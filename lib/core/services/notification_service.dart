@@ -74,7 +74,7 @@ class NotificationService {
     });
 
     await _plugin.initialize(
-      settings,
+      settings: settings,
       onDidReceiveNotificationResponse: (response) {
         final actionId = response.actionId;
         final payload = response.payload;
@@ -133,7 +133,13 @@ class NotificationService {
       ],
     );
     final details = NotificationDetails(android: androidDetails);
-    await _plugin.show(notificationId, title, '$speed • $eta', details, payload: payload);
+    await _plugin.show(
+      id: notificationId,
+      title: title,
+      body: '$speed • $eta',
+      notificationDetails: details,
+      payload: payload,
+    );
   }
 
   Future<void> showDownloadComplete({
@@ -151,10 +157,10 @@ class NotificationService {
     );
     final details = NotificationDetails(android: androidDetails);
     await _plugin.show(
-      notificationId,
-      title,
-      'Download complete',
-      details,
+      id: notificationId,
+      title: title,
+      body: 'Download complete',
+      notificationDetails: details,
     );
   }
 
@@ -174,15 +180,15 @@ class NotificationService {
     );
     final details = NotificationDetails(android: androidDetails);
     await _plugin.show(
-      notificationId,
-      title,
-      error ?? 'Download failed',
-      details,
+      id: notificationId,
+      title: title,
+      body: error ?? 'Download failed',
+      notificationDetails: details,
     );
   }
 
   Future<void> cancelNotification(int notificationId) async {
     if (!_initialized) return;
-    await _plugin.cancel(notificationId);
+    await _plugin.cancel(id: notificationId);
   }
 }

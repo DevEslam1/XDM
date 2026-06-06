@@ -11,6 +11,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+
+class MockConnectivityPlatform extends ConnectivityPlatform {
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async {
+    return [ConnectivityResult.wifi];
+  }
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged {
+    return Stream.value([ConnectivityResult.wifi]);
+  }
+}
 
 class FakeDownloadEngine extends DownloadEngine {
   final startedUrls = <String>[];
@@ -91,29 +104,13 @@ void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
     Hive.init('build/test_hive_provider');
+    ConnectivityPlatform.instance = MockConnectivityPlatform();
 
     // Register mock handlers for platform channels
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.example.dmx/widget'),
       (methodCall) async => null,
-    );
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('dev.fluttercommunity.plus/connectivity'),
-      (methodCall) async {
-        if (methodCall.method == 'check') {
-          return ['wifi'];
-        }
-        return null;
-      },
-    );
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('dev.fluttercommunity.plus/connectivity_status'),
-      (methodCall) async {
-        return null;
-      },
     );
   });
 

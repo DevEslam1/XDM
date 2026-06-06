@@ -101,10 +101,7 @@ class _SplashScreenState extends State<SplashScreen>
             localizedReason: isRtl
                 ? 'يرجى تأكيد هويتك لفتح لوحة قيادة XDM'
                 : 'Please authenticate to open XDM dashboard',
-            options: const AuthenticationOptions(
-              biometricOnly: false,
-              stickyAuth: true,
-            ),
+            persistAcrossBackgrounding: true,
           );
           if (didAuth) {
             setState(() {

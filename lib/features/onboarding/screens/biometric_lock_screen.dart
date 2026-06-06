@@ -35,10 +35,7 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> {
           localizedReason: widget.isRtl
               ? 'يرجى تأكيد هويتك لفتح لوحة قيادة XDM'
               : 'Please authenticate to open XDM dashboard',
-          options: const AuthenticationOptions(
-            biometricOnly: false,
-            stickyAuth: true,
-          ),
+          persistAcrossBackgrounding: true,
         );
         if (didAuth && mounted) {
           Navigator.pop(context, true);

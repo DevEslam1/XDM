@@ -53,7 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     final isDark = settings.isDarkMode;
     final provider = Provider.of<DownloadProvider>(context, listen: false);
     final isRtl = L10n.isRtl(context);
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json', 'txt'],
     );

@@ -660,7 +660,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
 
   Future<void> _pickTorrentFile(SettingsProvider settings) async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['torrent'],
       );
