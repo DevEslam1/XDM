@@ -182,6 +182,28 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           }
                         },
                       ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildPathPickerTile(
+                        context,
+                        settings: settings,
+                        title: L10n.isRtl(context) ? 'مجلد التحميل الافتراضي' : 'Default Download Folder',
+                        subtitle: settings.customDownloadPath?.isNotEmpty == true
+                            ? settings.customDownloadPath!
+                            : (L10n.isRtl(context) ? 'تلقائي (Downloads/XDM)' : 'Default (Downloads/XDM)'),
+                        onTap: () async {
+                          triggerHaptic(settings);
+                          final path = await FilePicker.getDirectoryPath();
+                          if (path != null) {
+                            await settings.setCustomDownloadPath(path);
+                          }
+                        },
+                        onClear: settings.customDownloadPath?.isNotEmpty == true
+                            ? () async {
+                                triggerHaptic(settings);
+                                await settings.setCustomDownloadPath(null);
+                              }
+                            : null,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -559,6 +581,55 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPathPickerTile(
+    BuildContext context, {
+    required SettingsProvider settings,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    VoidCallback? onClear,
+  }) {
+    final isDark = settings.isDarkMode;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final subClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    return ListTile(
+      title: Text(
+        title,
+        style: TextStyle(
+          color: textClr,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          color: subClr,
+          fontSize: 10,
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onClear != null)
+            IconButton(
+              icon: Icon(Icons.clear, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, size: 18),
+              tooltip: L10n.isRtl(context) ? 'إعادة تعيين الافتراضي' : 'Reset to default',
+              onPressed: onClear,
+            ),
+          IconButton(
+            icon: const Icon(Icons.folder_open, size: 18),
+            color: accentClr,
+            onPressed: onTap,
+          ),
+        ],
+      ),
+      onTap: onTap,
     );
   }
 

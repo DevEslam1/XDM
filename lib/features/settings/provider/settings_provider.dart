@@ -26,10 +26,12 @@ class SettingsProvider extends ChangeNotifier {
   static const _globalTorrentSeedingLimitedKey = 'globalTorrentSeedingLimited';
   static const _globalTorrentSeedingLimitKbpsKey = 'globalTorrentSeedingLimitKbps';
   static const _defaultThreadCountKey = 'defaultThreadCount';
+  static const _customDownloadPathKey = 'customDownloadPath';
 
   late final SharedPreferences _prefs;
 
   bool autoStart = true;
+  String? customDownloadPath;
   int maxDownloads = 3;
   double speedLimitMb = 0.0;
   bool enableGlow = true;
@@ -86,6 +88,7 @@ class SettingsProvider extends ChangeNotifier {
     globalTorrentSeedingLimited = _prefs.getBool(_globalTorrentSeedingLimitedKey) ?? globalTorrentSeedingLimited;
     globalTorrentSeedingLimitKbps = _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ?? globalTorrentSeedingLimitKbps;
     defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? defaultThreadCount;
+    customDownloadPath = _prefs.getString(_customDownloadPathKey);
   }
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
@@ -225,6 +228,16 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setDefaultThreadCount(int value) async {
     defaultThreadCount = value;
     await _prefs.setInt(_defaultThreadCountKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setCustomDownloadPath(String? value) async {
+    customDownloadPath = value;
+    if (value == null) {
+      await _prefs.remove(_customDownloadPathKey);
+    } else {
+      await _prefs.setString(_customDownloadPathKey, value);
+    }
     notifyListeners();
   }
 }

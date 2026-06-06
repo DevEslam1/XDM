@@ -64,7 +64,10 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   }
 
   Future<void> _loadDefaultPath() async {
-    final path = await PermissionService().defaultDownloadDirectory();
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final path = settings.customDownloadPath?.isNotEmpty == true
+        ? settings.customDownloadPath!
+        : await PermissionService().defaultDownloadDirectory();
     if (!mounted) return;
     // Only fill the path if the user hasn't already started typing into
     // the field. Otherwise we'd silently overwrite their input.

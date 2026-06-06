@@ -364,7 +364,9 @@ class DownloadProvider extends ChangeNotifier {
     required int threadCount,
     DateTime? scheduledAt,
   }) async {
-    final defaultDirectory = await _permissionService.defaultDownloadDirectory();
+    final defaultDirectory = _settingsProvider.customDownloadPath?.isNotEmpty == true
+        ? _settingsProvider.customDownloadPath!
+        : await _permissionService.defaultDownloadDirectory();
     final metadata = await _downloadEngine.resolveMetadata(
       url: url.trim(),
       requestedFileName: name.trim().isEmpty ? null : name.trim(),
