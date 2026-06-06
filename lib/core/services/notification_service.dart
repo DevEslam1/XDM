@@ -27,6 +27,8 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
+  bool _initialized = false;
+
   static const String _downloadChannelId = 'dmx_download_progress';
   static const String _downloadChannelName = 'Download Progress';
   static const String _downloadChannelDesc =
@@ -91,6 +93,7 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+    _initialized = true;
   }
 
   Future<void> showDownloadProgress({
@@ -103,6 +106,7 @@ class NotificationService {
     required String languageCode,
     required String payload,
   }) async {
+    if (!_initialized) return;
     final androidDetails = AndroidNotificationDetails(
       _downloadChannelId,
       _downloadChannelName,
@@ -136,6 +140,7 @@ class NotificationService {
     required int notificationId,
     required String title,
   }) async {
+    if (!_initialized) return;
     final androidDetails = AndroidNotificationDetails(
       _downloadChannelId,
       _downloadChannelName,
@@ -158,6 +163,7 @@ class NotificationService {
     required String title,
     String? error,
   }) async {
+    if (!_initialized) return;
     final androidDetails = AndroidNotificationDetails(
       _downloadChannelId,
       _downloadChannelName,
@@ -176,6 +182,7 @@ class NotificationService {
   }
 
   Future<void> cancelNotification(int notificationId) async {
+    if (!_initialized) return;
     await _plugin.cancel(notificationId);
   }
 }

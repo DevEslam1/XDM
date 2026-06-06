@@ -188,4 +188,72 @@ void main() {
     expect(provider.queuedTasksCount, 1);
     expect(engine.startedUrls, ['https://example.com/one.zip']);
   });
+
+  test('updateTaskThreadCount on task with zero progress only resizes chunks', () async {
+    final (database, settings) = await _setupServices();
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    await provider.addDownload(
+      name: 'test.zip',
+      url: 'https://example.com/test.zip',
+      size: 100,
+      category: '',
+      savePath: '',
+      threadCount: 2,
+    );
+
+    final taskId = provider.tasks.first.id;
+    expect(provider.tasks.first.threadCount, 2);
+    expect(provider.tasks.first.chunks.length, 2);
+
+    await provider.updateTaskThreadCount(taskId, 5);
+    expect(provider.tasks.first.threadCount, 5);
+    expect(provider.tasks.first.chunks.length, 5);
+    expect(provider.tasks.first.downloadedBytes, 0);
+  });
+
+  test('updateTaskThreadCount on task with non-zero progress resets progress and chunks', () async {
+    final (database, settings) = await _setupServices();
+    final now = DateTime.now();
+    final task = DownloadTask(
+      id: 'active_task',
+      fileName: 'active.zip',
+      url: 'https://example.com/active.zip',
+      fileSize: 100,
+      downloadedBytes: 50,
+      category: 'Archive',
+      status: DownloadStatus.paused,
+      savePath: 'build',
+      localFilePath: 'build/active.zip',
+      tempFilePath: 'build/active.zip.dmxpart',
+      threadCount: 2,
+      chunks: const [0.5, 0.5],
+      createdAt: now,
+      updatedAt: now,
+    );
+    await database.saveTask(task);
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    expect(provider.tasks.first.downloadedBytes, 50);
+    expect(provider.tasks.first.threadCount, 2);
+
+    await provider.updateTaskThreadCount('active_task', 4);
+    expect(provider.tasks.first.threadCount, 4);
+    expect(provider.tasks.first.chunks.length, 4);
+    expect(provider.tasks.first.downloadedBytes, 0);
+    expect(provider.tasks.first.status, DownloadStatus.paused);
+  });
 }

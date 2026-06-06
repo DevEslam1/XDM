@@ -188,7 +188,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       const SizedBox(height: 28),
 
                       // Connection Channels / Chunks Visualizer
-                      _buildChannelsPanel(context, task, statusColor, settings),
+                      _buildChannelsPanel(context, task, provider, statusColor, settings),
                       const SizedBox(height: 20),
 
                       // Individual Speed and Seeding Controls Panel
@@ -305,9 +305,94 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     );
   }
 
+  void _changeThreadCount(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    SettingsProvider settings,
+    int newCount,
+  ) {
+    if (task.threadCount == newCount) return;
+
+    final isRtl = L10n.isRtl(context);
+    final isDark = settings.isDarkMode;
+
+    if (task.downloadedBytes > 0) {
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: isDark ? AppTheme.surface : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+              ),
+            ),
+            title: Text(
+              L10n.of(context, 'details_threads_warning_title'),
+              style: TextStyle(
+                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            content: Text(
+              L10n.of(context, 'details_threads_warning_desc'),
+              style: TextStyle(
+                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                fontSize: 14,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  triggerHaptic(settings);
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  L10n.of(context, 'cancel_btn'),
+                  style: TextStyle(
+                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? AppTheme.neonRed.withValues(alpha: 0.2) : AppTheme.lightNeonRed.withValues(alpha: 0.1),
+                  side: BorderSide(
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  triggerHaptic(settings);
+                  Navigator.pop(context);
+                  provider.updateTaskThreadCount(task.id, newCount);
+                },
+                child: Text(
+                  isRtl ? 'نعم، أعد التعيين' : 'YES, RESET',
+                  style: TextStyle(
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      provider.updateTaskThreadCount(task.id, newCount);
+    }
+  }
+
   Widget _buildChannelsPanel(
     BuildContext context,
     DownloadTask task,
+    DownloadProvider provider,
     Color statusColor,
     SettingsProvider settings,
   ) {
@@ -342,6 +427,75 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Thread Adjuster Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isRtl ? 'تعديل قنوات الاتصال' : 'ADJUST CONNECTION CHANNELS',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {
+                      final list = [1, 2, 4, 5, 8, 16];
+                      final curIdx = list.indexOf(task.threadCount);
+                      if (curIdx > 0) {
+                        _changeThreadCount(context, task, provider, settings, list[curIdx - 1]);
+                      }
+                    },
+                    icon: Icon(
+                      Icons.remove_circle_outline,
+                      size: 20,
+                      color: task.threadCount > 1 ? statusColor : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: borderClr.withValues(alpha: 0.1),
+                      border: Border.all(color: borderClr),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${task.threadCount}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {
+                      final list = [1, 2, 4, 5, 8, 16];
+                      final curIdx = list.indexOf(task.threadCount);
+                      if (curIdx != -1 && curIdx < list.length - 1) {
+                        _changeThreadCount(context, task, provider, settings, list[curIdx + 1]);
+                      }
+                    },
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      size: 20,
+                      color: task.threadCount < 16 ? statusColor : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
