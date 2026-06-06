@@ -1,0 +1,505 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../../../core/app_theme.dart';
+import '../../../core/utils/localization.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../../settings/provider/settings_provider.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
+
+class CategoriesScreen extends StatelessWidget {
+  const CategoriesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<DownloadProvider>(context);
+    final settings = Provider.of<SettingsProvider>(context);
+    final counts = provider.categoryCounts;
+    final sizes = provider.categorySizes;
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+
+    // Define category presentation details
+    final List<Map<String, dynamic>> categoryCards = [
+      {
+        'name': 'Video',
+        'icon': Icons.movie_outlined,
+        'color': isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+        'description': 'MP4, MKV, AVI, MOV',
+      },
+      {
+        'name': 'Audio',
+        'icon': Icons.audiotrack_outlined,
+        'color': isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+        'description': 'MP3, WAV, FLAC, AAC',
+      },
+      {
+        'name': 'Document',
+        'icon': Icons.description_outlined,
+        'color': isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+        'description': 'PDF, DOCX, XLSX, TXT',
+      },
+      {
+        'name': 'Archive',
+        'icon': Icons.folder_zip_outlined,
+        'color': isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+        'description': 'ZIP, RAR, 7Z, TAR',
+      },
+      {
+        'name': 'APK',
+        'icon': Icons.android_outlined,
+        'color': const Color(0xFFF15BB5),
+        'description': isRtl ? 'ملفات تطبيقات أندرويد' : 'Android App Packages',
+      },
+      {
+        'name': 'Other',
+        'icon': Icons.insert_drive_file_outlined,
+        'color': isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+        'description': isRtl ? 'ملفات بيانات متنوعة' : 'Miscellaneous Data',
+      },
+    ];
+
+    // Compute total size
+    final totalSizeMb = sizes.values.fold(0.0, (sum, val) => sum + val);
+
+    return GeometricGridBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          title: Text(
+            'DMX',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: textClr,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+              fontSize: 16,
+            ),
+          ),
+          automaticallyImplyLeading: false,
+        ),
+        body: Directionality(
+          textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header description
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 10.0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        L10n.of(context, 'category_overview'),
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: secClr,
+                          fontSize: 10,
+                          letterSpacing: 1.0,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isRtl
+                            ? 'عرض تفصيلي للملفات المحملة مقسمة حسب نوع الملف.'
+                            : 'Overview of downloaded content structured by MIME-type.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: mutedClr,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Donut PieChart Analytics Panel
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: _buildDonutChartCard(context, categoryCards, sizes, totalSizeMb, settings),
+                ),
+                const SizedBox(height: 10),
+
+                // Categories Grid
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(16.0),
+                    physics: const BouncingScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 1.1,
+                    ),
+                    itemCount: categoryCards.length,
+                    itemBuilder: (context, index) {
+                      final card = categoryCards[index];
+                      final String name = card['name'];
+                      final IconData icon = card['icon'];
+                      final Color color = card['color'];
+                      final String desc = card['description'];
+
+                      final count = counts[name] ?? 0;
+                      final sizeMb = sizes[name] ?? 0.0;
+
+                      // Format size
+                      String sizeText;
+                      if (sizeMb >= 1024) {
+                        sizeText = '${(sizeMb / 1024).toStringAsFixed(2)} GB';
+                      } else {
+                        sizeText = '${sizeMb.toStringAsFixed(1)} MB';
+                      }
+
+                      return GestureDetector(
+                        onTap: () {
+                          if (settings.vibration) {
+                            HapticFeedback.lightImpact();
+                          }
+                          provider.setCategoryFilter(name);
+                          provider.setActiveTabIndex(0);
+                        },
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: DmxBackdropFilter(
+                            sigmaX: 8,
+                            sigmaY: 8,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    child: Container(
+                                      height: 3,
+                                      decoration: BoxDecoration(
+                                        borderRadius: const BorderRadius.vertical(
+                                          top: Radius.circular(20),
+                                        ),
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            color.withValues(alpha: 0.7),
+                                            color.withValues(alpha: 0.1),
+                                            Colors.transparent,
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(14.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: color.withValues(
+                                                  alpha: 0.08,
+                                                ),
+                                                borderRadius: BorderRadius.circular(
+                                                  12,
+                                                ),
+                                              ),
+                                              child: Icon(
+                                                icon,
+                                                color: color,
+                                                size: 22,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
+                                                borderRadius: BorderRadius.circular(
+                                                  12,
+                                                ),
+                                                border: Border.all(
+                                                  color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                                  width: 0.6,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                '$count ${isRtl ? 'عناصر' : 'ITEMS'}',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelMedium
+                                                    ?.copyWith(
+                                                      color: textClr,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          _translateCategoryName(context, name).toUpperCase(),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 0.8,
+                                                color: textClr,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          desc,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                fontSize: 9,
+                                                color: mutedClr,
+                                              ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          sizeText,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelLarge
+                                              ?.copyWith(
+                                                fontSize: 13,
+                                                color: color,
+                                                fontWeight: FontWeight.bold,
+                                                shadows: isDark
+                                                    ? [
+                                                        Shadow(
+                                                          color: color.withValues(
+                                                            alpha: 0.25,
+                                                          ),
+                                                          blurRadius: 4.0,
+                                                        ),
+                                                      ]
+                                                    : null,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDonutChartCard(
+    BuildContext context,
+    List<Map<String, dynamic>> categoryCards,
+    Map<String, double> sizes,
+    double totalSizeMb,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final isRtl = L10n.isRtl(context);
+
+    // Format total size
+    String totalSizeText;
+    if (totalSizeMb >= 1024) {
+      totalSizeText = '${(totalSizeMb / 1024).toStringAsFixed(2)} GB';
+    } else {
+      totalSizeText = '${totalSizeMb.toStringAsFixed(1)} MB';
+    }
+
+    final hasNoData = totalSizeMb == 0.0;
+
+    // Create sections
+    final List<PieChartSectionData> sections = hasNoData
+        ? [
+            PieChartSectionData(
+              color: isDark ? AppTheme.border : AppTheme.lightBorder,
+              value: 1.0,
+              radius: 14,
+              title: '',
+            )
+          ]
+        : categoryCards.map((card) {
+            final String name = card['name'];
+            final Color color = card['color'];
+            final sizeMb = sizes[name] ?? 0.0;
+            final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
+
+            return PieChartSectionData(
+              color: color,
+              value: sizeMb,
+              radius: 14,
+              title: percentage >= 12 ? '${percentage.toStringAsFixed(0)}%' : '',
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+              ),
+            );
+          }).where((section) => section.value > 0).toList();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: DmxBackdropFilter(
+        sigmaX: 10,
+        sigmaY: 10,
+        child: Container(
+          width: double.infinity,
+          height: 120,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+          child: Row(
+            children: [
+              // 1. Donut PieChart
+              SizedBox(
+                width: 100,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    PieChart(
+                      PieChartData(
+                        sections: sections,
+                        centerSpaceRadius: 32,
+                        sectionsSpace: 2.5,
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isRtl ? 'الإجمالي' : 'TOTAL',
+                          style: TextStyle(
+                            color: mutedClr,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          totalSizeText,
+                          style: TextStyle(
+                            color: textClr,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // 2. Legend / List summary of top categories sizes
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: categoryCards.take(3).map((card) {
+                    final String name = card['name'];
+                    final Color color = card['color'];
+                    final sizeMb = sizes[name] ?? 0.0;
+                    String sizeText = sizeMb >= 1024
+                        ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
+                        : '${sizeMb.toStringAsFixed(0)}M';
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _translateCategoryName(context, name),
+                              style: TextStyle(
+                                color: textClr,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            sizeText,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _translateCategoryName(BuildContext context, String name) {
+    if (!L10n.isRtl(context)) return name;
+    switch (name) {
+      case 'Video':
+        return 'الفيديو';
+      case 'Audio':
+        return 'الصوت';
+      case 'Document':
+        return 'المستندات';
+      case 'Archive':
+        return 'الأرشيف';
+      case 'APK':
+        return 'التطبيقات';
+      default:
+        return 'أخرى';
+    }
+  }
+}

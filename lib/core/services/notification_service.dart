@@ -1,0 +1,181 @@
+import 'dart:async';
+import 'dart:isolate';
+import 'dart:ui';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../utils/localization.dart';
+
+@pragma('vm:entry-point')
+void _onBackgroundNotificationResponse(NotificationResponse response) {
+  final actionId = response.actionId;
+  final payload = response.payload;
+  if (actionId != null && payload != null) {
+    final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
+    if (port != null) {
+      port.send({
+        'action': actionId,
+        'taskId': payload,
+      });
+    }
+  }
+}
+
+class NotificationService {
+  NotificationService._();
+  static final NotificationService _instance = NotificationService._();
+  factory NotificationService() => _instance;
+
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
+
+  static const String _downloadChannelId = 'dmx_download_progress';
+  static const String _downloadChannelName = 'Download Progress';
+  static const String _downloadChannelDesc =
+      'Real-time download transfer progress';
+
+  final StreamController<Map<String, String>> _actionStreamController =
+      StreamController<Map<String, String>>.broadcast();
+
+  Stream<Map<String, String>> get onActionTapped => _actionStreamController.stream;
+
+  ReceivePort? _receivePort;
+
+  Future<void> init() async {
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    // Register ReceivePort for background actions
+    _receivePort = ReceivePort();
+    IsolateNameServer.removePortNameMapping('dmx_notification_port');
+    IsolateNameServer.registerPortWithName(_receivePort!.sendPort, 'dmx_notification_port');
+
+    _receivePort!.listen((message) {
+      if (message is Map) {
+        final action = message['action'] as String?;
+        final taskId = message['taskId'] as String?;
+        if (action != null && taskId != null) {
+          _actionStreamController.add({
+            'action': action,
+            'taskId': taskId,
+          });
+        }
+      }
+    });
+
+    await _plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (response) {
+        final actionId = response.actionId;
+        final payload = response.payload;
+        if (actionId != null && payload != null) {
+          _actionStreamController.add({
+            'action': actionId,
+            'taskId': payload,
+          });
+        }
+      },
+      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
+    );
+
+    // Request runtime notification permission on Android 13+
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+  }
+
+  Future<void> showDownloadProgress({
+    required int notificationId,
+    required String title,
+    required int progress,
+    required int maxProgress,
+    required String speed,
+    required String eta,
+    required String languageCode,
+    required String payload,
+  }) async {
+    final androidDetails = AndroidNotificationDetails(
+      _downloadChannelId,
+      _downloadChannelName,
+      channelDescription: _downloadChannelDesc,
+      importance: Importance.low,
+      priority: Priority.low,
+      showProgress: true,
+      maxProgress: maxProgress > 0 ? maxProgress : 100,
+      progress: progress.clamp(0, maxProgress > 0 ? maxProgress : 100),
+      onlyAlertOnce: true,
+      ongoing: true,
+      autoCancel: false,
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          'pause',
+          L10n.translate(languageCode, 'pause_btn'),
+          showsUserInterface: false,
+        ),
+        AndroidNotificationAction(
+          'cancel',
+          L10n.translate(languageCode, 'cancel_btn'),
+          showsUserInterface: false,
+        ),
+      ],
+    );
+    final details = NotificationDetails(android: androidDetails);
+    await _plugin.show(notificationId, title, '$speed • $eta', details, payload: payload);
+  }
+
+  Future<void> showDownloadComplete({
+    required int notificationId,
+    required String title,
+  }) async {
+    final androidDetails = AndroidNotificationDetails(
+      _downloadChannelId,
+      _downloadChannelName,
+      channelDescription: _downloadChannelDesc,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      showProgress: false,
+    );
+    final details = NotificationDetails(android: androidDetails);
+    await _plugin.show(
+      notificationId,
+      title,
+      'Download complete',
+      details,
+    );
+  }
+
+  Future<void> showDownloadFailed({
+    required int notificationId,
+    required String title,
+    String? error,
+  }) async {
+    final androidDetails = AndroidNotificationDetails(
+      _downloadChannelId,
+      _downloadChannelName,
+      channelDescription: _downloadChannelDesc,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      showProgress: false,
+    );
+    final details = NotificationDetails(android: androidDetails);
+    await _plugin.show(
+      notificationId,
+      title,
+      error ?? 'Download failed',
+      details,
+    );
+  }
+
+  Future<void> cancelNotification(int notificationId) async {
+    await _plugin.cancel(notificationId);
+  }
+}

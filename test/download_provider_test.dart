@@ -1,0 +1,191 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/permission_service.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/provider/download_provider.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class FakeDownloadEngine extends DownloadEngine {
+  final startedUrls = <String>[];
+
+  @override
+  Future<DownloadMetadata> resolveMetadata({
+    required String url,
+    String? requestedFileName,
+    String? customUserAgent,
+    bool enableProxy = false,
+    String? proxyAddress,
+    bool bypassSSL = false,
+  }) async {
+    return DownloadMetadata(
+      fileName: requestedFileName ?? 'file.zip',
+      category: 'Archive',
+      fileSize: 100,
+      supportsResume: true,
+    );
+  }
+
+  @override
+  Future<void> download({
+    required String url,
+    required String tempFilePath,
+    required String localFilePath,
+    required int knownFileSize,
+    required bool supportsResume,
+    required CancelToken cancelToken,
+    required ValueChangedProgress onProgress,
+    required int Function() speedLimitBytesPerSecond,
+    required int Function() activeDownloadCount,
+    int threadCount = 1,
+    String? customUserAgent,
+    bool enableProxy = false,
+    String? proxyAddress,
+    bool bypassSSL = false,
+  }) {
+    startedUrls.add(url);
+    final completer = Completer<void>();
+    cancelToken.whenCancel.then((_) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+          ),
+        );
+      }
+    });
+    return completer.future;
+  }
+}
+
+class FakePermissionService extends PermissionService {
+  @override
+  Future<String> defaultDownloadDirectory() async => 'build/test_downloads';
+
+  @override
+  Future<bool> ensureStorageAccess() async => true;
+}
+
+Future<(DatabaseService, SettingsProvider)> _setupServices() async {
+  SharedPreferences.setMockInitialValues({});
+  if (!Hive.isBoxOpen(DatabaseService.downloadsBoxName)) {
+    await Hive.openBox<dynamic>(DatabaseService.downloadsBoxName);
+  }
+  await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
+
+  final database = DatabaseService();
+  await database.init();
+  final settings = SettingsProvider();
+  await settings.load();
+  return (database, settings);
+}
+
+void main() {
+  setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    Hive.init('build/test_hive_provider');
+
+    // Register mock handlers for platform channels
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.example.dmx/widget'),
+      (methodCall) async => null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+      (methodCall) async {
+        if (methodCall.method == 'check') {
+          return ['wifi'];
+        }
+        return null;
+      },
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/connectivity_status'),
+      (methodCall) async {
+        return null;
+      },
+    );
+  });
+
+  tearDown(() async {
+    if (Hive.isBoxOpen(DatabaseService.downloadsBoxName)) {
+      await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
+    }
+  });
+
+  test('load converts stale downloading tasks to paused', () async {
+    final (database, settings) = await _setupServices();
+    final now = DateTime.now();
+    await database.saveTask(
+      DownloadTask(
+        id: 'stale',
+        fileName: 'stale.zip',
+        url: 'https://example.com/stale.zip',
+        fileSize: 100,
+        downloadedBytes: 10,
+        category: 'Archive',
+        status: DownloadStatus.downloading,
+        savePath: 'build',
+        localFilePath: 'build/stale.zip',
+        tempFilePath: 'build/stale.zip.dmxpart',
+        threadCount: 2,
+        chunks: const [0.1, 0.1],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    expect(provider.tasks.single.status, DownloadStatus.paused);
+    expect(provider.tasks.single.speed, 0);
+  });
+
+  test('addDownload respects maxDownloads and queues overflow', () async {
+    final (database, settings) = await _setupServices();
+    await settings.setMaxDownloads(1);
+    final engine = FakeDownloadEngine();
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: engine,
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    await provider.addDownload(
+      name: 'one.zip',
+      url: 'https://example.com/one.zip',
+      size: 0,
+      category: '',
+      savePath: '',
+    );
+    await provider.addDownload(
+      name: 'two.zip',
+      url: 'https://example.com/two.zip',
+      size: 0,
+      category: '',
+      savePath: '',
+    );
+
+    expect(provider.downloadingTasksCount, 1);
+    expect(provider.queuedTasksCount, 1);
+    expect(engine.startedUrls, ['https://example.com/one.zip']);
+  });
+}

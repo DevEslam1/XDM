@@ -1,0 +1,221 @@
+import '../../../core/utils/file_utils.dart';
+
+enum DownloadStatus { queued, downloading, paused, completed, failed }
+
+class DownloadTask {
+  final String id;
+  final String fileName;
+  final String url;
+  final int fileSize;
+  int downloadedBytes;
+  double speed;
+  int? eta;
+  final String category;
+  DownloadStatus status;
+  final String savePath;
+  final String localFilePath;
+  final String tempFilePath;
+  final String? errorMessage;
+  final int threadCount;
+  List<double> chunks;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? completedAt;
+  final DateTime? scheduledAt;
+  final bool supportsResume;
+
+  DownloadTask({
+    required this.id,
+    required this.fileName,
+    required this.url,
+    required this.fileSize,
+    required this.downloadedBytes,
+    this.speed = 0.0,
+    this.eta,
+    required this.category,
+    required this.status,
+    required this.savePath,
+    required this.localFilePath,
+    required this.tempFilePath,
+    this.errorMessage,
+    required this.threadCount,
+    required this.chunks,
+    required this.createdAt,
+    required this.updatedAt,
+    this.completedAt,
+    this.scheduledAt,
+    this.supportsResume = false,
+  });
+
+  double get progress {
+    if (fileSize <= 0) return 0.0;
+    return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+  }
+
+  String get progressPercentString => '${(progress * 100).toStringAsFixed(1)}%';
+
+  String get speedFormatted {
+    if (status != DownloadStatus.downloading || speed <= 0) return '0.0 KB/s';
+    return '${formatBytes(speed)}/s';
+  }
+
+  String get etaFormatted {
+    if (status == DownloadStatus.completed) return 'Finished';
+    if (status == DownloadStatus.queued) return 'Queued';
+    if (status == DownloadStatus.paused) {
+      if (scheduledAt != null) {
+        return 'Scheduled';
+      }
+      return 'Paused';
+    }
+    if (status == DownloadStatus.failed) return 'Failed';
+    if (eta == null || eta! <= 0) return '--';
+
+    if (eta! >= 3600) {
+      final hours = eta! ~/ 3600;
+      final minutes = (eta! % 3600) ~/ 60;
+      return '${hours}h ${minutes}m left';
+    }
+    if (eta! >= 60) {
+      final minutes = eta! ~/ 60;
+      final seconds = eta! % 60;
+      return '${minutes}m ${seconds}s left';
+    }
+    return '${eta}s left';
+  }
+
+  String get sizeFormatted => fileSize > 0 ? formatBytes(fileSize) : 'Unknown';
+
+  String get downloadedSizeFormatted => formatBytes(downloadedBytes);
+
+  DownloadTask copyWith({
+    String? fileName,
+    int? fileSize,
+    int? downloadedBytes,
+    double? speed,
+    int? eta,
+    bool clearEta = false,
+    String? category,
+    DownloadStatus? status,
+    String? savePath,
+    String? localFilePath,
+    String? tempFilePath,
+    String? errorMessage,
+    bool clearError = false,
+    int? threadCount,
+    List<double>? chunks,
+    DateTime? updatedAt,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
+    DateTime? scheduledAt,
+    bool clearScheduledAt = false,
+    bool? supportsResume,
+  }) {
+    return DownloadTask(
+      id: id,
+      fileName: fileName ?? this.fileName,
+      url: url,
+      fileSize: fileSize ?? this.fileSize,
+      downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+      speed: speed ?? this.speed,
+      eta: clearEta ? null : eta ?? this.eta,
+      category: category ?? this.category,
+      status: status ?? this.status,
+      savePath: savePath ?? this.savePath,
+      localFilePath: localFilePath ?? this.localFilePath,
+      tempFilePath: tempFilePath ?? this.tempFilePath,
+      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      threadCount: threadCount ?? this.threadCount,
+      chunks: chunks ?? this.chunks,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? DateTime.now(),
+      completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
+      scheduledAt: clearScheduledAt ? null : scheduledAt ?? this.scheduledAt,
+      supportsResume: supportsResume ?? this.supportsResume,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'fileName': fileName,
+      'url': url,
+      'fileSize': fileSize,
+      'downloadedBytes': downloadedBytes,
+      'speed': speed,
+      'eta': eta,
+      'category': category,
+      'status': status.name,
+      'savePath': savePath,
+      'localFilePath': localFilePath,
+      'tempFilePath': tempFilePath,
+      'errorMessage': errorMessage,
+      'threadCount': threadCount,
+      'chunks': chunks,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'completedAt': completedAt?.toIso8601String(),
+      'scheduledAt': scheduledAt?.toIso8601String(),
+      'supportsResume': supportsResume,
+    };
+  }
+
+  factory DownloadTask.fromMap(Map<String, dynamic> map) {
+    final statusName = map['status'] as String? ?? DownloadStatus.paused.name;
+    final status = DownloadStatus.values.firstWhere(
+      (value) => value.name == statusName,
+      orElse: () => DownloadStatus.paused,
+    );
+    final rawChunks = (map['chunks'] as List? ?? const [0.0])
+        .map((value) => (value as num).toDouble().clamp(0.0, 1.0))
+        .toList();
+    final threadCount = (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
+
+    // Validate chunks length matches threadCount — resize if mismatched
+    List<double> chunks;
+    if (rawChunks.length == threadCount) {
+      chunks = rawChunks;
+    } else if (rawChunks.length > threadCount) {
+      chunks = rawChunks.sublist(0, threadCount);
+    } else {
+      chunks = [
+        ...rawChunks,
+        ...List.filled(threadCount - rawChunks.length, 0.0),
+      ];
+    }
+
+    return DownloadTask(
+      id: map['id'] as String,
+      fileName: map['fileName'] as String,
+      url: map['url'] as String,
+      fileSize: (map['fileSize'] as num?)?.toInt() ?? 0,
+      downloadedBytes: (map['downloadedBytes'] as num?)?.toInt() ?? 0,
+      speed: (map['speed'] as num?)?.toDouble() ?? 0.0,
+      eta: (map['eta'] as num?)?.toInt(),
+      category: map['category'] as String? ?? 'Other',
+      status: status,
+      savePath: map['savePath'] as String? ?? '',
+      localFilePath: map['localFilePath'] as String? ?? '',
+      tempFilePath: map['tempFilePath'] as String? ?? '',
+      errorMessage: map['errorMessage'] as String?,
+      threadCount: threadCount,
+      chunks: chunks,
+      createdAt:
+          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt:
+          DateTime.tryParse(map['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
+      completedAt: DateTime.tryParse(map['completedAt'] as String? ?? ''),
+      scheduledAt: DateTime.tryParse(map['scheduledAt'] as String? ?? ''),
+      supportsResume: map['supportsResume'] as bool? ?? false,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || (other is DownloadTask && other.id == id);
+
+  @override
+  int get hashCode => id.hashCode;
+}

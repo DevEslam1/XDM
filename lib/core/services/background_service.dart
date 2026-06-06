@@ -1,0 +1,106 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+
+class BackgroundService {
+  static const int foregroundNotificationId = 888;
+  static const String _serviceChannelId = 'dmx_background_service';
+
+  static bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+  static Future<void> initialize() async {
+    if (!isSupported) return;
+    final service = FlutterBackgroundService();
+    await service.configure(
+      androidConfiguration: AndroidConfiguration(
+        onStart: _onStart,
+        autoStart: false,
+        autoStartOnBoot: false,
+        isForegroundMode: true,
+        notificationChannelId: _serviceChannelId,
+        initialNotificationTitle: 'DMX',
+        initialNotificationContent: 'Downloads active',
+        foregroundServiceNotificationId: foregroundNotificationId,
+      ),
+      iosConfiguration: IosConfiguration(
+        autoStart: false,
+        onForeground: _onStart,
+        onBackground: _onIosBackground,
+      ),
+    );
+  }
+
+  @pragma('vm:entry-point')
+  static void _onStart(ServiceInstance service) {
+    if (service is AndroidServiceInstance) {
+      Timer? heartbeatTimer;
+
+      void resetHeartbeat() {
+        heartbeatTimer?.cancel();
+        heartbeatTimer = Timer(const Duration(seconds: 15), () {
+          service.stopSelf();
+        });
+      }
+
+      resetHeartbeat();
+
+      service.on('stopService').listen((_) {
+        heartbeatTimer?.cancel();
+        service.stopSelf();
+      });
+
+      service.on('updateNotification').listen((event) {
+        resetHeartbeat();
+        if (event is Map<String, dynamic>) {
+          service.setForegroundNotificationInfo(
+            title: event['title'] as String? ?? 'DMX',
+            content: event['content'] as String? ?? '',
+          );
+        }
+      });
+
+      service.on('heartbeat').listen((_) {
+        resetHeartbeat();
+      });
+    }
+  }
+
+  @pragma('vm:entry-point')
+  static bool _onIosBackground(ServiceInstance service) {
+    return true;
+  }
+
+  static Future<void> start() async {
+    if (!isSupported) return;
+    final service = FlutterBackgroundService();
+    final isRunning = await service.isRunning();
+    if (!isRunning) {
+      await service.startService();
+    }
+  }
+
+  static Future<void> stop() async {
+    if (!isSupported) return;
+    final service = FlutterBackgroundService();
+    service.invoke('stopService');
+  }
+
+  static Future<void> updateNotification({
+    required String title,
+    required String content,
+  }) async {
+    if (!isSupported) return;
+    final service = FlutterBackgroundService();
+    service.invoke('updateNotification', {
+      'title': title,
+      'content': content,
+    });
+  }
+
+  static Future<void> sendHeartbeat() async {
+    if (!isSupported) return;
+    final service = FlutterBackgroundService();
+    service.invoke('heartbeat');
+  }
+}
