@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -965,13 +965,17 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   void _updateTelemetryWidget() {
-    try {
-      const MethodChannel('com.example.dmx/widget').invokeMethod('updateWidget', {
-        'activeCount': downloadingTasksCount,
-        'totalSpeed': currentDownloadSpeedFormatted,
-      });
-    } catch (e) {
-      debugPrint('Failed to update telemetry widget: $e');
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        const MethodChannel('com.example.dmx/widget').invokeMethod('updateWidget', {
+          'activeCount': downloadingTasksCount,
+          'totalSpeed': currentDownloadSpeedFormatted,
+        }).catchError((e) {
+          debugPrint('Failed to update telemetry widget via future: $e');
+        });
+      } catch (e) {
+        debugPrint('Failed to update telemetry widget: $e');
+      }
     }
   }
 

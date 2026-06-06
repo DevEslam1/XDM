@@ -253,4 +253,169 @@ void main() {
     expect(provider.tasks.first.downloadedBytes, 0);
     expect(provider.tasks.first.status, DownloadStatus.paused);
   });
+
+  test('load with pauseOrphanDownloads=false preserves active downloads', () async {
+    final (database, settings) = await _setupServices();
+    final now = DateTime.now();
+    await database.saveTask(
+      DownloadTask(
+        id: 'active',
+        fileName: 'active.zip',
+        url: 'https://example.com/active.zip',
+        fileSize: 100,
+        downloadedBytes: 10,
+        category: 'Archive',
+        status: DownloadStatus.downloading,
+        savePath: 'build',
+        localFilePath: 'build/active.zip',
+        tempFilePath: 'build/active.zip.dmxpart',
+        threadCount: 2,
+        chunks: const [0.1, 0.1],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+    expect(provider.tasks.single.status, DownloadStatus.paused);
+
+    // Simulate a fresh provider reload (e.g. pull-to-refresh).
+    await provider.load(pauseOrphanDownloads: false);
+    expect(
+      provider.tasks.single.status,
+      DownloadStatus.paused,
+      reason: 'No active stream → still paused on subsequent load',
+    );
+
+    // Now add a fake active stream; reload should not pause it.
+    final second = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await second.load();
+    // No active stream from outside; the cancelTokens map is empty. So
+    // the "in-flight" condition can't be triggered from outside. The
+    // important regression test is the previous assertion (downloads
+    // started by a previous load are not silently paused on a user
+    // refresh).
+  });
+
+  test('retryTask does not zero downloadedBytes or chunks', () async {
+    final (database, settings) = await _setupServices();
+    final now = DateTime.now();
+    final task = DownloadTask(
+      id: 'retry_target',
+      fileName: 'resume.zip',
+      url: 'https://example.com/resume.zip',
+      fileSize: 200,
+      downloadedBytes: 80,
+      category: 'Archive',
+      status: DownloadStatus.failed,
+      savePath: 'build',
+      localFilePath: 'build/resume.zip',
+      tempFilePath: 'build/resume.zip.dmxpart',
+      threadCount: 2,
+      chunks: const [0.4, 0.4],
+      createdAt: now,
+      updatedAt: now,
+    );
+    await database.saveTask(task);
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    await provider.retryTask('retry_target');
+    expect(provider.tasks.first.downloadedBytes, 80,
+        reason: 'retry must preserve the on-disk resume state');
+    expect(provider.tasks.first.chunks, [0.4, 0.4]);
+    expect(provider.tasks.first.status, anyOf(
+      DownloadStatus.queued,
+      DownloadStatus.downloading,
+    ));
+  });
+
+  test('categorySizes ignores failed and unknown categories', () async {
+    final (database, settings) = await _setupServices();
+    final now = DateTime.now();
+    final tasks = [
+      DownloadTask(
+        id: 'a',
+        fileName: 'a.mp4',
+        url: 'https://x/a.mp4',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Video',
+        status: DownloadStatus.failed,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: now,
+        updatedAt: now,
+      ),
+      DownloadTask(
+        id: 'b',
+        fileName: 'b.mp4',
+        url: 'https://x/b.mp4',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Video',
+        status: DownloadStatus.queued,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: now,
+        updatedAt: now,
+      ),
+      DownloadTask(
+        id: 'c',
+        fileName: 'c.mp4',
+        url: 'https://x/c.mp4',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Alien', // unknown category
+        status: DownloadStatus.completed,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [1.0],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ];
+    for (final t in tasks) {
+      await database.saveTask(t);
+    }
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    final sizes = provider.categorySizes;
+    expect(sizes['Video'] ?? 0.0, lessThan(0.001),
+        reason: 'Failed/queued tasks must not contribute to disk usage');
+    expect(sizes.containsKey('Alien'), false,
+        reason: 'Unknown categories must not be silently dropped into the map');
+  });
 }

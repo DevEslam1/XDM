@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../utils/localization.dart';
 
@@ -29,6 +31,13 @@ class NotificationService {
 
   bool _initialized = false;
 
+  static bool get isSupported =>
+      !kIsWeb &&
+      (Platform.isAndroid ||
+          Platform.isIOS ||
+          Platform.isMacOS ||
+          Platform.isLinux);
+
   static const String _downloadChannelId = 'dmx_download_progress';
   static const String _downloadChannelName = 'Download Progress';
   static const String _downloadChannelDesc =
@@ -43,6 +52,7 @@ class NotificationService {
   StreamSubscription<dynamic>? _receivePortSub;
 
   Future<void> init() async {
+    if (!isSupported) return;
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
