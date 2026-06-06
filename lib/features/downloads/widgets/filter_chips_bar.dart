@@ -18,10 +18,13 @@ class FilterChipsBar extends StatelessWidget {
     final categoryFilter = provider.categoryFilter;
     final isRtl = L10n.isRtl(context);
 
-    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final glassBg = isDark ? AppTheme.glassBg : AppTheme.lightGlassBg;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final glassBorder = isDark
+        ? AppTheme.glassBorder
+        : AppTheme.lightGlassBorder;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
 
     final filters = ['All', 'Downloading', 'Completed', 'Failed'];
 
@@ -36,7 +39,9 @@ class FilterChipsBar extends StatelessWidget {
                 label: Text(
                   '${isRtl ? 'تصنيف: ' : 'CAT: '}${categoryFilter.toUpperCase()}',
                   style: TextStyle(
-                    color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                    color: isDark
+                        ? AppTheme.neonGreen
+                        : AppTheme.lightNeonGreen,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                   ),
@@ -52,9 +57,12 @@ class FilterChipsBar extends StatelessWidget {
                   }
                   provider.setCategoryFilter(null);
                 },
-                backgroundColor: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.1),
+                backgroundColor:
+                    (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                        .withValues(alpha: 0.1),
                 side: BorderSide(
-                  color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.35),
+                  color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                      .withValues(alpha: 0.35),
                   width: 0.8,
                 ),
                 shape: RoundedRectangleBorder(
@@ -73,9 +81,12 @@ class FilterChipsBar extends StatelessWidget {
 
                 // Derive status color matching task status colors
                 final filterClr = switch (filter) {
-                  'All' => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                  'Downloading' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  'Completed' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  'All' =>
+                    isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  'Downloading' =>
+                    isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  'Completed' =>
+                    isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                   'Failed' => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                   _ => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                 };
@@ -106,10 +117,12 @@ class FilterChipsBar extends StatelessWidget {
                         boxShadow: isSelected
                             ? [
                                 BoxShadow(
-                                  color: filterClr.withValues(alpha: isDark ? 0.35 : 0.15),
+                                  color: filterClr.withValues(
+                                    alpha: isDark ? 0.35 : 0.15,
+                                  ),
                                   blurRadius: 10.0,
                                   spreadRadius: 1.0,
-                                )
+                                ),
                               ]
                             : null,
                       ),
@@ -118,12 +131,15 @@ class FilterChipsBar extends StatelessWidget {
                         heightFactor: 1.0,
                         child: Text(
                           filter.toUpperCase(),
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: isSelected ? filterClr : secClr,
-                            fontSize: 10,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            letterSpacing: 1.0,
-                          ),
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: isSelected ? filterClr : secClr,
+                                fontSize: 10,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                letterSpacing: 1.0,
+                              ),
                         ),
                       ),
                     ),

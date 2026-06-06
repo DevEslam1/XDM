@@ -1165,28 +1165,28 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                   setState(() => _isSubmitting = true);
                   try {
                     await provider.updateTaskUrlAndResume(duplicateTask!.id, _urlController.text.trim());
-                    if (mounted) {
-                      setState(() => _isSubmitting = false);
-                      ThemedSnackbar.show(
-                        context,
-                        message: isRtl ? 'تم تحديث رابط الملف واستئنافه' : 'File link updated and download resumed.',
-                        color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                        icon: Icons.check_circle_outline,
-                        isDarkMode: isDark,
-                      );
-                      Navigator.pop(context); // Close AddScreen
-                    }
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    if (!context.mounted) return;
+                    ThemedSnackbar.show(
+                      context,
+                      message: isRtl ? 'تم تحديث رابط الملف واستئنافه' : 'File link updated and download resumed.',
+                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      icon: Icons.check_circle_outline,
+                      isDarkMode: isDark,
+                    );
+                    Navigator.pop(context); // Close AddScreen
                   } catch (e) {
-                    if (mounted) {
-                      setState(() => _isSubmitting = false);
-                      ThemedSnackbar.show(
-                        context,
-                        message: e.toString(),
-                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                        icon: Icons.error_outline,
-                        isDarkMode: isDark,
-                      );
-                    }
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    if (!context.mounted) return;
+                    ThemedSnackbar.show(
+                      context,
+                      message: e.toString(),
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      icon: Icons.error_outline,
+                      isDarkMode: isDark,
+                    );
                   }
                 },
                 child: Text(
@@ -1208,28 +1208,28 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                   setState(() => _isSubmitting = true);
                   try {
                     await provider.startOverTask(duplicateTask!.id, _urlController.text.trim());
-                    if (mounted) {
-                      setState(() => _isSubmitting = false);
-                      ThemedSnackbar.show(
-                        context,
-                        message: isRtl ? 'بدأ التحميل من جديد' : 'Download started over from scratch.',
-                        color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                        icon: Icons.refresh,
-                        isDarkMode: isDark,
-                      );
-                      Navigator.pop(context); // Close AddScreen
-                    }
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    if (!context.mounted) return;
+                    ThemedSnackbar.show(
+                      context,
+                      message: isRtl ? 'بدأ التحميل من جديد' : 'Download started over from scratch.',
+                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      icon: Icons.refresh,
+                      isDarkMode: isDark,
+                    );
+                    Navigator.pop(context); // Close AddScreen
                   } catch (e) {
-                    if (mounted) {
-                      setState(() => _isSubmitting = false);
-                      ThemedSnackbar.show(
-                        context,
-                        message: e.toString(),
-                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                        icon: Icons.error_outline,
-                        isDarkMode: isDark,
-                      );
-                    }
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    if (!context.mounted) return;
+                    ThemedSnackbar.show(
+                      context,
+                      message: e.toString(),
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      icon: Icons.error_outline,
+                      isDarkMode: isDark,
+                    );
                   }
                 },
                 child: Text(
@@ -1276,21 +1276,21 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                       scheduledAt: _isScheduled ? _scheduledDateTime : null,
                       torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
                     );
-                    if (mounted) {
-                      setState(() => _isSubmitting = false);
-                      Navigator.pop(context); // Close AddScreen
-                    }
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    if (!context.mounted) return;
+                    Navigator.pop(context); // Close AddScreen
                   } catch (e) {
-                    if (mounted) {
-                      setState(() => _isSubmitting = false);
-                      ThemedSnackbar.show(
-                        context,
-                        message: e.toString(),
-                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                        icon: Icons.error_outline,
-                        isDarkMode: isDark,
-                      );
-                    }
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    if (!context.mounted) return;
+                    ThemedSnackbar.show(
+                      context,
+                      message: e.toString(),
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      icon: Icons.error_outline,
+                      isDarkMode: isDark,
+                    );
                   }
                 },
                 child: Text(
@@ -1329,6 +1329,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
       );
       if (!mounted) return;
       setState(() => _isSubmitting = false);
+      if (!context.mounted) return;
       if (provider.lastError != null) {
         ThemedSnackbar.show(
           context,

@@ -162,7 +162,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
         ),
       ),
       bottomNavigationBar: AnimatedSlide(
-        offset: downloadProvider.isNavbarVisible ? Offset.zero : const Offset(0, 1.0),
+        offset: (downloadProvider.isNavbarVisible && currentIndex != 2) ? Offset.zero : const Offset(0, 1.0),
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
         child: ClipRRect(

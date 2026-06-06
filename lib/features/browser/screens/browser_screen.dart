@@ -65,7 +65,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               setState(() {
                 _isLoading = true;
                 _loadingProgress = 0.0;
-                _urlController.text = url == 'about:blank' ? '' : url;
+                _urlController.text = _cleanUrl(url);
                 if (url != 'about:blank') {
                   _isHome = false;
                 }
@@ -213,11 +213,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     var url = input.trim();
     if (url.isEmpty) return;
 
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.hasScheme) {
+      if (uri.scheme != 'http' && uri.scheme != 'https') {
+        url = 'https://google.com/search?q=${Uri.encodeComponent(input)}';
+      }
+    } else {
       if (url.contains('.') && !url.contains(' ')) {
         url = 'https://$url';
       } else {
-        // Perform Google search
         url = 'https://google.com/search?q=${Uri.encodeComponent(url)}';
       }
     }
@@ -226,6 +230,22 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       _isHome = false;
     });
     _webViewController.loadRequest(Uri.parse(url));
+  }
+
+  String _cleanUrl(String url) {
+    if (url == 'about:blank') return '';
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) return url;
+    var clean = uri.toString();
+    if (uri.query.isNotEmpty) {
+      clean = '${uri.scheme}://${uri.host}${uri.path.isEmpty ? '' : uri.path}?${uri.query}';
+    } else {
+      clean = '${uri.scheme}://${uri.host}${uri.path.isEmpty ? '' : uri.path}';
+    }
+    if (clean.endsWith('/') && clean.length > 8) {
+      clean = clean.substring(0, clean.length - 1);
+    }
+    return clean;
   }
 
   void _showInterceptionSheet(BuildContext context, String downloadUrl) {
@@ -635,14 +655,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final statusBarHeight = MediaQuery.of(context).padding.top;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return GeometricGridBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Column(
           children: [
-            // Custom collapsing App Bar with blur
+            // Custom collapsing App Bar with blur (always visible)
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
@@ -665,14 +684,34 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Row(
                       children: [
+                        // X close button
+                        IconButton(
+                          icon: Icon(Icons.close, size: 20, color: textClr),
+                          tooltip: isRtl ? 'العودة للرئيسية' : 'Back to Home',
+                          onPressed: () {
+                            triggerHaptic(settings);
+                            setState(() {
+                              _isHome = true;
+                              _showBars = true;
+                              _lastScrollY = 0;
+                            });
+                            downloadProvider.setActiveTabIndex(0);
+                            downloadProvider.setNavbarVisible(true);
+                            if (_dashboardScrollController.hasClients) {
+                              _dashboardScrollController.jumpTo(0);
+                            }
+                            _webViewController.loadRequest(Uri.parse('about:blank'));
+                          },
+                        ),
+                        const SizedBox(width: 4),
                         // Address bar
                         Expanded(
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            height: 40,
+                            height: 36,
                             decoration: BoxDecoration(
                               color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
                               borderRadius: BorderRadius.circular(16),
@@ -692,7 +731,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     ]
                                   : null,
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
                             child: TextField(
                               controller: _urlController,
                               focusNode: _focusNode,
@@ -738,53 +777,27 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        // Navigation controls
-                        if (!_isHome) ...[
-                          IconButton(
-                            icon: Icon(Icons.home_outlined, size: 18, color: textClr),
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              final dp = Provider.of<DownloadProvider>(context, listen: false);
-                              setState(() {
-                                _isHome = true;
-                                _urlController.clear();
-                                _showBars = true;
-                                _lastScrollY = 0;
-                              });
-                              dp.setNavbarVisible(true);
-                              if (_dashboardScrollController.hasClients) {
-                                _dashboardScrollController.jumpTo(0);
-                              }
-                              _webViewController.loadRequest(Uri.parse('about:blank'));
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.arrow_back_ios_new, size: 15, color: _canGoBack ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
-                            onPressed: _canGoBack
-                                ? () {
-                                    triggerHaptic(settings);
-                                    _webViewController.goBack();
-                                  }
-                                : null,
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.arrow_forward_ios, size: 15, color: _canGoForward ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
-                            onPressed: _canGoForward
-                                ? () {
-                                    triggerHaptic(settings);
-                                    _webViewController.goForward();
-                                  }
-                                : null,
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.refresh, size: 17, color: textClr),
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              _webViewController.reload();
-                            },
-                          ),
-                        ],
+                        const SizedBox(width: 4),
+                        // Back button
+                        IconButton(
+                          icon: Icon(Icons.arrow_back_ios_new, size: 15, color: _canGoBack ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
+                          onPressed: _canGoBack
+                              ? () {
+                                  triggerHaptic(settings);
+                                  _webViewController.goBack();
+                                }
+                              : null,
+                        ),
+                        // Forward button
+                        IconButton(
+                          icon: Icon(Icons.arrow_forward_ios, size: 15, color: _canGoForward ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
+                          onPressed: _canGoForward
+                              ? () {
+                                  triggerHaptic(settings);
+                                  _webViewController.goForward();
+                                }
+                              : null,
+                        ),
                       ],
                     ),
                   ),
@@ -799,19 +812,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 backgroundColor: Colors.transparent,
                 color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
               ),
-            // The main browser view (WebView or Dashboard)
+            // Main browser view
             Expanded(
               child: _isHome
                   ? _buildHomeDashboard(context, settings)
                   : WebViewWidget(controller: _webViewController),
-            ),
-            // Bottom spacer to account for the blurry navbar behind content
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              height: downloadProvider.isNavbarVisible
-                  ? (68.0 + bottomPadding)
-                  : bottomPadding,
             ),
           ],
         ),
