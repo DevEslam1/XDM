@@ -46,7 +46,13 @@ XDM features a curated, theme-aware user interface designed as a tactical cyberp
 
 ### 3. Integrated Web Sandbox Browser
 *   **Direct Web Sniffer**: Inline web browser allowing instant downloading.
-*   **Broad Download Interceptor**: Detects and captures redirects, data URIs, base64 data streams, blob URLs, custom user-agent requests, and matches complex queries.
+*   **Broad Download Interception**: Detects and captures redirects, data URIs, base64 data streams, blob URLs, custom user-agent requests, and matches complex queries.
+*   **Multi-Tab Support**: Keep multiple tabs alive concurrently in memory (using `IndexedStack`) with separate web views, support for a visual tab-grid switcher, and specialized private Incognito tabs.
+*   **Edge Swipe Navigation Gestures**: Drag from screen boundaries (left edge to go back, right edge to go forward) for a fluid, gesture-driven browsing experience.
+*   **Offline Page Cache**: Instantly save page DOM structures as offline `.html` documents inside the downloads dock with local file access.
+*   **JS Injection / Custom CSS Editor**: Persistent tabbed script editor that injects custom CSS styling and Javascript code automatically when pages load.
+*   **Video Quality Selector**: A bottom sheet modal displaying detected resolutions/qualities of video element streams, allowing users to choose their download quality.
+*   **Smart Surf & Download History**: Segmented, searchable log page containing both surfing history entries and download history tasks.
 
 ### 4. Native App Protections & Services
 *   **Biometric Gate Lock**: Secure Local Authentication (`local_auth`) checking on initial app load and background-to-foreground transitions (`paused` ➔ `resumed`) using a lock screen overlay.

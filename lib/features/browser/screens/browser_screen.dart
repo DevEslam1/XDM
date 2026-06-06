@@ -1015,7 +1015,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         child: ListView.separated(
                           shrinkWrap: true,
                           itemCount: detectedSources.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 6),
+                          separatorBuilder: (context, index) => const SizedBox(height: 6),
                           itemBuilder: (context, i) {
                             final src = detectedSources[i];
                             final label = src['label'] as String? ?? 'Media Stream ${i + 1}';
@@ -1759,10 +1759,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     ]
                                   : null,
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: Row(
                               children: [
                                 if (activeTab.isIncognito) ...[
+                                  const SizedBox(width: 8),
                                   Icon(
                                     Icons.visibility_off,
                                     size: 14,
@@ -1770,23 +1771,29 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                         ? AppTheme.neonViolet
                                         : AppTheme.lightNeonViolet,
                                   ),
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 4),
                                 ],
                                 Expanded(
                                   child: TextField(
                                     controller: _urlController,
                                     focusNode: _focusNode,
+                                    textAlignVertical: TextAlignVertical.center,
                                     style: TextStyle(
                                       color: textClr,
                                       fontSize: 13,
                                     ),
                                     decoration: InputDecoration(
-                                      icon: Icon(
+                                      isDense: true,
+                                      prefixIcon: Icon(
                                         activeTab.isHome ? Icons.search : Icons.language,
                                         color: _isFocused
                                             ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
                                             : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
                                         size: 16,
+                                      ),
+                                      prefixIconConstraints: const BoxConstraints(
+                                        minWidth: 32,
+                                        minHeight: 32,
                                       ),
                                       suffixIcon: _urlController.text.isNotEmpty
                                           ? IconButton(
@@ -1804,6 +1811,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                               },
                                             )
                                           : null,
+                                      suffixIconConstraints: const BoxConstraints(
+                                        minWidth: 32,
+                                        minHeight: 32,
+                                      ),
                                       hintText: isRtl ? 'ابحث أو ادخل الرابط...' : 'SEARCH OR SCAN SIGNAL...',
                                       hintStyle: TextStyle(
                                         color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
@@ -1812,7 +1823,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                       border: InputBorder.none,
                                       enabledBorder: InputBorder.none,
                                       focusedBorder: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
                                     ),
                                     onSubmitted: _navigateToUrl,
                                   ),
