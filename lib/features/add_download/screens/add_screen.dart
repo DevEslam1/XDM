@@ -76,6 +76,12 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
     _loadDefaultPath();
     if (widget.prefilledUrl != null) {
       _urlController.text = widget.prefilledUrl!;
+      final url = widget.prefilledUrl!;
+      if (YoutubeService.isYoutubeVideoUrl(url) || YoutubeService.isPlaylistUrl(url)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _resolveLinkMetadata();
+        });
+      }
     }
     if (widget.prefilledName != null) {
       _nameController.text = widget.prefilledName!;
@@ -113,6 +119,10 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
       _urlController.selection = TextSelection.fromPosition(
         TextPosition(offset: _urlController.text.length),
       );
+      final url = data.text!.trim();
+      if (YoutubeService.isYoutubeVideoUrl(url) || YoutubeService.isPlaylistUrl(url)) {
+        _resolveLinkMetadata();
+      }
     }
   }
 
@@ -546,6 +556,12 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                             : () async {
                                 triggerHaptic(settings);
                                 if (_formKey.currentState!.validate()) {
+                                  final url = _urlController.text.trim();
+                                  if ((YoutubeService.isYoutubeVideoUrl(url) || YoutubeService.isPlaylistUrl(url)) && !_isMetadataResolved) {
+                                    await _resolveLinkMetadata();
+                                    return;
+                                  }
+
                                   if (_isMetadataResolved && _torrentFiles.isNotEmpty) {
                                     final hasSelected = _torrentFiles.any((f) => f['selected'] == true);
                                     if (!hasSelected) {

@@ -488,8 +488,11 @@ class DownloadEngine {
             response.headers.value(Headers.contentLengthHeader) ?? '',
           ) ??
           0;
-      if (totalSize <= 0 && contentLength > 0) {
-        totalSize = resumeFrom + contentLength;
+      if (contentLength > 0) {
+        final actualSize = (response.statusCode == 206 ? resumeFrom : 0) + contentLength;
+        if (actualSize != totalSize) {
+          totalSize = actualSize;
+        }
       }
 
       final sink = tempFile.openWrite(

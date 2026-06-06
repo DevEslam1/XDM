@@ -1682,64 +1682,68 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final isDark = settings.isDarkMode;
     final textPrimary = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          triggerHaptic(settings);
-          final activeTab = _tabs[_currentTabIndex];
-          setState(() {
-            activeTab.isHome = false;
-          });
-          _navigateToUrl(url);
-        },
+    return GlassCard(
+      borderRadius: 16,
+      padding: EdgeInsets.zero,
+      isDarkMode: isDark,
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
-        child: GlassCard(
-          borderRadius: 16,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          isDarkMode: isDark,
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            triggerHaptic(settings);
+            final activeTab = _tabs[_currentTabIndex];
+            setState(() {
+              activeTab.isHome = false;
+            });
+            _navigateToUrl(url);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: color,
+                    size: 20,
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: textPrimary,
-                        fontSize: 12,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: textPrimary,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      url.replaceAll('https://', ''),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                        fontSize: 9,
+                      const SizedBox(height: 2),
+                      Text(
+                        url.replaceAll('https://', ''),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                          fontSize: 9,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

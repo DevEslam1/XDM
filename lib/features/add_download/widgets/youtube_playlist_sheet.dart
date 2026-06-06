@@ -353,15 +353,19 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                               borderRadius: 14,
                               padding: EdgeInsets.zero,
                               isDarkMode: isDark,
-                              child: InkWell(
+                              child: Material(
+                                color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(14),
-                                onTap: () {
-                                  runHaptic(settings);
-                                  setState(() {
-                                    _videos[index] = {...video, 'selected': !isSelected};
-                                  });
-                                },
-                                child: Padding(
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () {
+                                    runHaptic(settings);
+                                    setState(() {
+                                      _videos[index] = {...video, 'selected': !isSelected};
+                                    });
+                                  },
+                                  child: Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                   child: Row(
                                     children: [
@@ -461,8 +465,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 ),
                               ),
                             ),
-                          );
-                        },
+                          ),
+                        );
+                      },
                       ),
                     ),
 

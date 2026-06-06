@@ -93,53 +93,59 @@ class FilterChipsBar extends StatelessWidget {
 
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
-                  child: InkWell(
-                    onTap: () => provider.setStatusFilter(filter),
-                    borderRadius: BorderRadius.circular(20),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      curve: Curves.easeInOut,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? filterClr.withValues(alpha: 0.12)
+                          : glassBg,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
                         color: isSelected
-                            ? filterClr.withValues(alpha: 0.12)
-                            : glassBg,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected
-                              ? filterClr.withValues(alpha: 0.5)
-                              : glassBorder,
-                          width: 1.0,
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: filterClr.withValues(
-                                    alpha: isDark ? 0.35 : 0.15,
-                                  ),
-                                  blurRadius: 10.0,
-                                  spreadRadius: 1.0,
-                                ),
-                              ]
-                            : null,
+                            ? filterClr.withValues(alpha: 0.5)
+                            : glassBorder,
+                        width: 1.0,
                       ),
-                      child: Center(
-                        widthFactor: 1.0,
-                        heightFactor: 1.0,
-                        child: Text(
-                          filter.toUpperCase(),
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: isSelected ? filterClr : secClr,
-                                fontSize: 10,
-                                fontWeight: isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                letterSpacing: 1.0,
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: filterClr.withValues(
+                                  alpha: isDark ? 0.35 : 0.15,
+                                ),
+                                blurRadius: 10.0,
+                                spreadRadius: 1.0,
                               ),
+                            ]
+                          : null,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => provider.setStatusFilter(filter),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: Center(
+                            widthFactor: 1.0,
+                            heightFactor: 1.0,
+                            child: Text(
+                              filter.toUpperCase(),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: isSelected ? filterClr : secClr,
+                                    fontSize: 10,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                    letterSpacing: 1.0,
+                                  ),
+                            ),
+                          ),
                         ),
                       ),
                     ),

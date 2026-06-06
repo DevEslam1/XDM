@@ -343,89 +343,93 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     final title = item['title'] as String? ?? url;
     final id = item['id'] as String? ?? '';
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
+        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          runHaptic(settings);
-          Navigator.pop(context, url);
-        },
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-              width: 0.6,
+        border: Border.all(
+          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+          width: 0.6,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            runHaptic(settings);
+            Navigator.pop(context, url);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.language, color: accent, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        url,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.copy,
+                    size: 16,
+                    color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  ),
+                  tooltip: 'Copy URL',
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: url));
+                    runHaptic(settings);
+                  },
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  ),
+                  tooltip: 'Remove',
+                  onPressed: () {
+                    runHaptic(settings);
+                    if (id.isNotEmpty) {
+                      _deleteHistoryItem(id);
+                    }
+                  },
+                ),
+              ],
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.language, color: accent, size: 18),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      url,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.copy,
-                  size: 16,
-                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-                ),
-                tooltip: 'Copy URL',
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: url));
-                  runHaptic(settings);
-                },
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.close,
-                  size: 16,
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                ),
-                tooltip: 'Remove',
-                onPressed: () {
-                  runHaptic(settings);
-                  if (id.isNotEmpty) {
-                    _deleteHistoryItem(id);
-                  }
-                },
-              ),
-            ],
           ),
         ),
       ),
@@ -434,86 +438,90 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
   Widget _taskTile(BuildContext context, DownloadTask t, bool isDark) {
     final color = _statusColor(t.status, isDark);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
+        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          Clipboard.setData(ClipboardData(text: t.url));
-          runHaptic(context.read<SettingsProvider>());
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Copied URL for: ${t.fileName}'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-              width: 0.6,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(_statusIcon(t.status), color: color, size: 18),
+        border: Border.all(
+          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+          width: 0.6,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: t.url));
+            runHaptic(context.read<SettingsProvider>());
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Copied URL for: ${t.fileName}'),
+                duration: const Duration(seconds: 2),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t.fileName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      t.url,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(_statusIcon(t.status), color: color, size: 18),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  _statusLabel(t.status),
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.6,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        t.url,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _statusLabel(t.status),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -158,7 +158,16 @@ class DownloadProvider extends ChangeNotifier {
     }
 
     await _databaseService.saveTasks(_tasks);
+
+    // Automatically restart seeding for completed torrents with seeding enabled
+    for (final task in _tasks) {
+      if (task.isTorrent && task.status == DownloadStatus.completed && task.seedingEnabled) {
+        _startSeedingTorrent(task);
+      }
+    }
+
     _checkScheduledDownloads();
+    _startWidgetTimer();
     notifyListeners();
     _updateTelemetryWidget();
   }
@@ -676,14 +685,62 @@ class DownloadProvider extends ChangeNotifier {
   }) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
-    _tasks[index] = _tasks[index].copyWith(
-      seedingEnabled: enabled,
+
+    final oldTask = _tasks[index];
+    final newEnabled = enabled ?? oldTask.seedingEnabled;
+
+    _tasks[index] = oldTask.copyWith(
+      seedingEnabled: newEnabled,
       seedingLimited: limited,
       seedingLimitKbps: limitKbps,
     );
     await _databaseService.saveTask(_tasks[index]);
+
+    if (oldTask.isTorrent) {
+      final torrentId = _torrentIds[taskId];
+      if (newEnabled) {
+        if (torrentId != null) {
+          TorrentService.resumeTorrent(torrentId);
+        } else {
+          _startSeedingTorrent(_tasks[index]);
+        }
+      } else {
+        if (torrentId != null) {
+          TorrentService.pauseTorrent(torrentId);
+        }
+      }
+    }
+
     notifyListeners();
     _startWidgetTimer();
+  }
+
+  void _startSeedingTorrent(DownloadTask task) {
+    if (_torrentIds.containsKey(task.id)) return;
+    try {
+      final saveDir = task.savePath;
+      int torrentId;
+      if (task.url.startsWith('magnet:')) {
+        torrentId = TorrentService.addMagnet(task.url, saveDir);
+      } else {
+        String filePath = task.url;
+        if (task.url.startsWith('file://')) {
+          filePath = Uri.parse(task.url).toFilePath();
+        }
+        torrentId = TorrentService.addTorrentFile(filePath, saveDir);
+      }
+      _torrentIds[task.id] = torrentId;
+      TorrentService.resumeTorrent(torrentId);
+
+      if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+        final priorities = task.torrentFiles!
+            .map((f) => (f['selected'] as bool? ?? true) ? 1 : 0)
+            .toList();
+        TorrentService.setFilePriorities(torrentId, priorities);
+      }
+    } catch (e) {
+      debugPrint('Failed to restart seeding for task ${task.id}: $e');
+    }
   }
 
   double get currentUploadSpeed {
@@ -1270,11 +1327,99 @@ class DownloadProvider extends ChangeNotifier {
       }
     }
 
-    _tasks[index] = task.copyWith(
+    final wasTorrent = task.isTorrent;
+    final isNewTorrent = cleanUrl.startsWith('magnet:') ||
+        cleanUrl.toLowerCase().endsWith('.torrent');
+
+    if (wasTorrent || isNewTorrent) {
+      // Remove old torrent from engine if registered
+      final torrentId = _torrentIds[taskId];
+      if (torrentId != null) {
+        TorrentService.removeTorrent(torrentId);
+        _torrentIds.remove(taskId);
+      }
+
+      // Clean up part files
+      await _cleanupPartFiles(task);
+
+      // Resolve metadata for new URL
+      DownloadMetadata? metadata;
+      try {
+        metadata = await _downloadEngine.resolveMetadata(
+          url: cleanUrl,
+          requestedFileName: task.fileName,
+          customUserAgent: _settingsProvider.customUserAgent,
+          enableProxy: _settingsProvider.enableProxy,
+          proxyAddress: _settingsProvider.proxyAddress,
+          bypassSSL: _settingsProvider.bypassSSL,
+        );
+      } catch (e) {
+        throw Exception('Failed to resolve new torrent: $e');
+      }
+
+      final updatedTask = task.copyWith(
+        url: cleanUrl,
+        fileSize: metadata.fileSize > 0 ? metadata.fileSize : task.fileSize,
+        supportsResume: metadata.supportsResume,
+        downloadedBytes: 0,
+        chunks: List<double>.filled(task.threadCount, 0.0),
+        torrentFiles: metadata.torrentFiles,
+        fileName: (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
+            ? metadata.fileName
+            : task.fileName,
+        clearError: true,
+      );
+
+      _tasks[index] = updatedTask;
+      await _databaseService.saveTask(updatedTask);
+      notifyListeners();
+
+      if (wasDownloading) {
+        await resumeTask(taskId);
+      }
+      return;
+    }
+
+    // Resolve metadata for standard URL
+    DownloadMetadata? metadata;
+    try {
+      metadata = await _downloadEngine.resolveMetadata(
+        url: cleanUrl,
+        requestedFileName: task.fileName,
+        customUserAgent: _settingsProvider.customUserAgent,
+        enableProxy: _settingsProvider.enableProxy,
+        proxyAddress: _settingsProvider.proxyAddress,
+        bypassSSL: _settingsProvider.bypassSSL,
+      );
+    } catch (e) {
+      throw Exception('Failed to resolve new link: $e');
+    }
+
+    bool sizeChanged = false;
+    if (metadata.fileSize > 0 && task.fileSize > 0 && metadata.fileSize != task.fileSize) {
+      sizeChanged = true;
+    }
+
+    if (sizeChanged) {
+      await _cleanupPartFiles(task);
+    }
+
+    final updatedTask = task.copyWith(
       url: cleanUrl,
+      fileSize: metadata.fileSize > 0 ? metadata.fileSize : task.fileSize,
+      supportsResume: metadata.supportsResume,
+      downloadedBytes: sizeChanged ? 0 : task.downloadedBytes,
+      chunks: sizeChanged
+          ? List<double>.filled(task.threadCount, 0.0)
+          : task.chunks,
+      fileName: (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
+          ? metadata.fileName
+          : task.fileName,
       clearError: true,
     );
-    await _databaseService.saveTask(_tasks[index]);
+
+    _tasks[index] = updatedTask;
+    await _databaseService.saveTask(updatedTask);
     notifyListeners();
 
     if (wasDownloading) {

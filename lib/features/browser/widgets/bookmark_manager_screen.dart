@@ -140,92 +140,91 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
               separatorBuilder: (context, index) => const SizedBox(height: 6),
               itemBuilder: (context, i) {
                 final bm = _bookmarks[i];
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
+                return Container(
+                  decoration: BoxDecoration(
+                    color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(14),
-                    onTap: () {
-                      Navigator.pop(context, bm.url);
-                    },
-                    onLongPress: () => _editBookmarkDialog(bm),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: (isDark
-                                ? AppTheme.glassBg
-                                : AppTheme.lightGlassBg)
-                            .withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isDark
-                              ? AppTheme.glassBorder
-                              : AppTheme.lightGlassBorder,
-                          width: 0.6,
+                    border: Border.all(
+                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                      width: 0.6,
+                    ),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(14),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () {
+                        Navigator.pop(context, bm.url);
+                      },
+                      onLongPress: () => _editBookmarkDialog(bm),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(Icons.bookmark, color: accent, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    bm.title.isEmpty ? bm.url : bm.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? AppTheme.textPrimary
+                                          : AppTheme.lightTextPrimary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    bm.url,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? AppTheme.textMuted
+                                          : AppTheme.lightTextMuted,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.copy,
+                                  size: 16,
+                                  color: isDark
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.lightTextSecondary),
+                              tooltip: 'Copy URL',
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: bm.url));
+                                runHaptic(settings);
+                              },
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.delete_outline,
+                                  size: 16,
+                                  color: isDark
+                                      ? AppTheme.neonRed
+                                      : AppTheme.lightNeonRed),
+                              tooltip: 'Delete',
+                              onPressed: () => _delete(bm),
+                            ),
+                          ],
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(Icons.bookmark, color: accent, size: 18),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  bm.title.isEmpty ? bm.url : bm.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? AppTheme.textPrimary
-                                        : AppTheme.lightTextPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  bm.url,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.copy,
-                                size: 16,
-                                color: isDark
-                                    ? AppTheme.textSecondary
-                                    : AppTheme.lightTextSecondary),
-                            tooltip: 'Copy URL',
-                            onPressed: () {
-                              Clipboard.setData(ClipboardData(text: bm.url));
-                              runHaptic(settings);
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete_outline,
-                                size: 16,
-                                color: isDark
-                                    ? AppTheme.neonRed
-                                    : AppTheme.lightNeonRed),
-                            tooltip: 'Delete',
-                            onPressed: () => _delete(bm),
-                          ),
-                        ],
                       ),
                     ),
                   ),

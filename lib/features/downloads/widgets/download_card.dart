@@ -152,18 +152,22 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                       ]
                     : null,
               ),
-              child: InkWell(
+              child: Material(
+                color: Colors.transparent,
                 borderRadius: BorderRadius.circular(20),
-                onTap: () {
-                  triggerHaptic(settings);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DetailsScreen(taskId: task.id),
-                    ),
-                  );
-                },
-                child: Padding(
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    triggerHaptic(settings);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DetailsScreen(taskId: task.id),
+                      ),
+                    );
+                  },
+                  child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -469,7 +473,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Future<bool?> _showDeleteConfirmationDialog(

@@ -291,31 +291,36 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
         borderRadius: 14,
         padding: EdgeInsets.zero,
         isDarkMode: isDark,
-        child: ListTile(
-          dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-          leading: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(_iconForType(type), color: color, size: 18),
             ),
-            child: Icon(_iconForType(type), color: color, size: 18),
+            title: Text(
+              label,
+              style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              '${formatBytes(size)} • .$ext',
+              style: TextStyle(color: secClr, fontSize: 10),
+            ),
+            trailing: Icon(Icons.download_rounded, color: color, size: 20),
+            onTap: () {
+              runHaptic(settings);
+              Navigator.pop(context, stream);
+            },
           ),
-          title: Text(
-            label,
-            style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text(
-            '${formatBytes(size)} • .$ext',
-            style: TextStyle(color: secClr, fontSize: 10),
-          ),
-          trailing: Icon(Icons.download_rounded, color: color, size: 20),
-          onTap: () {
-            runHaptic(settings);
-            Navigator.pop(context, stream);
-          },
         ),
       ),
     );
