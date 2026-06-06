@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import '../../../core/app_theme.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../../core/utils/bencode_decoder.dart';
@@ -21,6 +22,8 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/services/download_engine.dart';
+import '../widgets/youtube_quality_sheet.dart';
+import '../widgets/youtube_playlist_sheet.dart';
 
 class AddScreen extends StatefulWidget {
   final String? prefilledUrl;
@@ -788,6 +791,52 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         icon: Icons.error_outline,
         isDarkMode: Provider.of<SettingsProvider>(context, listen: false).isDarkMode,
       );
+      return;
+    }
+
+    // ── YouTube Playlist URL ────────────────────────────────────────
+    if (YoutubeService.isPlaylistUrl(url)) {
+      if (!mounted) return;
+      final result = await YoutubePlaylistSheet.show(context, url);
+      if (result != null && mounted) {
+        final isDark = Provider.of<SettingsProvider>(context, listen: false).isDarkMode;
+        ThemedSnackbar.show(
+          context,
+          message: L10n.isRtl(context)
+              ? 'تم إضافة ${result.selectedVideos.length} فيديو من القائمة'
+              : '${result.selectedVideos.length} videos from "${result.playlistTitle}" enqueued.',
+          color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+          icon: Icons.playlist_add_check,
+          isDarkMode: isDark,
+        );
+        if (mounted) Navigator.pop(context);
+      }
+      return;
+    }
+
+    // ── YouTube Single Video URL ────────────────────────────────────
+    if (YoutubeService.isYoutubeVideoUrl(url)) {
+      if (!mounted) return;
+      final stream = await YoutubeQualitySheet.show(context, url);
+      if (stream != null && mounted) {
+        final title = stream['title'] as String? ?? 'YouTube Video';
+        final ext = stream['ext'] as String? ?? 'mp4';
+        final size = stream['size'] as int? ?? 0;
+        final streamUrl = stream['src'] as String;
+        final type = stream['type'] as String? ?? 'muxed';
+
+        setState(() {
+          _urlController.text = streamUrl;
+          _resolvedFileName = '$title.$ext';
+          _nameController.text = _resolvedFileName;
+          _resolvedFileSize = size;
+          _resolvedCategory = type == 'audio' ? 'Audio' : 'Video';
+          _selectedCategory = _resolvedCategory;
+          _supportsResume = true;
+          _torrentFiles = [];
+          _isMetadataResolved = true;
+        });
+      }
       return;
     }
 

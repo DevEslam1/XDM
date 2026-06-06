@@ -29,6 +29,8 @@ import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_history_sheet.dart';
 import '../services/ad_blocker.dart';
 import '../services/browser_detector.dart';
+import '../../add_download/widgets/youtube_quality_sheet.dart';
+import '../../add_download/widgets/youtube_playlist_sheet.dart';
 
 class BrowserTab {
   final String id;
@@ -81,6 +83,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   // Sniffer and detected media
   final Map<String, String> _detectedDownloadUrls = {}; // tab.id -> url
   final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {}; // tab.url -> sources
+  final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
   final Set<String> _recordedHistoryThisSession = {};
   final ScrollController _dashboardScrollController = ScrollController();
   static const String _snifferPrefKey = 'browserSnifferEnabled';
@@ -796,8 +799,36 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   Future<void> _scanPageMedia(BrowserTab tab) async {
     if (!mounted || tab.isHome) return;
 
-    // Direct YouTube streams capture
-    if (YoutubeService.isYoutubeUrl(tab.url)) {
+    // YouTube Playlist detection — do this first before single video
+    if (YoutubeService.isPlaylistUrl(tab.url)) {
+      try {
+        final info = await YoutubeService.getPlaylistInfo(tab.url);
+        if (info != null && mounted) {
+          final count = info['videoCount'] as int? ?? 0;
+          setState(() {
+            _detectedPlaylistUrls[tab.id] = count;
+            // Also set a download URL so the FAB shows
+            _detectedDownloadUrls[tab.id] = tab.url;
+          });
+        }
+      } catch (_) {}
+      // If it also has a video ID (e.g. watch?v=xxx&list=yyy),
+      // still try to fetch the single video streams too
+      if (YoutubeService.isYoutubeVideoUrl(tab.url)) {
+        try {
+          final youtubeStreams = await YoutubeService.getStreams(tab.url);
+          if (youtubeStreams.isNotEmpty && mounted) {
+            setState(() {
+              _detectedMediaSources[tab.url] = youtubeStreams;
+            });
+          }
+        } catch (_) {}
+      }
+      return;
+    }
+
+    // Direct YouTube single video streams capture
+    if (YoutubeService.isYoutubeVideoUrl(tab.url)) {
       try {
         final youtubeStreams = await YoutubeService.getStreams(tab.url);
         if (youtubeStreams.isNotEmpty && mounted) {
@@ -1699,7 +1730,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
     final activeTab = _tabs[_currentTabIndex];
     final showFab = !activeTab.isHome && 
-        (_detectedDownloadUrls[activeTab.id] != null || (_detectedMediaSources[activeTab.url]?.isNotEmpty ?? false));
+        (_detectedDownloadUrls[activeTab.id] != null || 
+         (_detectedMediaSources[activeTab.url]?.isNotEmpty ?? false) ||
+         _detectedPlaylistUrls.containsKey(activeTab.id));
 
     // Reactively ensure zoom configuration matches settings changes
     activeTab.controller.enableZoom(settings.pinchToZoom);
@@ -2119,7 +2152,67 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final activeTab = _tabs[_currentTabIndex];
     final detectedSources = _detectedMediaSources[activeTab.url] ?? [];
+    final isPlaylist = _detectedPlaylistUrls.containsKey(activeTab.id);
+    final playlistCount = _detectedPlaylistUrls[activeTab.id] ?? 0;
 
+    // YouTube Playlist FAB
+    if (isPlaylist) {
+      return FloatingActionButton.extended(
+        backgroundColor: Colors.red,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        onPressed: () async {
+          triggerHaptic(settings);
+          final result = await YoutubePlaylistSheet.show(context, activeTab.url);
+          if (result != null && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"'),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        },
+        icon: const Icon(Icons.playlist_play_rounded),
+        label: Text('PLAYLIST${playlistCount > 0 ? ' ($playlistCount)' : ''}'),
+      );
+    }
+
+    // YouTube single video — show quality picker directly
+    if (YoutubeService.isYoutubeVideoUrl(activeTab.url) && detectedSources.isNotEmpty) {
+      return FloatingActionButton.extended(
+        backgroundColor: Colors.red,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        onPressed: () async {
+          triggerHaptic(settings);
+          if (detectedSources.length > 1) {
+            _showDetectedMediaSheet(context, activeTab.url);
+          } else {
+            final stream = await YoutubeQualitySheet.show(context, activeTab.url);
+            if (stream != null && mounted) {
+              final title = stream['title'] as String? ?? 'YouTube Video';
+              final ext = stream['ext'] as String? ?? 'mp4';
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AddScreen(
+                    prefilledUrl: stream['src'] as String,
+                    prefilledName: '$title.$ext',
+                  ),
+                ),
+              );
+            }
+          }
+        },
+        icon: const Icon(Icons.play_circle_filled),
+        label: Text(detectedSources.length > 1
+            ? 'YOUTUBE (${detectedSources.length})'
+            : 'YOUTUBE'),
+      );
+    }
+
+    // Normal download FAB
     return FloatingActionButton.extended(
       backgroundColor: accent,
       foregroundColor: Colors.black,
