@@ -97,7 +97,7 @@ class DownloadProvider extends ChangeNotifier {
           speed: 0,
           clearEta: true,
           errorMessage:
-              'Paused because DMX was closed during a foreground download.',
+              'Paused because XDM was closed during a foreground download.',
         );
       }
       return task.copyWith(
@@ -717,7 +717,7 @@ class DownloadProvider extends ChangeNotifier {
     final active = downloadingTasksCount;
     if (active > 0) {
       BackgroundService.updateNotification(
-        title: 'DMX - $active active',
+        title: 'XDM - $active active',
         content: '${formatBytes(currentDownloadSpeed)}/s',
       );
     }

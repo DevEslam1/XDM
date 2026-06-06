@@ -33,8 +33,8 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> {
       if (canCheck || isSupported) {
         final bool didAuth = await _auth.authenticate(
           localizedReason: widget.isRtl
-              ? 'يرجى تأكيد هويتك لفتح لوحة قيادة DMX'
-              : 'Please authenticate to open DMX dashboard',
+              ? 'يرجى تأكيد هويتك لفتح لوحة قيادة XDM'
+              : 'Please authenticate to open XDM dashboard',
           options: const AuthenticationOptions(
             biometricOnly: false,
             stickyAuth: true,

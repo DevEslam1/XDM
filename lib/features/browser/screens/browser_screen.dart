@@ -191,8 +191,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         const SizedBox(height: 16),
                         Text(
                           isRtl
-                              ? 'اكتشف مستعرض DMX إشارة تنزيل قابلة للاعتراض:'
-                              : 'DMX Scanner intercepted a downloadable stream signal:',
+                              ? 'اكتشف مستعرض XDM إشارة تنزيل قابلة للاعتراض:'
+                              : 'XDM Scanner intercepted a downloadable stream signal:',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
                           ),

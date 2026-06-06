@@ -13,7 +13,7 @@ class PermissionService {
     }
 
     final docs = await getApplicationDocumentsDirectory();
-    return p.join(docs.path, 'DMX');
+    return p.join(docs.path, 'XDM');
   }
 
   /// On modern Android (10+) with scoped storage, explicit storage permission

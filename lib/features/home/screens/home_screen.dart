@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   ),
                 )
               : Text(
-                  'DMX',
+                  'XDM',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: textClr,
                     fontWeight: FontWeight.bold,

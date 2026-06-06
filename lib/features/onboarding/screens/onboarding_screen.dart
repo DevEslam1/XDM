@@ -54,7 +54,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'DMX // CORE INIT',
+                        'XDM // CORE INIT',
                         style: TextStyle(
                           color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                           fontFamily: 'Space Grotesk',

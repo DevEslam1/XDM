@@ -17,7 +17,7 @@
             android:id="@+id/widget_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="DMX TELEMETRY"
+            android:text="XDM TELEMETRY"
             android:textColor="#00E5FF"
             android:textSize="10sp"
             android:textStyle="bold"

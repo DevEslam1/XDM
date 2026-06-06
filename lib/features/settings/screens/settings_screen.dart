@@ -45,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     triggerHaptic(settings);
     final provider = Provider.of<DownloadProvider>(context, listen: false);
     final jsonStr = provider.exportBackupJson();
-    await Share.share(jsonStr, subject: 'DMX Backup Signal Logs');
+    await Share.share(jsonStr, subject: 'XDM Backup Signal Logs');
   }
 
   void _importBackup(BuildContext context, SettingsProvider settings) async {

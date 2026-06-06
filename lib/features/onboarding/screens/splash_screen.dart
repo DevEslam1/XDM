@@ -99,8 +99,8 @@ class _SplashScreenState extends State<SplashScreen>
         if (canCheck || isSupported) {
           final bool didAuth = await _auth.authenticate(
             localizedReason: isRtl
-                ? 'يرجى تأكيد هويتك لفتح لوحة قيادة DMX'
-                : 'Please authenticate to open DMX dashboard',
+                ? 'يرجى تأكيد هويتك لفتح لوحة قيادة XDM'
+                : 'Please authenticate to open XDM dashboard',
             options: const AuthenticationOptions(
               biometricOnly: false,
               stickyAuth: true,
@@ -173,7 +173,7 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'DMX // TRANSMISSION GATE',
+                    'XDM // TRANSMISSION GATE',
                     style: TextStyle(
                       color: textClr,
                       fontFamily: 'Space Grotesk',

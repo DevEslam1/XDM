@@ -56,7 +56,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: Text(
-            'DMX',
+            'XDM',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               color: textClr,
               fontWeight: FontWeight.bold,

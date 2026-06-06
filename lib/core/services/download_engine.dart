@@ -246,7 +246,7 @@ class DownloadEngine {
         ));
       }
 
-      await localFile.writeAsString('DMX Torrent Simulation payload');
+      await localFile.writeAsString('XDM Torrent Simulation payload');
       return;
     }
 

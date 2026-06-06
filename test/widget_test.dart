@@ -70,6 +70,6 @@ void main() {
     await tester.pumpWidget(await _buildTestApp());
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('DMX'), findsOneWidget);
+    expect(find.text('XDM'), findsOneWidget);
   });
 }

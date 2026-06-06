@@ -19,7 +19,7 @@ class BackgroundService {
         autoStartOnBoot: false,
         isForegroundMode: true,
         notificationChannelId: _serviceChannelId,
-        initialNotificationTitle: 'DMX',
+        initialNotificationTitle: 'XDM',
         initialNotificationContent: 'Downloads active',
         foregroundServiceNotificationId: foregroundNotificationId,
       ),
@@ -54,7 +54,7 @@ class BackgroundService {
         resetHeartbeat();
         if (event is Map<String, dynamic>) {
           service.setForegroundNotificationInfo(
-            title: event['title'] as String? ?? 'DMX',
+            title: event['title'] as String? ?? 'XDM',
             content: event['content'] as String? ?? '',
           );
         }
