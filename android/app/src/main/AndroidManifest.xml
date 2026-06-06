@@ -46,6 +46,10 @@
             android:name="flutterEmbedding"
             android:value="2" />
         <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="true" />
+        <service
             android:name="id.flutter.flutter_background_service.ForegroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />

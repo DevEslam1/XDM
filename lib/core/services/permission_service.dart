@@ -9,7 +9,7 @@ class PermissionService {
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       final downloads = await getDownloadsDirectory();
-      if (downloads != null) return downloads.path;
+      if (downloads != null) return p.join(downloads.path, 'XDM');
     }
 
     final docs = await getApplicationDocumentsDirectory();

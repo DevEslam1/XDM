@@ -99,11 +99,29 @@ class NotificationService {
       onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
     );
 
-    // Request runtime notification permission on Android 13+
-    await _plugin
+    // Request runtime notification permission and create channels on Android 13+
+    final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      await androidPlugin.requestNotificationsPermission();
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _downloadChannelId,
+          _downloadChannelName,
+          description: _downloadChannelDesc,
+          importance: Importance.low,
+        ),
+      );
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'dmx_background_service',
+          'XDM Background Service',
+          description: 'Used for XDM background download service',
+          importance: Importance.low,
+        ),
+      );
+    }
     _initialized = true;
   }
 
