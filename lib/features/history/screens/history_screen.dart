@@ -55,6 +55,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          flexibleSpace: ClipRect(
+            child: DmxBackdropFilter(
+              sigmaX: 12,
+              sigmaY: 12,
+              child: Container(
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+              ),
+            ),
+          ),
           title: Text(
             'XDM',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(

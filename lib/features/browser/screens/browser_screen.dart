@@ -9,6 +9,7 @@ import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../add_download/screens/add_screen.dart';
+import '../../downloads/provider/download_provider.dart';
 import '../../../core/utils/haptic_helper.dart';
 
 class BrowserScreen extends StatefulWidget {
@@ -32,6 +33,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   bool _isHome = true;
   bool _isSnifferEnabled = true;
   bool _isFocused = false;
+  bool _showBars = true;
+  double _lastScrollY = 0;
+  final ScrollController _dashboardScrollController = ScrollController();
 
   @override
   void initState() {
@@ -46,31 +50,43 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       setState(() {}); // Rebuild to update suffix clear button visibility
     });
 
+    _dashboardScrollController.addListener(_onDashboardScroll);
+
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
-            setState(() {
-              _isLoading = true;
-              _loadingProgress = 0.0;
-              _urlController.text = url == 'about:blank' ? '' : url;
-              if (url != 'about:blank') {
-                _isHome = false;
-              }
-            });
+            if (mounted) {
+              final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
+              setState(() {
+                _isLoading = true;
+                _loadingProgress = 0.0;
+                _urlController.text = url == 'about:blank' ? '' : url;
+                if (url != 'about:blank') {
+                  _isHome = false;
+                }
+                _showBars = true;
+                _lastScrollY = 0;
+              });
+              downloadProvider.setNavbarVisible(true);
+            }
             _updateNavState();
           },
           onPageFinished: (url) {
-            setState(() {
-              _isLoading = false;
-            });
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
             _updateNavState();
           },
           onProgress: (progress) {
-            setState(() {
-              _loadingProgress = progress / 100;
-            });
+            if (mounted) {
+              setState(() {
+                _loadingProgress = progress / 100;
+              });
+            }
           },
           onNavigationRequest: (NavigationRequest request) {
             if (_isSnifferEnabled && _isDownloadable(request.url)) {
@@ -80,13 +96,55 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             return NavigationDecision.navigate;
           },
         ),
-      );
+      )
+      ..setOnScrollPositionChange((ScrollPositionChange change) {
+        if (mounted) {
+          _handleScroll(change.y.toDouble());
+        }
+      });
+  }
+
+  void _onDashboardScroll() {
+    if (!_dashboardScrollController.hasClients) return;
+    final y = _dashboardScrollController.offset;
+    _handleScroll(y);
+  }
+
+  void _handleScroll(double y) {
+    if (!mounted) return;
+    final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
+    if (y <= 0) {
+      if (!_showBars) {
+        setState(() {
+          _showBars = true;
+        });
+        downloadProvider.setNavbarVisible(true);
+      }
+      _lastScrollY = y;
+    } else if (y - _lastScrollY > 15) {
+      if (_showBars) {
+        setState(() {
+          _showBars = false;
+        });
+        downloadProvider.setNavbarVisible(false);
+      }
+      _lastScrollY = y;
+    } else if (_lastScrollY - y > 15) {
+      if (!_showBars) {
+        setState(() {
+          _showBars = true;
+        });
+        downloadProvider.setNavbarVisible(true);
+      }
+      _lastScrollY = y;
+    }
   }
 
   @override
   void dispose() {
     _urlController.dispose();
     _focusNode.dispose();
+    _dashboardScrollController.dispose();
     super.dispose();
   }
 
@@ -296,6 +354,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final accentColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
     return SingleChildScrollView(
+      controller: _dashboardScrollController,
       padding: const EdgeInsets.all(24.0),
       physics: const BouncingScrollPhysics(),
       child: Column(
@@ -543,6 +602,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final downloadProvider = context.watch<DownloadProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
@@ -550,145 +610,186 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     return GeometricGridBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          titleSpacing: 0,
-          title: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0),
-            child: Row(
-              children: [
-                // 1. Browser address textfield input
-                Expanded(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: 40,
+        body: Column(
+          children: [
+            // Custom App Bar
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              height: _showBars ? (kToolbarHeight + MediaQuery.of(context).padding.top) : 0,
+              child: ClipRect(
+                child: DmxBackdropFilter(
+                  sigmaX: 12,
+                  sigmaY: 12,
+                  child: Container(
+                    padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+                    height: kToolbarHeight + MediaQuery.of(context).padding.top,
                     decoration: BoxDecoration(
-                      color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: _isFocused
-                            ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                            : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
-                        width: 1.0,
-                      ),
-                      boxShadow: (_isFocused && isDark && settings.enableGlow)
-                          ? [
-                              BoxShadow(
-                                color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.25),
-                                blurRadius: 8,
-                                spreadRadius: 0.5,
-                              )
-                            ]
-                          : null,
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: TextField(
-                      controller: _urlController,
-                      focusNode: _focusNode,
-                      style: TextStyle(
-                        color: textClr,
-                        fontSize: 13,
-                      ),
-                      decoration: InputDecoration(
-                        icon: Icon(
-                          _isHome ? Icons.search : Icons.language,
-                          color: _isFocused
-                              ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                              : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
-                          size: 16,
+                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                          width: 0.8,
                         ),
-                        suffixIcon: _urlController.text.isNotEmpty
-                            ? IconButton(
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                icon: Icon(
-                                  Icons.clear, 
-                                  size: 16, 
-                                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary
+                      ),
+                    ),
+                    child: SingleChildScrollView(
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: SizedBox(
+                        height: kToolbarHeight,
+                        alignment: Alignment.center,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                          child: Row(
+                            children: [
+                              // 1. Browser address textfield input
+                              Expanded(
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: _isFocused
+                                          ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                                          : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                                      width: 1.0,
+                                    ),
+                                    boxShadow: (_isFocused && isDark && settings.enableGlow)
+                                        ? [
+                                            BoxShadow(
+                                              color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.25),
+                                              blurRadius: 8,
+                                              spreadRadius: 0.5,
+                                            )
+                                          ]
+                                        : null,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: TextField(
+                                    controller: _urlController,
+                                    focusNode: _focusNode,
+                                    style: TextStyle(
+                                      color: textClr,
+                                      fontSize: 13,
+                                    ),
+                                    decoration: InputDecoration(
+                                      icon: Icon(
+                                        _isHome ? Icons.search : Icons.language,
+                                        color: _isFocused
+                                            ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                                            : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                                        size: 16,
+                                      ),
+                                      suffixIcon: _urlController.text.isNotEmpty
+                                          ? IconButton(
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(),
+                                              icon: Icon(
+                                                Icons.clear, 
+                                                size: 16, 
+                                                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary
+                                              ),
+                                              onPressed: () {
+                                                triggerHaptic(settings);
+                                                _urlController.clear();
+                                                setState(() {});
+                                              },
+                                            )
+                                          : null,
+                                      hintText: isRtl ? 'ابحث أو ادخل الرابط...' : 'SEARCH OR SCAN SIGNAL...',
+                                      hintStyle: TextStyle(
+                                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                        fontSize: 11,
+                                      ),
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                                    ),
+                                    onSubmitted: _navigateToUrl,
+                                  ),
                                 ),
-                                onPressed: () {
-                                  triggerHaptic(settings);
-                                  _urlController.clear();
-                                  setState(() {});
-                                },
-                              )
-                            : null,
-                        hintText: isRtl ? 'ابحث أو ادخل الرابط...' : 'SEARCH OR SCAN SIGNAL...',
-                        hintStyle: TextStyle(
-                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                          fontSize: 11,
+                              ),
+                              const SizedBox(width: 8),
+                              // Navigation controls
+                              if (!_isHome) ...[
+                                IconButton(
+                                  icon: Icon(Icons.home_outlined, size: 18, color: textClr),
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
+                                    setState(() {
+                                      _isHome = true;
+                                      _urlController.clear();
+                                      _showBars = true;
+                                    });
+                                    downloadProvider.setNavbarVisible(true);
+                                    if (_dashboardScrollController.hasClients) {
+                                      _dashboardScrollController.jumpTo(0);
+                                    }
+                                    _webViewController.loadRequest(Uri.parse('about:blank'));
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.arrow_back_ios_new, size: 15, color: _canGoBack ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
+                                  onPressed: _canGoBack
+                                      ? () {
+                                          triggerHaptic(settings);
+                                          _webViewController.goBack();
+                                        }
+                                      : null,
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.arrow_forward_ios, size: 15, color: _canGoForward ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
+                                  onPressed: _canGoForward
+                                      ? () {
+                                          triggerHaptic(settings);
+                                          _webViewController.goForward();
+                                        }
+                                      : null,
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.refresh, size: 17, color: textClr),
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    _webViewController.reload();
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
                       ),
-                      onSubmitted: _navigateToUrl,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Navigation controls
-                if (!_isHome) ...[
-                  IconButton(
-                    icon: Icon(Icons.home_outlined, size: 18, color: textClr),
-                    onPressed: () {
-                      triggerHaptic(settings);
-                      setState(() {
-                        _isHome = true;
-                        _urlController.clear();
-                      });
-                      _webViewController.loadRequest(Uri.parse('about:blank'));
-                    },
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.arrow_back_ios_new, size: 15, color: _canGoBack ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
-                    onPressed: _canGoBack
-                        ? () {
-                            triggerHaptic(settings);
-                            _webViewController.goBack();
-                          }
-                        : null,
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.arrow_forward_ios, size: 15, color: _canGoForward ? textClr : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
-                    onPressed: _canGoForward
-                        ? () {
-                            triggerHaptic(settings);
-                            _webViewController.goForward();
-                          }
-                        : null,
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.refresh, size: 17, color: textClr),
-                    onPressed: () {
-                      triggerHaptic(settings);
-                      _webViewController.reload();
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              // Loading Progress line
-              if (_isLoading && !_isHome)
-                LinearProgressIndicator(
-                  value: _loadingProgress,
-                  minHeight: 2.0,
-                  backgroundColor: Colors.transparent,
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                ),
-              Expanded(
-                child: _isHome
-                    ? _buildHomeDashboard(context, settings)
-                    : WebViewWidget(controller: _webViewController),
               ),
-            ],
-          ),
+            ),
+            // Loading Progress line
+            if (_isLoading && !_isHome)
+              LinearProgressIndicator(
+                value: _loadingProgress,
+                minHeight: 2.0,
+                backgroundColor: Colors.transparent,
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              ),
+            // The main browser view (WebView or Dashboard)
+            Expanded(
+              child: _isHome
+                  ? _buildHomeDashboard(context, settings)
+                  : WebViewWidget(controller: _webViewController),
+            ),
+            // Animated bottom padding corresponding to bottom navigation bar visibility
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              height: downloadProvider.isNavbarVisible
+                  ? (68.0 + MediaQuery.of(context).padding.bottom)
+                  : 0.0,
+            ),
+          ],
         ),
       ),
     );

@@ -66,6 +66,7 @@ class DownloadProvider extends ChangeNotifier {
   String? _categoryFilter;
   int _activeTabIndex = 0;
   String? _lastError;
+  bool _isNavbarVisible = true;
 
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
   String get searchQuery => _searchQuery;
@@ -75,14 +76,23 @@ class DownloadProvider extends ChangeNotifier {
   String? get lastError => _lastError;
   SortOption get sortOption => _sortOption;
   bool get sortAscending => _sortAscending;
+  bool get isNavbarVisible => _isNavbarVisible;
 
   void setCategoryFilter(String? category) {
     _categoryFilter = category;
     notifyListeners();
   }
 
+  void setNavbarVisible(bool visible) {
+    if (_isNavbarVisible != visible) {
+      _isNavbarVisible = visible;
+      notifyListeners();
+    }
+  }
+
   void setActiveTabIndex(int index) {
     _activeTabIndex = index;
+    _isNavbarVisible = true;
     notifyListeners();
   }
 

@@ -87,6 +87,15 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          flexibleSpace: ClipRect(
+            child: DmxBackdropFilter(
+              sigmaX: 12,
+              sigmaY: 12,
+              child: Container(
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+              ),
+            ),
+          ),
           title: Text(
             L10n.of(context, 'config_header'),
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(

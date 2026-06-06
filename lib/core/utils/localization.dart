@@ -39,10 +39,12 @@ class L10n {
       'settings_lang': 'COCKPIT LANGUAGE',
       'settings_lang_sub': 'Select interface localization',
       'settings_default_threads': 'DEFAULT CONNECTION CHANNELS',
-      'settings_default_threads_sub': 'Default part threads count for new downloads',
+      'settings_default_threads_sub':
+          'Default part threads count for new downloads',
       'settings_about': 'ABOUT XDM',
       'settings_firmware': 'SYSTEM FIRMWARE v2.0.26',
-      'settings_about_desc': 'High-efficiency parallel multithreading transmission processor for mobile networks. Designed for low-latency signal captures.',
+      'settings_about_desc':
+          'High-efficiency parallel multithreading transmission processor for mobile networks. Designed for low-latency signal captures.',
       'add_download': 'ESTABLISH NEW SIGNAL',
       'add_download_url': 'TARGET URL SIGNAL',
       'add_download_name': 'LOCAL IDENTITY (FILENAME)',
@@ -66,11 +68,14 @@ class L10n {
       'clipboard_ignore': 'IGNORE',
       'clipboard_establish': 'ESTABLISH',
       'onboarding_title_1': 'MAX SPEED ENGINE',
-      'onboarding_sub_1': 'Accelerate download speeds with multi-threaded chunking pipelines.',
+      'onboarding_sub_1':
+          'Accelerate download speeds with multi-threaded chunking pipelines.',
       'onboarding_title_2': 'SMART CATEGORIES',
-      'onboarding_sub_2': 'Auto-organize your files into categorized docks cleanly.',
+      'onboarding_sub_2':
+          'Auto-organize your files into categorized docks cleanly.',
       'onboarding_title_3': 'TACTILE COCKPIT',
-      'onboarding_sub_3': 'Complete control with connection filters, grid styles, and scheduling.',
+      'onboarding_sub_3':
+          'Complete control with connection filters, grid styles, and scheduling.',
       'onboarding_start': 'INITIALIZE COCKPIT',
       'onboarding_next': 'NEXT SIGNAL',
       'details_title': 'SIGNAL DETAILS',
@@ -88,7 +93,8 @@ class L10n {
       'details_established': 'ESTABLISHED',
       'details_inactive_eta': 'ETA: INACTIVE',
       'details_threads_warning_title': 'RESTRUCTURE CONNECTION CHANNELS?',
-      'details_threads_warning_desc': 'Changing connection channels on an active or paused download will delete existing segment files and reset your progress back to 0. Do you want to proceed?',
+      'details_threads_warning_desc':
+          'Changing connection channels on an active or paused download will delete existing segment files and reset your progress back to 0. Do you want to proceed?',
       'sort_date': 'DATE',
       'sort_status': 'STATUS',
       'search_placeholder': 'Filter signals...',
@@ -109,9 +115,11 @@ class L10n {
       'settings_proxy_sub': 'Redirect connection data streams',
       'settings_proxy_address': 'PROXY ADDRESS (IP:PORT)',
       'settings_bypass_ssl': 'TRUST ALL SSL CERTIFICATES',
-      'settings_bypass_ssl_sub': 'Bypass SSL validation (WARNING: MITM vulnerability)',
+      'settings_bypass_ssl_sub':
+          'Bypass SSL validation (WARNING: MITM vulnerability)',
       'settings_reduce_visuals': 'REDUCE VISUAL EFFECTS',
-      'settings_reduce_visuals_sub': 'Disable blur and glow effects for better performance',
+      'settings_reduce_visuals_sub':
+          'Disable blur and glow effects for better performance',
       'settings_biometric': 'BIOMETRIC APP LOCK',
       'settings_biometric_sub': 'Verify identity before opening cockpit',
       'settings_cleanup': 'AUTO-CLEANUP LOGS',
@@ -157,10 +165,12 @@ class L10n {
       'settings_lang': 'لغة لوحة القيادة',
       'settings_lang_sub': 'اختر لغة واجهة المستخدم',
       'settings_default_threads': 'قنوات الاتصال الافتراضية',
-      'settings_default_threads_sub': 'عدد خيوط الأجزاء الافتراضية للتنزيلات الجديدة',
+      'settings_default_threads_sub':
+          'عدد خيوط الأجزاء الافتراضية للتنزيلات الجديدة',
       'settings_about': 'حول XDM',
       'settings_firmware': 'إصدار النظام v2.0.26',
-      'settings_about_desc': 'معالج نقل متوازي متعدد الخيوط عالي الكفاءة لشبكات الجوال. مصمم لالتقاط الإشارات منخفضة التأخير.',
+      'settings_about_desc':
+          'معالج نقل متوازي متعدد الخيوط عالي الكفاءة لشبكات الجوال. مصمم لالتقاط الإشارات منخفضة التأخير.',
       'add_download': 'إنشارة إشارة تنزيل جديدة',
       'add_download_url': 'رابط الإشارة المستهدفة',
       'add_download_name': 'الهوية المحلية (اسم الملف)',
@@ -184,11 +194,13 @@ class L10n {
       'clipboard_ignore': 'تجاهل',
       'clipboard_establish': 'استقبل',
       'onboarding_title_1': 'محرك السرعة القصوى',
-      'onboarding_sub_1': 'تسريع التنزيل عن طريق تقسيم الملفات عبر خيوط متعددة.',
+      'onboarding_sub_1':
+          'تسريع التنزيل عن طريق تقسيم الملفات عبر خيوط متعددة.',
       'onboarding_title_2': 'التصنيف الذكي',
       'onboarding_sub_2': 'تنظيم تلقائي لملفاتك داخل تصنيفات محددة بنقاء.',
       'onboarding_title_3': 'لوحة القيادة التفاعلية',
-      'onboarding_sub_3': 'تحكم كامل عبر فلاتر التنزيل، أنماط الشبكة، والجدولة.',
+      'onboarding_sub_3':
+          'تحكم كامل عبر فلاتر التنزيل، أنماط الشبكة، والجدولة.',
       'onboarding_start': 'تهيئة قمرة القيادة',
       'onboarding_next': 'الإشارة التالية',
       'details_title': 'تفاصيل الإشارة',
@@ -206,7 +218,8 @@ class L10n {
       'details_established': 'وقت الإنشاء',
       'details_inactive_eta': 'الوقت المقدر: غير نشط',
       'details_threads_warning_title': 'إعادة هيكلة قنوات الاتصال؟',
-      'details_threads_warning_desc': 'تغيير قنوات الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى حذف ملفات الأجزاء الحالية وإعادة تعيين تقدمك إلى 0. هل تريد الاستمرار؟',
+      'details_threads_warning_desc':
+          'تغيير قنوات الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى حذف ملفات الأجزاء الحالية وإعادة تعيين تقدمك إلى 0. هل تريد الاستمرار؟',
       'sort_date': 'التاريخ',
       'sort_status': 'الحالة',
       'search_placeholder': 'تصفية الإشارات...',
@@ -227,9 +240,11 @@ class L10n {
       'settings_proxy_sub': 'توجيه تدفق بيانات الاتصال',
       'settings_proxy_address': 'عنوان البروكسي (IP:PORT)',
       'settings_bypass_ssl': 'الوثوق بجميع شهادات SSL',
-      'settings_bypass_ssl_sub': 'تجاوز التحقق من الشهادات (تحذير: عرضة للاختراق)',
+      'settings_bypass_ssl_sub':
+          'تجاوز التحقق من الشهادات (تحذير: عرضة للاختراق)',
       'settings_reduce_visuals': 'تقليل التأثيرات البصرية',
-      'settings_reduce_visuals_sub': 'تعطيل تأثيرات التمويه والتوهج لتحسين الأداء',
+      'settings_reduce_visuals_sub':
+          'تعطيل تأثيرات التمويه والتوهج لتحسين الأداء',
       'settings_biometric': 'قفل التطبيق البصمي',
       'settings_biometric_sub': 'التحقق من الهوية قبل فتح لوحة القيادة',
       'settings_cleanup': 'التنظيف التلقائي للسجلات',
@@ -240,11 +255,14 @@ class L10n {
       'settings_backup_sub': 'أرشفة واسترجاع سجلات الاتصالات',
       'settings_export': 'تصدير النسخة الاحتياطية',
       'settings_import': 'استيراد النسخة الاحتياطية',
-    }
+    },
   };
 
   static String of(BuildContext context, String key) {
-    final lang = Provider.of<SettingsProvider>(context, listen: false).languageCode;
+    final lang = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    ).languageCode;
     return _translations[lang]?[key] ?? key;
   }
 
@@ -253,7 +271,8 @@ class L10n {
   }
 
   static bool isRtl(BuildContext context) {
-    return Provider.of<SettingsProvider>(context, listen: false).languageCode == 'ar';
+    return Provider.of<SettingsProvider>(context, listen: false).languageCode ==
+        'ar';
   }
 
   static String translateCategory(BuildContext context, String cat) {
@@ -274,7 +293,11 @@ class L10n {
     }
   }
 
-  static String translateStatus(BuildContext context, DownloadStatus status, String rawEta) {
+  static String translateStatus(
+    BuildContext context,
+    DownloadStatus status,
+    String rawEta,
+  ) {
     if (!isRtl(context)) return rawEta;
     switch (status) {
       case DownloadStatus.completed:
@@ -294,7 +317,10 @@ class L10n {
     }
   }
 
-  static String translateStatusName(BuildContext context, DownloadStatus status) {
+  static String translateStatusName(
+    BuildContext context,
+    DownloadStatus status,
+  ) {
     if (!isRtl(context)) return status.name;
     switch (status) {
       case DownloadStatus.downloading:

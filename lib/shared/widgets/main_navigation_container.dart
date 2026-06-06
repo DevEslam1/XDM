@@ -139,6 +139,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.background : AppTheme.lightBackground,
+      extendBody: true,
       body: Directionality(
         textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
         child: FadeIndexedStack(
@@ -146,59 +147,64 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
           children: _screens,
         ),
       ),
-      bottomNavigationBar: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: DmxBackdropFilter(
-          sigmaX: 15,
-          sigmaY: 15,
-          child: Container(
-            decoration: BoxDecoration(
-              color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              border: Border(
-                top: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.6),
+      bottomNavigationBar: AnimatedSlide(
+        offset: downloadProvider.isNavbarVisible ? Offset.zero : const Offset(0, 1.0),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: DmxBackdropFilter(
+            sigmaX: 15,
+            sigmaY: 15,
+            child: Container(
+              decoration: BoxDecoration(
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(
+                  top: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.6),
+                ),
               ),
-            ),
-            child: SafeArea(
-              child: Directionality(
-                textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                child: Container(
-                  height: 68,
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNavItem(
-                        index: 0,
-                        icon: Icons.sensors_outlined,
-                        activeIcon: Icons.sensors,
-                        label: L10n.of(context, 'title_transmissions'),
-                      ),
-                      _buildNavItem(
-                        index: 1,
-                        icon: Icons.grid_view_outlined,
-                        activeIcon: Icons.grid_view_rounded,
-                        label: L10n.of(context, 'title_categories'),
-                      ),
-                      _buildNavItem(
-                        index: 2,
-                        icon: Icons.language_outlined,
-                        activeIcon: Icons.language,
-                        label: L10n.of(context, 'title_browser'),
-                      ),
-                      _buildNavItem(
-                        index: 3,
-                        icon: Icons.history_toggle_off_outlined,
-                        activeIcon: Icons.history,
-                        label: L10n.of(context, 'title_history'),
-                      ),
-                      _buildNavItem(
-                        index: 4,
-                        icon: Icons.settings_outlined,
-                        activeIcon: Icons.settings_rounded,
-                        label: L10n.of(context, 'title_config'),
-                      ),
-                    ],
+              child: SafeArea(
+                child: Directionality(
+                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                  child: Container(
+                    height: 68,
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildNavItem(
+                          index: 0,
+                          icon: Icons.sensors_outlined,
+                          activeIcon: Icons.sensors,
+                          label: L10n.of(context, 'title_transmissions'),
+                        ),
+                        _buildNavItem(
+                          index: 1,
+                          icon: Icons.grid_view_outlined,
+                          activeIcon: Icons.grid_view_rounded,
+                          label: L10n.of(context, 'title_categories'),
+                        ),
+                        _buildNavItem(
+                          index: 2,
+                          icon: Icons.language_outlined,
+                          activeIcon: Icons.language,
+                          label: L10n.of(context, 'title_browser'),
+                        ),
+                        _buildNavItem(
+                          index: 3,
+                          icon: Icons.history_toggle_off_outlined,
+                          activeIcon: Icons.history,
+                          label: L10n.of(context, 'title_history'),
+                        ),
+                        _buildNavItem(
+                          index: 4,
+                          icon: Icons.settings_outlined,
+                          activeIcon: Icons.settings_rounded,
+                          label: L10n.of(context, 'title_config'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

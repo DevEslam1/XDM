@@ -12,6 +12,7 @@ import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -100,6 +101,15 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          flexibleSpace: ClipRect(
+            child: DmxBackdropFilter(
+              sigmaX: 12,
+              sigmaY: 12,
+              child: Container(
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+              ),
+            ),
+          ),
           title: Text(
             isRtl ? 'إرسال جديد' : 'NEW TRANSMISSION',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(

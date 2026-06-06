@@ -8,6 +8,7 @@ import '../../downloads/widgets/download_stats_panel.dart';
 import '../../downloads/widgets/filter_chips_bar.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../add_download/screens/add_screen.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -42,6 +43,15 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          flexibleSpace: ClipRect(
+            child: DmxBackdropFilter(
+              sigmaX: 12,
+              sigmaY: 12,
+              child: Container(
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+              ),
+            ),
+          ),
           title: _isSearching
               ? Container(
                   decoration: BoxDecoration(

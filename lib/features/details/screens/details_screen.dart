@@ -10,6 +10,7 @@ import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../widgets/circular_progress_widget.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -29,6 +30,15 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
+          flexibleSpace: ClipRect(
+            child: DmxBackdropFilter(
+              sigmaX: 12,
+              sigmaY: 12,
+              child: Container(
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+              ),
+            ),
+          ),
           title: Text(
             L10n.of(context, 'details_title'),
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
