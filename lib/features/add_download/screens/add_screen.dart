@@ -17,6 +17,8 @@ import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/file_utils.dart';
+import '../../../core/services/download_engine.dart';
 
 class AddScreen extends StatefulWidget {
   final String? prefilledUrl;
@@ -38,6 +40,14 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
 
   bool _isScheduled = false;
   DateTime? _scheduledDateTime;
+
+  bool _isMetadataResolved = false;
+  bool _isResolvingLink = false;
+  String _resolvedFileName = '';
+  int _resolvedFileSize = 0;
+  String _resolvedCategory = 'Auto';
+  bool _supportsResume = false;
+  List<Map<String, dynamic>> _torrentFiles = [];
 
   final List<String> _categories = [
     'Auto',
@@ -238,10 +248,42 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 12),
+                          if (_isResolvingLink)
+                            const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8.0),
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            Align(
+                              alignment: isRtl ? Alignment.centerLeft : Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: _resolveLinkMetadata,
+                                icon: Icon(Icons.verified_user_outlined, size: 16, color: blueClr),
+                                label: Text(
+                                  isRtl ? 'التحقق من الرابط' : 'VERIFY LINK',
+                                  style: TextStyle(
+                                    color: blueClr,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
+                    _buildMetadataPanel(context, isDark),
 
                     // File Configuration Card
                     _buildInputPanel(
@@ -501,7 +543,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                                    await provider.addDownload(
                                      name: _nameController.text.trim(),
                                      url: _urlController.text.trim(),
-                                     size: 0,
+                                     size: _isMetadataResolved ? _resolvedFileSize : 0,
                                      category: _selectedCategory == 'Auto'
                                          ? ''
                                          : _selectedCategory,
@@ -685,6 +727,13 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
             _urlController.text = 'file://$filePath';
             _nameController.text = meta['name'] ?? '';
             _selectedCategory = 'Archive';
+            // Pre-resolve metadata variables immediately
+            _resolvedFileName = meta['name'] ?? '';
+            _resolvedFileSize = meta['length'] ?? 0;
+            _resolvedCategory = 'Archive';
+            _supportsResume = true;
+            _torrentFiles = List<Map<String, dynamic>>.from(meta['files'] ?? []);
+            _isMetadataResolved = true;
           });
           if (mounted) {
             ThemedSnackbar.show(
@@ -722,5 +771,288 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         );
       }
     }
+  }
+
+  Future<void> _resolveLinkMetadata() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      ThemedSnackbar.show(
+        context,
+        message: L10n.isRtl(context) ? 'يرجى إدخال الرابط أولاً' : 'Please enter a URL first',
+        color: AppTheme.neonRed,
+        icon: Icons.error_outline,
+        isDarkMode: Provider.of<SettingsProvider>(context, listen: false).isDarkMode,
+      );
+      return;
+    }
+
+    if (!isValidTransmissionUrl(url)) {
+      ThemedSnackbar.show(
+        context,
+        message: L10n.isRtl(context) ? 'رابط غير صالح' : 'Invalid transmission URL',
+        color: AppTheme.neonRed,
+        icon: Icons.error_outline,
+        isDarkMode: Provider.of<SettingsProvider>(context, listen: false).isDarkMode,
+      );
+      return;
+    }
+
+    setState(() {
+      _isResolvingLink = true;
+      _isMetadataResolved = false;
+      _torrentFiles = [];
+    });
+
+    try {
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      
+      // If it's a local torrent file url (file://), handle it
+      if (url.startsWith('file://')) {
+        final filePath = Uri.parse(url).toFilePath();
+        final file = File(filePath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final meta = BencodeDecoder.parseTorrentBytes(bytes);
+          if (meta != null) {
+            setState(() {
+              _resolvedFileName = meta['name'] ?? '';
+              _resolvedFileSize = meta['length'] ?? 0;
+              _resolvedCategory = 'Archive';
+              _supportsResume = true;
+              _torrentFiles = List<Map<String, dynamic>>.from(meta['files'] ?? []);
+              _isMetadataResolved = true;
+              
+              _nameController.text = _resolvedFileName;
+              _selectedCategory = 'Archive';
+            });
+            return;
+          }
+        }
+      }
+
+      // Otherwise resolve metadata from network
+      final engine = DownloadEngine();
+      final meta = await engine.resolveMetadata(
+        url: url,
+        requestedFileName: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : null,
+        customUserAgent: settings.customUserAgent,
+        enableProxy: settings.enableProxy,
+        proxyAddress: settings.proxyAddress,
+        bypassSSL: settings.bypassSSL,
+      );
+
+      setState(() {
+        _resolvedFileName = meta.fileName;
+        _resolvedFileSize = meta.fileSize;
+        _resolvedCategory = meta.category;
+        _supportsResume = meta.supportsResume;
+        _isMetadataResolved = true;
+        
+        // Update the form inputs to prefill if appropriate
+        _nameController.text = _resolvedFileName;
+        if (_categories.contains(_resolvedCategory)) {
+          _selectedCategory = _resolvedCategory;
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: 'Error resolving link metadata: $e',
+          color: AppTheme.neonRed,
+          icon: Icons.error_outline,
+          isDarkMode: Provider.of<SettingsProvider>(context, listen: false).isDarkMode,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isResolvingLink = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildMetadataPanel(BuildContext context, bool isDark) {
+    if (!_isMetadataResolved) return const SizedBox.shrink();
+
+    final isRtl = L10n.isRtl(context);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+
+    IconData categoryIcon;
+    switch (_resolvedCategory) {
+      case 'Video':
+        categoryIcon = Icons.movie_outlined;
+        break;
+      case 'Audio':
+        categoryIcon = Icons.audiotrack_outlined;
+        break;
+      case 'Document':
+        categoryIcon = Icons.description_outlined;
+        break;
+      case 'Archive':
+        categoryIcon = Icons.folder_zip_outlined;
+        break;
+      case 'APK':
+        categoryIcon = Icons.android_outlined;
+        break;
+      default:
+        categoryIcon = Icons.insert_drive_file_outlined;
+    }
+
+    return Column(
+      children: [
+        _buildInputPanel(
+          context,
+          isDark: isDark,
+          title: isRtl ? 'بيانات النقل المؤكدة' : 'VERIFIED TRANSMISSION METADATA',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.2),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Icon(
+                      categoryIcon,
+                      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _resolvedFileName,
+                          style: TextStyle(
+                            color: textClr,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              formatBytes(_resolvedFileSize),
+                              style: TextStyle(
+                                color: textClr,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Icon(
+                              _supportsResume ? Icons.check_circle_outline : Icons.error_outline,
+                              color: _supportsResume ? greenClr : redClr,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _supportsResume 
+                                  ? (isRtl ? 'يدعم الاستكمال' : 'Resume Supported') 
+                                  : (isRtl ? 'لا يدعم الاستكمال' : 'No Resume Support'),
+                              style: TextStyle(
+                                color: _supportsResume ? greenClr : redClr,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_torrentFiles.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Divider(height: 1, thickness: 0.5),
+                const SizedBox(height: 12),
+                Text(
+                  isRtl ? 'الملفات المضمنة (${_torrentFiles.length})' : 'INCLUDED FILES (${_torrentFiles.length})',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: secClr,
+                    fontSize: 9,
+                    letterSpacing: 0.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 150),
+                  decoration: BoxDecoration(
+                    color: (isDark ? AppTheme.background : AppTheme.lightBackground).withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: glassBorder, width: 0.6),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                    itemCount: _torrentFiles.length,
+                    separatorBuilder: (context, index) => const Divider(height: 10, thickness: 0.3),
+                    itemBuilder: (context, index) {
+                      final f = _torrentFiles[index];
+                      final name = f['name'] as String? ?? 'unknown';
+                      final length = f['length'] as int? ?? 0;
+                      return Row(
+                        children: [
+                          Icon(
+                            Icons.insert_drive_file_outlined,
+                            size: 14,
+                            color: secClr,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: TextStyle(
+                                color: textClr,
+                                fontSize: 11,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            formatBytes(length),
+                            style: TextStyle(
+                              color: secClr,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
   }
 }

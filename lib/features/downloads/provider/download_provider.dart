@@ -51,6 +51,7 @@ class DownloadProvider extends ChangeNotifier {
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, List<double>> _speedHistories = {};
   final Map<String, int> _lastProgressUpdateTimes = {};
+  final Map<String, int> _lastDbSaveTimes = {};
   final Set<String> _pendingProgressUpdates = {};
 
   List<double> getSpeedHistory(String id) => _speedHistories[id] ?? const [];
@@ -531,6 +532,7 @@ class DownloadProvider extends ChangeNotifier {
     _cancelTokens.remove(id);
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
+    _lastDbSaveTimes.remove(id);
     _pendingProgressUpdates.remove(id);
     _tasks.removeWhere((task) => task.id == id);
     if (task != null) {
@@ -569,6 +571,7 @@ class DownloadProvider extends ChangeNotifier {
   /// been flushed to the database. No-op if there's nothing pending.
   Future<void> _flushPendingProgress(String id) async {
     _lastProgressUpdateTimes.remove(id);
+    _lastDbSaveTimes.remove(id);
     if (!_pendingProgressUpdates.remove(id)) return;
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) return;
@@ -687,14 +690,19 @@ class DownloadProvider extends ChangeNotifier {
               return;
             }
 
+            final index = _tasks.indexWhere((t) => t.id == task.id);
+            if (index == -1) return;
+
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
+            final lastDbSave = _lastDbSaveTimes[task.id] ?? 0;
+
             final speedList = _speedHistories[task.id] ??= [];
             speedList.add(progress.speed);
             if (speedList.length > 20) {
               speedList.removeAt(0);
             }
 
-            final now = DateTime.now().millisecondsSinceEpoch;
-            final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
             final updatedTask = current.copyWith(
               fileSize: progress.fileSize,
               downloadedBytes: progress.downloadedBytes,
@@ -708,32 +716,34 @@ class DownloadProvider extends ChangeNotifier {
                   ),
             );
 
-            // Throttle database writes and UI notifications to once per 500ms
-            if (now - lastUpdate < 500) {
-              // Update in-memory task state and mark as having a pending
-              // write so pause/cancel can flush it before tearing down.
-              final index = _tasks.indexWhere((t) => t.id == task.id);
-              if (index != -1) {
-                _tasks[index] = updatedTask;
-                _pendingProgressUpdates.add(task.id);
-              }
-              return;
+            // Throttle UI notification and notification progress to 200ms
+            if (now - lastUpdate >= 200) {
+              _lastProgressUpdateTimes[task.id] = now;
+              _tasks[index] = updatedTask;
+              notifyListeners();
+
+              _notificationService.showDownloadProgress(
+                notificationId: notificationId,
+                title: task.fileName,
+                progress: progress.downloadedBytes,
+                maxProgress: progress.fileSize,
+                speed: updatedTask.speedFormatted,
+                eta: updatedTask.etaFormatted,
+                languageCode: _settingsProvider.languageCode,
+                payload: task.id,
+              );
+            } else {
+              _tasks[index] = updatedTask;
             }
 
-            _lastProgressUpdateTimes[task.id] = now;
-            _pendingProgressUpdates.remove(task.id);
-            _setTask(updatedTask);
-
-            _notificationService.showDownloadProgress(
-              notificationId: notificationId,
-              title: task.fileName,
-              progress: progress.downloadedBytes,
-              maxProgress: progress.fileSize,
-              speed: task.speedFormatted,
-              eta: task.etaFormatted,
-              languageCode: _settingsProvider.languageCode,
-              payload: task.id,
-            );
+            // Throttle database saves to 2000ms
+            if (now - lastDbSave >= 2000) {
+              _lastDbSaveTimes[task.id] = now;
+              _pendingProgressUpdates.remove(task.id);
+              _databaseService.saveTask(updatedTask);
+            } else {
+              _pendingProgressUpdates.add(task.id);
+            }
           },
         )
         .then((_) async {
