@@ -116,6 +116,7 @@ class DownloadTask {
 
   DownloadTask copyWith({
     String? fileName,
+    String? url,
     int? fileSize,
     int? downloadedBytes,
     double? speed,
@@ -145,7 +146,7 @@ class DownloadTask {
     return DownloadTask(
       id: id,
       fileName: fileName ?? this.fileName,
-      url: url,
+      url: url ?? this.url,
       fileSize: fileSize ?? this.fileSize,
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
       speed: speed ?? this.speed,

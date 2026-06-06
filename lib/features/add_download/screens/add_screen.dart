@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import '../../../core/app_theme.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../../core/utils/bencode_decoder.dart';
 import '../../downloads/provider/download_provider.dart';
+import '../../downloads/models/download_task.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
@@ -551,45 +553,17 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                                     }
                                   }
 
-                                  setState(() => _isSubmitting = true);
                                   final provider = Provider.of<DownloadProvider>(
                                     context,
                                     listen: false,
                                   );
-                                   await provider.addDownload(
-                                     name: _nameController.text.trim(),
-                                     url: _urlController.text.trim(),
-                                     size: _isMetadataResolved ? _resolvedFileSize : 0,
-                                     category: _selectedCategory == 'Auto'
-                                         ? ''
-                                         : _selectedCategory,
-                                     savePath: _pathController.text.trim(),
-                                     threadCount: _selectedThreads,
-                                     scheduledAt: _isScheduled ? _scheduledDateTime : null,
-                                     torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
-                                   );
-                                  if (!context.mounted) return;
-                                  setState(() => _isSubmitting = false);
-                                  if (provider.lastError != null) {
-                                    ThemedSnackbar.show(
-                                      context,
-                                      message: provider.lastError!,
-                                      color: redClr,
-                                      icon: Icons.error_outline,
-                                      isDarkMode: isDark,
-                                    );
-                                    return;
-                                  }
-                                  ThemedSnackbar.show(
+                                  await _handleDuplicateOrSubmit(
                                     context,
-                                    message: isRtl
-                                        ? 'تم إنشاء الاتصال. القنوات متصلة.'
-                                        : 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
-                                    color: blueClr,
-                                    icon: Icons.rocket_launch_outlined,
-                                    isDarkMode: isDark,
+                                    provider,
+                                    settings,
+                                    isDark,
+                                    isRtl,
                                   );
-                                  Navigator.pop(context);
                                 }
                               },
                         text: _isSubmitting
@@ -1116,5 +1090,265 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         const SizedBox(height: 16),
       ],
     );
+  }
+
+  Future<void> _handleDuplicateOrSubmit(
+    BuildContext context,
+    DownloadProvider provider,
+    SettingsProvider settings,
+    bool isDark,
+    bool isRtl,
+  ) async {
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    final enteredName = _nameController.text.trim();
+    final finalFileName = enteredName.isNotEmpty
+        ? safeFileName(enteredName)
+        : fileNameFromUrl(_urlController.text.trim());
+    final int finalSize = _isMetadataResolved ? _resolvedFileSize : 0;
+
+    DownloadTask? duplicateTask;
+    if (finalSize > 0) {
+      for (final task in provider.tasks) {
+        if (task.fileName.toLowerCase() == finalFileName.toLowerCase() &&
+            task.fileSize == finalSize) {
+          duplicateTask = task;
+          break;
+        }
+      }
+    }
+
+    if (duplicateTask != null) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: isDark ? AppTheme.surface : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+              ),
+            ),
+            title: Text(
+              isRtl ? 'ملف مكرر مكتشف' : 'DUPLICATE FILE DETECTED',
+              style: TextStyle(
+                color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            content: Text(
+              isRtl
+                  ? 'يوجد بالفعل ملف بنفس الاسم والحجم في قائمة التحميل. يرجى اختيار إجراء:'
+                  : 'A file with the same name and size is already in the download list. Please select an action:',
+              style: TextStyle(
+                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                fontSize: 13,
+              ),
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actionsOverflowButtonSpacing: 8,
+            actions: [
+              // Option 1: Update Link
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? AppTheme.neonBlue.withValues(alpha: 0.1) : AppTheme.lightNeonBlue.withValues(alpha: 0.05),
+                  side: BorderSide(color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () async {
+                  triggerHaptic(settings);
+                  Navigator.pop(context);
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await provider.updateTaskUrlAndResume(duplicateTask!.id, _urlController.text.trim());
+                    if (mounted) {
+                      setState(() => _isSubmitting = false);
+                      ThemedSnackbar.show(
+                        context,
+                        message: isRtl ? 'تم تحديث رابط الملف واستئنافه' : 'File link updated and download resumed.',
+                        color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                        icon: Icons.check_circle_outline,
+                        isDarkMode: isDark,
+                      );
+                      Navigator.pop(context); // Close AddScreen
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _isSubmitting = false);
+                      ThemedSnackbar.show(
+                        context,
+                        message: e.toString(),
+                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        icon: Icons.error_outline,
+                        isDarkMode: isDark,
+                      );
+                    }
+                  }
+                },
+                child: Text(
+                  isRtl ? 'تحديث الرابط والاستئناف' : 'UPDATE LINK & RESUME',
+                  style: TextStyle(color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue, fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+              ),
+
+              // Option 2: Start Over
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? AppTheme.neonViolet.withValues(alpha: 0.1) : AppTheme.lightNeonViolet.withValues(alpha: 0.05),
+                  side: BorderSide(color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () async {
+                  triggerHaptic(settings);
+                  Navigator.pop(context);
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await provider.startOverTask(duplicateTask!.id, _urlController.text.trim());
+                    if (mounted) {
+                      setState(() => _isSubmitting = false);
+                      ThemedSnackbar.show(
+                        context,
+                        message: isRtl ? 'بدأ التحميل من جديد' : 'Download started over from scratch.',
+                        color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                        icon: Icons.refresh,
+                        isDarkMode: isDark,
+                      );
+                      Navigator.pop(context); // Close AddScreen
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _isSubmitting = false);
+                      ThemedSnackbar.show(
+                        context,
+                        message: e.toString(),
+                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        icon: Icons.error_outline,
+                        isDarkMode: isDark,
+                      );
+                    }
+                  }
+                },
+                child: Text(
+                  isRtl ? 'بدء من جديد' : 'START OVER',
+                  style: TextStyle(color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet, fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+              ),
+
+              // Option 3: Add Another (Numbered)
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? AppTheme.neonGreen.withValues(alpha: 0.1) : AppTheme.lightNeonGreen.withValues(alpha: 0.05),
+                  side: BorderSide(color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () async {
+                  triggerHaptic(settings);
+                  Navigator.pop(context);
+                  setState(() => _isSubmitting = true);
+
+                  // Find a unique numbered filename
+                  String numberedName = finalFileName;
+                  final ext = p.extension(finalFileName);
+                  final base = p.basenameWithoutExtension(finalFileName);
+                  var counter = 1;
+                  while (true) {
+                    final candidate = '${base}_$counter$ext';
+                    final exists = provider.tasks.any((t) => t.fileName.toLowerCase() == candidate.toLowerCase());
+                    if (!exists) {
+                      numberedName = candidate;
+                      break;
+                    }
+                    counter++;
+                  }
+
+                  try {
+                    await provider.addDownload(
+                      name: numberedName,
+                      url: _urlController.text.trim(),
+                      size: finalSize,
+                      category: _selectedCategory == 'Auto' ? '' : _selectedCategory,
+                      savePath: _pathController.text.trim(),
+                      threadCount: _selectedThreads,
+                      scheduledAt: _isScheduled ? _scheduledDateTime : null,
+                      torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
+                    );
+                    if (mounted) {
+                      setState(() => _isSubmitting = false);
+                      Navigator.pop(context); // Close AddScreen
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _isSubmitting = false);
+                      ThemedSnackbar.show(
+                        context,
+                        message: e.toString(),
+                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        icon: Icons.error_outline,
+                        isDarkMode: isDark,
+                      );
+                    }
+                  }
+                },
+                child: Text(
+                  isRtl ? 'إضافة كملف مرقم جديد' : 'ADD NUMBERED FILE',
+                  style: TextStyle(color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+              ),
+
+              // Option 4: Cancel
+              TextButton(
+                onPressed: () {
+                  triggerHaptic(settings);
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  L10n.of(context, 'cancel_btn'),
+                  style: TextStyle(color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      // Normal submission
+      setState(() => _isSubmitting = true);
+      await provider.addDownload(
+        name: enteredName,
+        url: _urlController.text.trim(),
+        size: finalSize,
+        category: _selectedCategory == 'Auto' ? '' : _selectedCategory,
+        savePath: _pathController.text.trim(),
+        threadCount: _selectedThreads,
+        scheduledAt: _isScheduled ? _scheduledDateTime : null,
+        torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
+      );
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+      if (provider.lastError != null) {
+        ThemedSnackbar.show(
+          context,
+          message: provider.lastError!,
+          color: redClr,
+          icon: Icons.error_outline,
+          isDarkMode: isDark,
+        );
+        return;
+      }
+      ThemedSnackbar.show(
+        context,
+        message: isRtl
+            ? 'تم إنشاء الاتصال. القنوات متصلة.'
+            : 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
+        color: blueClr,
+        icon: Icons.rocket_launch_outlined,
+        isDarkMode: isDark,
+      );
+      Navigator.pop(context);
+    }
   }
 }

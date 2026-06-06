@@ -71,6 +71,15 @@ class FilterChipsBar extends StatelessWidget {
                 final filter = filters[index];
                 final isSelected = activeFilter == filter;
 
+                // Derive status color matching task status colors
+                final filterClr = switch (filter) {
+                  'All' => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  'Downloading' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  'Completed' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  'Failed' => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  _ => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                };
+
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
                   child: InkWell(
@@ -80,37 +89,41 @@ class FilterChipsBar extends StatelessWidget {
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeInOut,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 9,
+                        horizontal: 16,
+                        vertical: 8,
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? blueClr.withValues(alpha: 0.12)
+                            ? filterClr.withValues(alpha: 0.12)
                             : glassBg,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: isSelected
-                              ? blueClr.withValues(alpha: 0.35)
+                              ? filterClr.withValues(alpha: 0.5)
                               : glassBorder,
-                          width: 0.8,
+                          width: 1.0,
                         ),
-                        boxShadow: isSelected && isDark
+                        boxShadow: isSelected
                             ? [
                                 BoxShadow(
-                                  color: blueClr.withValues(alpha: 0.12),
-                                  blurRadius: 8.0,
-                                  spreadRadius: 0,
-                                ),
+                                  color: filterClr.withValues(alpha: isDark ? 0.35 : 0.15),
+                                  blurRadius: 10.0,
+                                  spreadRadius: 1.0,
+                                )
                               ]
                             : null,
                       ),
-                      child: Text(
-                        filter.toUpperCase(),
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: isSelected ? blueClr : secClr,
-                          fontSize: 10,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          letterSpacing: 1.0,
+                      child: Center(
+                        widthFactor: 1.0,
+                        heightFactor: 1.0,
+                        child: Text(
+                          filter.toUpperCase(),
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: isSelected ? filterClr : secClr,
+                            fontSize: 10,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            letterSpacing: 1.0,
+                          ),
                         ),
                       ),
                     ),

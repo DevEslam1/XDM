@@ -179,29 +179,39 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                             ),
                           const SizedBox(width: 16),
                           NeonGlowButton(
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              provider.deleteTask(task.id);
-                              ThemedSnackbar.show(
-                                context,
-                                message: isRtl ? 'تم حذف النقل بنجاح' : 'Transfer record deleted',
-                                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                                icon: Icons.delete,
-                                isDarkMode: isDark,
-                              );
-                              Navigator.pop(context);
-                            },
-                            text: L10n.of(context, 'delete_btn'),
-                            icon: Icons.delete_outline,
-                            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                          ),
+                             onPressed: () async {
+                               triggerHaptic(settings);
+                               final deleteFiles = await _showDeleteConfirmationDialog(context, task, settings);
+                               if (deleteFiles != null) {
+                                 provider.deleteTask(task.id, deleteFiles: deleteFiles);
+                                 if (context.mounted) {
+                                   ThemedSnackbar.show(
+                                     context,
+                                     message: isRtl ? 'تم حذف النقل بنجاح' : 'Transfer record deleted',
+                                     color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                     icon: Icons.delete,
+                                     isDarkMode: isDark,
+                                   );
+                                   Navigator.pop(context);
+                                 }
+                               }
+                             },
+                             text: L10n.of(context, 'delete_btn'),
+                             icon: Icons.delete_outline,
+                             color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                           ),
                         ],
                       ),
                       const SizedBox(height: 28),
 
-                      // Connection Channels / Chunks Visualizer
-                      _buildChannelsPanel(context, task, provider, statusColor, settings),
-                      const SizedBox(height: 20),
+                      // Connection Channels / Chunks Visualizer or Torrent Stats Panel
+                      if (task.isTorrent) ...[
+                        _buildTorrentStatsPanel(context, task, provider, settings),
+                        const SizedBox(height: 20),
+                      ] else ...[
+                        _buildChannelsPanel(context, task, provider, statusColor, settings),
+                        const SizedBox(height: 20),
+                      ],
 
                       // Individual Speed and Seeding Controls Panel
                       _buildTaskBandwidthPanel(context, task, provider, settings),
@@ -215,7 +225,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       _buildTorrentFilesPanel(context, task, provider, settings),
 
                       // File Metadata Panel
-                      _buildMetadataPanel(context, task, settings),
+                      _buildMetadataPanel(context, task, provider, settings),
                       const SizedBox(height: 20),
                     ],
                   ),
@@ -593,7 +603,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     );
   }
 
-  Widget _buildMetadataPanel(BuildContext context, DownloadTask task, SettingsProvider settings) {
+  Widget _buildMetadataPanel(BuildContext context, DownloadTask task, DownloadProvider provider, SettingsProvider settings) {
     final isDark = settings.isDarkMode;
     final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
@@ -621,6 +631,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             value: task.url,
             isUrl: true,
             settings: settings,
+            onEditPressed: () {
+              _showUpdateUrlDialog(context, task, provider, settings);
+            },
           ),
           _buildMetaRow(context, label: L10n.of(context, 'details_path'), value: task.savePath, settings: settings),
           _buildMetaRow(
@@ -666,6 +679,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     required String value,
     bool isUrl = false,
     required SettingsProvider settings,
+    VoidCallback? onEditPressed,
   }) {
     final isDark = settings.isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
@@ -686,15 +700,32 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontSize: 12,
-              color: textClr,
-              fontWeight: isUrl ? FontWeight.normal : FontWeight.bold,
-            ),
-            maxLines: isUrl ? 2 : 1,
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontSize: 12,
+                    color: textClr,
+                    fontWeight: isUrl ? FontWeight.normal : FontWeight.bold,
+                  ),
+                  maxLines: isUrl ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (onEditPressed != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  onPressed: onEditPressed,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: L10n.isRtl(context) ? 'تحديث الرابط' : 'Update URL',
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -1114,6 +1145,372 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
         ),
         const SizedBox(height: 20),
       ],
+    );
+  }
+
+  void _showUpdateUrlDialog(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final textController = TextEditingController(text: task.url);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+            ),
+          ),
+          title: Text(
+            isRtl ? 'تحديث رابط التحميل' : 'UPDATE DOWNLOAD LINK',
+            style: TextStyle(
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isRtl
+                    ? 'أدخل الرابط الجديد لمتابعة التحميل:'
+                    : 'Enter the new URL to continue downloading:',
+                style: TextStyle(
+                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                maxLines: 3,
+                style: TextStyle(
+                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  fontSize: 12,
+                ),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: (isDark ? AppTheme.cardBg : Colors.grey.shade100).withValues(alpha: 0.5),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                triggerHaptic(settings);
+                Navigator.pop(context);
+              },
+              child: Text(
+                L10n.of(context, 'cancel_btn'),
+                style: TextStyle(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? AppTheme.neonBlue.withValues(alpha: 0.2) : AppTheme.lightNeonBlue.withValues(alpha: 0.1),
+                side: BorderSide(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () async {
+                triggerHaptic(settings);
+                final newUrl = textController.text.trim();
+                if (newUrl.isEmpty) return;
+
+                Navigator.pop(context);
+                try {
+                  await provider.updateTaskUrl(task.id, newUrl);
+                  if (context.mounted) {
+                    ThemedSnackbar.show(
+                      context,
+                      message: isRtl
+                          ? 'تم تحديث الرابط بنجاح. يمكنك استئناف التحميل الآن.'
+                          : 'Link updated successfully. You can resume download now.',
+                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      icon: Icons.check_circle_outline,
+                      isDarkMode: isDark,
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ThemedSnackbar.show(
+                      context,
+                      message: e.toString(),
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      icon: Icons.error_outline,
+                      isDarkMode: isDark,
+                    );
+                  }
+                }
+              },
+              child: Text(
+                isRtl ? 'تحديث' : 'UPDATE',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<bool?> _showDeleteConfirmationDialog(
+    BuildContext context,
+    DownloadTask task,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    bool deleteFiles = false;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Directionality(
+              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+              child: AlertDialog(
+                backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.92),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.8),
+                ),
+                title: Text(
+                  L10n.of(context, 'delete_title'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isRtl
+                          ? 'هل أنت متأكد من حذف "${task.fileName}" من القائمة؟'
+                          : 'Are you sure you want to remove "${task.fileName}" from the list?',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: deleteFiles,
+                            activeColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                            side: BorderSide(
+                              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                              width: 1.0,
+                            ),
+                            onChanged: (val) {
+                              if (val != null) {
+                                triggerHaptic(settings);
+                                setState(() {
+                                  deleteFiles = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              triggerHaptic(settings);
+                              setState(() {
+                                deleteFiles = !deleteFiles;
+                              });
+                            },
+                            child: Text(
+                              L10n.of(context, 'delete_files_label'),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text(
+                      L10n.of(context, 'cancel_btn'),
+                      style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text(
+                      L10n.of(context, 'delete_btn'),
+                      style: TextStyle(
+                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () => Navigator.of(context).pop({'confirmed': true, 'deleteFiles': deleteFiles}),
+                  ),
+                ],
+              ),
+            );
+          }
+        );
+      },
+    ).then((result) {
+      if (result != null && result['confirmed'] == true) {
+        return result['deleteFiles'] as bool;
+      }
+      return null;
+    });
+  }
+
+  Widget _buildTorrentStatsPanel(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final isRtl = L10n.isRtl(context);
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    final seeds = provider.getTorrentSeeds(task.id);
+    final peers = provider.getTorrentPeers(task.id);
+
+    return GlassCard(
+      borderRadius: 20,
+      padding: const EdgeInsets.all(16),
+      isDarkMode: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isRtl ? 'حالة اتصال التورنت' : 'TORRENT CONNECTION STATUS',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: secClr,
+              fontSize: 10,
+              letterSpacing: 1.0,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.upload_outlined, color: greenClr, size: 20),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isRtl ? 'المصادر النشطة' : 'ACTIVE SEEDS',
+                          style: TextStyle(
+                            color: secClr,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$seeds',
+                          style: TextStyle(
+                            color: textClr,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.download_outlined, color: blueClr, size: 20),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isRtl ? 'النظراء النشطين' : 'ACTIVE PEERS',
+                          style: TextStyle(
+                            color: secClr,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$peers',
+                          style: TextStyle(
+                            color: textClr,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

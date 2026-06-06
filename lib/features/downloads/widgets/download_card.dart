@@ -19,7 +19,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<DownloadProvider>(context, listen: false);
+    final provider = Provider.of<DownloadProvider>(context);
     final settings = Provider.of<SettingsProvider>(context);
     final isDark = settings.isDarkMode;
 
@@ -97,9 +97,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       confirmDismiss: (direction) async {
         triggerHaptic(settings);
         if (direction == DismissDirection.endToStart) {
-          final confirm = await _showDeleteConfirmationDialog(context, task, settings);
-          if (confirm == true) {
-            provider.deleteTask(task.id);
+          final deleteFiles = await _showDeleteConfirmationDialog(context, task, settings);
+          if (deleteFiles != null) {
+            provider.deleteTask(task.id, deleteFiles: deleteFiles);
             if (context.mounted) {
               ThemedSnackbar.show(
                 context,
@@ -207,10 +207,12 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 6),
-                                Row(
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
                                     StatusChip(status: task.status),
-                                    const SizedBox(width: 8),
                                     Text(
                                       L10n.translateCategory(context, task.category).toUpperCase(),
                                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -220,6 +222,33 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                             color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
                                           ),
                                     ),
+                                    if (task.isTorrent &&
+                                        (task.status == DownloadStatus.downloading ||
+                                            (task.status == DownloadStatus.completed && task.seedingEnabled))) ...[
+                                      Text(
+                                        '|',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${L10n.of(context, 'seeds')}: ${provider.getTorrentSeeds(task.id)}',
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                                            ),
+                                      ),
+                                      Text(
+                                        '${L10n.of(context, 'peers')}: ${provider.getTorrentPeers(task.id)}',
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                            ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ],
@@ -282,30 +311,30 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                   },
                                   tooltip: 'Open File',
                                 ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.close,
-                                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                                  size: 18,
-                                ),
-                                onPressed: () async {
-                                  triggerHaptic(settings);
-                                  final confirm = await _showDeleteConfirmationDialog(context, task, settings);
-                                  if (confirm == true) {
-                                    provider.deleteTask(task.id);
-                                    if (context.mounted) {
-                                      ThemedSnackbar.show(
-                                        context,
-                                        message: L10n.isRtl(context) ? 'تم حذف النقل بنجاح' : 'Transfer record deleted',
-                                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                                        icon: Icons.delete,
-                                        isDarkMode: isDark,
-                                      );
-                                    }
-                                  }
-                                },
-                                tooltip: 'Delete Task',
-                              ),
+                               IconButton(
+                                 icon: Icon(
+                                   Icons.close,
+                                   color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                   size: 18,
+                                 ),
+                                 onPressed: () async {
+                                   triggerHaptic(settings);
+                                   final deleteFiles = await _showDeleteConfirmationDialog(context, task, settings);
+                                   if (deleteFiles != null) {
+                                     provider.deleteTask(task.id, deleteFiles: deleteFiles);
+                                     if (context.mounted) {
+                                       ThemedSnackbar.show(
+                                         context,
+                                         message: L10n.isRtl(context) ? 'تم حذف النقل بنجاح' : 'Transfer record deleted',
+                                         color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                         icon: Icons.delete,
+                                         isDarkMode: isDark,
+                                       );
+                                     }
+                                   }
+                                 },
+                                 tooltip: 'Delete Task',
+                               ),
                             ],
                           ),
                         ],
@@ -450,62 +479,121 @@ class DownloadCard extends StatelessWidget with HapticHelper {
   ) {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
+    bool deleteFiles = false;
 
-    return showDialog<bool>(
+    return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (BuildContext context) {
-        return Directionality(
-          textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-          child: AlertDialog(
-            backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.92),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-              side: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.8),
-            ),
-            title: Text(
-              L10n.of(context, 'delete_title'),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
-            ),
-            content: Text(
-              isRtl
-                  ? 'هل أنت متأكد من حذف "${task.fileName}" من القائمة؟'
-                  : 'Are you sure you want to remove "${task.fileName}" from the list?',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-              ),
-            ),
-            actions: [
-              TextButton(
-                style: TextButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Directionality(
+              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+              child: AlertDialog(
+                backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.92),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  side: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.8),
                 ),
-                child: Text(
-                  L10n.of(context, 'cancel_btn'),
-                  style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
-                ),
-                onPressed: () => Navigator.of(context).pop(false),
-              ),
-              TextButton(
-                style: TextButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Text(
-                  L10n.of(context, 'delete_btn'),
-                  style: TextStyle(
+                title: Text(
+                  L10n.of(context, 'delete_title'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
                   ),
                 ),
-                onPressed: () => Navigator.of(context).pop(true),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isRtl
+                          ? 'هل أنت متأكد من حذف "${task.fileName}" من القائمة؟'
+                          : 'Are you sure you want to remove "${task.fileName}" from the list?',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: deleteFiles,
+                            activeColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                            side: BorderSide(
+                              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                              width: 1.0,
+                            ),
+                            onChanged: (val) {
+                              if (val != null) {
+                                triggerHaptic(settings);
+                                setState(() {
+                                  deleteFiles = val;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              triggerHaptic(settings);
+                              setState(() {
+                                deleteFiles = !deleteFiles;
+                              });
+                            },
+                            child: Text(
+                              L10n.of(context, 'delete_files_label'),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text(
+                      L10n.of(context, 'cancel_btn'),
+                      style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text(
+                      L10n.of(context, 'delete_btn'),
+                      style: TextStyle(
+                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () => Navigator.of(context).pop({'confirmed': true, 'deleteFiles': deleteFiles}),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          }
         );
       },
-    );
+    ).then((result) {
+      if (result != null && result['confirmed'] == true) {
+        return result['deleteFiles'] as bool;
+      }
+      return null;
+    });
   }
 }

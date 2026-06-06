@@ -34,6 +34,8 @@ class TorrentUpdateInfo {
   final int totalWanted;
   final bool hasMetadata;
   final String stateLabel;
+  final int numSeeds;
+  final int numPeers;
 
   TorrentUpdateInfo({
     required this.id,
@@ -45,5 +47,7 @@ class TorrentUpdateInfo {
     required this.totalWanted,
     required this.hasMetadata,
     required this.stateLabel,
+    this.numSeeds = 0,
+    this.numPeers = 0,
   });
 }

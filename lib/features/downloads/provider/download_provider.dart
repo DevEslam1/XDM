@@ -573,7 +573,7 @@ class DownloadProvider extends ChangeNotifier {
     _updateTelemetryWidget();
   }
 
-  Future<void> deleteTask(String id) async {
+  Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
     _cancelTokens[id]?.cancel('deleted');
     _cancelTokens.remove(id);
@@ -585,12 +585,39 @@ class DownloadProvider extends ChangeNotifier {
 
     final torrentId = _torrentIds[id];
     if (torrentId != null) {
-      TorrentService.removeTorrent(torrentId);
+      TorrentService.removeTorrent(torrentId, deleteFiles: deleteFiles);
       _torrentIds.remove(id);
     }
 
     if (task != null) {
-      await _cleanupPartFiles(task);
+      if (deleteFiles) {
+        await _cleanupPartFiles(task);
+        try {
+          final localFile = File(task.localFilePath);
+          if (await localFile.exists()) {
+            await localFile.delete();
+          }
+        } catch (e) {
+          debugPrint('Failed to delete completed file: $e');
+        }
+
+        if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+          for (final f in task.torrentFiles!) {
+            final relPath = f['name'] as String?;
+            if (relPath != null && relPath.isNotEmpty) {
+              try {
+                final fullPath = p.join(task.savePath, relPath);
+                final file = File(fullPath);
+                if (await file.exists()) {
+                  await file.delete();
+                }
+              } catch (e) {
+                debugPrint('Failed to delete torrent file segment $relPath: $e');
+              }
+            }
+          }
+        }
+      }
     }
     await _databaseService.deleteTask(id);
     _notificationService.cancelNotification(id.hashCode.abs());
@@ -674,6 +701,28 @@ class DownloadProvider extends ChangeNotifier {
           task.isTorrent &&
           task.seedingEnabled)
       .length;
+
+  int getTorrentSeeds(String taskId) {
+    final torrentId = _torrentIds[taskId];
+    if (torrentId != null) {
+      final stat = _latestTorrentStats[torrentId];
+      if (stat != null) {
+        return stat.numSeeds;
+      }
+    }
+    return 0;
+  }
+
+  int getTorrentPeers(String taskId) {
+    final torrentId = _torrentIds[taskId];
+    if (torrentId != null) {
+      final stat = _latestTorrentStats[torrentId];
+      if (stat != null) {
+        return stat.numPeers;
+      }
+    }
+    return 0;
+  }
 
   DownloadTask? taskById(String id) {
     return _findTask(id);
@@ -1197,6 +1246,94 @@ class DownloadProvider extends ChangeNotifier {
     _tasks[index] = updated;
     await _databaseService.saveTask(updated);
     notifyListeners();
+  }
+
+  Future<void> updateTaskUrl(String taskId, String newUrl) async {
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+
+    var task = _tasks[index];
+    final cleanUrl = newUrl.trim();
+    if (task.url == cleanUrl) return;
+
+    if (!isValidTransmissionUrl(cleanUrl)) {
+      throw Exception('Invalid URL/Magnet');
+    }
+
+    final wasDownloading = task.status == DownloadStatus.downloading;
+    if (wasDownloading) {
+      await pauseTask(taskId);
+      // Reload task state in case it updated during pause
+      final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
+      if (updatedIdx != -1) {
+        task = _tasks[updatedIdx];
+      }
+    }
+
+    _tasks[index] = task.copyWith(
+      url: cleanUrl,
+      clearError: true,
+    );
+    await _databaseService.saveTask(_tasks[index]);
+    notifyListeners();
+
+    if (wasDownloading) {
+      await resumeTask(taskId);
+    }
+  }
+
+  Future<void> updateTaskUrlAndResume(String id, String newUrl) async {
+    await updateTaskUrl(id, newUrl);
+    final task = _findTask(id);
+    if (task != null && task.status != DownloadStatus.downloading) {
+      await resumeTask(id);
+    }
+  }
+
+  Future<void> startOverTask(String id, String newUrl) async {
+    final task = _findTask(id);
+    if (task == null) return;
+
+    // Cancel active download if running
+    _cancelTokens[id]?.cancel('restart');
+    _cancelTokens.remove(id);
+
+    final torrentId = _torrentIds[id];
+    if (torrentId != null) {
+      TorrentService.removeTorrent(torrentId);
+      _torrentIds.remove(id);
+    }
+
+    // Clean up partial files
+    await _cleanupPartFiles(task);
+
+    // Also clean up final completed file if it exists
+    try {
+      final localFile = File(task.localFilePath);
+      if (await localFile.exists()) {
+        await localFile.delete();
+      }
+    } catch (e) {
+      debugPrint('Failed to delete completed file during start over: $e');
+    }
+
+    // Reset task fields
+    await _setTask(
+      task.copyWith(
+        url: newUrl.trim(),
+        status: DownloadStatus.queued,
+        downloadedBytes: 0,
+        speed: 0,
+        clearEta: true,
+        clearError: true,
+        clearCompletedAt: true,
+        chunks: List<double>.filled(task.threadCount, 0.0),
+      ),
+    );
+
+    _pumpQueue();
+    _startWidgetTimer();
+    _updateTelemetryWidget();
   }
 
   List<Map<String, dynamic>> _updateTorrentFilesProgress(
