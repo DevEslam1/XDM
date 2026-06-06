@@ -109,7 +109,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       sigmaX: 8,
                       sigmaY: 8,
                       child: Container(
-                        decoration: AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                            width: 0.8,
+                          ),
+                        ),
                         child: TextField(
                           controller: _searchController,
                           style: TextStyle(

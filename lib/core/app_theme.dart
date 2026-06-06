@@ -125,27 +125,27 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: background.withValues(alpha: 0.6),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        fillColor: const Color(0xFF0F0F16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: glassBorder, width: 0.8),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Color(0x15FFFFFF), width: 0.8),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: glassBorder, width: 0.8),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Color(0x15FFFFFF), width: 0.8),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: neonBlue, width: 1.0),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: neonBlue.withValues(alpha: 0.5), width: 1.2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: neonRed, width: 1.0),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: neonRed.withValues(alpha: 0.5), width: 1.2),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: neonRed, width: 1.0),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: neonRed.withValues(alpha: 0.5), width: 1.2),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
@@ -250,27 +250,27 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: lightSurface.withValues(alpha: 0.8),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        fillColor: const Color(0xFFF1F5F9),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: lightGlassBorder, width: 0.8),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Color(0x0D000000), width: 0.8),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: lightGlassBorder, width: 0.8),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: const BorderSide(color: Color(0x0D000000), width: 0.8),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: lightNeonBlue, width: 1.0),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: lightNeonBlue.withValues(alpha: 0.5), width: 1.2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: lightNeonRed, width: 1.0),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: lightNeonRed.withValues(alpha: 0.5), width: 1.2),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: lightNeonRed, width: 1.0),
+          borderRadius: BorderRadius.circular(20),
+          borderSide: BorderSide(color: lightNeonRed.withValues(alpha: 0.5), width: 1.2),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(

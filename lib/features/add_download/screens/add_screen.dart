@@ -599,8 +599,8 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
 
   InputDecoration _buildInputDecoration(String hint, {required bool isDark}) {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final bgClr = isDark ? AppTheme.background : AppTheme.lightBackground;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final bgClr = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
+    final borderClr = isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000);
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
 
@@ -608,27 +608,27 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
       hintText: hint,
       hintStyle: TextStyle(color: mutedClr, fontSize: 13),
       filled: true,
-      fillColor: bgClr.withValues(alpha: 0.6),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      fillColor: bgClr,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: glassBorder, width: 0.8),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: borderClr, width: 0.8),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: glassBorder, width: 0.8),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: borderClr, width: 0.8),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: blueClr, width: 1.0),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: blueClr.withValues(alpha: 0.5), width: 1.2),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: redClr, width: 1.0),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: redClr.withValues(alpha: 0.5), width: 1.2),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: redClr, width: 1.0),
+        borderRadius: BorderRadius.circular(20),
+        borderSide: BorderSide(color: redClr.withValues(alpha: 0.5), width: 1.2),
       ),
     );
   }

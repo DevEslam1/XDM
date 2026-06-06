@@ -56,12 +56,10 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           title: _isSearching
               ? Container(
                   decoration: BoxDecoration(
-                    color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
-                    borderRadius: BorderRadius.circular(16),
+                    color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder,
+                      color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
                       width: 0.8,
                     ),
                   ),
@@ -281,6 +279,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
               ],
             ),
             child: FloatingActionButton(
+              heroTag: null,
               backgroundColor: accentClr,
               foregroundColor: isDark
                   ? AppTheme.background

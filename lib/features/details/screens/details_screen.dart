@@ -1200,17 +1200,27 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                 ),
                 decoration: InputDecoration(
                   filled: true,
-                  fillColor: (isDark ? AppTheme.cardBg : Colors.grey.shade100).withValues(alpha: 0.5),
+                  fillColor: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(20),
                     borderSide: BorderSide(
-                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                      color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                      width: 0.8,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(
+                      color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                      width: 0.8,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(20),
                     borderSide: BorderSide(
-                      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                      color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.5),
+                      width: 1.2,
                     ),
                   ),
                 ),

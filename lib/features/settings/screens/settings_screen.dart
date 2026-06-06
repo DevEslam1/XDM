@@ -824,8 +824,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   }) {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final subClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final bgClr = isDark ? AppTheme.background : AppTheme.lightBackground;
-    final glassBdr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -852,9 +850,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           Container(
             height: 42,
             decoration: BoxDecoration(
-              color: bgClr.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: glassBdr, width: 0.8),
+              color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                width: 0.8,
+              ),
             ),
             child: TextField(
               controller: controller,

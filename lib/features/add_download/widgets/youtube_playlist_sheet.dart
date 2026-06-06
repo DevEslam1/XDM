@@ -55,7 +55,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   bool _isLoading = true;
   bool _isDownloading = false;
   String? _errorMessage;
-  String _qualityPreset = 'best_muxed';
+  String _qualityPreset = '720p';
   int _downloadProgress = 0;
 
   static const List<Map<String, String>> _qualityOptions = [
@@ -394,7 +394,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                               ? Image.network(
                                                   thumbnailUrl,
                                                   fit: BoxFit.cover,
-                                                  errorBuilder: (_, __, ___) => Container(
+                                                  errorBuilder: (_, _, _) => Container(
                                                     color: (isDark ? AppTheme.background : AppTheme.lightBackground)
                                                         .withValues(alpha: 0.6),
                                                     child: Icon(Icons.play_circle_outline, color: mutedClr, size: 24),

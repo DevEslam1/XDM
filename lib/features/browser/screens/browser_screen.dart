@@ -274,6 +274,36 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           },
           onUrlChange: (change) {
             if (change.url != null) {
+              final cleanUrl = _cleanUrl(change.url!);
+              if (mounted) {
+                setState(() {
+                  tab.url = cleanUrl;
+                  if (cleanUrl != 'about:blank') {
+                    tab.isHome = false;
+                  }
+                  if (_tabs[_currentTabIndex].id == tab.id) {
+                    _urlController.text = tab.url;
+                  }
+                });
+                
+                // Clear cached download/playlist tags on dynamic navigation & trigger scan
+                _detectedDownloadUrls.remove(tab.id);
+                _detectedPlaylistUrls.remove(tab.id);
+                _scanPageMedia(tab);
+                
+                // Fetch new page title after a short delay for SPA rendering
+                Future.delayed(const Duration(milliseconds: 1000), () {
+                  if (mounted) {
+                    tab.controller.getTitle().then((t) {
+                      if (t != null && t.isNotEmpty && mounted) {
+                        setState(() {
+                          tab.title = t;
+                        });
+                      }
+                    });
+                  }
+                });
+              }
               if (!tab.isIncognito && !settings.incognitoEnabled) {
                 _recordHistory(change.url!);
               }
@@ -1800,13 +1830,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             duration: const Duration(milliseconds: 200),
                             height: 36,
                             decoration: BoxDecoration(
-                              color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
-                              borderRadius: BorderRadius.circular(16),
+                              color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: _isFocused
-                                    ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                                    : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
-                                width: 1.0,
+                                    ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.5)
+                                    : (isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000)),
+                                width: _isFocused ? 1.2 : 0.8,
                               ),
                               boxShadow: (_isFocused && isDark && settings.enableGlow)
                                   ? [
@@ -1892,6 +1922,76 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           ),
                         ),
                         const SizedBox(width: 4),
+
+                        // YouTube download button in appbar
+                        if (!activeTab.isHome && (YoutubeService.isYoutubeVideoUrl(activeTab.url) || YoutubeService.isPlaylistUrl(activeTab.url))) ...[
+                          IconButton(
+                            icon: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.red, width: 1.2),
+                                boxShadow: settings.enableGlow
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.red.withValues(alpha: 0.4),
+                                          blurRadius: 6,
+                                          spreadRadius: 0.5,
+                                        )
+                                      ]
+                                    : null,
+                              ),
+                              child: Icon(
+                                YoutubeService.isPlaylistUrl(activeTab.url)
+                                    ? Icons.playlist_play_rounded
+                                    : Icons.download_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                            ),
+                            tooltip: YoutubeService.isPlaylistUrl(activeTab.url)
+                                ? (isRtl ? 'تحميل قائمة التشغيل' : 'Download Playlist')
+                                : (isRtl ? 'تحميل الفيديو' : 'Download Video'),
+                            onPressed: () async {
+                              triggerHaptic(settings);
+                              if (YoutubeService.isPlaylistUrl(activeTab.url)) {
+                                final result = await YoutubePlaylistSheet.show(context, activeTab.url);
+                                if (result != null && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(isRtl
+                                          ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
+                                          : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"'),
+                                      duration: const Duration(seconds: 3),
+                                    ),
+                                  );
+                                }
+                              } else {
+                                final detectedSources = _detectedMediaSources[activeTab.url] ?? [];
+                                if (detectedSources.length > 1) {
+                                  _showDetectedMediaSheet(context, activeTab.url);
+                                } else {
+                                  final stream = await YoutubeQualitySheet.show(context, activeTab.url);
+                                  if (stream != null && context.mounted) {
+                                    final title = stream['title'] as String? ?? 'YouTube Video';
+                                    final ext = stream['ext'] as String? ?? 'mp4';
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => AddScreen(
+                                          prefilledUrl: stream['src'] as String,
+                                          prefilledName: '$title.$ext',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                        ],
                         
                         // Back navigation
                         IconButton(
@@ -2158,13 +2258,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // YouTube Playlist FAB
     if (isPlaylist) {
       return FloatingActionButton.extended(
+        heroTag: null,
         backgroundColor: Colors.red,
         foregroundColor: Colors.white,
         elevation: 4,
         onPressed: () async {
           triggerHaptic(settings);
           final result = await YoutubePlaylistSheet.show(context, activeTab.url);
-          if (result != null && mounted) {
+          if (result != null && context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"'),
@@ -2181,6 +2282,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // YouTube single video — show quality picker directly
     if (YoutubeService.isYoutubeVideoUrl(activeTab.url) && detectedSources.isNotEmpty) {
       return FloatingActionButton.extended(
+        heroTag: null,
         backgroundColor: Colors.red,
         foregroundColor: Colors.white,
         elevation: 4,
@@ -2190,7 +2292,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _showDetectedMediaSheet(context, activeTab.url);
           } else {
             final stream = await YoutubeQualitySheet.show(context, activeTab.url);
-            if (stream != null && mounted) {
+            if (stream != null && context.mounted) {
               final title = stream['title'] as String? ?? 'YouTube Video';
               final ext = stream['ext'] as String? ?? 'mp4';
               Navigator.push(
@@ -2214,6 +2316,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
     // Normal download FAB
     return FloatingActionButton.extended(
+      heroTag: null,
       backgroundColor: accent,
       foregroundColor: Colors.black,
       elevation: 4,
