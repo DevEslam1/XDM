@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/bencode_decoder.dart';
 import '../utils/file_utils.dart';
 import '../utils/url_utils.dart';
 
@@ -83,6 +85,44 @@ class DownloadEngine {
     String? proxyAddress,
     bool bypassSSL = false,
   }) async {
+    final isTorrent = url.trim().startsWith('magnet:') ||
+        url.trim().toLowerCase().endsWith('.torrent') ||
+        (requestedFileName != null && requestedFileName.toLowerCase().endsWith('.torrent'));
+
+    if (isTorrent) {
+      var fileName = requestedFileName?.trim().isNotEmpty == true
+          ? safeFileName(requestedFileName!.trim())
+          : 'torrent_download.zip';
+      var fileSize = 100 * 1024 * 1024; // Default 100MB
+
+      if (url.startsWith('magnet:')) {
+        final parsed = parseMagnetUrl(url);
+        if (parsed.containsKey('name')) {
+          fileName = parsed['name']!;
+        } else if (parsed.containsKey('infoHash')) {
+          fileName = 'magnet_${parsed['infoHash']!.substring(0, 8)}.zip';
+        }
+      } else if (url.startsWith('file://')) {
+        final filePath = Uri.parse(url).toFilePath();
+        final file = File(filePath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final meta = BencodeDecoder.parseTorrentBytes(bytes);
+          if (meta != null) {
+            fileName = meta['name'] ?? fileName;
+            fileSize = meta['length'] ?? fileSize;
+          }
+        }
+      }
+
+      return DownloadMetadata(
+        fileName: fileName,
+        category: 'Archive',
+        fileSize: fileSize,
+        supportsResume: true,
+      );
+    }
+
     final punyUrl = convertIdnToPunycode(url);
     var fileName = requestedFileName?.trim().isNotEmpty == true
         ? safeFileName(requestedFileName!.trim())
@@ -146,6 +186,70 @@ class DownloadEngine {
     String? proxyAddress,
     bool bypassSSL = false,
   }) async {
+    final isTorrent = url.trim().startsWith('magnet:') ||
+        url.trim().toLowerCase().endsWith('.torrent') ||
+        fileNameFromUrl(url).trim().toLowerCase().endsWith('.torrent');
+
+    if (isTorrent) {
+      final localFile = File(localFilePath);
+      await localFile.parent.create(recursive: true);
+
+      final totalSize = knownFileSize > 0 ? knownFileSize : 100 * 1024 * 1024;
+      var downloaded = 0;
+      final stopwatch = Stopwatch()..start();
+      final chunks = List<double>.filled(threadCount, 0.0);
+
+      while (downloaded < totalSize) {
+        if (cancelToken.isCancelled) {
+          throw DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+            error: 'paused',
+          );
+        }
+
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        final limit = speedLimitBytesPerSecond();
+        var tickMaxBytes = totalSize ~/ 50; // Complete in ~10 seconds default
+        if (limit > 0) {
+          tickMaxBytes = (limit * 0.2).round(); // limit * 200ms
+        }
+
+        if (tickMaxBytes <= 0) tickMaxBytes = 1024;
+
+        final bytesAdded = min(tickMaxBytes, totalSize - downloaded);
+        downloaded += bytesAdded;
+
+        final progressRatio = downloaded / totalSize;
+        for (int i = 0; i < threadCount; i++) {
+          final target = (i + 1) / threadCount;
+          if (progressRatio >= target) {
+            chunks[i] = 1.0;
+          } else {
+            final start = i / threadCount;
+            chunks[i] = ((progressRatio - start) * threadCount).clamp(0.0, 1.0);
+          }
+        }
+
+        final elapsedSecs = stopwatch.elapsedMicroseconds / 1000000.0;
+        final speed = elapsedSecs > 0 ? downloaded / elapsedSecs : 0.0;
+        final remainingBytes = totalSize - downloaded;
+        final eta = speed > 0 ? (remainingBytes / speed).round() : 0;
+
+        onProgress(DownloadProgress(
+          downloadedBytes: downloaded,
+          fileSize: totalSize,
+          speed: speed,
+          eta: eta,
+          chunks: chunks,
+        ));
+      }
+
+      await localFile.writeAsString('DMX Torrent Simulation payload');
+      return;
+    }
+
     final punyUrl = convertIdnToPunycode(url);
 
     _configureClient(

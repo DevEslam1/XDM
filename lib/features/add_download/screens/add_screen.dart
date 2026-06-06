@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/url_utils.dart';
+import '../../../core/utils/bencode_decoder.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
@@ -48,6 +51,10 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   @override
   void initState() {
     super.initState();
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    if (_threadsList.contains(settings.defaultThreadCount)) {
+      _selectedThreads = settings.defaultThreadCount;
+    }
     _loadDefaultPath();
     if (widget.prefilledUrl != null) {
       _urlController.text = widget.prefilledUrl!;
@@ -155,7 +162,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                                     fontSize: 13,
                                   ),
                                   decoration: _buildInputDecoration(
-                                    isRtl ? 'أدخل رابط التحميل (رابط واحد لكل سطر)' : 'Enter download URL (one per line for batch)',
+                                    isRtl ? 'أدخل رابط التحميل أو المغناطيس (Magnet)' : 'Enter download URL or Magnet link',
                                     isDark: isDark,
                                   ),
                                   validator: (value) {
@@ -166,9 +173,9 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                                     if (urls.isEmpty) {
                                       return isRtl ? 'رابط الإشارة مطلوب' : 'URL signal required';
                                     }
-                                    final allValid = urls.every((u) => isHttpUrl(u));
+                                    final allValid = urls.every((u) => isValidTransmissionUrl(u));
                                     if (!allValid) {
-                                      return isRtl ? 'تأكد من صحة جميع الروابط' : 'Ensure all URLs have valid HTTP/HTTPS protocol';
+                                      return isRtl ? 'تأكد من صحة جميع الروابط أو روابط المغناطيس (Magnet)' : 'Ensure all URLs have valid HTTP/HTTPS or Magnet protocol';
                                     }
                                     return null;
                                   },
@@ -189,6 +196,24 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                                   onPressed: () {
                                     triggerHaptic(settings);
                                     _pasteFromClipboard();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Import Torrent File button
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                decoration: BoxDecoration(
+                                  color: blueClr.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: blueClr.withValues(alpha: 0.2), width: 0.8),
+                                ),
+                                child: IconButton(
+                                  icon: Icon(Icons.file_open_outlined, color: blueClr, size: 20),
+                                  tooltip: isRtl ? 'استيراد ملف تورنت' : 'Import .torrent file',
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    _pickTorrentFile(settings);
                                   },
                                 ),
                               ),
@@ -621,5 +646,60 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         ],
       ),
     );
+  }
+
+  Future<void> _pickTorrentFile(SettingsProvider settings) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['torrent'],
+      );
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final file = File(filePath);
+        final bytes = await file.readAsBytes();
+        final meta = BencodeDecoder.parseTorrentBytes(bytes);
+        if (meta != null) {
+          setState(() {
+            _urlController.text = 'file://$filePath';
+            _nameController.text = meta['name'] ?? '';
+            _selectedCategory = 'Archive';
+          });
+          if (mounted) {
+            ThemedSnackbar.show(
+              context,
+              message: L10n.isRtl(context)
+                  ? 'تم استيراد بيانات التورنت بنجاح'
+                  : 'Torrent metadata imported successfully',
+              color: AppTheme.neonBlue,
+              icon: Icons.check_circle_outline,
+              isDarkMode: settings.isDarkMode,
+            );
+          }
+        } else {
+          if (mounted) {
+            ThemedSnackbar.show(
+              context,
+              message: L10n.isRtl(context)
+                  ? 'فشل في قراءة بيانات ملف التورنت'
+                  : 'Failed to decode torrent file metadata',
+              color: AppTheme.neonRed,
+              icon: Icons.error_outline,
+              isDarkMode: settings.isDarkMode,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: 'Error importing torrent: $e',
+          color: AppTheme.neonRed,
+          icon: Icons.error_outline,
+          isDarkMode: settings.isDarkMode,
+        );
+      }
+    }
   }
 }

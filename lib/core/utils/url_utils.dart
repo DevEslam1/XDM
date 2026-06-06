@@ -8,6 +8,44 @@ bool isHttpUrl(String value) {
       uri.host.isNotEmpty;
 }
 
+bool isMagnetUrl(String value) {
+  final clean = value.trim();
+  return clean.startsWith('magnet:?');
+}
+
+bool isTorrentFileUrl(String value) {
+  final clean = value.trim().toLowerCase();
+  return clean.startsWith('file://') || clean.endsWith('.torrent') || clean.contains('.torrent?');
+}
+
+bool isValidTransmissionUrl(String value) {
+  return isHttpUrl(value) || isMagnetUrl(value) || isTorrentFileUrl(value);
+}
+
+Map<String, String> parseMagnetUrl(String magnetUrl) {
+  try {
+    final uri = Uri.parse(magnetUrl.trim());
+    final queryParams = uri.queryParametersAll;
+    final Map<String, String> result = {};
+
+    final xtList = queryParams['xt'] ?? [];
+    for (final xt in xtList) {
+      if (xt.startsWith('urn:btih:')) {
+        result['infoHash'] = xt.substring('urn:btih:'.length).toUpperCase();
+      }
+    }
+
+    final dnList = queryParams['dn'] ?? [];
+    if (dnList.isNotEmpty) {
+      result['name'] = Uri.decodeComponent(dnList.first);
+    }
+
+    return result;
+  } catch (_) {
+    return {};
+  }
+}
+
 String fileNameFromUrl(String url) {
   final uri = Uri.tryParse(url);
   final fallback = 'download_${DateTime.now().millisecondsSinceEpoch}.bin';

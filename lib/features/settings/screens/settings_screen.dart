@@ -141,6 +141,20 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         },
                       ),
                       Divider(color: dividerColor, height: 1),
+                      _buildDropdownTile<int>(
+                        settings: settings,
+                        title: L10n.of(context, 'settings_default_threads'),
+                        subtitle: L10n.of(context, 'settings_default_threads_sub'),
+                        value: settings.defaultThreadCount,
+                        items: [1, 2, 4, 5, 8, 16],
+                        onChanged: (val) {
+                          if (val != null) {
+                            settings.setDefaultThreadCount(val);
+                            triggerHaptic(settings);
+                          }
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
                       _buildDropdownTile<String>(
                         settings: settings,
                         title: L10n.of(context, 'settings_lang'),
@@ -185,7 +199,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           triggerHaptic(settings);
                         },
                       ),
-                      Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
                         settings: settings,
                         title: L10n.of(context, 'settings_wifi_only'),
@@ -196,6 +209,48 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           triggerHaptic(settings);
                         },
                       ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context) ? 'تفعيل مشاركة التورنت (Seeding)' : 'Torrent Seeding',
+                        subtitle: L10n.isRtl(context) ? 'مشاركة أجزاء الملفات بعد اكتمال التحميل' : 'Share files back to peers after download completes',
+                        value: settings.globalTorrentSeeding,
+                        onChanged: (val) {
+                          settings.setGlobalTorrentSeeding(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      if (settings.globalTorrentSeeding) ...[
+                        Divider(color: dividerColor, height: 1),
+                        _buildSwitchTile(
+                          settings: settings,
+                          title: L10n.isRtl(context) ? 'تقييد سرعة المشاركة' : 'Limit Seeding Speed',
+                          subtitle: L10n.isRtl(context) ? 'تحديد حد أقصى لسرعة الرفع' : 'Set a maximum limit for upload speed',
+                          value: settings.globalTorrentSeedingLimited,
+                          onChanged: (val) {
+                            settings.setGlobalTorrentSeedingLimited(val);
+                            triggerHaptic(settings);
+                          },
+                        ),
+                        if (settings.globalTorrentSeedingLimited) ...[
+                          Divider(color: dividerColor, height: 1),
+                          _buildSliderTile(
+                            settings: settings,
+                            title: L10n.isRtl(context) ? 'سرعة الرفع القصوى' : 'Maximum Upload Speed',
+                            subtitle: '${settings.globalTorrentSeedingLimitKbps} kbps (${(settings.globalTorrentSeedingLimitKbps / 8).toStringAsFixed(1)} KB/s)',
+                            value: settings.globalTorrentSeedingLimitKbps.toDouble(),
+                            min: 100.0,
+                            max: 10000.0,
+                            divisions: 99,
+                            onChanged: (val) {
+                              settings.setGlobalTorrentSeedingLimitKbps(val.round());
+                            },
+                            onChangeEnd: (val) {
+                              triggerHaptic(settings);
+                            },
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                   const SizedBox(height: 16),

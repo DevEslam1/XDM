@@ -23,6 +23,12 @@ class DownloadTask {
   final DateTime? completedAt;
   final DateTime? scheduledAt;
   final bool supportsResume;
+  
+  // Speed Limit and Torrent Seeding Fields
+  final int speedLimitKbps; // 0 = unlimited
+  final bool seedingEnabled;
+  final bool seedingLimited;
+  final int seedingLimitKbps;
 
   DownloadTask({
     required this.id,
@@ -45,7 +51,16 @@ class DownloadTask {
     this.completedAt,
     this.scheduledAt,
     this.supportsResume = false,
+    this.speedLimitKbps = 0,
+    this.seedingEnabled = true,
+    this.seedingLimited = false,
+    this.seedingLimitKbps = 500,
   });
+
+  bool get isTorrent =>
+      url.trim().startsWith('magnet:') ||
+      url.trim().toLowerCase().endsWith('.torrent') ||
+      fileName.trim().toLowerCase().endsWith('.torrent');
 
   double get progress {
     if (fileSize <= 0) return 0.0;
@@ -55,12 +70,20 @@ class DownloadTask {
   String get progressPercentString => '${(progress * 100).toStringAsFixed(1)}%';
 
   String get speedFormatted {
+    if (status != DownloadStatus.downloading && status != DownloadStatus.completed) return '0.0 KB/s';
+    // If it's completed and is torrent seeding:
+    if (status == DownloadStatus.completed && isTorrent && seedingEnabled) {
+      return '${formatBytes(speed)}/s';
+    }
     if (status != DownloadStatus.downloading || speed <= 0) return '0.0 KB/s';
     return '${formatBytes(speed)}/s';
   }
 
   String get etaFormatted {
-    if (status == DownloadStatus.completed) return 'Finished';
+    if (status == DownloadStatus.completed) {
+      if (isTorrent && seedingEnabled) return 'Seeding';
+      return 'Finished';
+    }
     if (status == DownloadStatus.queued) return 'Queued';
     if (status == DownloadStatus.paused) {
       if (scheduledAt != null) {
@@ -110,6 +133,10 @@ class DownloadTask {
     DateTime? scheduledAt,
     bool clearScheduledAt = false,
     bool? supportsResume,
+    int? speedLimitKbps,
+    bool? seedingEnabled,
+    bool? seedingLimited,
+    int? seedingLimitKbps,
   }) {
     return DownloadTask(
       id: id,
@@ -132,6 +159,10 @@ class DownloadTask {
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
       scheduledAt: clearScheduledAt ? null : scheduledAt ?? this.scheduledAt,
       supportsResume: supportsResume ?? this.supportsResume,
+      speedLimitKbps: speedLimitKbps ?? this.speedLimitKbps,
+      seedingEnabled: seedingEnabled ?? this.seedingEnabled,
+      seedingLimited: seedingLimited ?? this.seedingLimited,
+      seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
     );
   }
 
@@ -157,6 +188,10 @@ class DownloadTask {
       'completedAt': completedAt?.toIso8601String(),
       'scheduledAt': scheduledAt?.toIso8601String(),
       'supportsResume': supportsResume,
+      'speedLimitKbps': speedLimitKbps,
+      'seedingEnabled': seedingEnabled,
+      'seedingLimited': seedingLimited,
+      'seedingLimitKbps': seedingLimitKbps,
     };
   }
 
@@ -209,6 +244,10 @@ class DownloadTask {
       completedAt: DateTime.tryParse(map['completedAt'] as String? ?? ''),
       scheduledAt: DateTime.tryParse(map['scheduledAt'] as String? ?? ''),
       supportsResume: map['supportsResume'] as bool? ?? false,
+      speedLimitKbps: (map['speedLimitKbps'] as num?)?.toInt() ?? 0,
+      seedingEnabled: map['seedingEnabled'] as bool? ?? true,
+      seedingLimited: map['seedingLimited'] as bool? ?? false,
+      seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
     );
   }
 

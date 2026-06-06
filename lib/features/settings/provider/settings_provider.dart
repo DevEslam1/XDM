@@ -22,6 +22,10 @@ class SettingsProvider extends ChangeNotifier {
   static const _customUserAgentKey = 'customUserAgent';
   static const _cleanupDaysKey = 'cleanupDays';
   static const _categoryFoldersKey = 'categoryFolders';
+  static const _globalTorrentSeedingKey = 'globalTorrentSeeding';
+  static const _globalTorrentSeedingLimitedKey = 'globalTorrentSeedingLimited';
+  static const _globalTorrentSeedingLimitKbpsKey = 'globalTorrentSeedingLimitKbps';
+  static const _defaultThreadCountKey = 'defaultThreadCount';
 
   late final SharedPreferences _prefs;
 
@@ -46,6 +50,14 @@ class SettingsProvider extends ChangeNotifier {
   int cleanupDays = 0;
   bool categoryFolders = false;
 
+  // Torrent Seeding settings
+  bool globalTorrentSeeding = true;
+  bool globalTorrentSeedingLimited = false;
+  int globalTorrentSeedingLimitKbps = 500;
+
+  // Connection settings
+  int defaultThreadCount = 5;
+
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
     autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
@@ -69,6 +81,11 @@ class SettingsProvider extends ChangeNotifier {
     customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
     categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
+
+    globalTorrentSeeding = _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
+    globalTorrentSeedingLimited = _prefs.getBool(_globalTorrentSeedingLimitedKey) ?? globalTorrentSeedingLimited;
+    globalTorrentSeedingLimitKbps = _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ?? globalTorrentSeedingLimitKbps;
+    defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? defaultThreadCount;
   }
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
@@ -184,6 +201,30 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setReduceVisuals(bool value) async {
     reduceVisuals = value;
     await _prefs.setBool(_reduceVisualsKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setGlobalTorrentSeeding(bool value) async {
+    globalTorrentSeeding = value;
+    await _prefs.setBool(_globalTorrentSeedingKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setGlobalTorrentSeedingLimited(bool value) async {
+    globalTorrentSeedingLimited = value;
+    await _prefs.setBool(_globalTorrentSeedingLimitedKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setGlobalTorrentSeedingLimitKbps(int value) async {
+    globalTorrentSeedingLimitKbps = value;
+    await _prefs.setInt(_globalTorrentSeedingLimitKbpsKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setDefaultThreadCount(int value) async {
+    defaultThreadCount = value;
+    await _prefs.setInt(_defaultThreadCountKey, value);
     notifyListeners();
   }
 }

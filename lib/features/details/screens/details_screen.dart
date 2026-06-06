@@ -191,6 +191,10 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       _buildChannelsPanel(context, task, statusColor, settings),
                       const SizedBox(height: 20),
 
+                      // Individual Speed and Seeding Controls Panel
+                      _buildTaskBandwidthPanel(context, task, provider, settings),
+                      const SizedBox(height: 20),
+
                       // Telemetry Speed History Graph
                       _buildSpeedGraphPanel(context, task, provider, settings),
                       const SizedBox(height: 20),
@@ -539,5 +543,241 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
       return 'تم إلغاء النقل';
     }
     return err;
+  }
+
+  Widget _buildTaskBandwidthPanel(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final borderClr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+
+    final hasLimit = task.speedLimitKbps > 0;
+
+    return GlassCard(
+      borderRadius: 20,
+      padding: const EdgeInsets.all(16),
+      isDarkMode: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.speed, color: blueClr, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'التحكم في سرعة التحميل' : 'BANDWIDTH SPEED CONTROLS',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: secClr,
+                  fontSize: 10,
+                  letterSpacing: 1.0,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isRtl ? 'حد التحميل الأقصى' : 'DOWNLOAD SPEED LIMIT',
+                    style: TextStyle(color: textClr, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    hasLimit
+                        ? '${task.speedLimitKbps} kbps (${(task.speedLimitKbps / 8).toStringAsFixed(1)} KB/s)'
+                        : (isRtl ? 'غير محدود' : 'UNLIMITED SPEED'),
+                    style: TextStyle(color: hasLimit ? blueClr : secClr, fontSize: 11, fontFamily: 'monospace'),
+                  ),
+                ],
+              ),
+              Switch(
+                value: hasLimit,
+                activeThumbColor: blueClr,
+                onChanged: (val) {
+                  triggerHaptic(settings);
+                  provider.updateTaskSpeedLimit(task.id, val ? 500 : 0);
+                },
+              ),
+            ],
+          ),
+          if (hasLimit) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildSpeedStepButton(
+                  context: context,
+                  label: '-100 kbps',
+                  isDark: isDark,
+                  onPressed: task.speedLimitKbps <= 100
+                      ? null
+                      : () {
+                          triggerHaptic(settings);
+                          provider.updateTaskSpeedLimit(task.id, task.speedLimitKbps - 100);
+                        },
+                ),
+                const SizedBox(width: 16),
+                _buildSpeedStepButton(
+                  context: context,
+                  label: '+100 kbps',
+                  isDark: isDark,
+                  onPressed: () {
+                    triggerHaptic(settings);
+                    provider.updateTaskSpeedLimit(task.id, task.speedLimitKbps + 100);
+                  },
+                ),
+              ],
+            ),
+          ],
+
+          if (task.isTorrent) ...[
+            const SizedBox(height: 16),
+            Divider(color: borderClr, height: 1),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.cloud_upload_outlined, color: violetClr, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  isRtl ? 'إعدادات مشاركة التورنت (Seeding)' : 'TORRENT SEEDING INTERFACE',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: secClr,
+                    fontSize: 10,
+                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isRtl ? 'تفعيل المشاركة (Seeding)' : 'SEEDING TRANSMISSION',
+                      style: TextStyle(color: textClr, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      task.seedingEnabled
+                          ? (isRtl ? 'نشط عند اكتمال التحميل' : 'ACTIVE ON COMPLETION')
+                          : (isRtl ? 'غير نشط' : 'DISABLED'),
+                      style: TextStyle(color: task.seedingEnabled ? violetClr : secClr, fontSize: 11),
+                    ),
+                  ],
+                ),
+                Switch(
+                  value: task.seedingEnabled,
+                  activeThumbColor: violetClr,
+                  onChanged: (val) {
+                    triggerHaptic(settings);
+                    provider.updateTaskSeeding(task.id, enabled: val);
+                  },
+                ),
+              ],
+            ),
+            if (task.seedingEnabled) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isRtl ? 'تقييد سرعة الرفع' : 'LIMIT UPLOAD SPEED',
+                        style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        task.seedingLimited
+                            ? '${task.seedingLimitKbps} kbps (${(task.seedingLimitKbps / 8).toStringAsFixed(1)} KB/s)'
+                            : (isRtl ? 'سرعة رفع قصوى' : 'UNLIMITED UPLOAD'),
+                        style: TextStyle(color: task.seedingLimited ? violetClr : secClr, fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                  Switch(
+                    value: task.seedingLimited,
+                    activeThumbColor: violetClr,
+                    onChanged: (val) {
+                      triggerHaptic(settings);
+                      provider.updateTaskSeeding(task.id, limited: val);
+                    },
+                  ),
+                ],
+              ),
+              if (task.seedingLimited) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSpeedStepButton(
+                      context: context,
+                      label: '-100 kbps',
+                      isDark: isDark,
+                      onPressed: task.seedingLimitKbps <= 100
+                          ? null
+                          : () {
+                              triggerHaptic(settings);
+                              provider.updateTaskSeeding(task.id, limitKbps: task.seedingLimitKbps - 100);
+                            },
+                    ),
+                    const SizedBox(width: 16),
+                    _buildSpeedStepButton(
+                      context: context,
+                      label: '+100 kbps',
+                      isDark: isDark,
+                      onPressed: () {
+                        triggerHaptic(settings);
+                        provider.updateTaskSeeding(task.id, limitKbps: task.seedingLimitKbps + 100);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpeedStepButton({
+    required BuildContext context,
+    required String label,
+    required bool isDark,
+    required VoidCallback? onPressed,
+  }) {
+    final activeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: activeClr,
+        side: BorderSide(color: activeClr.withValues(alpha: 0.3)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+      ),
+    );
   }
 }

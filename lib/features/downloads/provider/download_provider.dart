@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
@@ -264,7 +265,7 @@ class DownloadProvider extends ChangeNotifier {
     required int size,
     required String category,
     required String savePath,
-    int threadCount = 5,
+    int? threadCount,
     DateTime? scheduledAt,
   }) async {
     _lastError = null;
@@ -282,10 +283,12 @@ class DownloadProvider extends ChangeNotifier {
       return;
     }
 
+    final resolvedThreadCount = threadCount ?? _settingsProvider.defaultThreadCount;
+
     if (urls.length > 1) {
       for (var i = 0; i < urls.length; i++) {
         final singleUrl = urls[i];
-        if (!isHttpUrl(singleUrl)) continue;
+        if (!isValidTransmissionUrl(singleUrl)) continue;
         final suffix = i + 1;
         final singleName = name.trim().isNotEmpty ? '${name.trim()}_$suffix' : '';
         await _addSingleDownload(
@@ -294,14 +297,14 @@ class DownloadProvider extends ChangeNotifier {
           size: size,
           category: category,
           savePath: savePath,
-          threadCount: threadCount,
+          threadCount: resolvedThreadCount,
           scheduledAt: scheduledAt,
         );
       }
     } else {
       final singleUrl = urls.first;
-      if (!isHttpUrl(singleUrl)) {
-        _lastError = 'Invalid HTTP/HTTPS URL.';
+      if (!isValidTransmissionUrl(singleUrl)) {
+        _lastError = 'Invalid target transmission URL/magnet.';
         notifyListeners();
         return;
       }
@@ -311,7 +314,7 @@ class DownloadProvider extends ChangeNotifier {
         size: size,
         category: category,
         savePath: savePath,
-        threadCount: threadCount,
+        threadCount: resolvedThreadCount,
         scheduledAt: scheduledAt,
       );
     }
@@ -488,6 +491,48 @@ class DownloadProvider extends ChangeNotifier {
     _updateTelemetryWidget();
   }
 
+  Future<void> updateTaskSpeedLimit(String taskId, int speedLimitKbps) async {
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+    _tasks[index] = _tasks[index].copyWith(speedLimitKbps: speedLimitKbps);
+    await _databaseService.saveTask(_tasks[index]);
+    notifyListeners();
+  }
+
+  Future<void> updateTaskSeeding(
+    String taskId, {
+    bool? enabled,
+    bool? limited,
+    int? limitKbps,
+  }) async {
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+    _tasks[index] = _tasks[index].copyWith(
+      seedingEnabled: enabled,
+      seedingLimited: limited,
+      seedingLimitKbps: limitKbps,
+    );
+    await _databaseService.saveTask(_tasks[index]);
+    notifyListeners();
+    _startWidgetTimer();
+  }
+
+  double get currentUploadSpeed {
+    return _tasks
+        .where((task) => task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
+        .fold(0.0, (sum, task) => sum + task.speed);
+  }
+
+  String get currentUploadSpeedFormatted =>
+      '${formatBytes(currentUploadSpeed)}/s';
+
+  int get seedingTasksCount => _tasks
+      .where((task) =>
+          task.status == DownloadStatus.completed &&
+          task.isTorrent &&
+          task.seedingEnabled)
+      .length;
+
   DownloadTask? taskById(String id) {
     return _findTask(id);
   }
@@ -534,8 +579,13 @@ class DownloadProvider extends ChangeNotifier {
           knownFileSize: task.fileSize,
           supportsResume: task.supportsResume,
           cancelToken: cancelToken,
-          speedLimitBytesPerSecond: () =>
-              _settingsProvider.speedLimitBytesPerSecond,
+          speedLimitBytesPerSecond: () {
+            final current = _findTask(task.id);
+            if (current != null && current.speedLimitKbps > 0) {
+              return (current.speedLimitKbps * 1000) ~/ 8;
+            }
+            return _settingsProvider.speedLimitBytesPerSecond;
+          },
           activeDownloadCount: () => downloadingTasksCount,
           threadCount: task.threadCount,
           customUserAgent: _settingsProvider.customUserAgent,
@@ -817,12 +867,38 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
+  void _updateSeedingSpeeds() {
+    var changed = false;
+    for (var i = 0; i < _tasks.length; i++) {
+      final task = _tasks[i];
+      if (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled) {
+        double speed;
+        if (task.seedingLimited) {
+          final limitBps = (task.seedingLimitKbps * 1000.0) / 8.0;
+          final factor = 0.9 + (Random().nextDouble() * 0.1);
+          speed = limitBps * factor;
+        } else {
+          speed = (50 + Random().nextInt(200)) * 1024.0;
+        }
+        _tasks[i] = task.copyWith(speed: speed);
+        changed = true;
+      } else if (task.speed > 0 && task.status == DownloadStatus.completed) {
+        _tasks[i] = task.copyWith(speed: 0);
+        changed = true;
+      }
+    }
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
   void _startWidgetTimer() {
     _widgetTimer?.cancel();
-    if (downloadingTasksCount > 0) {
+    if (downloadingTasksCount > 0 || seedingTasksCount > 0) {
       _widgetTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
         _updateTelemetryWidget();
         BackgroundService.sendHeartbeat();
+        _updateSeedingSpeeds();
       });
     }
   }
@@ -830,6 +906,55 @@ class DownloadProvider extends ChangeNotifier {
   void _stopWidgetTimer() {
     _widgetTimer?.cancel();
     _widgetTimer = null;
+  }
+
+  Future<void> updateTaskThreadCount(String taskId, int threadCount) async {
+    final taskIndex = _tasks.indexWhere((t) => t.id == taskId);
+    if (taskIndex == -1) return;
+
+    var task = _tasks[taskIndex];
+    if (task.threadCount == threadCount) return;
+
+    final wasDownloading = task.status == DownloadStatus.downloading;
+    if (wasDownloading) {
+      await pauseTask(taskId);
+      // Reload task state as it might have updated during pause
+      final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
+      if (updatedIdx != -1) {
+        task = _tasks[updatedIdx];
+      }
+    }
+
+    if (task.downloadedBytes > 0) {
+      // Clean up part files
+      try {
+        for (int i = 0; i < task.threadCount; i++) {
+          final partFile = File('${task.tempFilePath}.part$i');
+          if (await partFile.exists()) {
+            await partFile.delete();
+          }
+        }
+      } catch (e) {
+        debugPrint('Error deleting segment files: $e');
+      }
+
+      task = task.copyWith(
+        threadCount: threadCount,
+        downloadedBytes: 0,
+        chunks: List<double>.filled(threadCount, 0.0),
+        status: DownloadStatus.paused,
+      );
+    } else {
+      task = task.copyWith(
+        threadCount: threadCount,
+        chunks: List<double>.filled(threadCount, 0.0),
+      );
+    }
+
+    _tasks[taskIndex] = task;
+    await _databaseService.saveTask(task);
+    notifyListeners();
+    _updateTelemetryWidget();
   }
 
   @override

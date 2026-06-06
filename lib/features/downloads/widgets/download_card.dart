@@ -382,17 +382,21 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           // ETA or status message
                           Row(
                             children: [
-                              if (task.status == DownloadStatus.downloading) ...[
+                              if (task.status == DownloadStatus.downloading || (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)) ...[
                                 Icon(
-                                  Icons.download,
+                                  (task.status == DownloadStatus.completed) ? Icons.upload : Icons.download,
                                   size: 12,
-                                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                  color: (task.status == DownloadStatus.completed)
+                                      ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                                      : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   task.speedFormatted,
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                        color: (task.status == DownloadStatus.completed)
+                                            ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                                            : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
                                         fontWeight: FontWeight.w600,
                                         fontSize: 11,
                                       ),
@@ -400,21 +404,27 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                 const SizedBox(width: 8),
                               ],
                               Icon(
-                                task.status == DownloadStatus.completed
-                                    ? Icons.check_circle_outline
-                                    : Icons.schedule,
+                                (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
+                                    ? Icons.cloud_upload_outlined
+                                    : (task.status == DownloadStatus.completed
+                                        ? Icons.check_circle_outline
+                                        : Icons.schedule),
                                 size: 12,
-                                color: task.status == DownloadStatus.completed
-                                    ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                                    : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+                                color: (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
+                                    ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                                    : (task.status == DownloadStatus.completed
+                                        ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                                        : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 L10n.translateStatus(context, task.status, task.etaFormatted),
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: task.status == DownloadStatus.completed
-                                          ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                                          : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                                      color: (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
+                                          ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                                          : (task.status == DownloadStatus.completed
+                                              ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                                              : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)),
                                       fontSize: 11,
                                     ),
                               ),
