@@ -8,3 +8,9 @@ mixin HapticHelper {
     }
   }
 }
+
+void runHaptic(SettingsProvider settings) {
+  if (settings.vibration) {
+    HapticFeedback.lightImpact();
+  }
+}

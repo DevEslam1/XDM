@@ -27,6 +27,10 @@ class SettingsProvider extends ChangeNotifier {
   static const _globalTorrentSeedingLimitKbpsKey = 'globalTorrentSeedingLimitKbps';
   static const _defaultThreadCountKey = 'defaultThreadCount';
   static const _customDownloadPathKey = 'customDownloadPath';
+  static const _incognitoEnabledKey = 'incognitoEnabled';
+  static const _desktopModeKey = 'desktopMode';
+  static const _adBlockerEnabledKey = 'adBlockerEnabled';
+  static const _pinchToZoomKey = 'pinchToZoom';
 
   late final SharedPreferences _prefs;
 
@@ -60,6 +64,12 @@ class SettingsProvider extends ChangeNotifier {
   // Connection settings
   int defaultThreadCount = 5;
 
+  // Browser settings
+  bool incognitoEnabled = false;
+  bool desktopMode = false;
+  bool adBlockerEnabled = true;
+  bool pinchToZoom = true;
+
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
     autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
@@ -89,6 +99,10 @@ class SettingsProvider extends ChangeNotifier {
     globalTorrentSeedingLimitKbps = _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ?? globalTorrentSeedingLimitKbps;
     defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? defaultThreadCount;
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
+    incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
+    desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
+    adBlockerEnabled = _prefs.getBool(_adBlockerEnabledKey) ?? adBlockerEnabled;
+    pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
   }
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
@@ -238,6 +252,30 @@ class SettingsProvider extends ChangeNotifier {
     } else {
       await _prefs.setString(_customDownloadPathKey, value);
     }
+    notifyListeners();
+  }
+
+  Future<void> setIncognitoEnabled(bool value) async {
+    incognitoEnabled = value;
+    await _prefs.setBool(_incognitoEnabledKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setDesktopMode(bool value) async {
+    desktopMode = value;
+    await _prefs.setBool(_desktopModeKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setAdBlockerEnabled(bool value) async {
+    adBlockerEnabled = value;
+    await _prefs.setBool(_adBlockerEnabledKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setPinchToZoom(bool value) async {
+    pinchToZoom = value;
+    await _prefs.setBool(_pinchToZoomKey, value);
     notifyListeners();
   }
 }
