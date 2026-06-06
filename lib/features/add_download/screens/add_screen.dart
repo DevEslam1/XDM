@@ -535,6 +535,22 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                             : () async {
                                 triggerHaptic(settings);
                                 if (_formKey.currentState!.validate()) {
+                                  if (_isMetadataResolved && _torrentFiles.isNotEmpty) {
+                                    final hasSelected = _torrentFiles.any((f) => f['selected'] == true);
+                                    if (!hasSelected) {
+                                      ThemedSnackbar.show(
+                                        context,
+                                        message: isRtl 
+                                            ? 'يجب تحديد ملف واحد على الأقل للتحميل' 
+                                            : 'At least one file must be selected for download.',
+                                        color: redClr,
+                                        icon: Icons.warning_amber_outlined,
+                                        isDarkMode: isDark,
+                                      );
+                                      return;
+                                    }
+                                  }
+
                                   setState(() => _isSubmitting = true);
                                   final provider = Provider.of<DownloadProvider>(
                                     context,
@@ -550,6 +566,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                                      savePath: _pathController.text.trim(),
                                      threadCount: _selectedThreads,
                                      scheduledAt: _isScheduled ? _scheduledDateTime : null,
+                                     torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
                                    );
                                   if (!context.mounted) return;
                                   setState(() => _isSubmitting = false);
@@ -732,7 +749,15 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
             _resolvedFileSize = meta['length'] ?? 0;
             _resolvedCategory = 'Archive';
             _supportsResume = true;
-            _torrentFiles = List<Map<String, dynamic>>.from(meta['files'] ?? []);
+            _torrentFiles = (meta['files'] as List? ?? [])
+                .map((f) => {
+                      'name': f['name'] as String? ?? '',
+                      'length': f['length'] as int? ?? 0,
+                      'selected': true,
+                      'downloadedBytes': 0,
+                      'speed': 0.0,
+                    })
+                .toList();
             _isMetadataResolved = true;
           });
           if (mounted) {
@@ -819,7 +844,15 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
               _resolvedFileSize = meta['length'] ?? 0;
               _resolvedCategory = 'Archive';
               _supportsResume = true;
-              _torrentFiles = List<Map<String, dynamic>>.from(meta['files'] ?? []);
+              _torrentFiles = (meta['files'] as List? ?? [])
+                  .map((f) => {
+                        'name': f['name'] as String? ?? '',
+                        'length': f['length'] as int? ?? 0,
+                        'selected': true,
+                        'downloadedBytes': 0,
+                        'speed': 0.0,
+                      })
+                  .toList();
               _isMetadataResolved = true;
               
               _nameController.text = _resolvedFileName;
@@ -1014,20 +1047,48 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                       final f = _torrentFiles[index];
                       final name = f['name'] as String? ?? 'unknown';
                       final length = f['length'] as int? ?? 0;
+                      final selected = f['selected'] as bool? ?? true;
+                      final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
                       return Row(
                         children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Checkbox(
+                              value: selected,
+                              activeColor: blueClr,
+                              side: BorderSide(color: glassBorder, width: 0.8),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _torrentFiles[index] = {
+                                      ...f,
+                                      'selected': val,
+                                    };
+                                    // Recalculate total size
+                                    final totalSize = _torrentFiles
+                                        .where((file) => file['selected'] == true)
+                                        .fold(0, (sum, file) => sum + (file['length'] as int));
+                                    _resolvedFileSize = totalSize;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
                           Icon(
                             Icons.insert_drive_file_outlined,
                             size: 14,
-                            color: secClr,
+                            color: selected ? textClr : secClr,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               name,
                               style: TextStyle(
-                                color: textClr,
+                                color: selected ? textClr : secClr,
                                 fontSize: 11,
+                                decoration: selected ? null : TextDecoration.lineThrough,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -1037,7 +1098,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                           Text(
                             formatBytes(length),
                             style: TextStyle(
-                              color: secClr,
+                              color: selected ? secClr : secClr.withValues(alpha: 0.5),
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),

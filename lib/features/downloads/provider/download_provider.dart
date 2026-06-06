@@ -303,6 +303,7 @@ class DownloadProvider extends ChangeNotifier {
     required String savePath,
     int? threadCount,
     DateTime? scheduledAt,
+    List<Map<String, dynamic>>? torrentFiles,
   }) async {
     _lastError = null;
     final urls = url.split(RegExp(r'[\r\n]+')).map((u) => u.trim()).where((u) => u.isNotEmpty).toList();
@@ -352,6 +353,7 @@ class DownloadProvider extends ChangeNotifier {
         savePath: savePath,
         threadCount: resolvedThreadCount,
         scheduledAt: scheduledAt,
+        torrentFiles: torrentFiles,
       );
     }
   }
@@ -364,26 +366,50 @@ class DownloadProvider extends ChangeNotifier {
     required String savePath,
     required int threadCount,
     DateTime? scheduledAt,
+    List<Map<String, dynamic>>? torrentFiles,
   }) async {
     final defaultDirectory = _settingsProvider.customDownloadPath?.isNotEmpty == true
         ? _settingsProvider.customDownloadPath!
         : await _permissionService.defaultDownloadDirectory();
-    final metadata = await _downloadEngine.resolveMetadata(
-      url: url.trim(),
-      requestedFileName: name.trim().isEmpty ? null : name.trim(),
-      customUserAgent: _settingsProvider.customUserAgent,
-      enableProxy: _settingsProvider.enableProxy,
-      proxyAddress: _settingsProvider.proxyAddress,
-      bypassSSL: _settingsProvider.bypassSSL,
-    );
-    final resolvedCategory = category.trim().isNotEmpty ? category : metadata.category;
+
+    // If the caller already pre-resolved name + size (e.g. via "Verify Link"
+    // in AddScreen), skip the redundant HEAD request which can return
+    // different/empty results from servers that block HEAD.
+    final bool alreadyResolved = name.trim().isNotEmpty && size > 0;
+
+    String resolvedCategory;
+    String fileName;
+    int fileSize;
+    bool supportsResume;
+
+    if (alreadyResolved) {
+      fileName = safeFileName(name.trim());
+      fileSize = size;
+      resolvedCategory = category.trim().isNotEmpty
+          ? category
+          : categoryFromFileName(fileName);
+      supportsResume = true; // Assume resume support for pre-resolved
+    } else {
+      final metadata = await _downloadEngine.resolveMetadata(
+        url: url.trim(),
+        requestedFileName: name.trim().isEmpty ? null : name.trim(),
+        customUserAgent: _settingsProvider.customUserAgent,
+        enableProxy: _settingsProvider.enableProxy,
+        proxyAddress: _settingsProvider.proxyAddress,
+        bypassSSL: _settingsProvider.bypassSSL,
+      );
+      resolvedCategory = category.trim().isNotEmpty ? category : metadata.category;
+      fileName = name.trim().isNotEmpty
+          ? safeFileName(name.trim())
+          : metadata.fileName;
+      fileSize = size > 0 ? size : metadata.fileSize;
+      supportsResume = metadata.supportsResume;
+    }
+
     var directory = savePath.trim().isNotEmpty ? savePath.trim() : defaultDirectory;
     if (_settingsProvider.categoryFolders) {
       directory = p.join(directory, resolvedCategory);
     }
-    final fileName = name.trim().isNotEmpty
-        ? safeFileName(name.trim())
-        : metadata.fileName;
     final localFilePath = _downloadEngine.buildLocalFilePath(directory, fileName);
     final tempFilePath = _downloadEngine.buildTempFilePath(directory, fileName);
     final now = DateTime.now();
@@ -394,7 +420,7 @@ class DownloadProvider extends ChangeNotifier {
       id: '${now.microsecondsSinceEpoch}_${url.hashCode.abs()}_${Random().nextInt(999999)}',
       fileName: fileName,
       url: url.trim(),
-      fileSize: size > 0 ? size : metadata.fileSize,
+      fileSize: fileSize,
       downloadedBytes: 0,
       category: resolvedCategory,
       status: isScheduled ? DownloadStatus.paused : DownloadStatus.queued,
@@ -406,11 +432,12 @@ class DownloadProvider extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
       scheduledAt: scheduledAt,
-      supportsResume: metadata.supportsResume,
+      supportsResume: supportsResume,
       // Apply the user's global torrent seeding preference.
       seedingEnabled: _settingsProvider.globalTorrentSeeding,
       seedingLimited: _settingsProvider.globalTorrentSeedingLimited,
       seedingLimitKbps: _settingsProvider.globalTorrentSeedingLimitKbps,
+      torrentFiles: torrentFiles,
     );
 
     _tasks.insert(0, task);
@@ -714,6 +741,13 @@ class DownloadProvider extends ChangeNotifier {
                     progress.fileSize,
                     progress.downloadedBytes,
                   ),
+              torrentFiles: current.torrentFiles != null
+                  ? _updateTorrentFilesProgress(
+                      current.torrentFiles!,
+                      progress.downloadedBytes,
+                      progress.speed,
+                    )
+                  : null,
             );
 
             // Throttle UI notification and notification progress to 200ms
@@ -765,6 +799,9 @@ class DownloadProvider extends ChangeNotifier {
               chunks: List<double>.filled(current.threadCount, 1.0),
               completedAt: now,
               updatedAt: now,
+              torrentFiles: current.torrentFiles != null
+                  ? _markTorrentFilesCompleted(current.torrentFiles!)
+                  : null,
             ),
           );
           _notificationService.showDownloadComplete(
@@ -1079,6 +1116,80 @@ class DownloadProvider extends ChangeNotifier {
     await _databaseService.saveTask(task);
     notifyListeners();
     _updateTelemetryWidget();
+  }
+
+  Future<void> updateTorrentTaskFiles(String taskId, List<Map<String, dynamic>> files) async {
+    final index = _tasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+
+    final task = _tasks[index];
+    
+    // Calculate new total size of selected files
+    final selectedSize = files
+        .where((f) => f['selected'] == true)
+        .fold(0, (sum, f) => sum + (f['length'] as int));
+
+    final updated = task.copyWith(
+      torrentFiles: files,
+      fileSize: selectedSize > 0 ? selectedSize : task.fileSize,
+    );
+
+    _tasks[index] = updated;
+    await _databaseService.saveTask(updated);
+    notifyListeners();
+  }
+
+  List<Map<String, dynamic>> _updateTorrentFilesProgress(
+    List<Map<String, dynamic>> files,
+    int totalDownloaded,
+    double totalSpeed,
+  ) {
+    final result = files.map((f) => Map<String, dynamic>.from(f)).toList();
+    
+    int selectedSize = result
+        .where((f) => f['selected'] == true)
+        .fold(0, (sum, f) => sum + (f['length'] as int));
+
+    if (selectedSize == 0) return result;
+
+    int remainingDownloaded = totalDownloaded;
+
+    for (var f in result) {
+      if (f['selected'] != true) {
+        f['downloadedBytes'] = 0;
+        f['speed'] = 0.0;
+        continue;
+      }
+
+      final length = f['length'] as int;
+      if (remainingDownloaded >= length) {
+        f['downloadedBytes'] = length;
+        f['speed'] = 0.0;
+        remainingDownloaded -= length;
+      } else if (remainingDownloaded > 0) {
+        f['downloadedBytes'] = remainingDownloaded;
+        f['speed'] = totalSpeed;
+        remainingDownloaded = 0;
+      } else {
+        f['downloadedBytes'] = 0;
+        f['speed'] = 0.0;
+      }
+    }
+
+    return result;
+  }
+
+  List<Map<String, dynamic>> _markTorrentFilesCompleted(List<Map<String, dynamic>> files) {
+    return files.map((f) {
+      final copy = Map<String, dynamic>.from(f);
+      if (copy['selected'] == true) {
+        copy['downloadedBytes'] = copy['length'] as int;
+      } else {
+        copy['downloadedBytes'] = 0;
+      }
+      copy['speed'] = 0.0;
+      return copy;
+    }).toList();
   }
 
   @override

@@ -15,6 +15,7 @@ import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../core/utils/file_utils.dart';
 
 class DetailsScreen extends StatelessWidget with HapticHelper {
   final String taskId;
@@ -209,6 +210,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       // Telemetry Speed History Graph
                       _buildSpeedGraphPanel(context, task, provider, settings),
                       const SizedBox(height: 20),
+
+                      // Torrent files checklist & status
+                      _buildTorrentFilesPanel(context, task, provider, settings),
 
                       // File Metadata Panel
                       _buildMetadataPanel(context, task, settings),
@@ -943,6 +947,173 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
         label,
         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
       ),
+    );
+  }
+
+  Widget _buildTorrentFilesPanel(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    SettingsProvider settings,
+  ) {
+    if (!task.isTorrent || task.torrentFiles == null || task.torrentFiles!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+
+    final files = task.torrentFiles!;
+
+    return Column(
+      children: [
+        GlassCard(
+          borderRadius: 20,
+          padding: const EdgeInsets.all(16),
+          isDarkMode: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isRtl ? 'ملفات التورنت المضمنة' : 'TORRENT INCLUDED FILES',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: secClr,
+                  fontSize: 10,
+                  letterSpacing: 1.0,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: files.length,
+                separatorBuilder: (context, index) => const Divider(height: 16, thickness: 0.3),
+                itemBuilder: (context, index) {
+                  final f = files[index];
+                  final name = f['name'] as String? ?? 'unknown';
+                  final length = f['length'] as int? ?? 0;
+                  final selected = f['selected'] as bool? ?? true;
+                  final downloadedBytes = f['downloadedBytes'] as int? ?? 0;
+                  final speed = (f['speed'] as num?)?.toDouble() ?? 0.0;
+
+                  final fileProgress = length > 0 ? (downloadedBytes / length).clamp(0.0, 1.0) : 0.0;
+                  final isDownloading = task.status == DownloadStatus.downloading;
+                  final isCompleted = task.status == DownloadStatus.completed;
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Checkbox(
+                          value: selected,
+                          activeColor: blueClr,
+                          side: BorderSide(color: glassBorder, width: 1.0),
+                          onChanged: (isCompleted || isDownloading)
+                              ? null
+                              : (val) {
+                                  if (val != null) {
+                                    triggerHaptic(settings);
+                                    final updatedFiles = List<Map<String, dynamic>>.from(files);
+                                    updatedFiles[index] = {
+                                      ...f,
+                                      'selected': val,
+                                    };
+                                    provider.updateTorrentTaskFiles(task.id, updatedFiles);
+                                  }
+                                },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.insert_drive_file_outlined,
+                        size: 16,
+                        color: selected ? textClr : secClr,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: TextStyle(
+                                color: selected ? textClr : secClr,
+                                fontSize: 12,
+                                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                                decoration: selected ? null : TextDecoration.lineThrough,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 6),
+                            if (selected) ...[
+                              Stack(
+                                children: [
+                                  Container(
+                                    height: 4,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: glassBorder.withValues(alpha: 0.3),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                  FractionallySizedBox(
+                                    widthFactor: fileProgress,
+                                    child: Container(
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: isDownloading ? blueClr : (isCompleted ? greenClr : secClr),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    '${formatBytes(downloadedBytes)} / ${formatBytes(length)}',
+                                    style: TextStyle(color: secClr, fontSize: 10),
+                                  ),
+                                  if (speed > 0)
+                                    Text(
+                                      '${formatBytes(speed)}/s',
+                                      style: TextStyle(color: blueClr, fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  Text(
+                                    '${(fileProgress * 100).toStringAsFixed(1)}%',
+                                    style: TextStyle(color: textClr, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ] else ...[
+                              Text(
+                                isRtl ? 'تم تخطيه' : 'Skipped',
+                                style: TextStyle(color: secClr, fontSize: 10, fontStyle: FontStyle.italic),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
     );
   }
 }

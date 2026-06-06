@@ -12,6 +12,13 @@ class PermissionService {
       if (downloads != null) return p.join(downloads.path, 'XDM');
     }
 
+    // On Android, use the shared Downloads folder so files are visible
+    // in the user's file manager. getApplicationDocumentsDirectory()
+    // returns app-internal storage that users cannot browse to.
+    if (!kIsWeb && Platform.isAndroid) {
+      return p.join('/storage/emulated/0/Download', 'XDM');
+    }
+
     final docs = await getApplicationDocumentsDirectory();
     return p.join(docs.path, 'XDM');
   }

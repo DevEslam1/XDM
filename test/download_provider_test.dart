@@ -418,4 +418,50 @@ void main() {
     expect(sizes.containsKey('Alien'), false,
         reason: 'Unknown categories must not be silently dropped into the map');
   });
+
+  test('updateTorrentTaskFiles updates torrent selection and file size correctly', () async {
+    final (database, settings) = await _setupServices();
+    final now = DateTime.now();
+    final task = DownloadTask(
+      id: 'torrent_test',
+      fileName: 'test.torrent',
+      url: 'file:///path/test.torrent',
+      fileSize: 300,
+      downloadedBytes: 0,
+      category: 'Archive',
+      status: DownloadStatus.paused,
+      savePath: '',
+      localFilePath: '',
+      tempFilePath: '',
+      threadCount: 1,
+      chunks: const [0.0],
+      createdAt: now,
+      updatedAt: now,
+      torrentFiles: const [
+        {'name': 'file1.txt', 'length': 100, 'selected': true},
+        {'name': 'file2.txt', 'length': 200, 'selected': true},
+      ],
+    );
+    await database.saveTask(task);
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    expect(provider.tasks.first.fileSize, 300);
+
+    // Unselect file1.txt
+    final updatedFiles = [
+      {'name': 'file1.txt', 'length': 100, 'selected': false},
+      {'name': 'file2.txt', 'length': 200, 'selected': true},
+    ];
+    await provider.updateTorrentTaskFiles('torrent_test', updatedFiles);
+
+    expect(provider.tasks.first.torrentFiles![0]['selected'], false);
+    expect(provider.tasks.first.fileSize, 200); // 300 - 100
+  });
 }

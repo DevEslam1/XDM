@@ -29,6 +29,7 @@ class DownloadTask {
   final bool seedingEnabled;
   final bool seedingLimited;
   final int seedingLimitKbps;
+  final List<Map<String, dynamic>>? torrentFiles;
 
   DownloadTask({
     required this.id,
@@ -55,10 +56,12 @@ class DownloadTask {
     this.seedingEnabled = true,
     this.seedingLimited = false,
     this.seedingLimitKbps = 500,
+    this.torrentFiles,
   });
 
   bool get isTorrent =>
       url.trim().startsWith('magnet:') ||
+      url.trim().startsWith('file://') ||
       url.trim().toLowerCase().endsWith('.torrent') ||
       fileName.trim().toLowerCase().endsWith('.torrent');
 
@@ -137,6 +140,7 @@ class DownloadTask {
     bool? seedingEnabled,
     bool? seedingLimited,
     int? seedingLimitKbps,
+    List<Map<String, dynamic>>? torrentFiles,
   }) {
     return DownloadTask(
       id: id,
@@ -163,6 +167,7 @@ class DownloadTask {
       seedingEnabled: seedingEnabled ?? this.seedingEnabled,
       seedingLimited: seedingLimited ?? this.seedingLimited,
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
+      torrentFiles: torrentFiles ?? this.torrentFiles,
     );
   }
 
@@ -192,6 +197,7 @@ class DownloadTask {
       'seedingEnabled': seedingEnabled,
       'seedingLimited': seedingLimited,
       'seedingLimitKbps': seedingLimitKbps,
+      'torrentFiles': torrentFiles,
     };
   }
 
@@ -248,6 +254,9 @@ class DownloadTask {
       seedingEnabled: map['seedingEnabled'] as bool? ?? true,
       seedingLimited: map['seedingLimited'] as bool? ?? false,
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
+      torrentFiles: map['torrentFiles'] != null
+          ? (map['torrentFiles'] as List).map((f) => Map<String, dynamic>.from(f as Map)).toList()
+          : null,
     );
   }
 

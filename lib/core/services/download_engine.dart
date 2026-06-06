@@ -195,10 +195,13 @@ class DownloadEngine {
     bool bypassSSL = false,
   }) async {
     final isTorrent = url.trim().startsWith('magnet:') ||
+        url.trim().startsWith('file://') ||
         url.trim().toLowerCase().endsWith('.torrent') ||
         fileNameFromUrl(url).trim().toLowerCase().endsWith('.torrent');
 
     if (isTorrent) {
+      // NOTE: This is a simulated torrent download. A real BitTorrent
+      // engine (e.g. libtorrent) would be needed for actual P2P transfers.
       final localFile = File(localFilePath);
       await localFile.parent.create(recursive: true);
 
@@ -254,7 +257,17 @@ class DownloadEngine {
         ));
       }
 
-      await localFile.writeAsString('XDM Torrent Simulation payload');
+      // Write a placeholder file with torrent info
+      final placeholderContent = StringBuffer()
+        ..writeln('XDM Torrent Placeholder')
+        ..writeln('========================')
+        ..writeln('Source: $url')
+        ..writeln('Expected size: $knownFileSize bytes')
+        ..writeln('')
+        ..writeln('Note: Real BitTorrent downloading requires a native')
+        ..writeln('torrent engine integration (e.g. libtorrent).')
+        ..writeln('This file is a placeholder for the torrent download.');
+      await localFile.writeAsString(placeholderContent.toString());
       return;
     }
 
