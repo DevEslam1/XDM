@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../core/app_theme.dart';
@@ -36,6 +37,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   bool _showBars = true;
   double _lastScrollY = 0;
   final ScrollController _dashboardScrollController = ScrollController();
+  static const String _snifferPrefKey = 'browserSnifferEnabled';
 
   @override
   void initState() {
@@ -45,6 +47,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         _isFocused = _focusNode.hasFocus;
       });
     });
+    _loadSnifferPref();
     
     _urlController.addListener(() {
       setState(() {}); // Rebuild to update suffix clear button visibility
@@ -148,12 +151,39 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     super.dispose();
   }
 
+  Future<void> _loadSnifferPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getBool(_snifferPrefKey) ?? true;
+      if (!mounted) return;
+      setState(() {
+        _isSnifferEnabled = value;
+      });
+    } catch (e) {
+      // Defaults to true if the prefs read fails.
+    }
+  }
+
+  Future<void> _setSnifferEnabled(bool value) async {
+    setState(() {
+      _isSnifferEnabled = value;
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_snifferPrefKey, value);
+    } catch (_) {
+      // Best-effort persistence; in-memory state is the source of truth.
+    }
+  }
+
   bool _isDownloadable(String url) {
     final cleanUrl = url.split('?').first.toLowerCase();
     final lowercaseUrl = url.toLowerCase();
 
+    // blob: and data: URLs are inline content (e.g. embedded images);
+    // intercepting them just shows a useless download sheet.
     if (lowercaseUrl.startsWith('blob:') || lowercaseUrl.startsWith('data:')) {
-      return true;
+      return false;
     }
 
     final extensions = [
@@ -456,9 +486,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   activeThumbColor: accentColor,
                   onChanged: (val) {
                     triggerHaptic(settings);
-                    setState(() {
-                      _isSnifferEnabled = val;
-                    });
+                    _setSnifferEnabled(val);
                   },
                 ),
               ],

@@ -42,39 +42,45 @@ class DownloadProgress {
 }
 
 class DownloadEngine {
-  DownloadEngine({Dio? dio}) : _dio = dio ?? Dio();
+  DownloadEngine({Dio? dio}) : _sharedDio = dio ?? Dio();
 
-  final Dio _dio;
+  // Kept around for tests/extensions that may need it, but the engine
+  // no longer mutates this client; every request builds its own.
+  // ignore: unused_field
+  final Dio _sharedDio;
 
-  void _configureClient({
+  /// Builds an isolated Dio instance configured with per-call options.
+  /// Using a fresh client per request prevents the shared [_dio] instance
+  /// from being mutated by concurrent downloads (which previously caused
+  /// one in-flight download to silently pick up another download's
+  /// proxy/UA/SSL settings).
+  Dio _buildIsolatedClient({
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
     bool bypassSSL = false,
   }) {
+    final client = Dio();
     if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
-      _dio.options.headers['User-Agent'] = customUserAgent.trim();
-    } else {
-      _dio.options.headers.remove('User-Agent');
+      client.options.headers['User-Agent'] = customUserAgent.trim();
     }
 
-    final adapter = _dio.httpClientAdapter;
+    final adapter = client.httpClientAdapter;
     if (adapter is IOHttpClientAdapter) {
       if (enableProxy && proxyAddress != null && proxyAddress.trim().isNotEmpty) {
         adapter.createHttpClient = () {
-          final client = HttpClient();
-          client.findProxy = (uri) {
+          final httpClient = HttpClient();
+          httpClient.findProxy = (uri) {
             return 'PROXY ${proxyAddress.trim()}';
           };
           if (bypassSSL) {
-            client.badCertificateCallback = (cert, host, port) => true;
+            httpClient.badCertificateCallback = (cert, host, port) => true;
           }
-          return client;
+          return httpClient;
         };
-      } else {
-        adapter.createHttpClient = null;
       }
     }
+    return client;
   }
 
   Future<DownloadMetadata> resolveMetadata({
@@ -130,7 +136,9 @@ class DownloadEngine {
     var fileSize = 0;
     var supportsResume = false;
 
-    _configureClient(
+    // Use a per-call Dio so concurrent downloads don't share UA/proxy/SSL
+    // state via the engine's long-lived client.
+    final isolatedDio = _buildIsolatedClient(
       customUserAgent: customUserAgent,
       enableProxy: enableProxy,
       proxyAddress: proxyAddress,
@@ -138,7 +146,7 @@ class DownloadEngine {
     );
 
     try {
-      final response = await _dio.head<dynamic>(
+      final response = await isolatedDio.head<dynamic>(
         punyUrl,
         options: Options(
           followRedirects: true,
@@ -252,7 +260,9 @@ class DownloadEngine {
 
     final punyUrl = convertIdnToPunycode(url);
 
-    _configureClient(
+    // Use a per-call Dio so concurrent downloads don't share UA/proxy/SSL
+    // state via the engine's long-lived client.
+    final isolatedDio = _buildIsolatedClient(
       customUserAgent: customUserAgent,
       enableProxy: enableProxy,
       proxyAddress: proxyAddress,
@@ -277,7 +287,7 @@ class DownloadEngine {
         headers['range'] = 'bytes=$resumeFrom-';
       }
 
-      final response = await _dio.get<ResponseBody>(
+      final response = await isolatedDio.get<ResponseBody>(
         punyUrl,
         cancelToken: cancelToken,
         options: Options(
@@ -364,8 +374,15 @@ class DownloadEngine {
           }
         }
       } finally {
-        await sink.flush();
-        await sink.close();
+        // Closing the sink can throw on Windows if the underlying handle
+        // was already invalidated by the cancellation path. Swallow it
+        // so the real error reaches the caller.
+        try {
+          await sink.flush();
+        } catch (_) {}
+        try {
+          await sink.close();
+        } catch (_) {}
       }
 
       await File(localFilePath).parent.create(recursive: true);
@@ -464,7 +481,7 @@ class DownloadEngine {
           final headers = <String, dynamic>{};
           headers['range'] = 'bytes=${start + resumeFrom}-$end';
 
-          final chunkResponse = await _dio.get<ResponseBody>(
+          final chunkResponse = await isolatedDio.get<ResponseBody>(
             punyUrl,
             cancelToken: cancelToken,
             options: Options(
@@ -507,8 +524,12 @@ class DownloadEngine {
               }
             }
           } finally {
-            await sink.flush();
-            await sink.close();
+            try {
+              await sink.flush();
+            } catch (_) {}
+            try {
+              await sink.close();
+            } catch (_) {}
           }
         }());
       }
@@ -536,8 +557,12 @@ class DownloadEngine {
           }
         }
       } finally {
-        await outputSink.flush();
-        await outputSink.close();
+        try {
+          await outputSink.flush();
+        } catch (_) {}
+        try {
+          await outputSink.close();
+        } catch (_) {}
       }
     }
   }

@@ -14,6 +14,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../provider/settings_provider.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/constants.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -155,7 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         title: L10n.of(context, 'settings_default_threads'),
                         subtitle: L10n.of(context, 'settings_default_threads_sub'),
                         value: settings.defaultThreadCount,
-                        items: [1, 2, 4, 5, 8, 16],
+                        items: kAvailableThreadOptions,
                         onChanged: (val) {
                           if (val != null) {
                             settings.setDefaultThreadCount(val);

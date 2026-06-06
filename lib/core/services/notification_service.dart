@@ -40,6 +40,7 @@ class NotificationService {
   Stream<Map<String, String>> get onActionTapped => _actionStreamController.stream;
 
   ReceivePort? _receivePort;
+  StreamSubscription<dynamic>? _receivePortSub;
 
   Future<void> init() async {
     const androidSettings = AndroidInitializationSettings(
@@ -60,7 +61,7 @@ class NotificationService {
     IsolateNameServer.removePortNameMapping('dmx_notification_port');
     IsolateNameServer.registerPortWithName(_receivePort!.sendPort, 'dmx_notification_port');
 
-    _receivePort!.listen((message) {
+    _receivePortSub = _receivePort!.listen((message) {
       if (message is Map) {
         final action = message['action'] as String?;
         final taskId = message['taskId'] as String?;
@@ -190,5 +191,18 @@ class NotificationService {
   Future<void> cancelNotification(int notificationId) async {
     if (!_initialized) return;
     await _plugin.cancel(id: notificationId);
+  }
+
+  /// Tears down the isolate port and broadcast stream. Call from the
+  /// app-shutdown path if you ever wire one up. The singleton lifetime
+  /// makes this mostly defensive, but it keeps the port name mapping
+  /// from leaking across hot restarts.
+  Future<void> dispose() async {
+    await _receivePortSub?.cancel();
+    _receivePortSub = null;
+    _receivePort?.close();
+    _receivePort = null;
+    IsolateNameServer.removePortNameMapping('dmx_notification_port');
+    await _actionStreamController.close();
   }
 }

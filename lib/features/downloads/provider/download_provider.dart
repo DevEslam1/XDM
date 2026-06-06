@@ -51,11 +51,13 @@ class DownloadProvider extends ChangeNotifier {
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, List<double>> _speedHistories = {};
   final Map<String, int> _lastProgressUpdateTimes = {};
+  final Set<String> _pendingProgressUpdates = {};
 
   List<double> getSpeedHistory(String id) => _speedHistories[id] ?? const [];
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   List<ConnectivityResult> _currentConnectivity = [];
+  bool _hasResolvedInitialConnectivity = false;
   Timer? _schedulingTimer;
   Timer? _widgetTimer;
   SortOption _sortOption = SortOption.dateAdded;
@@ -96,12 +98,22 @@ class DownloadProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> load() async {
+  /// [pauseOrphanDownloads] should be true only on initial app startup, when
+  /// in-flight downloads (from a previous run) cannot be resumed safely.
+  /// On user-triggered reload, we must preserve currently active downloads.
+  Future<void> load({bool pauseOrphanDownloads = true}) async {
     final cleanupDays = _settingsProvider.cleanupDays;
     final now = DateTime.now();
+    final toDelete = <DownloadTask>[];
 
     final loaded = _databaseService.loadTasks().map((task) {
-      if (task.status == DownloadStatus.downloading) {
+      // Only mark in-flight downloads as paused on initial load.
+      // If a CancelToken exists in the in-memory map, an active download
+      // stream is still running and must not be flipped to paused.
+      final hasActiveStream = _cancelTokens.containsKey(task.id);
+      if (pauseOrphanDownloads &&
+          task.status == DownloadStatus.downloading &&
+          !hasActiveStream) {
         return task.copyWith(
           status: DownloadStatus.paused,
           speed: 0,
@@ -119,7 +131,7 @@ class DownloadProvider extends ChangeNotifier {
           (task.status == DownloadStatus.completed || task.status == DownloadStatus.failed)) {
         final difference = now.difference(task.createdAt).inDays;
         if (difference >= cleanupDays) {
-          _databaseService.deleteTask(task.id);
+          toDelete.add(task);
           return false;
         }
       }
@@ -129,6 +141,12 @@ class DownloadProvider extends ChangeNotifier {
     _tasks
       ..clear()
       ..addAll(loaded);
+
+    for (final task in toDelete) {
+      await _databaseService.deleteTask(task.id);
+      await _cleanupPartFiles(task);
+    }
+
     await _databaseService.saveTasks(_tasks);
     _checkScheduledDownloads();
     notifyListeners();
@@ -255,6 +273,8 @@ class DownloadProvider extends ChangeNotifier {
   Map<String, int> get categoryCounts {
     final counts = _emptyCategoryCounts<int>(0);
     for (final task in _tasks) {
+      // Skip unknown categories so they aren't silently dropped later.
+      if (!counts.containsKey(task.category)) continue;
       counts[task.category] = (counts[task.category] ?? 0) + 1;
     }
     return counts;
@@ -263,6 +283,11 @@ class DownloadProvider extends ChangeNotifier {
   Map<String, double> get categorySizes {
     final sizes = _emptyCategoryCounts<double>(0);
     for (final task in _tasks) {
+      if (!sizes.containsKey(task.category)) continue;
+      // Don't include failed/queued tasks in storage accounting; only
+      // completed and partially-completed tasks actually consumed disk.
+      if (task.status == DownloadStatus.failed) continue;
+      if (task.status == DownloadStatus.queued) continue;
       sizes[task.category] =
           (sizes[task.category] ?? 0) + task.fileSize / (1024 * 1024);
     }
@@ -320,7 +345,7 @@ class DownloadProvider extends ChangeNotifier {
       }
       await _addSingleDownload(
         name: name,
-        url: singleUrl,
+        url: url,
         size: size,
         category: category,
         savePath: savePath,
@@ -379,6 +404,10 @@ class DownloadProvider extends ChangeNotifier {
       updatedAt: now,
       scheduledAt: scheduledAt,
       supportsResume: metadata.supportsResume,
+      // Apply the user's global torrent seeding preference.
+      seedingEnabled: _settingsProvider.globalTorrentSeeding,
+      seedingLimited: _settingsProvider.globalTorrentSeedingLimited,
+      seedingLimitKbps: _settingsProvider.globalTorrentSeedingLimitKbps,
     );
 
     _tasks.insert(0, task);
@@ -394,7 +423,8 @@ class DownloadProvider extends ChangeNotifier {
     final task = _findTask(id);
     if (task == null) return;
 
-    _lastProgressUpdateTimes.remove(id);
+    // Flush any pending throttled progress to disk so resume has the latest bytes.
+    await _flushPendingProgress(id);
 
     if (task.status == DownloadStatus.downloading) {
       _cancelTokens[id]?.cancel('paused');
@@ -448,9 +478,15 @@ class DownloadProvider extends ChangeNotifier {
     final task = _findTask(id);
     if (task == null) return;
 
-    _lastProgressUpdateTimes.remove(id);
+    // Flush any pending throttled progress and drop tracking state.
+    await _flushPendingProgress(id);
 
     _cancelTokens[id]?.cancel('cancelled');
+
+    // Remove the .partN chunk files so a fresh download won't try to
+    // resume from a partial state.
+    await _cleanupPartFiles(task);
+
     await _setTask(
       task.copyWith(
         status: DownloadStatus.failed,
@@ -470,14 +506,16 @@ class DownloadProvider extends ChangeNotifier {
     final task = _findTask(id);
     if (task == null) return;
 
+    // Don't reset downloadedBytes/chunks to 0 — the .partN files are still
+    // on disk and the download engine will resume from existing offsets.
+    // The onProgress callback will pick up the real numbers from the next
+    // chunk that arrives.
     await _setTask(
       task.copyWith(
-        downloadedBytes: 0,
         status: DownloadStatus.queued,
         speed: 0,
         clearEta: true,
         clearError: true,
-        chunks: List<double>.filled(task.threadCount, 0.0),
         clearCompletedAt: true,
       ),
     );
@@ -486,10 +524,16 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<void> deleteTask(String id) async {
+    final task = _findTask(id);
     _cancelTokens[id]?.cancel('deleted');
     _cancelTokens.remove(id);
     _speedHistories.remove(id);
+    _lastProgressUpdateTimes.remove(id);
+    _pendingProgressUpdates.remove(id);
     _tasks.removeWhere((task) => task.id == id);
+    if (task != null) {
+      await _cleanupPartFiles(task);
+    }
     await _databaseService.deleteTask(id);
     _notificationService.cancelNotification(id.hashCode.abs());
     notifyListeners();
@@ -499,6 +543,35 @@ class DownloadProvider extends ChangeNotifier {
       _stopWidgetTimer();
     }
     _updateTelemetryWidget();
+  }
+
+  /// Deletes the partial .dmxpart and .partN files on disk for [task].
+  Future<void> _cleanupPartFiles(DownloadTask task) async {
+    try {
+      final tempFile = File(task.tempFilePath);
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      for (int i = 0; i < task.threadCount; i++) {
+        final partFile = File('${task.tempFilePath}.part$i');
+        if (await partFile.exists()) {
+          await partFile.delete();
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to clean up part files for ${task.id}: $e');
+    }
+  }
+
+  /// Persists any throttled in-memory progress for [id] that hasn't yet
+  /// been flushed to the database. No-op if there's nothing pending.
+  Future<void> _flushPendingProgress(String id) async {
+    _lastProgressUpdateTimes.remove(id);
+    if (!_pendingProgressUpdates.remove(id)) return;
+    final index = _tasks.indexWhere((t) => t.id == id);
+    if (index == -1) return;
+    final task = _tasks[index];
+    await _databaseService.saveTask(task);
   }
 
   Future<void> updateTaskSpeedLimit(String taskId, int speedLimitKbps) async {
@@ -571,6 +644,9 @@ class DownloadProvider extends ChangeNotifier {
 
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
+
+    // Fire-and-await so the queued→downloading transition is committed
+    // before the first progress callback fires.
     _setTask(
       task.copyWith(
         status: DownloadStatus.downloading,
@@ -632,15 +708,18 @@ class DownloadProvider extends ChangeNotifier {
 
             // Throttle database writes and UI notifications to once per 500ms
             if (now - lastUpdate < 500) {
-              // Update in-memory task state silently
+              // Update in-memory task state and mark as having a pending
+              // write so pause/cancel can flush it before tearing down.
               final index = _tasks.indexWhere((t) => t.id == task.id);
               if (index != -1) {
                 _tasks[index] = updatedTask;
+                _pendingProgressUpdates.add(task.id);
               }
               return;
             }
 
             _lastProgressUpdateTimes[task.id] = now;
+            _pendingProgressUpdates.remove(task.id);
             _setTask(updatedTask);
 
             _notificationService.showDownloadProgress(
@@ -656,16 +735,19 @@ class DownloadProvider extends ChangeNotifier {
           },
         )
         .then((_) async {
-          _lastProgressUpdateTimes.remove(task.id);
+          await _flushPendingProgress(task.id);
           final current = _findTask(task.id);
           if (current == null) return;
+          // If the user paused/cancelled in the meantime, don't override that.
+          if (current.status != DownloadStatus.downloading) return;
           final now = DateTime.now();
+          // Use the actual bytes the engine reported, not the advertised size.
+          // The engine's downloadedBytes accounts for resume from existing
+          // .partN files, so this is the real "what we have on disk" count.
           await _setTask(
             current.copyWith(
               status: DownloadStatus.completed,
-              downloadedBytes: current.fileSize > 0
-                  ? current.fileSize
-                  : current.downloadedBytes,
+              downloadedBytes: current.downloadedBytes,
               speed: 0,
               eta: 0,
               chunks: List<double>.filled(current.threadCount, 1.0),
@@ -679,7 +761,7 @@ class DownloadProvider extends ChangeNotifier {
           );
         })
         .catchError((Object error) async {
-          _lastProgressUpdateTimes.remove(task.id);
+          await _flushPendingProgress(task.id);
           final current = _findTask(task.id);
           if (current == null) return;
           if (error is DioException && error.type == DioExceptionType.cancel) {
@@ -739,17 +821,25 @@ class DownloadProvider extends ChangeNotifier {
     return _tasks[index];
   }
 
+  /// Build per-thread chunk progress that visually approximates the overall
+  /// progress. With [threadCount] threads we divide the work into sequential
+  /// slices: thread i handles slice [i/threadCount, (i+1)/threadCount].
+  /// Within a slice, progress is linear.
   List<double> _buildChunks(
     int threadCount,
     int fileSize,
     int downloadedBytes,
   ) {
-    final progress = fileSize > 0
-        ? (downloadedBytes / fileSize).clamp(0.0, 1.0)
-        : 0.0;
+    if (fileSize <= 0 || threadCount <= 0) {
+      return List<double>.filled(threadCount, 0.0);
+    }
+    final progress = (downloadedBytes / fileSize).clamp(0.0, 1.0);
     return List<double>.generate(threadCount, (index) {
-      final offset = (index - (threadCount / 2)) * 0.015;
-      return (progress + offset).clamp(0.0, 1.0);
+      final start = index / threadCount;
+      final end = (index + 1) / threadCount;
+      if (progress >= end) return 1.0;
+      if (progress <= start) return 0.0;
+      return ((progress - start) * threadCount).clamp(0.0, 1.0);
     });
   }
 
@@ -779,11 +869,17 @@ class DownloadProvider extends ChangeNotifier {
   void _initConnectivity() {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
       _currentConnectivity = results;
+      _hasResolvedInitialConnectivity = true;
       _checkWifiOnlyConstraint();
     });
     Connectivity().checkConnectivity().then((results) {
-      _currentConnectivity = results;
-      _checkWifiOnlyConstraint();
+      // Only treat this as the "current" value if the stream hasn't already
+      // given us a fresher answer; otherwise the very first emit is lost.
+      if (!_hasResolvedInitialConnectivity) {
+        _currentConnectivity = results;
+        _hasResolvedInitialConnectivity = true;
+        _checkWifiOnlyConstraint();
+      }
     });
   }
 
@@ -856,7 +952,9 @@ class DownloadProvider extends ChangeNotifier {
           clearCompletedAt: true,
           clearScheduledAt: true,
         );
-        _databaseService.saveTask(_tasks[i]);
+        // Await the write so a crash between schedule-check and persist
+        // doesn't leave the task in an inconsistent state.
+        unawaited(_databaseService.saveTask(_tasks[i]));
         hasChanges = true;
       }
     }

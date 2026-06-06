@@ -48,7 +48,8 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
               sigmaX: 12,
               sigmaY: 12,
               child: Container(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                    .withValues(alpha: 0.5),
               ),
             ),
           ),
@@ -58,7 +59,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                      color: isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder,
                       width: 0.8,
                     ),
                   ),
@@ -66,14 +69,16 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   child: TextField(
                     controller: _searchController,
                     autofocus: true,
-                    style: TextStyle(
-                      color: textClr,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: textClr, fontSize: 16),
                     decoration: InputDecoration(
-                      hintText: L10n.of(context, 'search_placeholder').toUpperCase(),
+                      hintText: L10n.of(
+                        context,
+                        'search_placeholder',
+                      ).toUpperCase(),
                       hintStyle: TextStyle(
-                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                        color: isDark
+                            ? AppTheme.textMuted
+                            : AppTheme.lightTextMuted,
                         fontSize: 14,
                       ),
                       border: InputBorder.none,
@@ -120,7 +125,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
-                    color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                    color: isDark
+                        ? AppTheme.glassBorder
+                        : AppTheme.lightGlassBorder,
                     width: 0.6,
                   ),
                 ),
@@ -193,7 +200,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     Text(
                       L10n.of(context, 'details_channels'),
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                        color: isDark
+                            ? AppTheme.textSecondary
+                            : AppTheme.lightTextSecondary,
                         fontSize: 10,
                         letterSpacing: 1.0,
                         fontWeight: FontWeight.bold,
@@ -202,7 +211,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     Text(
                       '${tasks.length} ${L10n.isRtl(context) ? 'إشارات' : 'SIGNALS'}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                        color: isDark
+                            ? AppTheme.textMuted
+                            : AppTheme.lightTextMuted,
                         fontSize: 10,
                       ),
                     ),
@@ -216,16 +227,24 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 child: tasks.isEmpty
                     ? _buildEmptyState(context)
                     : RefreshIndicator(
-                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                        color: isDark
+                            ? AppTheme.neonBlue
+                            : AppTheme.lightNeonBlue,
+                        backgroundColor: isDark
+                            ? AppTheme.surface
+                            : AppTheme.lightSurface,
                         onRefresh: () async {
                           triggerHaptic(settings);
-                          await provider.load();
+                          await provider.load(pauseOrphanDownloads: false);
                           if (context.mounted) {
                             ThemedSnackbar.show(
                               context,
-                              message: L10n.isRtl(context) ? 'تم إعادة تحميل سجلات الاتصال' : 'Transmission logs reloaded',
-                              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                              message: L10n.isRtl(context)
+                                  ? 'تم إعادة تحميل سجلات الاتصال'
+                                  : 'Transmission logs reloaded',
+                              color: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
                               icon: Icons.sync,
                               isDarkMode: isDark,
                             );
@@ -247,7 +266,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           ),
         ),
         floatingActionButton: Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).padding.bottom + 8.0,
+          ),
           child: Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -261,7 +282,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
             ),
             child: FloatingActionButton(
               backgroundColor: accentClr,
-              foregroundColor: isDark ? AppTheme.background : AppTheme.lightBackground,
+              foregroundColor: isDark
+                  ? AppTheme.background
+                  : AppTheme.lightBackground,
               shape: const CircleBorder(
                 side: BorderSide(color: Colors.white24, width: 0.8),
               ),
@@ -293,10 +316,17 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
-              border: Border.all(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.8),
+              border: Border.all(
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
+                width: 0.8,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.06),
+                  color:
+                      (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                          .withValues(alpha: 0.06),
                   blurRadius: 20.0,
                   spreadRadius: 0,
                 ),
@@ -312,7 +342,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           Text(
             L10n.of(context, 'empty_transmissions'),
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
               letterSpacing: 1.0,
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -320,7 +352,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           ),
           const SizedBox(height: 8),
           Text(
-            L10n.isRtl(context) ? 'أدخل رابط الإشارة لبدء الاتصال.' : 'Insert a URL signal to establish connection.',
+            L10n.isRtl(context)
+                ? 'أدخل رابط الإشارة لبدء الاتصال.'
+                : 'Insert a URL signal to establish connection.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
               fontSize: 11,

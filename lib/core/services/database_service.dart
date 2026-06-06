@@ -24,9 +24,11 @@ class DatabaseService {
   }
 
   Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
-    for (final task in tasks) {
-      await saveTask(task);
-    }
+    final entries = <String, Map<String, dynamic>>{
+      for (final task in tasks) task.id: task.toMap(),
+    };
+    if (entries.isEmpty) return;
+    await _downloadsBox.putAll(entries);
   }
 
   Future<void> deleteTask(String id) {

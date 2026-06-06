@@ -68,6 +68,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
   }
 
   Future<void> _showLockScreen() async {
+    if (!mounted) return;
     setState(() {
       _isLockScreenOpen = true;
     });
@@ -89,15 +90,28 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
       ),
     );
 
+    // Always reset the "lock screen is open" flag, regardless of how the
+    // route was dismissed (success, back gesture, route replacement).
+    // Otherwise future lifecycle events won't re-prompt.
+    if (!mounted) return;
+    setState(() {
+      _isLockScreenOpen = false;
+    });
+
     if (result == true) {
       setState(() {
         _isLocked = false;
-        _isLockScreenOpen = false;
       });
     }
+    // If result is not true, _isLocked stays true and the next
+    // lifecycle-resume will re-prompt the lock screen.
   }
 
   void _onUrlReceived(String url) {
+    // The share-intent callback fires on isolate-level events that can land
+    // after this widget is unmounted (background → resume). Guard against
+    // using a deactivated context.
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(

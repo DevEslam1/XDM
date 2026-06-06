@@ -13,6 +13,7 @@ import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/constants.dart';
 import '../../../shared/widgets/glass_card.dart';
 
 class DetailsScreen extends StatelessWidget with HapticHelper {
@@ -459,7 +460,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: () {
-                      final list = [1, 2, 4, 5, 8, 16];
+                      final list = kAvailableThreadOptions;
                       final curIdx = list.indexOf(task.threadCount);
                       if (curIdx > 0) {
                         _changeThreadCount(context, task, provider, settings, list[curIdx - 1]);
@@ -493,7 +494,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: () {
-                      final list = [1, 2, 4, 5, 8, 16];
+                      final list = kAvailableThreadOptions;
                       final curIdx = list.indexOf(task.threadCount);
                       if (curIdx != -1 && curIdx < list.length - 1) {
                         _changeThreadCount(context, task, provider, settings, list[curIdx + 1]);

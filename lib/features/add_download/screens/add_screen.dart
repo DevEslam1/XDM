@@ -16,6 +16,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/constants.dart';
 
 class AddScreen extends StatefulWidget {
   final String? prefilledUrl;
@@ -47,7 +48,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
     'APK',
     'Other',
   ];
-  final List<int> _threadsList = [1, 2, 4, 5, 8, 16];
+  final List<int> _threadsList = kAvailableThreadOptions;
 
   @override
   void initState() {
@@ -65,7 +66,11 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   Future<void> _loadDefaultPath() async {
     final path = await PermissionService().defaultDownloadDirectory();
     if (!mounted) return;
-    _pathController.text = path;
+    // Only fill the path if the user hasn't already started typing into
+    // the field. Otherwise we'd silently overwrite their input.
+    if (_pathController.text.isEmpty) {
+      _pathController.text = path;
+    }
   }
 
   @override
@@ -79,6 +84,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   Future<void> _pasteFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text != null && data!.text!.isNotEmpty) {
+      if (!mounted) return;
       _urlController.text = data.text!;
       _urlController.selection = TextSelection.fromPosition(
         TextPosition(offset: _urlController.text.length),
@@ -664,11 +670,13 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         type: FileType.custom,
         allowedExtensions: ['torrent'],
       );
+      if (!mounted) return;
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
         final file = File(filePath);
         final bytes = await file.readAsBytes();
         final meta = BencodeDecoder.parseTorrentBytes(bytes);
+        if (!mounted) return;
         if (meta != null) {
           setState(() {
             _urlController.text = 'file://$filePath';

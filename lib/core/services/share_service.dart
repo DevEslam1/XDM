@@ -8,10 +8,17 @@ class ShareService {
   ShareService._internal();
 
   StreamSubscription? _intentSub;
+  bool _initialized = false;
 
   /// Initializes listening to sharing intents.
   /// When a valid HTTP/HTTPS URL is received, it triggers [onUrlReceived].
+  ///
+  /// Safe to call multiple times: previous subscriptions are cancelled
+  /// before a new one is set up so we don't leak listeners and double-fire
+  /// [onUrlReceived].
   void init({required void Function(String url) onUrlReceived}) {
+    dispose();
+
     // Listen to shared media streams (when app is in background/foreground)
     _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((files) {
       for (final file in files) {
@@ -35,9 +42,14 @@ class ShareService {
         }
       }
     });
+    _initialized = true;
   }
 
   void dispose() {
     _intentSub?.cancel();
+    _intentSub = null;
+    _initialized = false;
   }
+
+  bool get isInitialized => _initialized;
 }

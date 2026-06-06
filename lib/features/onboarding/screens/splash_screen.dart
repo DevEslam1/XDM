@@ -104,22 +104,32 @@ class _SplashScreenState extends State<SplashScreen>
             persistAcrossBackgrounding: true,
           );
           if (didAuth) {
-            setState(() {
-              _authFailed = false;
-            });
+            if (mounted) {
+              setState(() {
+                _authFailed = false;
+              });
+            }
             _navigateToNext();
           } else {
-            setState(() {
-              _authFailed = true;
-            });
+            if (mounted) {
+              setState(() {
+                _authFailed = true;
+              });
+            }
           }
         } else {
+          // Device has no biometric capability at all; the user has
+          // nothing to authenticate with, so we let them in.
           _navigateToNext();
         }
       } catch (e) {
-        // Fallback on error (e.g. permission issues or device lock status)
+        // Don't bypass the lock on a plugin error — show the retry UI.
         debugPrint('SplashScreen biometric lock error: $e');
-        _navigateToNext();
+        if (mounted) {
+          setState(() {
+            _authFailed = true;
+          });
+        }
       }
     } else {
       _navigateToNext();

@@ -47,13 +47,21 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> {
           }
         }
       } else {
+        // Device genuinely has no biometrics/hardware support; let the user
+        // through. This is an intentional device-level decision, not a
+        // catch-all error path.
         if (mounted) {
           Navigator.pop(context, true);
         }
       }
-    } catch (_) {
+    } catch (e) {
+      // Don't auto-grant access on a plugin/runtime error: the lock is
+      // supposed to be enforced. Show the retry state so the user can try
+      // again, or back out to the OS lock screen.
       if (mounted) {
-        Navigator.pop(context, true);
+        setState(() {
+          _authFailed = true;
+        });
       }
     }
   }
