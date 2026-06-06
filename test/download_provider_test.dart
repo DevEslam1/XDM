@@ -61,6 +61,8 @@ class FakeDownloadEngine extends DownloadEngine {
     bool enableProxy = false,
     String? proxyAddress,
     bool bypassSSL = false,
+    List<Map<String, dynamic>>? torrentFiles,
+    int? torrentId,
   }) {
     startedUrls.add(url);
     final completer = Completer<void>();

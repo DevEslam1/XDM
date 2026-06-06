@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
+import '../../../core/services/torrent_service.dart';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -38,9 +39,15 @@ class DownloadProvider extends ChangeNotifier {
     _initConnectivity();
     _startSchedulingTimer();
     _actionSubscription = _notificationService.onActionTapped.listen(_handleNotificationAction);
+    if (TorrentService.isInitialized) {
+      _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen((torrents) {
+        _latestTorrentStats = torrents;
+      });
+    }
   }
 
   StreamSubscription<Map<String, String>>? _actionSubscription;
+  StreamSubscription? _torrentUpdatesSubscription;
 
   final DatabaseService _databaseService;
   final SettingsProvider _settingsProvider;
@@ -53,6 +60,8 @@ class DownloadProvider extends ChangeNotifier {
   final Map<String, int> _lastProgressUpdateTimes = {};
   final Map<String, int> _lastDbSaveTimes = {};
   final Set<String> _pendingProgressUpdates = {};
+  final Map<String, int> _torrentIds = {};
+  Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
 
   List<double> getSpeedHistory(String id) => _speedHistories[id] ?? const [];
 
@@ -322,39 +331,44 @@ class DownloadProvider extends ChangeNotifier {
 
     final resolvedThreadCount = threadCount ?? _settingsProvider.defaultThreadCount;
 
-    if (urls.length > 1) {
-      for (var i = 0; i < urls.length; i++) {
-        final singleUrl = urls[i];
-        if (!isValidTransmissionUrl(singleUrl)) continue;
-        final suffix = i + 1;
-        final singleName = name.trim().isNotEmpty ? '${name.trim()}_$suffix' : '';
+    try {
+      if (urls.length > 1) {
+        for (var i = 0; i < urls.length; i++) {
+          final singleUrl = urls[i];
+          if (!isValidTransmissionUrl(singleUrl)) continue;
+          final suffix = i + 1;
+          final singleName = name.trim().isNotEmpty ? '${name.trim()}_$suffix' : '';
+          await _addSingleDownload(
+            name: singleName,
+            url: singleUrl,
+            size: size,
+            category: category,
+            savePath: savePath,
+            threadCount: resolvedThreadCount,
+            scheduledAt: scheduledAt,
+          );
+        }
+      } else {
+        final singleUrl = urls.first;
+        if (!isValidTransmissionUrl(singleUrl)) {
+          _lastError = 'Invalid target transmission URL/magnet.';
+          notifyListeners();
+          return;
+        }
         await _addSingleDownload(
-          name: singleName,
-          url: singleUrl,
+          name: name,
+          url: url,
           size: size,
           category: category,
           savePath: savePath,
           threadCount: resolvedThreadCount,
           scheduledAt: scheduledAt,
+          torrentFiles: torrentFiles,
         );
       }
-    } else {
-      final singleUrl = urls.first;
-      if (!isValidTransmissionUrl(singleUrl)) {
-        _lastError = 'Invalid target transmission URL/magnet.';
-        notifyListeners();
-        return;
-      }
-      await _addSingleDownload(
-        name: name,
-        url: url,
-        size: size,
-        category: category,
-        savePath: savePath,
-        threadCount: resolvedThreadCount,
-        scheduledAt: scheduledAt,
-        torrentFiles: torrentFiles,
-      );
+    } catch (e) {
+      _lastError = e.toString();
+      notifyListeners();
     }
   }
 
@@ -513,6 +527,12 @@ class DownloadProvider extends ChangeNotifier {
 
     _cancelTokens[id]?.cancel('cancelled');
 
+    final torrentId = _torrentIds[id];
+    if (torrentId != null) {
+      TorrentService.removeTorrent(torrentId);
+      _torrentIds.remove(id);
+    }
+
     // Remove the .partN chunk files so a fresh download won't try to
     // resume from a partial state.
     await _cleanupPartFiles(task);
@@ -562,6 +582,13 @@ class DownloadProvider extends ChangeNotifier {
     _lastDbSaveTimes.remove(id);
     _pendingProgressUpdates.remove(id);
     _tasks.removeWhere((task) => task.id == id);
+
+    final torrentId = _torrentIds[id];
+    if (torrentId != null) {
+      TorrentService.removeTorrent(torrentId);
+      _torrentIds.remove(id);
+    }
+
     if (task != null) {
       await _cleanupPartFiles(task);
     }
@@ -666,7 +693,7 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
-  void _startTask(DownloadTask task) {
+  Future<void> _startTask(DownloadTask task) async {
     if (_cancelTokens.containsKey(task.id)) return;
 
     BackgroundService.start();
@@ -677,9 +704,37 @@ class DownloadProvider extends ChangeNotifier {
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
+    int? torrentId;
+    if (task.isTorrent) {
+      try {
+        final saveDir = task.savePath;
+        if (task.url.startsWith('magnet:')) {
+          torrentId = TorrentService.addMagnet(task.url, saveDir);
+        } else {
+          String filePath = task.url;
+          if (task.url.startsWith('file://')) {
+            filePath = Uri.parse(task.url).toFilePath();
+          }
+          torrentId = TorrentService.addTorrentFile(filePath, saveDir);
+        }
+        _torrentIds[task.id] = torrentId;
+      } catch (e) {
+        _cancelTokens.remove(task.id);
+        await _setTask(
+          task.copyWith(
+            status: DownloadStatus.failed,
+            errorMessage: 'Failed to initialize torrent: $e',
+          ),
+        );
+        _pumpQueue();
+        _updateTelemetryWidget();
+        return;
+      }
+    }
+
     // Fire-and-await so the queued→downloading transition is committed
     // before the first progress callback fires.
-    _setTask(
+    await _setTask(
       task.copyWith(
         status: DownloadStatus.downloading,
         clearError: true,
@@ -710,6 +765,8 @@ class DownloadProvider extends ChangeNotifier {
           enableProxy: _settingsProvider.enableProxy,
           proxyAddress: _settingsProvider.proxyAddress,
           bypassSSL: _settingsProvider.bypassSSL,
+          torrentFiles: task.torrentFiles,
+          torrentId: torrentId,
           onProgress: (progress) {
             final current = _findTask(task.id);
             if (current == null ||
@@ -731,23 +788,26 @@ class DownloadProvider extends ChangeNotifier {
             }
 
             final updatedTask = current.copyWith(
-              fileSize: progress.fileSize,
+              fileName: current.fileName == 'torrent_download.zip' || current.fileName.isEmpty
+                  ? (progress.fileName ?? current.fileName)
+                  : current.fileName,
+              fileSize: progress.fileSize > 0 ? progress.fileSize : current.fileSize,
               downloadedBytes: progress.downloadedBytes,
               speed: progress.speed,
               eta: progress.eta,
               chunks: progress.chunks ??
                   _buildChunks(
                     current.threadCount,
-                    progress.fileSize,
+                    progress.fileSize > 0 ? progress.fileSize : current.fileSize,
                     progress.downloadedBytes,
                   ),
-              torrentFiles: current.torrentFiles != null
-                  ? _updateTorrentFilesProgress(
+              torrentFiles: current.torrentFiles == null || current.torrentFiles!.isEmpty
+                  ? progress.torrentFiles
+                  : _updateTorrentFilesProgress(
                       current.torrentFiles!,
                       progress.downloadedBytes,
                       progress.speed,
-                    )
-                  : null,
+                    ),
             );
 
             // Throttle UI notification and notification progress to 200ms
@@ -1033,13 +1093,13 @@ class DownloadProvider extends ChangeNotifier {
     for (var i = 0; i < _tasks.length; i++) {
       final task = _tasks[i];
       if (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled) {
-        double speed;
-        if (task.seedingLimited) {
-          final limitBps = (task.seedingLimitKbps * 1000.0) / 8.0;
-          final factor = 0.9 + (Random().nextDouble() * 0.1);
-          speed = limitBps * factor;
-        } else {
-          speed = (50 + Random().nextInt(200)) * 1024.0;
+        double speed = 0.0;
+        final torrentId = _torrentIds[task.id];
+        if (torrentId != null) {
+          final torrent = _latestTorrentStats[torrentId];
+          if (torrent != null) {
+            speed = torrent.uploadRate.toDouble();
+          }
         }
         _tasks[i] = task.copyWith(speed: speed);
         changed = true;
@@ -1196,6 +1256,7 @@ class DownloadProvider extends ChangeNotifier {
   void dispose() {
     _settingsProvider.removeListener(_onSettingsChanged);
     _actionSubscription?.cancel();
+    _torrentUpdatesSubscription?.cancel();
     _connectivitySubscription?.cancel();
     _schedulingTimer?.cancel();
     _widgetTimer?.cancel();

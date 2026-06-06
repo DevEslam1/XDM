@@ -12,11 +12,26 @@ class PermissionService {
       if (downloads != null) return p.join(downloads.path, 'XDM');
     }
 
-    // On Android, use the shared Downloads folder so files are visible
-    // in the user's file manager. getApplicationDocumentsDirectory()
-    // returns app-internal storage that users cannot browse to.
+    // On Android, try the shared Downloads folder. If creation fails (e.g. Android 10+ scoped storage restrictions),
+    // fallback to app-specific external downloads directory which is always writable.
     if (!kIsWeb && Platform.isAndroid) {
-      return p.join('/storage/emulated/0/Download', 'XDM');
+      const publicPath = '/storage/emulated/0/Download/XDM';
+      try {
+        final dir = Directory(publicPath);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        return publicPath;
+      } catch (e) {
+        final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+        if (extDirs != null && extDirs.isNotEmpty) {
+          return extDirs.first.path;
+        }
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          return p.join(extDir.path, 'Download');
+        }
+      }
     }
 
     final docs = await getApplicationDocumentsDirectory();

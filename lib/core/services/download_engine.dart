@@ -6,6 +6,8 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'torrent_service.dart';
 
 import '../utils/bencode_decoder.dart';
 import '../utils/file_utils.dart';
@@ -16,12 +18,14 @@ class DownloadMetadata {
   final String category;
   final int fileSize;
   final bool supportsResume;
+  final List<Map<String, dynamic>>? torrentFiles;
 
   const DownloadMetadata({
     required this.fileName,
     required this.category,
     required this.fileSize,
     required this.supportsResume,
+    this.torrentFiles,
   });
 }
 
@@ -31,6 +35,8 @@ class DownloadProgress {
   final double speed;
   final int? eta;
   final List<double>? chunks;
+  final String? fileName;
+  final List<Map<String, dynamic>>? torrentFiles;
 
   const DownloadProgress({
     required this.downloadedBytes,
@@ -38,6 +44,8 @@ class DownloadProgress {
     required this.speed,
     required this.eta,
     this.chunks,
+    this.fileName,
+    this.torrentFiles,
   });
 }
 
@@ -100,14 +108,78 @@ class DownloadEngine {
           ? safeFileName(requestedFileName!.trim())
           : 'torrent_download.zip';
       var fileSize = 100 * 1024 * 1024; // Default 100MB
+      List<Map<String, dynamic>>? torrentFiles;
 
       if (url.startsWith('magnet:')) {
-        final parsed = parseMagnetUrl(url);
-        if (parsed.containsKey('name')) {
-          fileName = parsed['name']!;
-        } else if (parsed.containsKey('infoHash')) {
-          fileName = 'magnet_${parsed['infoHash']!.substring(0, 8)}.zip';
+        final magnetParams = parseMagnetUrl(url);
+        final magnetName = magnetParams['name'];
+        final resolvedName = requestedFileName?.trim().isNotEmpty == true
+            ? safeFileName(requestedFileName!.trim())
+            : (magnetName != null && magnetName.trim().isNotEmpty
+                ? safeFileName(magnetName.trim())
+                : 'torrent_download.zip');
+
+        String tempDir = '';
+        if (!kIsWeb) {
+          try {
+            final directory = await getTemporaryDirectory();
+            tempDir = directory.path;
+          } catch (e) {
+            debugPrint('Failed to get temporary directory: $e');
+          }
         }
+        final torrentId = TorrentService.addMagnet(url, tempDir);
+        TorrentService.resumeTorrent(torrentId);
+        
+        final completer = Completer<DownloadMetadata>();
+        StreamSubscription? sub;
+        
+        sub = TorrentService.torrentUpdates.listen((torrents) {
+          final torrent = torrents[torrentId];
+          if (torrent != null && torrent.hasMetadata) {
+            sub?.cancel();
+            
+            final files = TorrentService.getFiles(torrentId);
+            final resolvedFiles = files.map((f) => {
+              'name': f.name,
+              'length': f.size,
+              'selected': true,
+              'downloadedBytes': 0,
+              'speed': 0.0,
+            }).toList();
+            
+            final totalSize = resolvedFiles.fold(0, (sum, f) => sum + (f['length'] as int));
+            
+            TorrentService.removeTorrent(torrentId);
+            
+            if (!completer.isCompleted) {
+              completer.complete(DownloadMetadata(
+                fileName: torrent.name,
+                category: 'Archive',
+                fileSize: totalSize,
+                supportsResume: true,
+                torrentFiles: resolvedFiles,
+              ));
+            }
+          }
+        });
+        
+        // Timeout of 30 seconds -> Fallback to placeholder/magnet name instead of failing
+        Future.delayed(const Duration(seconds: 30), () {
+          if (!completer.isCompleted) {
+            sub?.cancel();
+            TorrentService.removeTorrent(torrentId);
+            completer.complete(DownloadMetadata(
+              fileName: resolvedName,
+              category: 'Archive',
+              fileSize: 0,
+              supportsResume: true,
+              torrentFiles: null,
+            ));
+          }
+        });
+        
+        return completer.future;
       } else if (url.startsWith('file://')) {
         final filePath = Uri.parse(url).toFilePath();
         final file = File(filePath);
@@ -117,6 +189,15 @@ class DownloadEngine {
           if (meta != null) {
             fileName = meta['name'] ?? fileName;
             fileSize = meta['length'] ?? fileSize;
+            torrentFiles = (meta['files'] as List? ?? [])
+                .map((f) => {
+                      'name': f['name'] as String? ?? '',
+                      'length': f['length'] as int? ?? 0,
+                      'selected': true,
+                      'downloadedBytes': 0,
+                      'speed': 0.0,
+                    })
+                .toList();
           }
         }
       }
@@ -126,6 +207,7 @@ class DownloadEngine {
         category: 'Archive',
         fileSize: fileSize,
         supportsResume: true,
+        torrentFiles: torrentFiles,
       );
     }
 
@@ -193,6 +275,8 @@ class DownloadEngine {
     bool enableProxy = false,
     String? proxyAddress,
     bool bypassSSL = false,
+    List<Map<String, dynamic>>? torrentFiles,
+    int? torrentId,
   }) async {
     final isTorrent = url.trim().startsWith('magnet:') ||
         url.trim().startsWith('file://') ||
@@ -200,74 +284,123 @@ class DownloadEngine {
         fileNameFromUrl(url).trim().toLowerCase().endsWith('.torrent');
 
     if (isTorrent) {
-      // NOTE: This is a simulated torrent download. A real BitTorrent
-      // engine (e.g. libtorrent) would be needed for actual P2P transfers.
-      final localFile = File(localFilePath);
-      await localFile.parent.create(recursive: true);
+      int id = torrentId ?? -1;
+      if (id == -1) {
+        final saveDir = File(localFilePath).parent.path;
+        if (url.startsWith('magnet:')) {
+          id = TorrentService.addMagnet(url, saveDir);
+        } else {
+          String filePath = url;
+          if (url.startsWith('file://')) {
+            filePath = Uri.parse(url).toFilePath();
+          }
+          id = TorrentService.addTorrentFile(filePath, saveDir);
+        }
+      }
 
-      final totalSize = knownFileSize > 0 ? knownFileSize : 100 * 1024 * 1024;
-      var downloaded = 0;
-      final stopwatch = Stopwatch()..start();
-      final chunks = List<double>.filled(threadCount, 0.0);
+      // Wait for metadata to resolve
+      final metadataCompleter = Completer<void>();
+      StreamSubscription? metadataSub;
 
-      while (downloaded < totalSize) {
-        if (cancelToken.isCancelled) {
-          throw DioException(
+      metadataSub = TorrentService.torrentUpdates.listen((torrents) {
+        final torrent = torrents[id];
+        if (torrent != null && torrent.hasMetadata) {
+          metadataSub?.cancel();
+          if (!metadataCompleter.isCompleted) {
+            metadataCompleter.complete();
+          }
+        }
+      });
+
+      // Handle cancel during metadata loading
+      cancelToken.whenCancel.then((_) {
+        metadataSub?.cancel();
+        TorrentService.pauseTorrent(id);
+        if (!metadataCompleter.isCompleted) {
+          metadataCompleter.completeError(DioException(
             requestOptions: RequestOptions(path: url),
             type: DioExceptionType.cancel,
             error: 'paused',
-          );
+          ));
         }
+      });
 
-        await Future.delayed(const Duration(milliseconds: 200));
+      await metadataCompleter.future;
 
-        final limit = speedLimitBytesPerSecond();
-        var tickMaxBytes = totalSize ~/ 50; // Complete in ~10 seconds default
-        if (limit > 0) {
-          tickMaxBytes = (limit * 0.2).round(); // limit * 200ms
+      // Set file priorities after metadata is loaded
+      if (torrentFiles != null && torrentFiles.isNotEmpty) {
+        final priorities = torrentFiles.map((f) => (f['selected'] as bool? ?? true) ? 1 : 0).toList();
+        TorrentService.setFilePriorities(id, priorities);
+      }
+
+      // Resume download
+      TorrentService.resumeTorrent(id);
+
+      final downloadCompleter = Completer<void>();
+      StreamSubscription? downloadSub;
+
+      downloadSub = TorrentService.torrentUpdates.listen((torrents) {
+        final torrent = torrents[id];
+        if (torrent == null) return;
+
+        final progress = torrent.progress; // double from 0.0 to 1.0
+        final stateLabel = torrent.stateLabel.toLowerCase();
+
+        final totalSize = torrent.totalWanted > 0 ? torrent.totalWanted : (knownFileSize > 0 ? knownFileSize : 0);
+        final downloadedBytes = torrent.totalDone;
+        final speed = torrent.downloadRate.toDouble();
+
+        final remaining = totalSize - downloadedBytes;
+        final eta = speed > 0 && remaining > 0 ? (remaining / speed).round() : 0;
+
+        List<Map<String, dynamic>>? resolvedFiles;
+        String? resolvedName;
+        if (torrent.hasMetadata) {
+          resolvedName = torrent.name;
+          try {
+            final files = TorrentService.getFiles(id);
+            resolvedFiles = files.map((f) => {
+              'name': f.name,
+              'length': f.size,
+              'selected': true,
+              'downloadedBytes': 0,
+              'speed': 0.0,
+            }).toList();
+          } catch (_) {}
         }
-
-        if (tickMaxBytes <= 0) tickMaxBytes = 1024;
-
-        final bytesAdded = min(tickMaxBytes, totalSize - downloaded);
-        downloaded += bytesAdded;
-
-        final progressRatio = downloaded / totalSize;
-        for (int i = 0; i < threadCount; i++) {
-          final target = (i + 1) / threadCount;
-          if (progressRatio >= target) {
-            chunks[i] = 1.0;
-          } else {
-            final start = i / threadCount;
-            chunks[i] = ((progressRatio - start) * threadCount).clamp(0.0, 1.0);
-          }
-        }
-
-        final elapsedSecs = stopwatch.elapsedMicroseconds / 1000000.0;
-        final speed = elapsedSecs > 0 ? downloaded / elapsedSecs : 0.0;
-        final remainingBytes = totalSize - downloaded;
-        final eta = speed > 0 ? (remainingBytes / speed).round() : 0;
 
         onProgress(DownloadProgress(
-          downloadedBytes: downloaded,
+          downloadedBytes: downloadedBytes,
           fileSize: totalSize,
           speed: speed,
           eta: eta,
-          chunks: chunks,
+          chunks: null,
+          fileName: resolvedName,
+          torrentFiles: resolvedFiles,
         ));
-      }
 
-      // Write a placeholder file with torrent info
-      final placeholderContent = StringBuffer()
-        ..writeln('XDM Torrent Placeholder')
-        ..writeln('========================')
-        ..writeln('Source: $url')
-        ..writeln('Expected size: $knownFileSize bytes')
-        ..writeln('')
-        ..writeln('Note: Real BitTorrent downloading requires a native')
-        ..writeln('torrent engine integration (e.g. libtorrent).')
-        ..writeln('This file is a placeholder for the torrent download.');
-      await localFile.writeAsString(placeholderContent.toString());
+        // Finish if progress is complete or it's seeding/completed
+        if (progress >= 1.0 || stateLabel == 'seeding' || stateLabel == 'completed' || stateLabel == 'finished') {
+          downloadSub?.cancel();
+          if (!downloadCompleter.isCompleted) {
+            downloadCompleter.complete();
+          }
+        }
+      });
+
+      cancelToken.whenCancel.then((_) {
+        downloadSub?.cancel();
+        TorrentService.pauseTorrent(id);
+        if (!downloadCompleter.isCompleted) {
+          downloadCompleter.completeError(DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+            error: 'paused',
+          ));
+        }
+      });
+
+      await downloadCompleter.future;
       return;
     }
 

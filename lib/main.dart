@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'core/services/torrent_service.dart';
 import 'core/app_theme.dart';
 import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
@@ -11,6 +12,9 @@ import 'features/onboarding/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (TorrentService.isSupported) {
+    await TorrentService.init();
+  }
   await Hive.initFlutter();
 
   final databaseService = DatabaseService();

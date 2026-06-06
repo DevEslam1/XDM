@@ -879,6 +879,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         _resolvedFileSize = meta.fileSize;
         _resolvedCategory = meta.category;
         _supportsResume = meta.supportsResume;
+        _torrentFiles = meta.torrentFiles ?? [];
         _isMetadataResolved = true;
         
         // Update the form inputs to prefill if appropriate
