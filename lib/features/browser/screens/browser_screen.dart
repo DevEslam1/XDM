@@ -453,7 +453,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 ),
                 Switch(
                   value: _isSnifferEnabled,
-                  activeColor: accentColor,
+                  activeThumbColor: accentColor,
                   onChanged: (val) {
                     triggerHaptic(settings);
                     setState(() {
@@ -635,7 +635,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     ),
                     child: SingleChildScrollView(
                       physics: const NeverScrollableScrollPhysics(),
-                      child: SizedBox(
+                      child: Container(
                         height: kToolbarHeight,
                         alignment: Alignment.center,
                         child: Padding(
