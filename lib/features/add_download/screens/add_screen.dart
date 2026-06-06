@@ -24,7 +24,8 @@ import '../../../core/services/download_engine.dart';
 
 class AddScreen extends StatefulWidget {
   final String? prefilledUrl;
-  const AddScreen({super.key, this.prefilledUrl});
+  final String? prefilledName;
+  const AddScreen({super.key, this.prefilledUrl, this.prefilledName});
 
   @override
   State<AddScreen> createState() => _AddScreenState();
@@ -72,6 +73,11 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
     _loadDefaultPath();
     if (widget.prefilledUrl != null) {
       _urlController.text = widget.prefilledUrl!;
+    }
+    if (widget.prefilledName != null) {
+      _nameController.text = widget.prefilledName!;
+      _resolvedFileName = widget.prefilledName!;
+      _isMetadataResolved = true;
     }
   }
 

@@ -12,6 +12,7 @@ class BrowserDownloadSheet extends StatelessWidget {
   final String url;
   final String? type;
   final String? text;
+  final String? suggestedName;
   final VoidCallback? onQuality;
 
   const BrowserDownloadSheet({
@@ -19,6 +20,7 @@ class BrowserDownloadSheet extends StatelessWidget {
     required this.url,
     this.type,
     this.text,
+    this.suggestedName,
     this.onQuality,
   });
 
@@ -27,6 +29,7 @@ class BrowserDownloadSheet extends StatelessWidget {
     String url, {
     String? type,
     String? text,
+    String? suggestedName,
     VoidCallback? onQuality,
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
@@ -41,6 +44,7 @@ class BrowserDownloadSheet extends StatelessWidget {
         url: url,
         type: type,
         text: text,
+        suggestedName: suggestedName,
         onQuality: onQuality,
       ),
     );
@@ -279,7 +283,10 @@ class BrowserDownloadSheet extends StatelessWidget {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) =>
-                                      AddScreen(prefilledUrl: url),
+                                      AddScreen(
+                                        prefilledUrl: url,
+                                        prefilledName: suggestedName,
+                                      ),
                                 ),
                               );
                             },

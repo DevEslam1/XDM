@@ -13,6 +13,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
@@ -794,6 +795,23 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   // DOM Page Media Scanner
   Future<void> _scanPageMedia(BrowserTab tab) async {
     if (!mounted || tab.isHome) return;
+
+    // Direct YouTube streams capture
+    if (YoutubeService.isYoutubeUrl(tab.url)) {
+      try {
+        final youtubeStreams = await YoutubeService.getStreams(tab.url);
+        if (youtubeStreams.isNotEmpty && mounted) {
+          setState(() {
+            _detectedMediaSources[tab.url] = youtubeStreams;
+            if (_detectedDownloadUrls[tab.id] == null) {
+              _detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
+            }
+          });
+          return; // Skip normal DOM scanning since we retrieved streams via YouTube API
+        }
+      } catch (_) {}
+    }
+
     try {
       final result = await tab.controller.runJavaScriptReturningResult('''
         (function() {
@@ -1042,9 +1060,17 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               trailing: Icon(Icons.download, size: 18, color: accent),
                               onTap: () {
                                 Navigator.pop(context);
+                                final title = src['title'] as String?;
+                                final ext = src['ext'] as String?;
+                                final label = src['label'] as String? ?? 'Media Stream ${i + 1}';
+                                String? filename;
+                                if (title != null && title.isNotEmpty) {
+                                  filename = ext != null ? "$title.$ext" : title;
+                                }
                                 BrowserDownloadSheet.show(
                                   context,
                                   srcUrl,
+                                  suggestedName: filename,
                                   type: label.toLowerCase().contains('audio') ? 'audio' : 'video',
                                   onQuality: () => _showQualityPicker(srcUrl),
                                 );
@@ -2107,9 +2133,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               ? detectedSources.first['src'] 
               : _detectedDownloadUrls[activeTab.id];
           if (url == null) return;
+          final title = detectedSources.isNotEmpty ? detectedSources.first['title'] as String? : null;
+          final ext = detectedSources.isNotEmpty ? detectedSources.first['ext'] as String? : null;
+          String? filename;
+          if (title != null && title.isNotEmpty) {
+            filename = ext != null ? "$title.$ext" : title;
+          }
           BrowserDownloadSheet.show(
             context,
             url,
+            suggestedName: filename,
             onQuality: () => _showQualityPicker(url),
           );
         }
