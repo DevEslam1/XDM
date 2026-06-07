@@ -287,49 +287,113 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                   ],
                 ),
                 const SizedBox(height: 14),
-                // Animated Progress Bar
-                TweenAnimationBuilder<double>(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOut,
-                  tween: Tween<double>(begin: 0.0, end: task.progress),
-                  builder: (context, val, child) {
-                    return Stack(
-                      children: [
-                        Container(
-                          height: 6,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        FractionallySizedBox(
-                          widthFactor: val,
-                          child: Container(
-                            height: 6,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: task.status == DownloadStatus.downloading && isDark && !settings.classicUi
-                                  ? [
-                                      BoxShadow(
-                                        color: statusColor.withValues(
-                                          alpha: 0.5,
+                // Segmented Progress Bar for Chunks
+                Builder(
+                  builder: (context) {
+                    final showSplitBar = (task.status == DownloadStatus.downloading || task.status == DownloadStatus.paused) &&
+                        task.chunks.isNotEmpty &&
+                        task.chunks.length > 1;
+
+                    if (showSplitBar) {
+                      return Row(
+                        children: List.generate(task.chunks.length, (index) {
+                          final chunkProgress = task.chunks[index];
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                left: index == 0 ? 0.0 : 2.0,
+                                right: index == task.chunks.length - 1 ? 0.0 : 2.0,
+                              ),
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                  if (chunkProgress > 0)
+                                    FractionallySizedBox(
+                                      widthFactor: chunkProgress,
+                                      child: Container(
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(4),
+                                          boxShadow: task.status == DownloadStatus.downloading && isDark && !settings.classicUi
+                                              ? [
+                                                  BoxShadow(
+                                                    color: statusColor.withValues(
+                                                      alpha: 0.4,
+                                                    ),
+                                                    blurRadius: 4.0,
+                                                    spreadRadius: 0.5,
+                                                  ),
+                                                ]
+                                              : null,
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              statusColor,
+                                              statusColor.withValues(alpha: 0.7),
+                                            ],
+                                          ),
                                         ),
-                                        blurRadius: 6.0,
-                                        spreadRadius: 0.5,
                                       ),
-                                    ]
-                                  : null,
-                              gradient: LinearGradient(
-                                colors: [
-                                  statusColor,
-                                  statusColor.withValues(alpha: 0.7),
+                                    ),
                                 ],
                               ),
                             ),
-                          ),
-                        ),
-                      ],
+                          );
+                        }),
+                      );
+                    }
+
+                    // Otherwise, render the standard continuous progress bar
+                    return TweenAnimationBuilder<double>(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                      tween: Tween<double>(begin: 0.0, end: task.progress),
+                      builder: (context, val, child) {
+                        return Stack(
+                          children: [
+                            Container(
+                              height: 6,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            if (val > 0)
+                              FractionallySizedBox(
+                                widthFactor: val,
+                                child: Container(
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: task.status == DownloadStatus.downloading && isDark && !settings.classicUi
+                                        ? [
+                                            BoxShadow(
+                                              color: statusColor.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                              blurRadius: 6.0,
+                                              spreadRadius: 0.5,
+                                            ),
+                                          ]
+                                        : null,
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        statusColor,
+                                        statusColor.withValues(alpha: 0.7),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
                     );
                   },
                 ),

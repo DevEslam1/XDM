@@ -8,10 +8,12 @@ import 'core/services/database_service.dart';
 import 'core/services/notification_service.dart';
 import 'features/downloads/provider/download_provider.dart';
 import 'features/settings/provider/settings_provider.dart';
+import 'features/browser/services/ad_blocker.dart';
 import 'features/onboarding/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AdBlocker.initialize();
   if (TorrentService.isSupported) {
     await TorrentService.init();
   }

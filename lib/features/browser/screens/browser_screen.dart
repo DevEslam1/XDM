@@ -205,6 +205,23 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         _longPressChannel,
         onMessageReceived: (msg) => _handleLongPressMessageForTab(tab, msg),
       )
+      ..addJavaScriptChannel(
+        'AdBlockerChannel',
+        onMessageReceived: (msg) {
+          try {
+            final data = jsonDecode(msg.message);
+            final requestId = data['id'];
+            final url = data['url'];
+            if (requestId != null && url != null) {
+              final shouldBlock = AdBlocker.shouldBlock(url);
+              final jsToRun = "if (window._adBlockPromiseResolvers && window._adBlockPromiseResolvers['$requestId']) { window._adBlockPromiseResolvers['$requestId']($shouldBlock); delete window._adBlockPromiseResolvers['$requestId']; }";
+              tab.controller.runJavaScript(jsToRun);
+            }
+          } catch (e) {
+            debugPrint('Error handling AdBlocker channel message: $e');
+          }
+        },
+      )
       ..setUserAgent(
         tab.isIncognito
             ? (settings.desktopMode
@@ -238,6 +255,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               downloadProvider.setNavbarVisible(true);
             }
             _injectLongPressScriptToTab(tab);
+            _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
           },
@@ -257,6 +275,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               });
             }
             _injectLongPressScriptToTab(tab);
+            _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
             
@@ -359,6 +378,18 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     try {
       await tab.controller.runJavaScript(_kLongPressScript);
     } catch (_) {}
+  }
+
+  Future<void> _injectAdBlocker(BrowserTab tab) async {
+    if (!mounted || tab.isHome) return;
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    if (settings.adBlockerEnabled) {
+      try {
+        await tab.controller.runJavaScript(AdBlocker.adBlockJavaScript);
+      } catch (e) {
+        debugPrint('AdBlocker script injection failed: $e');
+      }
+    }
   }
 
   void _handleLongPressMessageForTab(BrowserTab tab, JavaScriptMessage message) {

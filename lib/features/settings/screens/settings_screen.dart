@@ -14,6 +14,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../provider/settings_provider.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../browser/services/ad_blocker.dart';
 import '../../../core/utils/constants.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   late final TextEditingController _uaController;
   late final TextEditingController _proxyController;
+  bool _isUpdatingHosts = false;
 
   @override
   void initState() {
@@ -467,6 +469,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         ),
                       ],
                       Divider(color: dividerColor, height: 1),
+                      _buildUpdateHostsTile(context, settings),
+                      Divider(color: dividerColor, height: 1),
                       _buildBackupTile(context, settings),
                     ],
                   ),
@@ -879,6 +883,110 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpdateHostsTile(BuildContext context, SettingsProvider settings) {
+    final isDark = settings.isDarkMode;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final subClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final isRtl = L10n.isRtl(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isRtl ? 'تحديث فلاتر الحجب' : 'UPDATE ADBLOCKER FILTERS',
+                      style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isRtl
+                          ? 'تحديث يدوي لقوائم حجب الإعلانات والتعقب'
+                          : 'Manually download and update ad & tracker blocklists',
+                      style: TextStyle(color: subClr, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _isUpdatingHosts
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        ),
+                      ),
+                    )
+                  : IconButton(
+                      icon: Icon(
+                        Icons.sync,
+                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                      ),
+                      onPressed: () async {
+                        triggerHaptic(settings);
+                        setState(() {
+                          _isUpdatingHosts = true;
+                        });
+                        ThemedSnackbar.show(
+                          context,
+                          message: isRtl
+                              ? 'جاري تنزيل وتحديث فلاتر حجب الإعلانات...'
+                              : 'Downloading and updating adblocker filters...',
+                          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                          icon: Icons.downloading,
+                          isDarkMode: isDark,
+                        );
+                        try {
+                          await AdBlocker.updateHosts();
+                          if (context.mounted) {
+                            ThemedSnackbar.show(
+                              context,
+                              message: isRtl
+                                  ? 'تم تحديث فلاتر منع الإعلانات بنجاح!'
+                                  : 'Adblocker filters updated successfully!',
+                              color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                              icon: Icons.check_circle_outline,
+                              isDarkMode: isDark,
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ThemedSnackbar.show(
+                              context,
+                              message: isRtl
+                                  ? 'فشل تحديث فلاتر منع الإعلانات'
+                                  : 'Failed to update adblocker filters',
+                              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                              icon: Icons.error_outline,
+                              isDarkMode: isDark,
+                            );
+                          }
+                        } finally {
+                          if (mounted) {
+                            setState(() {
+                              _isUpdatingHosts = false;
+                            });
+                          }
+                        }
+                      },
+                    ),
+            ],
           ),
         ],
       ),
