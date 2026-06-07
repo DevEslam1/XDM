@@ -398,6 +398,17 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     children: [
                       _buildSwitchTile(
                         settings: settings,
+                        title: L10n.isRtl(context) ? 'حفظ سجل المتصفح' : 'Save Browser History',
+                        subtitle: L10n.isRtl(context) ? 'حفظ المواقع التي تزورها في السجل' : 'Keep a history of websites you visit',
+                        value: settings.saveBrowserHistory,
+                        onChanged: (val) {
+                          settings.setSaveBrowserHistory(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
                         title: L10n.of(context, 'settings_biometric'),
                         subtitle: L10n.of(context, 'settings_biometric_sub'),
                         value: settings.biometricLock,

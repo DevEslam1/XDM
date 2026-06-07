@@ -33,6 +33,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _adBlockerEnabledKey = 'adBlockerEnabled';
   static const _pinchToZoomKey = 'pinchToZoom';
   static const _batterySaverModeKey = 'batterySaverMode';
+  static const _saveBrowserHistoryKey = 'saveBrowserHistory';
 
   late final SharedPreferences _prefs;
 
@@ -76,6 +77,7 @@ class SettingsProvider extends ChangeNotifier {
   bool desktopMode = false;
   bool adBlockerEnabled = true;
   bool pinchToZoom = true;
+  bool saveBrowserHistory = false;
 
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
@@ -112,6 +114,7 @@ class SettingsProvider extends ChangeNotifier {
     desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
     adBlockerEnabled = _prefs.getBool(_adBlockerEnabledKey) ?? adBlockerEnabled;
     pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
+    saveBrowserHistory = _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
   }
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
@@ -297,6 +300,12 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setPinchToZoom(bool value) async {
     pinchToZoom = value;
     await _prefs.setBool(_pinchToZoomKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setSaveBrowserHistory(bool value) async {
+    saveBrowserHistory = value;
+    await _prefs.setBool(_saveBrowserHistoryKey, value);
     notifyListeners();
   }
 }

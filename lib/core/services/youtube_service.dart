@@ -166,21 +166,35 @@ class YoutubeService {
     if (videoId == null) return [];
 
     StreamManifest? manifest;
+    const timeout = Duration(seconds: 8);
 
-    const timeout = Duration(seconds: 12);
+    // List of clients to try sequentially in case of restrictions/signature issues
+    final clientsToTry = [
+      null, // Default clients list
+      [YoutubeApiClient.android],
+      [YoutubeApiClient.tv],
+      [YoutubeApiClient.ios],
+      [YoutubeApiClient.androidVr],
+    ];
 
-    // Try default client first (has internal tv fallback)
-    try {
-      manifest = await _yt.videos.streamsClient
-          .getManifest(videoId)
-          .timeout(timeout);
-    } catch (_) {
-      // Fallback: tv client works for more restrictive videos
+    for (final clients in clientsToTry) {
       try {
-        manifest = await _yt.videos.streamsClient
-            .getManifest(videoId, ytClients: [YoutubeApiClient.tv])
-            .timeout(timeout);
-      } catch (_) {}
+        if (clients == null) {
+          manifest = await _yt.videos.streamsClient
+              .getManifest(videoId)
+              .timeout(timeout);
+        } else {
+          manifest = await _yt.videos.streamsClient
+              .getManifest(videoId, ytClients: clients)
+              .timeout(timeout);
+        }
+        if (manifest.streams.isNotEmpty) {
+          break; // Found working manifest!
+        }
+      } catch (e) {
+        // Log locally and continue to next fallback client
+        Logger.root.warning('YoutubeService.getStreams: getManifest failed for client $clients: $e');
+      }
     }
 
     if (manifest == null || manifest.streams.isEmpty) return [];
@@ -291,19 +305,33 @@ class YoutubeService {
     String qualityPreset,
   ) async {
     StreamManifest? manifest;
+    const timeout = Duration(seconds: 8);
 
-    const timeout = Duration(seconds: 12);
+    final clientsToTry = [
+      null,
+      [YoutubeApiClient.android],
+      [YoutubeApiClient.tv],
+      [YoutubeApiClient.ios],
+      [YoutubeApiClient.androidVr],
+    ];
 
-    try {
-      manifest = await _yt.videos.streamsClient
-          .getManifest(videoId)
-          .timeout(timeout);
-    } catch (_) {
+    for (final clients in clientsToTry) {
       try {
-        manifest = await _yt.videos.streamsClient
-            .getManifest(videoId, ytClients: [YoutubeApiClient.tv])
-            .timeout(timeout);
-      } catch (_) {}
+        if (clients == null) {
+          manifest = await _yt.videos.streamsClient
+              .getManifest(videoId)
+              .timeout(timeout);
+        } else {
+          manifest = await _yt.videos.streamsClient
+              .getManifest(videoId, ytClients: clients)
+              .timeout(timeout);
+        }
+        if (manifest.streams.isNotEmpty) {
+          break;
+        }
+      } catch (e) {
+        Logger.root.warning('YoutubeService.getStreamForVideo: getManifest failed for client $clients: $e');
+      }
     }
 
     if (manifest == null || manifest.streams.isEmpty) return null;

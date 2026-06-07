@@ -162,6 +162,73 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 })();
 ''';
 
+  void _saveTabs() {
+    SharedPreferences.getInstance().then((prefs) {
+      final List<Map<String, dynamic>> tabList = [];
+      int savedIndex = 0;
+      int normalTabCount = 0;
+
+      for (int i = 0; i < _tabs.length; i++) {
+        final tab = _tabs[i];
+        if (tab.isIncognito) continue;
+
+        if (i == _currentTabIndex) {
+          savedIndex = normalTabCount;
+        }
+        tabList.add({
+          'url': tab.url,
+          'title': tab.title,
+          'isIncognito': false,
+        });
+        normalTabCount++;
+      }
+
+      prefs.setString('persisted_browser_tabs', jsonEncode(tabList));
+      prefs.setInt('persisted_browser_tab_index', savedIndex);
+    }).catchError((e) {
+      debugPrint('Error saving tabs: $e');
+    });
+  }
+
+  Future<void> _restoreTabs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String? tabsJson = prefs.getString('persisted_browser_tabs');
+    final int savedTabIndex = prefs.getInt('persisted_browser_tab_index') ?? 0;
+
+    if (tabsJson != null && tabsJson.isNotEmpty) {
+      try {
+        final List<dynamic> decoded = jsonDecode(tabsJson);
+        final List<BrowserTab> loadedTabs = [];
+        for (final item in decoded) {
+          if (item is Map<String, dynamic>) {
+            final String url = item['url'] as String? ?? 'about:blank';
+            final String title = item['title'] as String? ?? 'New Tab';
+
+            final tab = _createNewTab(initialUrl: url, isIncognito: false);
+            tab.title = title;
+            loadedTabs.add(tab);
+          }
+        }
+
+        if (loadedTabs.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _tabs.clear();
+              _tabs.addAll(loadedTabs);
+              _currentTabIndex = savedTabIndex.clamp(0, _tabs.length - 1);
+              final activeTab = _tabs[_currentTabIndex];
+              _urlController.text = activeTab.isHome ? '' : activeTab.url;
+            });
+            _updateNavState();
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('Error restoring tabs: $e');
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -182,6 +249,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // Create the first tab
     final initialTab = _createNewTab();
     _tabs.add(initialTab);
+
+    // Restore tabs from previous session
+    _restoreTabs();
   }
 
   BrowserTab _createNewTab({String initialUrl = 'about:blank', bool isIncognito = false}) {
@@ -258,6 +328,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
+            _saveTabs();
           },
           onPageFinished: (url) {
             if (mounted) {
@@ -271,13 +342,34 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   setState(() {
                     tab.title = t;
                   });
+                  _saveTabs();
                 }
               });
             }
+
+            if (url.contains('youtube.com')) {
+              tab.controller.runJavaScriptReturningResult('document.cookie').then((cookieResult) {
+                if (cookieResult is String && cookieResult.isNotEmpty && cookieResult != 'null') {
+                  var cleanCookie = cookieResult;
+                  if (cleanCookie.startsWith('"') && cleanCookie.endsWith('"')) {
+                    try {
+                      cleanCookie = jsonDecode(cleanCookie);
+                    } catch (_) {
+                      if (cleanCookie.length > 2) {
+                        cleanCookie = cleanCookie.substring(1, cleanCookie.length - 1);
+                      }
+                    }
+                  }
+                  YoutubeService.signInFromBrowser(cleanCookie);
+                }
+              }).catchError((_) {});
+            }
+
             _injectLongPressScriptToTab(tab);
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
+            _saveTabs();
             
             // Trigger background DOM media scanner
             Future.delayed(const Duration(milliseconds: 1000), () {
@@ -309,6 +401,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedPlaylistUrls.remove(tab.id);
                 _scanPageMedia(tab);
+                _saveTabs();
                 
                 // Fetch new page title after a short delay for SPA rendering
                 Future.delayed(const Duration(milliseconds: 1000), () {
@@ -318,12 +411,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         setState(() {
                           tab.title = t;
                         });
+                        _saveTabs();
                       }
                     });
                   }
                 });
               }
-              if (!tab.isIncognito && !settings.incognitoEnabled) {
+              if (!tab.isIncognito && !settings.incognitoEnabled && settings.saveBrowserHistory) {
                 _recordHistory(change.url!);
               }
             }
@@ -1383,6 +1477,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                         _urlController.text = '';
                                         _showBars = true;
                                       });
+                                      _saveTabs();
                                       Navigator.pop(context);
                                     },
                                   ),
@@ -1400,6 +1495,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                         _urlController.text = '';
                                         _showBars = true;
                                       });
+                                      _saveTabs();
                                       Navigator.pop(context);
                                     },
                                   ),
@@ -1431,6 +1527,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                         _urlController.text = tab.isHome ? '' : tab.url;
                                         _showBars = true;
                                       });
+                                      _saveTabs();
                                       Navigator.pop(context);
                                     },
                                     child: GlassCard(
@@ -1478,6 +1575,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                                           final activeTab = _tabs[_currentTabIndex];
                                                           _urlController.text = activeTab.isHome ? '' : activeTab.url;
                                                         });
+                                                        _saveTabs();
                                                       });
                                                     },
                                                   ),
