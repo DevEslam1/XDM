@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../../../core/app_theme.dart';
 import '../../../../shared/widgets/geometric_grid_background.dart';
@@ -35,6 +36,7 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> {
           localizedReason: widget.isRtl
               ? 'يرجى تأكيد هويتك لفتح لوحة قيادة XDM'
               : 'Please authenticate to open XDM dashboard',
+          biometricOnly: false,
           persistAcrossBackgrounding: true,
         );
         if (didAuth && mounted) {
@@ -55,9 +57,28 @@ class _BiometricLockScreenState extends State<BiometricLockScreen> {
         }
       }
     } catch (e) {
-      // Don't auto-grant access on a plugin/runtime error: the lock is
-      // supposed to be enforced. Show the retry state so the user can try
-      // again, or back out to the OS lock screen.
+      debugPrint('BiometricLockScreen authentication error: $e');
+      if (e is LocalAuthException) {
+        if (e.code == LocalAuthExceptionCode.noCredentialsSet ||
+            e.code == LocalAuthExceptionCode.noBiometricsEnrolled ||
+            e.code == LocalAuthExceptionCode.noBiometricHardware) {
+          debugPrint('Device has no biometric or passcode configured. Letting the user in.');
+          if (mounted) {
+            Navigator.pop(context, true);
+          }
+          return;
+        }
+      }
+      if (e is PlatformException) {
+        final code = e.code.toLowerCase();
+        if (code == 'notavailable' || code == 'notenrolled' || code == 'passcodenotset') {
+          debugPrint('Device has no biometric or passcode configured. Letting the user in.');
+          if (mounted) {
+            Navigator.pop(context, true);
+          }
+          return;
+        }
+      }
       if (mounted) {
         setState(() {
           _authFailed = true;

@@ -68,7 +68,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             if (taskIndex == -1) {
               return Center(
                 child: Text(
-                  isRtl ? 'فقد الاتصال بالإشارة' : 'SIGNAL LOST OR DISCONNECTED',
+                  isRtl ? 'مهمة التنزيل غير موجودة' : 'DOWNLOAD TASK NOT FOUND',
                   style: TextStyle(
                     color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                     fontWeight: FontWeight.bold,
@@ -187,7 +187,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                                  if (context.mounted) {
                                    ThemedSnackbar.show(
                                      context,
-                                     message: isRtl ? 'تم حذف النقل بنجاح' : 'Transfer record deleted',
+                                     message: isRtl ? 'تم حذف التنزيل بنجاح' : 'Download deleted successfully',
                                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                                      icon: Icons.delete,
                                      isDarkMode: isDark,
@@ -265,7 +265,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            L10n.isRtl(context) ? 'مخطط سرعة النقل (تيليميتري)' : 'TELEMETRY SPEED CHART',
+            L10n.isRtl(context) ? 'مخطط سرعة التنزيل' : 'DOWNLOAD SPEED CHART',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: secClr,
               fontSize: 10,
@@ -280,8 +280,8 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
               alignment: Alignment.center,
               child: Text(
                 isDownloading
-                    ? (L10n.isRtl(context) ? 'جاري تجميع البيانات...' : 'AWAITING TELEMETRY STREAMS...')
-                    : (L10n.isRtl(context) ? 'محرك النقل غير نشط' : 'TRANSMISSION ENGINE INACTIVE'),
+                    ? (L10n.isRtl(context) ? 'جاري تجميع البيانات...' : 'AWAITING DOWNLOAD SPEED DATA...')
+                    : (L10n.isRtl(context) ? 'محرك التنزيل غير نشط' : 'DOWNLOAD ENGINE INACTIVE'),
                 style: TextStyle(
                   color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                   fontFamily: 'monospace',
@@ -461,7 +461,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                isRtl ? 'تعديل قنوات الاتصال' : 'ADJUST CONNECTION CHANNELS',
+                isRtl ? 'تعديل خيوط الاتصال' : 'ADJUST CONNECTION THREADS',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                   fontSize: 9,

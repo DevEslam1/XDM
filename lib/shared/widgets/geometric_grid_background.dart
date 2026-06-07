@@ -10,11 +10,19 @@ class GeometricGridBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
+    final settings = Provider.of<SettingsProvider>(context);
+    final isDark = settings.isDarkMode;
     final bgColor = isDark ? AppTheme.background : AppTheme.lightBackground;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+
+    if (settings.classicUi) {
+      return Container(
+        color: bgColor,
+        child: child,
+      );
+    }
 
     // Reduce gradient intensity in light mode for subtlety
     final double blobAlpha1 = isDark ? 0.10 : 0.06;

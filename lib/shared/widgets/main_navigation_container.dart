@@ -7,8 +7,6 @@ import '../../core/services/share_service.dart';
 import '../../core/utils/localization.dart';
 import '../../features/add_download/screens/add_screen.dart';
 import '../../features/browser/screens/browser_screen.dart';
-import '../../features/categories/screens/categories_screen.dart';
-import '../../features/history/screens/history_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/onboarding/screens/biometric_lock_screen.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -31,9 +29,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const CategoriesScreen(),
     const BrowserScreen(),
-    const HistoryScreen(),
     const SettingsScreen(),
   ];
 
@@ -162,7 +158,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
         ),
       ),
       bottomNavigationBar: AnimatedSlide(
-        offset: (downloadProvider.isNavbarVisible && currentIndex != 2) ? Offset.zero : const Offset(0, 1.0),
+        offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.0),
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
         child: ClipRRect(
@@ -189,30 +185,18 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
                       children: [
                         _buildNavItem(
                           index: 0,
-                          icon: Icons.sensors_outlined,
-                          activeIcon: Icons.sensors,
+                          icon: Icons.file_download_outlined,
+                          activeIcon: Icons.file_download,
                           label: L10n.of(context, 'title_transmissions'),
                         ),
                         _buildNavItem(
                           index: 1,
-                          icon: Icons.grid_view_outlined,
-                          activeIcon: Icons.grid_view_rounded,
-                          label: L10n.of(context, 'title_categories'),
-                        ),
-                        _buildNavItem(
-                          index: 2,
                           icon: Icons.language_outlined,
                           activeIcon: Icons.language,
                           label: L10n.of(context, 'title_browser'),
                         ),
                         _buildNavItem(
-                          index: 3,
-                          icon: Icons.history_toggle_off_outlined,
-                          activeIcon: Icons.history,
-                          label: L10n.of(context, 'title_history'),
-                        ),
-                        _buildNavItem(
-                          index: 4,
+                          index: 2,
                           icon: Icons.settings_outlined,
                           activeIcon: Icons.settings_rounded,
                           label: L10n.of(context, 'title_config'),

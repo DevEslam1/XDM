@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
+import '../../features/settings/provider/settings_provider.dart';
 import 'dmx_backdrop_filter.dart';
 
 class GlassCard extends StatelessWidget {
@@ -24,6 +26,22 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = Provider.of<SettingsProvider>(context);
+    if (settings.classicUi) {
+      return Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: color ?? (isDarkMode ? AppTheme.surface : AppTheme.lightSurface),
+          border: border ?? Border.all(
+            color: isDarkMode ? AppTheme.border : AppTheme.lightBorder,
+            width: 1.0,
+          ),
+          borderRadius: BorderRadius.circular(borderRadius),
+        ),
+        child: child,
+      );
+    }
+
     final baseDeco = AppTheme.glassDecoration(
       borderRadius: borderRadius,
       isDark: isDarkMode,

@@ -19,18 +19,25 @@
 
 ## 🎨 Visual Identity & Cyberpunk Aesthetics
 
-XDM features a curated, theme-aware user interface designed as a tactical cyberpunk/neon cockpit. Every file download is treated as a dedicated data stream interception:
+XDM features a curated, theme-aware user interface designed as a tactical cyberpunk/neon cockpit. Every file download is treated as a dedicated data stream:
 
 *   **Glassmorphism Panels**: Reusable translucent backdrop-blurred cards (`GlassCard`) that adapt seamlessly to light and dark modes. Supports a **Visual Performance Mode** to bypass blurs for low-end device efficiency.
 *   **Dynamic Neon Accents**: Cyberpunk neon cyan, violet, green, red, and amber colors designed for low-latency visual alerts.
 *   **Geometric Mesh Backgrounds**: Programmatic grid mesh lines with theme-dependent gradient blobs that scale and reposition dynamically.
 *   **Tactile Vibrations**: Physical micro-haptic pulses (`HapticHelper`) mapped to transitions, downloads, and interface clicks.
+*   **Simplified Standard Terminology**: Replaced technical cyberpunk terminology (e.g. "Transmissions", "Signals", "Local Disk Allocation") with friendly, industry-standard labels ("Downloads", "Connections", "Save Location") to make the application intuitive for everyone while maintaining the premium design.
 
 ---
 
 ## 🚀 Key Features & Architectural Enhancements
 
-### 1. Multi-Threaded Range Pipeline
+### 1. Streamlined 3-Tab Interface & Unified Dashboard
+*   **Consolidated Navigation**: Bottom navigation bar reduced from 5 tabs down to 3: **Downloads** (the main dashboard), **Browser** (integrated web sandbox), and **Settings** (system configuration).
+*   **Unified Segmented Dashboard**: The Home screen features a sliding segmented control to toggle between **Active** (downloading/paused/queued) and **Completed** (completed/failed history) tasks.
+*   **Collapsible Storage Analytics**: A collapsible Category & Storage Analytics panel with an interactive Pie Chart (`fl_chart`) is embedded at the top of the downloads list and can be toggled via an AppBar action icon.
+*   **Simplified Add Download Screen**: Clean "Quick Download" input (URL, filename, save path) with an expandable/collapsible **Advanced Options** drawer (hidden by default) containing Category, Connections, and Schedule settings.
+
+### 2. Multi-Threaded Range Pipeline
 *   **Parallel Chunk Execution**: Splits files dynamically into multiple connection channels (threads) using chunked byte ranges, streaming into temporary `.part$index` segment files, and merging them sequentially upon completion.
 *   **Single-Thread Fallback**: Gracefully recovers and switches to single-threaded download streams when servers do not support range headers or expose `Content-Length`.
 *   **Rolling-Window Speed Estimation**: Tracks download speeds using a smooth 3-second rolling-window interval to prevent erratic spikes and stabilize speed indicators.
@@ -39,26 +46,26 @@ XDM features a curated, theme-aware user interface designed as a tactical cyberp
 *   **Collision-Safe Task IDs**: Cryptographically robust task IDs combining microsecond timestamp tokens with randomized offset tags.
 *   **Flexible Connection Channel Controls**: Configurable default thread counts and individual task thread adjustments (`1, 2, 4, 5, 8, 16`) backed by progress safety guards.
 
-### 2. Intelligent Categorization
-*   **Automatic Dock Indexing**: Automatically filters and classifies incoming transmissions into Video, Audio, Document, Archive, APK, and General categories.
-*   **Interactive Dashboards**: Tapping category badges instantly switches to the Transmissions hub and filters active files, equipped with clearable filter chips.
+### 3. Intelligent Categorization
+*   **Automatic Category Indexing**: Automatically filters and classifies incoming downloads into Video, Audio, Document, Archive, APK, and General categories.
+*   **Interactive Dashboard Filters**: Tapping category badges in the analytics panel filters the active files list on the main Downloads dashboard, equipped with clearable filter chips.
 *   **Categorized Folder Docks**: Automatically arranges saved files into subdirectories matching their classified categories.
 
-### 3. Integrated Web Sandbox Browser
+### 4. Integrated Web Sandbox Browser
 *   **Direct Web Sniffer**: Inline web browser allowing instant downloading.
 *   **Broad Download Interception**: Detects and captures redirects, data URIs, base64 data streams, blob URLs, custom user-agent requests, and matches complex queries.
 *   **Multi-Tab Support**: Keep multiple tabs alive concurrently in memory (using `IndexedStack`) with separate web views, support for a visual tab-grid switcher, and specialized private Incognito tabs.
 *   **Edge Swipe Navigation Gestures**: Drag from screen boundaries (left edge to go back, right edge to go forward) for a fluid, gesture-driven browsing experience.
-*   **Offline Page Cache**: Instantly save page DOM structures as offline `.html` documents inside the downloads dock with local file access.
+*   **Offline Page Cache**: Instantly save page DOM structures as offline `.html` documents inside the downloads folder with local file access.
 *   **JS Injection / Custom CSS Editor**: Persistent tabbed script editor that injects custom CSS styling and Javascript code automatically when pages load.
 *   **Video Quality Selector**: A bottom sheet modal displaying detected resolutions/qualities of video element streams, allowing users to choose their download quality.
 *   **Smart Surf & Download History**: Segmented, searchable log page containing both surfing history entries and download history tasks.
 
-### 4. Native App Protections & Services
+### 5. Native App Protections & Services
 *   **Biometric Gate Lock**: Secure Local Authentication (`local_auth`) checking on initial app load and background-to-foreground transitions (`paused` ➔ `resumed`) using a lock screen overlay.
 *   **Heartbeat Service Monitored Backgrounds**: A 15-second background monitor heartbeat checks task progress telemetries when minimized.
 *   **System Notification Quick Actions**: Android notification drawers feature quick **Pause** and **Cancel** buttons, which map actions directly back to the main UI isolate via named `ReceivePorts`.
-*   **System Backups**: Export and import transmission signals cleanly to/from JSON archives.
+*   **System Backups**: Export and import downloads cleanly to/from JSON archives.
 
 ---
 
@@ -84,10 +91,11 @@ lib/
 ├── features/
 │   ├── add_download/   # Establish new download screens and configurations
 │   ├── browser/        # Embedded sniffer webview components
-│   ├── categories/     # Classification and storage dashboard
+│   ├── categories/     # Legacy folder (now integrated into home dashboard)
 │   ├── details/        # Telemetry logs, speed graphs, thread modifiers
 │   ├── downloads/      # Main active list and state provider
-│   ├── history/        # Completed transaction logs
+│   ├── history/        # Legacy folder (now integrated into home dashboard)
+│   ├── home/           # Main cockpit and segmented downloads tab view
 │   ├── onboarding/     # Splash authentication and tutorial flows
 │   └── settings/       # Global cockpit configuration adjustments
 └── shared/

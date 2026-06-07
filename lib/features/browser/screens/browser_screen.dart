@@ -1771,8 +1771,20 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // Reactively ensure zoom configuration matches settings changes
     activeTab.controller.enableZoom(settings.pinchToZoom);
 
-    return GeometricGridBackground(
-      child: Scaffold(
+    return PopScope(
+      canPop: downloadProvider.activeTabIndex != 1,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final activeTab = _tabs[_currentTabIndex];
+        final canGoBack = await activeTab.controller.canGoBack();
+        if (canGoBack) {
+          await activeTab.controller.goBack();
+        } else {
+          downloadProvider.setActiveTabIndex(0);
+        }
+      },
+      child: GeometricGridBackground(
+        child: Scaffold(
         backgroundColor: Colors.transparent,
         floatingActionButton: showFab ? _buildDownloadFab(context, settings) : null,
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -2216,7 +2228,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   // Intercept bookmark and history opens from popups

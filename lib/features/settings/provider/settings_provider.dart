@@ -13,6 +13,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _languageCodeKey = 'languageCode';
   static const _isDarkModeKey = 'isDarkMode';
   static const _showOnboardingKey = 'showOnboarding';
+  static const _classicUiKey = 'classicUi';
 
   static const _biometricLockKey = 'biometricLock';
   static const _enableProxyKey = 'enableProxy';
@@ -46,6 +47,7 @@ class SettingsProvider extends ChangeNotifier {
   String languageCode = 'en';
   bool isDarkMode = true;
   bool showOnboarding = true;
+  bool classicUi = false;
 
   bool biometricLock = false;
   bool enableProxy = false;
@@ -84,6 +86,7 @@ class SettingsProvider extends ChangeNotifier {
     languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
     isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
     showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
+    classicUi = _prefs.getBool(_classicUiKey) ?? classicUi;
 
     biometricLock = _prefs.getBool(_biometricLockKey) ?? biometricLock;
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
@@ -170,6 +173,12 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setShowOnboarding(bool value) async {
     showOnboarding = value;
     await _prefs.setBool(_showOnboardingKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setClassicUi(bool value) async {
+    classicUi = value;
+    await _prefs.setBool(_classicUiKey, value);
     notifyListeners();
   }
 

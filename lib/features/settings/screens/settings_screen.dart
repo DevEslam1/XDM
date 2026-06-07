@@ -306,6 +306,17 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
                         settings: settings,
+                        title: L10n.of(context, 'settings_classic_ui'),
+                        subtitle: L10n.of(context, 'settings_classic_ui_sub'),
+                        value: settings.classicUi,
+                        onChanged: (val) {
+                          settings.setClassicUi(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
                         title: L10n.of(context, 'settings_glow'),
                         subtitle: L10n.of(context, 'settings_glow_sub'),
                         value: settings.enableGlow,

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
@@ -46,6 +47,12 @@ Future<DmxApp> _buildTestApp() async {
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
+    try {
+      final dir = Directory('build/test_hive_widget');
+      if (dir.existsSync()) {
+        dir.deleteSync(recursive: true);
+      }
+    } catch (_) {}
     Hive.init('build/test_hive_widget');
     ConnectivityPlatform.instance = MockConnectivityPlatform();
 
@@ -65,7 +72,8 @@ void main() {
   });
 
   testWidgets('DmxApp smoke test - dashboard verification', (tester) async {
-    await tester.pumpWidget(await _buildTestApp());
+    final app = (await tester.runAsync(() => _buildTestApp()))!;
+    await tester.pumpWidget(app);
     // Pump a frame to trigger postFrameCallback in SplashScreen
     await tester.pump();
     // Pump another frame to allow navigation

@@ -101,6 +101,7 @@ class _SplashScreenState extends State<SplashScreen>
             localizedReason: isRtl
                 ? 'يرجى تأكيد هويتك لفتح لوحة قيادة XDM'
                 : 'Please authenticate to open XDM dashboard',
+            biometricOnly: false,
             persistAcrossBackgrounding: true,
           );
           if (didAuth) {
@@ -123,8 +124,24 @@ class _SplashScreenState extends State<SplashScreen>
           _navigateToNext();
         }
       } catch (e) {
-        // Don't bypass the lock on a plugin error — show the retry UI.
         debugPrint('SplashScreen biometric lock error: $e');
+        if (e is LocalAuthException) {
+          if (e.code == LocalAuthExceptionCode.noCredentialsSet ||
+              e.code == LocalAuthExceptionCode.noBiometricsEnrolled ||
+              e.code == LocalAuthExceptionCode.noBiometricHardware) {
+            debugPrint('Device has no biometric or passcode configured. Letting the user in.');
+            _navigateToNext();
+            return;
+          }
+        }
+        if (e is PlatformException) {
+          final code = e.code.toLowerCase();
+          if (code == 'notavailable' || code == 'notenrolled' || code == 'passcodenotset') {
+            debugPrint('Device has no biometric or passcode configured. Letting the user in.');
+            _navigateToNext();
+            return;
+          }
+        }
         if (mounted) {
           setState(() {
             _authFailed = true;

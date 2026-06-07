@@ -43,6 +43,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   String _selectedCategory = 'Auto';
   int _selectedThreads = 5;
   bool _isSubmitting = false;
+  bool _showAdvanced = false;
 
   bool _isScheduled = false;
   DateTime? _scheduledDateTime;
@@ -364,144 +365,152 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                     ),
                     const SizedBox(height: 16),
 
-                    // Configuration Details Selector (Category & Threads)
-                    _buildInputPanel(
-                      context,
-                      isDark: isDark,
-                      title: isRtl ? 'إعدادات التوجيه' : 'ROUTING CONFIGURATION',
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      isRtl ? 'الفئة' : 'CATEGORY',
-                                      style: Theme.of(context).textTheme.labelMedium
-                                          ?.copyWith(
-                                            fontSize: 10,
-                                            color: secClr,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.5,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildDropdown<String>(
-                                      value: _selectedCategory,
-                                      items: _categories,
-                                      isDark: isDark,
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          setState(() {
-                                            _selectedCategory = val;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
+                    // Advanced Options Toggle
+                    GestureDetector(
+                      onTap: () {
+                        triggerHaptic(settings);
+                        setState(() {
+                          _showAdvanced = !_showAdvanced;
+                        });
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              L10n.of(context, 'add_download_adv').toUpperCase(),
+                              style: TextStyle(
+                                color: blueClr,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      isRtl ? 'القنوات (الخيوط)' : 'CHANNELS (THREADS)',
-                                      style: Theme.of(context).textTheme.labelMedium
-                                          ?.copyWith(
-                                            fontSize: 10,
-                                            color: secClr,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.5,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    _buildDropdown<int>(
-                                      value: _selectedThreads,
-                                      items: _threadsList,
-                                      isDark: isDark,
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          setState(() {
-                                            _selectedThreads = val;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Checkbox(
-                                value: _isScheduled,
-                                activeColor: blueClr,
-                                side: BorderSide(color: glassBorder, width: 1.0),
-                                onChanged: (val) {
-                                  setState(() {
-                                    _isScheduled = val ?? false;
-                                    if (_isScheduled && _scheduledDateTime == null) {
-                                      _scheduledDateTime = DateTime.now().add(const Duration(minutes: 5));
-                                    }
-                                  });
-                                },
-                              ),
-                              Text(
-                                isRtl ? 'جدولة الإرسال' : 'SCHEDULE TRANSMISSION',
-                                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: textClr,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              if (_isScheduled) ...[
-                                const Spacer(),
-                                TextButton.icon(
-                                  icon: Icon(Icons.calendar_month, size: 16, color: blueClr),
-                                  label: Text(
-                                    _scheduledDateTime != null 
-                                      ? '${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}' 
-                                      : (isRtl ? 'حدد الوقت' : 'SELECT TIME'),
-                                    style: TextStyle(color: blueClr, fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
-                                  onPressed: () async {
-                                    final date = await showDatePicker(
-                                      context: context,
-                                      initialDate: _scheduledDateTime ?? DateTime.now(),
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime.now().add(const Duration(days: 30)),
-                                      builder: (context, child) => Theme(
-                                        data: Theme.of(context).copyWith(
-                                          colorScheme: isDark
-                                              ? ColorScheme.dark(
-                                                  primary: blueClr,
-                                                  onPrimary: AppTheme.background,
-                                                  surface: AppTheme.surface,
-                                                  onSurface: AppTheme.textPrimary,
-                                                )
-                                              : ColorScheme.light(
-                                                  primary: blueClr,
-                                                  onPrimary: Colors.white,
-                                                  surface: AppTheme.lightSurface,
-                                                  onSurface: AppTheme.lightTextPrimary,
-                                                ),
+                            ),
+                            Icon(
+                              _showAdvanced ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                              color: blueClr,
+                              size: 20,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    if (_showAdvanced) ...[
+                      // Configuration Details Selector (Category & Threads)
+                      _buildInputPanel(
+                        context,
+                        isDark: isDark,
+                        title: isRtl ? 'خيارات متقدمة' : 'ADVANCED OPTIONS',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        isRtl ? 'الفئة' : 'CATEGORY',
+                                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                          fontSize: 10,
+                                          color: secClr,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
                                         ),
-                                        child: child!,
                                       ),
-                                    );
-                                    if (date != null && mounted) {
-                                      if (!context.mounted) return;
-                                      final time = await showTimePicker(
+                                      const SizedBox(height: 8),
+                                      _buildDropdown<String>(
+                                        value: _selectedCategory,
+                                        items: _categories,
+                                        isDark: isDark,
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setState(() {
+                                              _selectedCategory = val;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        isRtl ? 'خيوط الاتصال (الخيوط)' : 'CONNECTIONS (THREADS)',
+                                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                          fontSize: 10,
+                                          color: secClr,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _buildDropdown<int>(
+                                        value: _selectedThreads,
+                                        items: _threadsList,
+                                        isDark: isDark,
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setState(() {
+                                              _selectedThreads = val;
+                                            });
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _isScheduled,
+                                  activeColor: blueClr,
+                                  side: BorderSide(color: glassBorder, width: 1.0),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _isScheduled = val ?? false;
+                                      if (_isScheduled && _scheduledDateTime == null) {
+                                        _scheduledDateTime = DateTime.now().add(const Duration(minutes: 5));
+                                      }
+                                    });
+                                  },
+                                ),
+                                Text(
+                                  isRtl ? 'جدولة التنزيل' : 'SCHEDULE DOWNLOAD',
+                                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: textClr,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                if (_isScheduled) ...[
+                                  const Spacer(),
+                                  TextButton.icon(
+                                    icon: Icon(Icons.calendar_month, size: 16, color: blueClr),
+                                    label: Text(
+                                      _scheduledDateTime != null 
+                                        ? '${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}' 
+                                        : (isRtl ? 'حدد الوقت' : 'SELECT TIME'),
+                                      style: TextStyle(color: blueClr, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                    onPressed: () async {
+                                      final date = await showDatePicker(
                                         context: context,
-                                        initialTime: TimeOfDay.fromDateTime(_scheduledDateTime ?? DateTime.now()),
+                                        initialDate: _scheduledDateTime ?? DateTime.now(),
+                                        firstDate: DateTime.now(),
+                                        lastDate: DateTime.now().add(const Duration(days: 30)),
                                         builder: (context, child) => Theme(
                                           data: Theme.of(context).copyWith(
                                             colorScheme: isDark
@@ -521,30 +530,52 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                                           child: child!,
                                         ),
                                       );
-                                      if (time != null) {
-                                        setState(() {
-                                          _scheduledDateTime = DateTime(
-                                            date.year,
-                                            date.month,
-                                            date.day,
-                                            time.hour,
-                                            time.minute,
-                                          );
-                                        });
+                                      if (date != null && mounted) {
+                                        if (!context.mounted) return;
+                                        final time = await showTimePicker(
+                                          context: context,
+                                          initialTime: TimeOfDay.fromDateTime(_scheduledDateTime ?? DateTime.now()),
+                                          builder: (context, child) => Theme(
+                                            data: Theme.of(context).copyWith(
+                                              colorScheme: isDark
+                                                  ? ColorScheme.dark(
+                                                      primary: blueClr,
+                                                      onPrimary: AppTheme.background,
+                                                      surface: AppTheme.surface,
+                                                      onSurface: AppTheme.textPrimary,
+                                                    )
+                                                  : ColorScheme.light(
+                                                      primary: blueClr,
+                                                      onPrimary: Colors.white,
+                                                      surface: AppTheme.lightSurface,
+                                                      onSurface: AppTheme.lightTextPrimary,
+                                                    ),
+                                            ),
+                                            child: child!,
+                                          ),
+                                        );
+                                        if (time != null) {
+                                          setState(() {
+                                            _scheduledDateTime = DateTime(
+                                              date.year,
+                                              date.month,
+                                              date.day,
+                                              time.hour,
+                                              time.minute,
+                                            );
+                                          });
+                                        }
                                       }
-                                    }
-                                  },
-                                ),
+                                    },
+                                  ),
+                                ],
                               ],
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Advanced Options Toggle
-                    const SizedBox(height: 32),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Submit button
                     Center(
