@@ -15,7 +15,6 @@ import '../../downloads/models/download_task.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -141,46 +140,57 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
     return GeometricGridBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          flexibleSpace: ClipRect(
-            child: DmxBackdropFilter(
-              sigmaX: 12,
-              sigmaY: 12,
-              child: Container(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-          title: Text(
-            isRtl ? 'إرسال جديد' : 'NEW TRANSMISSION',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: textClr,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-              fontSize: 16,
-            ),
-          ),
-          leading: IconButton(
-            icon: Icon(
-              isRtl ? Icons.arrow_forward_ios : Icons.arrow_back_ios_new,
-              size: 18,
-              color: textClr,
-            ),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
         body: Directionality(
           textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
           child: SafeArea(
-            child: Form(
-              key: _formKey,
+            child: Center(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
+                child: Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 550),
+                    child: GlassCard(
+                      borderRadius: 24,
+                      padding: const EdgeInsets.all(20),
+                      isDarkMode: isDark,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.add_circle_outline,
+                                color: blueClr,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                isRtl ? 'إرسال جديد' : 'NEW TRANSMISSION',
+                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: textClr,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.5,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: Icon(Icons.close, color: textClr, size: 20),
+                                onPressed: () => Navigator.pop(context),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Divider(color: glassBorder, height: 1),
+                          const SizedBox(height: 16),
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 10),
                     // URL Input Card
                     _buildInputPanel(
                       context,
@@ -633,6 +643,12 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                     ),
                     const SizedBox(height: 24),
                   ],
+                ),
+              ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

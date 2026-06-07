@@ -115,20 +115,6 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   ),
                 ),
           actions: [
-            if (!_isSearching && _selectedTab == 1 && displayTasks.isNotEmpty)
-              IconButton(
-                icon: Icon(
-                  Icons.delete_sweep_outlined,
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                ),
-                tooltip: isRtl ? 'مسح كل السجل' : 'CLEAR ALL HISTORY',
-                onPressed: () => _showClearHistoryConfirmation(
-                  context,
-                  provider,
-                  displayTasks,
-                  settings,
-                ),
-              ),
             if (!_isSearching)
               IconButton(
                 icon: Icon(
@@ -161,59 +147,6 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 });
               },
             ),
-            if (!_isSearching)
-              PopupMenuButton<SortOption>(
-                icon: Icon(Icons.sort_rounded, color: textClr),
-                tooltip: 'SORT CHANNELS',
-                color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(
-                    color: isDark
-                        ? AppTheme.glassBorder
-                        : AppTheme.lightGlassBorder,
-                    width: 0.6,
-                  ),
-                ),
-                onSelected: (option) {
-                  triggerHaptic(settings);
-                  if (provider.sortOption == option) {
-                    provider.toggleSortDirection();
-                  } else {
-                    provider.setSortOption(option);
-                  }
-                },
-                itemBuilder: (context) => [
-                  _buildSortMenuItem(
-                    option: SortOption.dateAdded,
-                    label: L10n.of(context, 'sort_date'),
-                    currentOption: provider.sortOption,
-                    ascending: provider.sortAscending,
-                    settings: settings,
-                  ),
-                  _buildSortMenuItem(
-                    option: SortOption.fileSize,
-                    label: L10n.of(context, 'details_size'),
-                    currentOption: provider.sortOption,
-                    ascending: provider.sortAscending,
-                    settings: settings,
-                  ),
-                  _buildSortMenuItem(
-                    option: SortOption.fileName,
-                    label: L10n.of(context, 'details_filename'),
-                    currentOption: provider.sortOption,
-                    ascending: provider.sortAscending,
-                    settings: settings,
-                  ),
-                  _buildSortMenuItem(
-                    option: SortOption.status,
-                    label: L10n.of(context, 'sort_status'),
-                    currentOption: provider.sortOption,
-                    ascending: provider.sortAscending,
-                    settings: settings,
-                  ),
-                ],
-              ),
             const SizedBox(width: 8),
           ],
         ),
@@ -243,41 +176,141 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   child: DownloadStatsPanel(),
                 ),
 
-              // Filter Chips
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: FilterChipsBar(),
-              ),
-              const SizedBox(height: 16),
+              // Filter Chips (Only shown on Active tab)
+              if (_selectedTab == 0) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: FilterChipsBar(),
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // Title "DOWNLOADS OVERVIEW"
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  _selectedTab == 0
+                      ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
+                      : (isRtl ? 'سجل التنزيلات المكتملة' : 'COMPLETED DOWNLOADS'),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: isDark
+                        ? AppTheme.textSecondary
+                        : AppTheme.lightTextSecondary,
+                    fontSize: 10,
+                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Controls Row: Sort Option on the Left, Delete Sweep/Task count on the Right
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      _selectedTab == 0
-                          ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
-                          : (isRtl ? 'سجل التنزيلات المكتملة' : 'COMPLETED DOWNLOADS'),
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: isDark
-                            ? AppTheme.textSecondary
-                            : AppTheme.lightTextSecondary,
-                        fontSize: 10,
-                        letterSpacing: 1.0,
-                        fontWeight: FontWeight.bold,
+                    PopupMenuButton<SortOption>(
+                      tooltip: 'SORT CHANNELS',
+                      color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                          width: 0.6,
+                        ),
+                      ),
+                      onSelected: (option) {
+                        triggerHaptic(settings);
+                        if (provider.sortOption == option) {
+                          provider.toggleSortDirection();
+                        } else {
+                          provider.setSortOption(option);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        _buildSortMenuItem(
+                          option: SortOption.dateAdded,
+                          label: L10n.of(context, 'sort_date'),
+                          currentOption: provider.sortOption,
+                          ascending: provider.sortAscending,
+                          settings: settings,
+                        ),
+                        _buildSortMenuItem(
+                          option: SortOption.fileSize,
+                          label: L10n.of(context, 'details_size'),
+                          currentOption: provider.sortOption,
+                          ascending: provider.sortAscending,
+                          settings: settings,
+                        ),
+                        _buildSortMenuItem(
+                          option: SortOption.fileName,
+                          label: L10n.of(context, 'details_filename'),
+                          currentOption: provider.sortOption,
+                          ascending: provider.sortAscending,
+                          settings: settings,
+                        ),
+                        _buildSortMenuItem(
+                          option: SortOption.status,
+                          label: L10n.of(context, 'sort_status'),
+                          currentOption: provider.sortOption,
+                          ascending: provider.sortAscending,
+                          settings: settings,
+                        ),
+                      ],
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0x1F000000) : const Color(0x0A000000),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.sort_rounded, color: textClr, size: 14),
+                            const SizedBox(width: 6),
+                            Text(
+                              isRtl ? 'فرز' : 'SORT',
+                              style: TextStyle(
+                                color: textClr,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    Text(
-                      '${displayTasks.length} ${isRtl ? 'ملفات' : 'TASKS'}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppTheme.textMuted
-                            : AppTheme.lightTextMuted,
-                        fontSize: 10,
+                    if (_selectedTab == 1 && displayTasks.isNotEmpty)
+                      IconButton(
+                        icon: Icon(
+                          Icons.delete_sweep_outlined,
+                          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          size: 20,
+                        ),
+                        constraints: const BoxConstraints(),
+                        padding: EdgeInsets.zero,
+                        tooltip: isRtl ? 'مسح كل السجل' : 'CLEAR ALL HISTORY',
+                        onPressed: () => _showClearHistoryConfirmation(
+                          context,
+                          provider,
+                          displayTasks,
+                          settings,
+                        ),
+                      )
+                    else
+                      Text(
+                        '${displayTasks.length} ${isRtl ? 'ملفات' : 'TASKS'}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                          fontSize: 10,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
