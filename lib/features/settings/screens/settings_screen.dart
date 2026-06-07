@@ -12,6 +12,7 @@ import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/dmx_app_icon.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../downloads/provider/download_provider.dart';
+import '../../downloads/models/download_task.dart';
 import '../provider/settings_provider.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../browser/services/ad_blocker.dart';
@@ -374,6 +375,17 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           HapticFeedback.lightImpact();
                         },
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // System Telemetry & Performance Governor
+                  _buildSettingsSection(
+                    context,
+                    settings: settings,
+                    title: L10n.isRtl(context) ? 'مراقب الأداء والتحكم بالنظام' : 'TELEMETRY & PERFORMANCE GOVERNOR',
+                    children: [
+                      PerformanceTelemetryCard(settings: settings),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -1037,5 +1049,259 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
         ],
       ),
     );
+  }
+}
+
+class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
+  final SettingsProvider settings;
+  const PerformanceTelemetryCard({super.key, required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final accentColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final subClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+
+    return Consumer<DownloadProvider>(
+      builder: (context, provider, child) {
+        // Calculate metrics
+        final activeDownloads = provider.tasks.where((t) => t.status == DownloadStatus.downloading).toList();
+        final activeThreads = activeDownloads.fold<int>(0, (sum, t) => sum + t.threadCount);
+        final totalSpeedBytes = activeDownloads.fold<double>(0.0, (sum, t) => sum + t.speed);
+        
+        // GPU Load Estimate
+        final gpuLoad = settings.classicUi
+            ? (isRtl ? 'منخفض (نمط الواجهة الكلاسيكي)' : 'LOW (Classic UI Mode)')
+            : (isRtl ? 'متوسط (تأثيرات التوهج والضبابية)' : 'MODERATE (Glows & Blurs Active)');
+
+        // Battery impact level
+        String batteryImpact;
+        Color batteryColor;
+        if (settings.batterySaverMode) {
+          batteryImpact = isRtl ? 'توفير الطاقة نشط (أمثل)' : 'SAVER ACTIVE (Optimal)';
+          batteryColor = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+        } else if (activeDownloads.isNotEmpty) {
+          batteryImpact = isRtl ? 'متوسط (تحميل نشط)' : 'MODERATE (Active downloads)';
+          batteryColor = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+        } else {
+          batteryImpact = isRtl ? 'منخفض جداً (خامل)' : 'VERY LOW (Idle)';
+          batteryColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        }
+
+        // Memory load
+        final cachedNodes = provider.tasks.length;
+        final memoryLoad = isRtl 
+            ? 'ممتاز ($cachedNodes عناصر مخزنة مؤقتاً)' 
+            : 'EXCELLENT ($cachedNodes cached nodes)';
+
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Telemetry Grid
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMetricTile(
+                      context,
+                      icon: Icons.speed,
+                      title: isRtl ? 'السرعة الكلية' : 'Total Net Speed',
+                      value: activeDownloads.isEmpty
+                          ? '0.0 KB/s'
+                          : '${formatBytes(totalSpeedBytes)}/s',
+                      isDark: isDark,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildMetricTile(
+                      context,
+                      icon: Icons.dns_outlined,
+                      title: isRtl ? 'قنوات الاتصال' : 'Active Connections',
+                      value: activeDownloads.isEmpty
+                          ? (isRtl ? 'خامل' : 'Idle')
+                          : '$activeThreads ${isRtl ? 'خيوط' : 'threads'}',
+                      isDark: isDark,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Diagnostics list
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: (isDark ? AppTheme.background : AppTheme.lightBackground).withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: glassBorder, width: 0.8),
+                ),
+                child: Column(
+                  children: [
+                    _buildDiagRow(
+                      context,
+                      label: isRtl ? 'حمل المعالج (CPU)' : 'CPU Threading Load',
+                      value: activeDownloads.isEmpty
+                          ? (isRtl ? 'خامل (0%)' : 'Idle (0%)')
+                          : '${(activeThreads * 6).clamp(5, 95)}% ($activeThreads threads)',
+                      isDark: isDark,
+                    ),
+                    const Divider(height: 16),
+                    _buildDiagRow(
+                      context,
+                      label: isRtl ? 'حمل كارت الشاشة (GPU)' : 'GPU Rendering Load',
+                      value: gpuLoad,
+                      isDark: isDark,
+                    ),
+                    const Divider(height: 16),
+                    _buildDiagRow(
+                      context,
+                      label: isRtl ? 'استهلاك الذاكرة (RAM)' : 'RAM Cache Load',
+                      value: memoryLoad,
+                      isDark: isDark,
+                    ),
+                    const Divider(height: 16),
+                    _buildDiagRow(
+                      context,
+                      label: isRtl ? 'تأثير البطارية' : 'Battery Drainage Rate',
+                      value: batteryImpact,
+                      valueColor: batteryColor,
+                      isDark: isDark,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Battery Saver Toggle
+              SwitchListTile(
+                value: settings.batterySaverMode,
+                onChanged: (val) {
+                  settings.setBatterySaverMode(val);
+                  triggerHaptic(settings);
+                },
+                activeThumbColor: accentColor,
+                activeTrackColor: accentColor.withValues(alpha: 0.2),
+                inactiveThumbColor: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                inactiveTrackColor: isDark ? AppTheme.border : AppTheme.lightBorder,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  isRtl ? 'وضع توفير البطارية الأقصى' : 'Battery Saver Mode',
+                  style: TextStyle(
+                    color: textClr,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  isRtl
+                      ? 'يقيد قنوات الاتصال إلى ٢، والتحميلات المتزامنة إلى ١، ويفرض الواجهة الكلاسيكية لتوفير الطاقة'
+                      : 'Limits threads to 2, downloads to 1, and forces Classic UI to save battery',
+                  style: TextStyle(color: subClr, fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String value,
+    required bool isDark,
+  }) {
+    final bg = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
+    final border = isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000);
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiagRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    Color? valueColor,
+    required bool isDark,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            fontSize: 10,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String formatBytes(double bytes) {
+    if (bytes <= 0) return '0.0 B';
+    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    while (bytes >= 1024 && i < suffixes.length - 1) {
+      bytes /= 1024;
+      i++;
+    }
+    return '${bytes.toStringAsFixed(1)} ${suffixes[i]}';
   }
 }

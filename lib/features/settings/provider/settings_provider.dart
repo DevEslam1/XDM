@@ -32,12 +32,14 @@ class SettingsProvider extends ChangeNotifier {
   static const _desktopModeKey = 'desktopMode';
   static const _adBlockerEnabledKey = 'adBlockerEnabled';
   static const _pinchToZoomKey = 'pinchToZoom';
+  static const _batterySaverModeKey = 'batterySaverMode';
 
   late final SharedPreferences _prefs;
 
   bool autoStart = true;
   String? customDownloadPath;
-  int maxDownloads = 3;
+  int _maxDownloads = 3;
+  int get maxDownloads => batterySaverMode ? 1 : _maxDownloads;
   double speedLimitMb = 0.0;
   bool enableGlow = true;
   double gridOpacity = 12.0;
@@ -47,7 +49,9 @@ class SettingsProvider extends ChangeNotifier {
   String languageCode = 'en';
   bool isDarkMode = true;
   bool showOnboarding = true;
-  bool classicUi = false;
+  bool _classicUi = false;
+  bool get classicUi => batterySaverMode ? true : _classicUi;
+  bool batterySaverMode = false;
 
   bool biometricLock = false;
   bool enableProxy = false;
@@ -64,7 +68,8 @@ class SettingsProvider extends ChangeNotifier {
   int globalTorrentSeedingLimitKbps = 500;
 
   // Connection settings
-  int defaultThreadCount = 5;
+  int _defaultThreadCount = 5;
+  int get defaultThreadCount => batterySaverMode ? 2 : _defaultThreadCount;
 
   // Browser settings
   bool incognitoEnabled = false;
@@ -75,7 +80,7 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
     autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
-    maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? maxDownloads;
+    _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
     speedLimitMb = _prefs.getDouble(_speedLimitKey) ?? speedLimitMb;
     enableGlow = _prefs.getBool(_enableGlowKey) ?? enableGlow;
     gridOpacity = _prefs.getDouble(_gridOpacityKey) ?? gridOpacity;
@@ -86,7 +91,8 @@ class SettingsProvider extends ChangeNotifier {
     languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
     isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
     showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
-    classicUi = _prefs.getBool(_classicUiKey) ?? classicUi;
+    _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
+    batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
 
     biometricLock = _prefs.getBool(_biometricLockKey) ?? biometricLock;
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
@@ -100,7 +106,7 @@ class SettingsProvider extends ChangeNotifier {
     globalTorrentSeeding = _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
     globalTorrentSeedingLimited = _prefs.getBool(_globalTorrentSeedingLimitedKey) ?? globalTorrentSeedingLimited;
     globalTorrentSeedingLimitKbps = _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ?? globalTorrentSeedingLimitKbps;
-    defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? defaultThreadCount;
+    _defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
     incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
     desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
@@ -117,7 +123,7 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setMaxDownloads(int value) async {
-    maxDownloads = value;
+    _maxDownloads = value;
     await _prefs.setInt(_maxDownloadsKey, value);
     notifyListeners();
   }
@@ -177,7 +183,7 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setClassicUi(bool value) async {
-    classicUi = value;
+    _classicUi = value;
     await _prefs.setBool(_classicUiKey, value);
     notifyListeners();
   }
@@ -249,8 +255,14 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setDefaultThreadCount(int value) async {
-    defaultThreadCount = value;
+    _defaultThreadCount = value;
     await _prefs.setInt(_defaultThreadCountKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setBatterySaverMode(bool value) async {
+    batterySaverMode = value;
+    await _prefs.setBool(_batterySaverModeKey, value);
     notifyListeners();
   }
 
