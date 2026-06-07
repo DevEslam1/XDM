@@ -166,15 +166,18 @@ class YoutubeService {
     if (videoId == null) return [];
 
     StreamManifest? manifest;
-    const timeout = Duration(seconds: 8);
+    const timeout = Duration(seconds: 20);
 
-    // List of clients to try sequentially in case of restrictions/signature issues
+    // List of clients to try sequentially in case of restrictions/signature issues.
+    // Order matters: start with broadest then narrow down to specific clients.
     final clientsToTry = [
-      null, // Default clients list
+      null, // Default clients list (library decides)
       [YoutubeApiClient.android],
-      [YoutubeApiClient.tv],
       [YoutubeApiClient.ios],
+      [YoutubeApiClient.tv],
       [YoutubeApiClient.androidVr],
+      [YoutubeApiClient.webCreator],
+      [YoutubeApiClient.mweb],
     ];
 
     for (final clients in clientsToTry) {
@@ -194,6 +197,17 @@ class YoutubeService {
       } catch (e) {
         // Log locally and continue to next fallback client
         Logger.root.warning('YoutubeService.getStreams: getManifest failed for client $clients: $e');
+      }
+    }
+
+    // Last resort: require the watch page (slower but more reliable for some videos)
+    if (manifest == null || manifest.streams.isEmpty) {
+      try {
+        manifest = await _yt.videos.streamsClient
+            .getManifest(videoId, requireWatchPage: true)
+            .timeout(const Duration(seconds: 30));
+      } catch (e) {
+        Logger.root.warning('YoutubeService.getStreams: requireWatchPage fallback failed: $e');
       }
     }
 
@@ -305,14 +319,16 @@ class YoutubeService {
     String qualityPreset,
   ) async {
     StreamManifest? manifest;
-    const timeout = Duration(seconds: 8);
+    const timeout = Duration(seconds: 20);
 
     final clientsToTry = [
       null,
       [YoutubeApiClient.android],
-      [YoutubeApiClient.tv],
       [YoutubeApiClient.ios],
+      [YoutubeApiClient.tv],
       [YoutubeApiClient.androidVr],
+      [YoutubeApiClient.webCreator],
+      [YoutubeApiClient.mweb],
     ];
 
     for (final clients in clientsToTry) {
@@ -331,6 +347,17 @@ class YoutubeService {
         }
       } catch (e) {
         Logger.root.warning('YoutubeService.getStreamForVideo: getManifest failed for client $clients: $e');
+      }
+    }
+
+    // Last resort: require the watch page
+    if (manifest == null || manifest.streams.isEmpty) {
+      try {
+        manifest = await _yt.videos.streamsClient
+            .getManifest(videoId, requireWatchPage: true)
+            .timeout(const Duration(seconds: 30));
+      } catch (e) {
+        Logger.root.warning('YoutubeService.getStreamForVideo: requireWatchPage fallback failed: $e');
       }
     }
 

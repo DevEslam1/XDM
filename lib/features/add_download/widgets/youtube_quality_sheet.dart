@@ -215,6 +215,27 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: secClr, fontSize: 12),
                               ),
+                              const SizedBox(height: 20),
+                              TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _isLoading = true;
+                                    _errorMessage = null;
+                                    _streams = [];
+                                  });
+                                  _fetchStreams();
+                                },
+                                icon: Icon(Icons.refresh_rounded, size: 16, color: accent),
+                                label: Text(
+                                  'RETRY',
+                                  style: TextStyle(
+                                    color: accent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
