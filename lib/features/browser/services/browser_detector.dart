@@ -56,10 +56,21 @@ class BrowserDetector {
 
   static DetectedMedia? detect(String url) {
     final lower = url.toLowerCase();
-    if (lower.startsWith('magnet:?')) {
+    if (lower.startsWith('magnet:')) {
       return DetectedMedia(kind: DetectedMediaKind.magnet, url: url);
     }
+    
     final cleanUrl = lower.split('?').first.split('#').first;
+    
+    // Ignore common web page/resource extensions
+    final webExtensions = [
+      '.html', '.htm', '.php', '.jsp', '.asp', '.aspx', '.xhtml', 
+      '.js', '.css'
+    ];
+    if (webExtensions.any((ext) => cleanUrl.endsWith(ext))) {
+      return null;
+    }
+
     for (final entry in _extensionMap.entries) {
       if (cleanUrl.endsWith(entry.key) ||
           lower.contains('${entry.key}?') ||
@@ -71,9 +82,21 @@ class BrowserDetector {
         );
       }
     }
-    if (lower.contains('/download') ||
+    
+    final hasDownloadKeyword = lower.contains('/download') ||
         lower.contains('download_file') ||
-        lower.contains('attachment')) {
+        lower.contains('attachment');
+
+    if (hasDownloadKeyword) {
+      final uri = Uri.tryParse(url);
+      if (uri != null) {
+        final path = uri.path.toLowerCase();
+        if ((path.endsWith('/download') || path.endsWith('/download/') || 
+             path.endsWith('/downloads') || path.endsWith('/downloads/')) && 
+            uri.query.isEmpty) {
+          return null;
+        }
+      }
       return DetectedMedia(
         kind: DetectedMediaKind.unknown,
         url: url,
@@ -84,7 +107,10 @@ class BrowserDetector {
   }
 
   static bool isAutoDownloadable(String url) {
-    return detect(url) != null;
+    final detected = detect(url);
+    if (detected == null) return false;
+    if (detected.kind == DetectedMediaKind.image) return false;
+    return true;
   }
 
   static String _suggestName(String url, String ext) {

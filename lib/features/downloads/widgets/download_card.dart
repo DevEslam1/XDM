@@ -11,6 +11,7 @@ import '../models/download_task.dart';
 import '../provider/download_provider.dart';
 import 'status_chip.dart';
 import '../../details/screens/details_screen.dart';
+import '../../../../core/utils/premium_route.dart';
 
 class DownloadCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
@@ -105,8 +106,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             triggerHaptic(settings);
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (context) => DetailsScreen(taskId: task.id),
+              PremiumPageRoute(
+                type: PageTransitionType.slideRight,
+                child: DetailsScreen(taskId: task.id),
               ),
             );
           },
@@ -314,8 +316,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                     ),
                                   ),
                                   if (chunkProgress > 0)
-                                    FractionallySizedBox(
+                                    AnimatedFractionallySizedBox(
                                       widthFactor: chunkProgress,
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeOutCubic,
                                       child: Container(
                                         height: 6,
                                         decoration: BoxDecoration(

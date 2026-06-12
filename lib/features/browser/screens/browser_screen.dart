@@ -85,6 +85,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {}; // tab.url -> sources
   final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
   final Set<String> _recordedHistoryThisSession = {};
+  final Set<String> _bypassedSniffUrls = {};
   final ScrollController _dashboardScrollController = ScrollController();
   static const String _snifferPrefKey = 'browserSnifferEnabled';
   bool _isSnifferEnabled = true;
@@ -427,6 +428,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 AdBlocker.shouldBlock(request.url)) {
               return NavigationDecision.prevent;
             }
+            if (_bypassedSniffUrls.contains(request.url)) {
+              _bypassedSniffUrls.remove(request.url);
+              return NavigationDecision.navigate;
+            }
             if (BrowserDetector.isAutoDownloadable(request.url)) {
               setState(() {
                 _detectedDownloadUrls[tab.id] = request.url;
@@ -576,23 +581,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   bool _isDownloadable(String url) {
-    final cleanUrl = url.split('?').first.toLowerCase();
-    final lowercaseUrl = url.toLowerCase();
-
-    if (lowercaseUrl.startsWith('blob:') || lowercaseUrl.startsWith('data:')) {
-      return false;
-    }
-
-    final extensions = [
-      '.mp4', '.mkv', '.avi', '.mov', '.mp3', '.wav', '.flac', '.pdf',
-      '.docx', '.xlsx', '.zip', '.rar', '.7z', '.apk', '.dmg', '.exe',
-      '.tar', '.gz', '.iso', '.torrent', '.pkg'
-    ];
-
-    return extensions.any((ext) => cleanUrl.endsWith(ext) || lowercaseUrl.contains('$ext?') || lowercaseUrl.contains('$ext&')) ||
-        lowercaseUrl.contains('/download') ||
-        lowercaseUrl.contains('download_file') ||
-        lowercaseUrl.contains('attachment');
+    return BrowserDetector.isAutoDownloadable(url);
   }
 
   void _updateNavState() async {
@@ -915,7 +904,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   ),
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                 ),
-                                onPressed: () => Navigator.pop(context),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  final activeTab = _tabs[_currentTabIndex];
+                                  _bypassedSniffUrls.add(downloadUrl);
+                                  activeTab.controller.loadRequest(Uri.parse(downloadUrl));
+                                },
                                 child: Text(isRtl ? 'متابعة التصفح' : 'CONTINUE BROWSING'),
                               ),
                             ),
@@ -1933,11 +1927,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   padding: EdgeInsets.only(top: statusBarHeight),
                   height: kToolbarHeight + statusBarHeight,
                   decoration: BoxDecoration(
-                    color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+                    color: settings.classicUi
+                        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                        : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
                     border: Border(
                       bottom: BorderSide(
-                        color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-                        width: 0.8,
+                        color: settings.classicUi
+                            ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                            : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                        width: settings.classicUi ? 1.0 : 0.8,
                       ),
                     ),
                   ),

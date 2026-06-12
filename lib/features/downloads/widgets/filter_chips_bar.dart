@@ -7,7 +7,8 @@ import '../../settings/provider/settings_provider.dart';
 import '../provider/download_provider.dart';
 
 class FilterChipsBar extends StatelessWidget {
-  const FilterChipsBar({super.key});
+  final bool isHistory;
+  const FilterChipsBar({super.key, this.isHistory = false});
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +26,9 @@ class FilterChipsBar extends StatelessWidget {
         ? AppTheme.textSecondary
         : AppTheme.lightTextSecondary;
 
-    final filters = ['All', 'Downloading', 'Completed', 'Failed'];
+    final filters = isHistory
+        ? ['All', 'Completed', 'Failed']
+        : ['All', 'Downloading', 'Paused'];
 
     return SizedBox(
       height: 40,

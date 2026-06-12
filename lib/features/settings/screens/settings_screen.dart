@@ -276,15 +276,29 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          flexibleSpace: ClipRect(
-            child: DmxBackdropFilter(
-              sigmaX: 12,
-              sigmaY: 12,
-              child: Container(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
-              ),
-            ),
-          ),
+          backgroundColor: settings.classicUi
+              ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+              : Colors.transparent,
+          elevation: 0,
+          shape: settings.classicUi
+              ? Border(
+                  bottom: BorderSide(
+                    color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                    width: 1.0,
+                  ),
+                )
+              : null,
+          flexibleSpace: settings.classicUi
+              ? null
+              : ClipRect(
+                  child: DmxBackdropFilter(
+                    sigmaX: 12,
+                    sigmaY: 12,
+                    child: Container(
+                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
           title: Text(
             L10n.of(context, 'config_header'),
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -1229,7 +1243,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
             ),
           ),
           Container(
-            width: 110,
+            width: 120,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               color: bgClr.withValues(alpha: 0.6),
@@ -1240,6 +1254,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               child: DropdownButton<T>(
                 dropdownColor: menuBgClr,
                 value: value,
+                isExpanded: true,
                 icon: Icon(
                   Icons.arrow_drop_down,
                   color: secClr,
@@ -1253,7 +1268,10 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 items: items.map((item) {
                   return DropdownMenuItem<T>(
                     value: item,
-                    child: Text(itemLabels != null ? itemLabels[item]! : item.toString()),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(itemLabels != null ? itemLabels[item]! : item.toString()),
+                    ),
                   );
                 }).toList(),
                 onChanged: onChanged,

@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:path/path.dart' as p;
 import '../../../core/app_theme.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/url_utils.dart';
+import '../../../core/utils/file_utils.dart';
+import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 import '../../add_download/screens/add_screen.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../../downloads/models/download_task.dart';
 import '../services/browser_detector.dart';
 
 class BrowserDownloadSheet extends StatelessWidget {

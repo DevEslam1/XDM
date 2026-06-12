@@ -10,7 +10,19 @@ bool isHttpUrl(String value) {
 
 bool isMagnetUrl(String value) {
   final clean = value.trim();
-  return clean.startsWith('magnet:?');
+  if (!clean.toLowerCase().startsWith('magnet:')) return false;
+  final parsed = parseMagnetUrl(clean);
+  final infoHash = parsed['infoHash'];
+  if (infoHash == null || infoHash.isEmpty) return false;
+  
+  // BitTorrent info hash validation:
+  // - 40 character hex string (SHA-1)
+  // - 32 character base32 string
+  // - 64 character hex string (SHA-256 for BitTorrent v2)
+  final isHex40 = RegExp(r'^[A-F0-9]{40}$').hasMatch(infoHash);
+  final isBase32 = RegExp(r'^[A-Z2-7]{32}$').hasMatch(infoHash);
+  final isHex64 = RegExp(r'^[A-F0-9]{64}$').hasMatch(infoHash);
+  return isHex40 || isBase32 || isHex64;
 }
 
 bool isTorrentFileUrl(String value) {
@@ -23,27 +35,50 @@ bool isValidTransmissionUrl(String value) {
 }
 
 Map<String, String> parseMagnetUrl(String magnetUrl) {
-  try {
-    final uri = Uri.parse(magnetUrl.trim());
-    final queryParams = uri.queryParametersAll;
-    final Map<String, String> result = {};
+  final Map<String, String> result = {};
+  final trimmed = magnetUrl.trim();
+  if (!trimmed.toLowerCase().startsWith('magnet:')) return result;
 
-    final xtList = queryParams['xt'] ?? [];
-    for (final xt in xtList) {
-      if (xt.startsWith('urn:btih:')) {
-        result['infoHash'] = xt.substring('urn:btih:'.length).toUpperCase();
+  // Try regex extraction first, as it's robust to unescaped query chars
+  final xtMatch = RegExp(r'xt=urn:btih:([a-zA-Z0-9]+)', caseSensitive: false).firstMatch(trimmed);
+  if (xtMatch != null) {
+    result['infoHash'] = xtMatch.group(1)!.toUpperCase();
+  }
+
+  final dnMatch = RegExp(r'dn=([^&]+)', caseSensitive: false).firstMatch(trimmed);
+  if (dnMatch != null) {
+    try {
+      result['name'] = Uri.decodeComponent(dnMatch.group(1)!);
+    } catch (_) {
+      result['name'] = dnMatch.group(1)!;
+    }
+  }
+
+  // Fallback / supplement via Uri parsing
+  try {
+    final uri = Uri.parse(trimmed);
+    final queryParams = uri.queryParametersAll;
+
+    if (!result.containsKey('infoHash')) {
+      final xtList = queryParams['xt'] ?? [];
+      for (final xt in xtList) {
+        if (xt.startsWith('urn:btih:')) {
+          result['infoHash'] = xt.substring('urn:btih:'.length).toUpperCase();
+        }
       }
     }
 
-    final dnList = queryParams['dn'] ?? [];
-    if (dnList.isNotEmpty) {
-      result['name'] = Uri.decodeComponent(dnList.first);
+    if (!result.containsKey('name')) {
+      final dnList = queryParams['dn'] ?? [];
+      if (dnList.isNotEmpty) {
+        result['name'] = Uri.decodeComponent(dnList.first);
+      }
     }
-
-    return result;
   } catch (_) {
-    return {};
+    // Keep whatever regex was able to parse
   }
+
+  return result;
 }
 
 String fileNameFromUrl(String url) {

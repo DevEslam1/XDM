@@ -14,6 +14,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/downloads/provider/download_provider.dart';
 import 'clipboard_detection_sheet.dart';
 import 'dmx_backdrop_filter.dart';
+import '../../core/utils/premium_route.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -110,8 +111,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     if (!mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => AddScreen(prefilledUrl: url),
+      PremiumPageRoute(
+        type: PageTransitionType.slideUp,
+        child: AddScreen(prefilledUrl: url),
       ),
     );
   }
@@ -162,16 +164,27 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
         child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: settings.classicUi
+              ? BorderRadius.zero
+              : const BorderRadius.vertical(top: Radius.circular(24)),
           child: DmxBackdropFilter(
             sigmaX: 15,
             sigmaY: 15,
             child: Container(
               decoration: BoxDecoration(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                color: settings.classicUi
+                    ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                    : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+                borderRadius: settings.classicUi
+                    ? BorderRadius.zero
+                    : const BorderRadius.vertical(top: Radius.circular(24)),
                 border: Border(
-                  top: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.6),
+                  top: BorderSide(
+                    color: settings.classicUi
+                        ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                        : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                    width: settings.classicUi ? 1.0 : 0.6,
+                  ),
                 ),
               ),
               child: SafeArea(

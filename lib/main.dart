@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 import 'core/services/torrent_service.dart';
@@ -64,6 +65,7 @@ class DmxApp extends StatelessWidget {
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settings, child) {
+          final isDark = settings.isDarkMode;
           return MaterialApp(
             title: 'XDM - Download Manager X',
             debugShowCheckedModeBanner: false,
@@ -72,6 +74,18 @@ class DmxApp extends StatelessWidget {
             themeMode: settings.currentThemeMode,
             locale: Locale(settings.languageCode),
             home: const SplashScreen(),
+            builder: (context, child) {
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                  statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+                  systemNavigationBarColor: isDark ? AppTheme.background : AppTheme.lightBackground,
+                  systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                ),
+                child: child!,
+              );
+            },
           );
         },
       ),

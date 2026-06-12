@@ -54,6 +54,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   String _resolvedCategory = 'Auto';
   bool _supportsResume = false;
   List<Map<String, dynamic>> _torrentFiles = [];
+  String _lastCheckedUrl = '';
 
   final List<String> _categories = [
     'Auto',
@@ -74,6 +75,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
       _selectedThreads = settings.defaultThreadCount;
     }
     _loadDefaultPath();
+    _urlController.addListener(_onUrlChanged);
     if (widget.prefilledUrl != null) {
       _urlController.text = widget.prefilledUrl!;
       final url = widget.prefilledUrl!;
@@ -81,12 +83,49 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _resolveLinkMetadata();
         });
+      } else if (url.trim().toLowerCase().startsWith('magnet:')) {
+        final parsed = parseMagnetUrl(url);
+        final dnName = parsed['name'] ?? 'Torrent Download';
+        _nameController.text = dnName;
+        _resolvedFileName = dnName;
+        _resolvedCategory = 'Archive';
+        _selectedCategory = 'Archive';
+        _isMetadataResolved = true;
       }
     }
     if (widget.prefilledName != null) {
       _nameController.text = widget.prefilledName!;
       _resolvedFileName = widget.prefilledName!;
       _isMetadataResolved = true;
+    }
+  }
+
+  void _onUrlChanged() {
+    final url = _urlController.text.trim();
+    if (url == _lastCheckedUrl) return;
+    _lastCheckedUrl = url;
+
+    if (url.toLowerCase().startsWith('magnet:')) {
+      final parsed = parseMagnetUrl(url);
+      final dnName = parsed['name'] ?? 'Torrent Download';
+      setState(() {
+        if (_nameController.text.isEmpty || _nameController.text == 'Torrent Download') {
+          _nameController.text = dnName;
+        }
+        _resolvedFileName = _nameController.text.isNotEmpty ? _nameController.text : dnName;
+        _resolvedCategory = 'Archive';
+        _selectedCategory = 'Archive';
+        _isMetadataResolved = true;
+      });
+    } else {
+      // If we previously resolved as a magnet, but it's no longer a magnet, reset
+      if (_isMetadataResolved && _torrentFiles.isEmpty && _resolvedFileSize == 0 && _resolvedCategory == 'Archive') {
+        setState(() {
+          _isMetadataResolved = false;
+          _resolvedFileName = '';
+          _nameController.clear();
+        });
+      }
     }
   }
 
@@ -105,6 +144,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
 
   @override
   void dispose() {
+    _urlController.removeListener(_onUrlChanged);
     _urlController.dispose();
     _nameController.dispose();
     _pathController.dispose();
@@ -1079,6 +1119,29 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
+                        if (_urlController.text.trim().toLowerCase().startsWith('magnet:')) ...[
+                          Builder(
+                            builder: (context) {
+                              final parsed = parseMagnetUrl(_urlController.text.trim());
+                              final infoHash = parsed['infoHash'];
+                              if (infoHash != null && infoHash.isNotEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 4.0),
+                                  child: Text(
+                                    'HASH: $infoHash',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                      fontSize: 10,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ],
                         Row(
                           children: [
                             Text(

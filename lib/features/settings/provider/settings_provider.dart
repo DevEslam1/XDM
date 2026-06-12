@@ -55,7 +55,20 @@ class SettingsProvider extends ChangeNotifier {
   bool vibration = false;
   bool wifiOnly = false;
   String languageCode = 'en';
-  bool isDarkMode = true;
+  bool _isDarkMode = true;
+  bool get isDarkMode {
+    if (themeMode == 'system') {
+      try {
+        return WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+      } catch (_) {
+        return _isDarkMode;
+      }
+    }
+    return themeMode == 'dark';
+  }
+  set isDarkMode(bool value) {
+    _isDarkMode = value;
+  }
   String themeMode = 'system';
   bool showOnboarding = true;
   bool _classicUi = false;

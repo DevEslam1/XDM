@@ -12,6 +12,7 @@ import '../../../shared/widgets/dmx_app_icon.dart';
 import '../../settings/provider/settings_provider.dart';
 import 'onboarding_screen.dart';
 import '../../../shared/widgets/main_navigation_container.dart';
+import '../../../core/utils/premium_route.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -156,8 +157,9 @@ class _SplashScreenState extends State<SplashScreen>
   void _navigateToNext() {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => settings.showOnboarding
+      PremiumPageRoute(
+        type: PageTransitionType.slideUp,
+        child: settings.showOnboarding
             ? const OnboardingScreen()
             : const MainNavigationContainer(),
       ),

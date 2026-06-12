@@ -14,6 +14,8 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../add_download/screens/add_screen.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../shared/widgets/fade_in_slide.dart';
+import '../../../core/utils/premium_route.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -59,6 +61,14 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
         appBar: AppBar(
           backgroundColor: settings.classicUi ? (isDark ? AppTheme.surface : AppTheme.lightSurface) : Colors.transparent,
           elevation: 0,
+          shape: settings.classicUi
+              ? Border(
+                  bottom: BorderSide(
+                    color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                    width: 1.0,
+                  ),
+                )
+              : null,
           flexibleSpace: settings.classicUi
               ? null
               : ClipRect(
@@ -158,32 +168,40 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
               _buildSegmentedControl(context, isDark, isRtl),
 
               // Storage & Category Analytics Panel
-              if (_showAnalytics)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: _buildDonutChartCard(
-                    context,
-                    provider.categorySizes,
-                    provider.categorySizes.values.fold(0.0, (sum, val) => sum + val),
-                    settings,
-                  ),
-                ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOutCubic,
+                child: _showAnalytics
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: _buildDonutChartCard(
+                          context,
+                          provider.categorySizes,
+                          provider.categorySizes.values.fold(0.0, (sum, val) => sum + val),
+                          settings,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
 
               // Download Speed Statistics (only show for Active Downloads)
-              if (_selectedTab == 0)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: DownloadStatsPanel(),
-                ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOutCubic,
+                child: _selectedTab == 0
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: DownloadStatsPanel(),
+                      )
+                    : const SizedBox.shrink(),
+              ),
 
-              // Filter Chips (Only shown on Active tab)
-              if (_selectedTab == 0) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0),
-                  child: FilterChipsBar(),
-                ),
-                const SizedBox(height: 16),
-              ],
+              // Filter Chips
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: FilterChipsBar(isHistory: _selectedTab == 1),
+              ),
+              const SizedBox(height: 16),
 
               // Title "DOWNLOADS OVERVIEW"
               Padding(
@@ -351,7 +369,11 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                           ),
                           itemCount: displayTasks.length,
                           itemBuilder: (context, index) {
-                            return DownloadCard(task: displayTasks[index]);
+                            final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
+                            return FadeInSlide(
+                              delay: delay,
+                              child: DownloadCard(task: displayTasks[index]),
+                            );
                           },
                         ),
                       ),
@@ -378,7 +400,10 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     triggerHaptic(settings);
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const AddScreen()),
+                      PremiumPageRoute(
+                        type: PageTransitionType.slideUp,
+                        child: const AddScreen(),
+                      ),
                     );
                   },
                 )
@@ -407,7 +432,10 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                       triggerHaptic(settings);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const AddScreen()),
+                        PremiumPageRoute(
+                          type: PageTransitionType.slideUp,
+                          child: const AddScreen(),
+                        ),
                       );
                     },
                   ),
@@ -421,6 +449,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
     final activeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final inactiveClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final provider = Provider.of<DownloadProvider>(context, listen: false);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -446,6 +475,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 setState(() {
                   _selectedTab = 0;
                 });
+                provider.setStatusFilter('All');
               },
               child: Container(
                 alignment: Alignment.center,
@@ -484,6 +514,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 setState(() {
                   _selectedTab = 1;
                 });
+                provider.setStatusFilter('All');
               },
               child: Container(
                 alignment: Alignment.center,

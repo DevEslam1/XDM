@@ -325,9 +325,8 @@ class DownloadProvider extends ChangeNotifier {
           task.status == DownloadStatus.downloading ||
               task.status == DownloadStatus.queued,
         'Completed' => task.status == DownloadStatus.completed,
-        'Failed' =>
-          task.status == DownloadStatus.failed ||
-              task.status == DownloadStatus.paused,
+        'Failed' => task.status == DownloadStatus.failed,
+        'Paused' => task.status == DownloadStatus.paused,
         _ => true,
       };
     }).toList();
@@ -494,10 +493,13 @@ class DownloadProvider extends ChangeNotifier {
         ? _settingsProvider.customDownloadPath!
         : await _permissionService.defaultDownloadDirectory();
 
+    final bool isMagnet = url.trim().toLowerCase().startsWith('magnet:');
+
     // If the caller already pre-resolved name + size (e.g. via "Verify Link"
     // in AddScreen), skip the redundant HEAD request which can return
     // different/empty results from servers that block HEAD.
-    final bool alreadyResolved = name.trim().isNotEmpty && size > 0;
+    // For magnet URLs, bypass synchronous metadata resolve to avoid blocking the UI.
+    final bool alreadyResolved = (name.trim().isNotEmpty && size > 0) || isMagnet;
 
     String resolvedCategory;
     String fileName;
@@ -505,12 +507,21 @@ class DownloadProvider extends ChangeNotifier {
     bool supportsResume;
 
     if (alreadyResolved) {
-      fileName = safeFileName(name.trim());
-      fileSize = size;
-      resolvedCategory = category.trim().isNotEmpty
-          ? category
-          : categoryFromFileName(fileName);
-      supportsResume = true; // Assume resume support for pre-resolved
+      if (isMagnet) {
+        final parsed = parseMagnetUrl(url.trim());
+        final magnetName = parsed['name'] ?? 'Torrent Download';
+        fileName = name.trim().isNotEmpty ? safeFileName(name.trim()) : magnetName;
+        fileSize = size > 0 ? size : 0;
+        resolvedCategory = category.trim().isNotEmpty ? category : 'Archive';
+        supportsResume = true;
+      } else {
+        fileName = safeFileName(name.trim());
+        fileSize = size;
+        resolvedCategory = category.trim().isNotEmpty
+            ? category
+            : categoryFromFileName(fileName);
+        supportsResume = true; // Assume resume support for pre-resolved
+      }
     } else {
       final metadata = await _downloadEngine.resolveMetadata(
         url: url.trim(),
