@@ -62,6 +62,7 @@ class DownloadProvider extends ChangeNotifier {
   final Map<String, int> _lastDbSaveTimes = {};
   final Set<String> _pendingProgressUpdates = {};
   final Map<String, int> _torrentIds = {};
+  final Map<String, int> _retryCounts = {};
   Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
 
   List<double> getSpeedHistory(String id) => _speedHistories[id] ?? const [];
@@ -464,7 +465,7 @@ class DownloadProvider extends ChangeNotifier {
         }
         await _addSingleDownload(
           name: name,
-          url: url,
+          url: singleUrl,
           size: size,
           category: category,
           savePath: savePath,
@@ -593,6 +594,8 @@ class DownloadProvider extends ChangeNotifier {
     // Flush any pending throttled progress to disk so resume has the latest bytes.
     await _flushPendingProgress(id);
 
+    _retryCounts.remove(id);
+
     if (task.status == DownloadStatus.downloading) {
       _cancelTokens[id]?.cancel('paused');
     }
@@ -628,6 +631,8 @@ class DownloadProvider extends ChangeNotifier {
     final task = _findTask(id);
     if (task == null || task.status == DownloadStatus.completed) return;
 
+    _retryCounts.remove(id);
+
     await _setTask(
       task.copyWith(
         status: DownloadStatus.queued,
@@ -647,6 +652,8 @@ class DownloadProvider extends ChangeNotifier {
 
     // Flush any pending throttled progress and drop tracking state.
     await _flushPendingProgress(id);
+
+    _retryCounts.remove(id);
 
     _cancelTokens[id]?.cancel('cancelled');
 
@@ -679,6 +686,8 @@ class DownloadProvider extends ChangeNotifier {
     final task = _findTask(id);
     if (task == null) return;
 
+    _retryCounts.remove(id);
+
     // Don't reset downloadedBytes/chunks to 0 — the .partN files are still
     // on disk and the download engine will resume from existing offsets.
     // The onProgress callback will pick up the real numbers from the next
@@ -704,6 +713,7 @@ class DownloadProvider extends ChangeNotifier {
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
     _pendingProgressUpdates.remove(id);
+    _retryCounts.remove(id);
     _tasks.removeWhere((task) => task.id == id);
 
     final torrentId = _torrentIds[id];
@@ -1032,6 +1042,7 @@ class DownloadProvider extends ChangeNotifier {
                       progress.downloadedBytes,
                       progress.speed,
                     ),
+              supportsResume: progress.supportsResume ?? current.supportsResume,
             );
 
             // Throttle UI notification and notification progress to 200ms
@@ -1102,10 +1113,38 @@ class DownloadProvider extends ChangeNotifier {
           final current = _findTask(task.id);
           if (current == null) return;
           if (error is DioException && error.type == DioExceptionType.cancel) {
+            _retryCounts.remove(task.id);
             await _setTask(current.copyWith(speed: 0, clearEta: true));
             _notificationService.cancelNotification(notificationId);
             return;
           }
+
+          final maxRetries = 3;
+          final currentRetry = _retryCounts[task.id] ?? 0;
+
+          if (_isRetryableError(error) && currentRetry < maxRetries) {
+            _retryCounts[task.id] = currentRetry + 1;
+            final delaySeconds = pow(2, currentRetry + 1).toInt();
+            debugPrint('Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...');
+            
+            await _setTask(
+              current.copyWith(
+                status: DownloadStatus.queued,
+                speed: 0,
+                errorMessage: 'Retrying in $delaySeconds seconds: ${_errorMessage(error)}',
+              ),
+            );
+            
+            Timer(Duration(seconds: delaySeconds), () {
+              final checkedTask = _findTask(task.id);
+              if (checkedTask != null && checkedTask.status == DownloadStatus.queued) {
+                _pumpQueue();
+              }
+            });
+            return;
+          }
+
+          _retryCounts.remove(task.id);
           await _setTask(
             current.copyWith(
               status: DownloadStatus.failed,
@@ -1200,6 +1239,17 @@ class DownloadProvider extends ChangeNotifier {
     return error.toString();
   }
 
+  bool _isRetryableError(Object error) {
+    if (error is DioException) {
+      return error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionError ||
+          (error.response?.statusCode != null && error.response!.statusCode! >= 500);
+    }
+    return error is SocketException || error is HttpException;
+  }
+
   void _onSettingsChanged() {
     _checkWifiOnlyConstraint();
     _pumpQueue();
@@ -1222,9 +1272,9 @@ class DownloadProvider extends ChangeNotifier {
     });
   }
 
-  void _checkWifiOnlyConstraint() {
+  Future<void> _checkWifiOnlyConstraint() async {
     if (!_settingsProvider.wifiOnly) {
-      _resumeWaitingForWifi();
+      await _resumeWaitingForWifi();
       return;
     }
 
@@ -1233,13 +1283,13 @@ class DownloadProvider extends ChangeNotifier {
                     _currentConnectivity.contains(ConnectivityResult.vpn);
 
     if (!hasWifi) {
-      _pauseForWifiOnly();
+      await _pauseForWifiOnly();
     } else {
-      _resumeWaitingForWifi();
+      await _resumeWaitingForWifi();
     }
   }
 
-  void _pauseForWifiOnly() {
+  Future<void> _pauseForWifiOnly() async {
     final active = _tasks.where((task) =>
         task.status == DownloadStatus.downloading ||
         task.status == DownloadStatus.queued);
@@ -1247,7 +1297,7 @@ class DownloadProvider extends ChangeNotifier {
       if (task.status == DownloadStatus.downloading) {
         _cancelTokens[task.id]?.cancel('wifi_only_pause');
       }
-      _setTask(task.copyWith(
+      await _setTask(task.copyWith(
         status: DownloadStatus.paused,
         speed: 0,
         clearEta: true,
@@ -1256,12 +1306,12 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
-  void _resumeWaitingForWifi() {
+  Future<void> _resumeWaitingForWifi() async {
     final waiting = _tasks.where((task) =>
         task.status == DownloadStatus.paused &&
         task.errorMessage == 'Waiting for WiFi connection');
     for (final task in waiting.toList()) {
-      _setTask(task.copyWith(
+      await _setTask(task.copyWith(
         status: DownloadStatus.queued,
         clearError: true,
         clearEta: true,

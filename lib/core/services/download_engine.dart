@@ -36,6 +36,7 @@ class DownloadProgress {
   final List<double>? chunks;
   final String? fileName;
   final List<Map<String, dynamic>>? torrentFiles;
+  final bool? supportsResume;
 
   const DownloadProgress({
     required this.downloadedBytes,
@@ -45,6 +46,7 @@ class DownloadProgress {
     this.chunks,
     this.fileName,
     this.torrentFiles,
+    this.supportsResume,
   });
 }
 
@@ -278,7 +280,7 @@ class DownloadEngine {
         punyUrl,
         options: Options(
           followRedirects: true,
-          validateStatus: (status) => status != null && status < 500,
+          validateStatus: (status) => status != null && status >= 200 && status < 400,
         ),
       );
       final headerName = fileNameFromContentDisposition(response.headers);
@@ -530,10 +532,16 @@ class DownloadEngine {
         await chunkFiles[i].parent.create(recursive: true);
       }
 
-      // Initialize chunk progress from existing files
+      // Initialize chunk progress from existing files and validate chunk file size
       for (int i = 0; i < threadCount; i++) {
         if (await chunkFiles[i].exists()) {
-          chunkProgress[i] = await chunkFiles[i].length();
+          final fileLen = await chunkFiles[i].length();
+          if (fileLen > chunkSizes[i]) {
+            await chunkFiles[i].delete();
+            chunkProgress[i] = 0;
+          } else {
+            chunkProgress[i] = fileLen;
+          }
         }
       }
 
@@ -615,6 +623,15 @@ class DownloadEngine {
               ),
             );
 
+            if (chunkResponse.statusCode != 206) {
+              throw DioException(
+                requestOptions: RequestOptions(path: punyUrl),
+                type: DioExceptionType.badResponse,
+                response: chunkResponse,
+                message: 'Server returned ${chunkResponse.statusCode} instead of 206 for chunk range request.',
+              );
+            }
+
             final sink = file.openWrite(
               mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
             );
@@ -689,6 +706,15 @@ class DownloadEngine {
             await outputSink.close();
           } catch (_) {}
         }
+
+        if (totalSize > 0) {
+          final actualSize = await localFile.length();
+          if (actualSize != totalSize) {
+            throw Exception(
+              'Download integrity check failed: expected $totalSize bytes, got $actualSize bytes.',
+            );
+          }
+        }
       } catch (e) {
         if (e is DioException && e.type == DioExceptionType.cancel) {
           rethrow;
@@ -704,7 +730,7 @@ class DownloadEngine {
             } catch (_) {}
           }
         }
-        // Fallback to single threaded stream download
+        // Fallback to single-threaded stream download
         await _downloadSingleThreaded(
           url: url,
           punyUrl: punyUrl,
@@ -750,15 +776,47 @@ class DownloadEngine {
       headers['range'] = 'bytes=$resumeFrom-';
     }
 
-    final response = await isolatedDio.get<ResponseBody>(
+    var response = await isolatedDio.get<ResponseBody>(
       punyUrl,
       cancelToken: cancelToken,
       options: Options(
         responseType: ResponseType.stream,
         followRedirects: true,
         headers: headers,
+        validateStatus: (status) => status != null && (status < 400 || status == 416),
       ),
     );
+
+    var actualResumeFrom = resumeFrom;
+
+    if (response.statusCode == 416) {
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      actualResumeFrom = 0;
+      headers.remove('range');
+      response = await isolatedDio.get<ResponseBody>(
+        punyUrl,
+        cancelToken: cancelToken,
+        options: Options(
+          responseType: ResponseType.stream,
+          followRedirects: true,
+          headers: headers,
+        ),
+      );
+    }
+
+    final isPartialResponse = response.statusCode == 206;
+    if (actualResumeFrom > 0 && !isPartialResponse) {
+      // Server returned 200 instead of 206 — restart from scratch
+      actualResumeFrom = 0;
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    }
+
+    final acceptRanges = response.headers.value('accept-ranges')?.toLowerCase();
+    final serverSupportsResume = isPartialResponse || (acceptRanges == 'bytes');
 
     var totalSize = knownFileSize;
     final contentLength =
@@ -767,18 +825,18 @@ class DownloadEngine {
         ) ??
         0;
     if (contentLength > 0) {
-      final actualSize = (response.statusCode == 206 ? resumeFrom : 0) + contentLength;
+      final actualSize = (isPartialResponse ? actualResumeFrom : 0) + contentLength;
       if (actualSize != totalSize) {
         totalSize = actualSize;
       }
     }
 
     final sink = tempFile.openWrite(
-      mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
+      mode: actualResumeFrom > 0 ? FileMode.append : FileMode.write,
     );
     final stopwatch = Stopwatch()..start();
     var downloadedThisSession = 0;
-    var downloadedTotal = resumeFrom;
+    var downloadedTotal = actualResumeFrom;
     final speedSamples = <_SpeedSample>[];
 
     try {
@@ -823,6 +881,7 @@ class DownloadEngine {
             fileSize: totalSize,
             speed: speed,
             eta: eta,
+            supportsResume: serverSupportsResume,
           ),
         );
 
@@ -849,6 +908,15 @@ class DownloadEngine {
       } catch (_) {}
     }
 
+    if (totalSize > 0) {
+      final actualSize = await tempFile.length();
+      if (actualSize != totalSize) {
+        throw Exception(
+          'Download integrity check failed: expected $totalSize bytes, got $actualSize bytes.',
+        );
+      }
+    }
+
     await File(localFilePath).parent.create(recursive: true);
     if (await File(localFilePath).exists()) {
       await File(localFilePath).delete();
@@ -858,7 +926,13 @@ class DownloadEngine {
     } catch (_) {
       // Fallback for cross-device/cross-filesystem move
       await tempFile.copy(localFilePath);
-      await tempFile.delete();
+      final copiedLen = await File(localFilePath).length();
+      final origLen = await tempFile.length();
+      if (copiedLen == origLen) {
+        await tempFile.delete();
+      } else {
+        throw Exception('File copy failed on fallback rename.');
+      }
     }
   }
 
