@@ -83,10 +83,14 @@ class DownloadEngine {
       if (enableProxy) {
         final String host = (proxyHost != null && proxyHost.trim().isNotEmpty)
             ? proxyHost.trim()
-            : (proxyAddress != null && proxyAddress.contains(':') ? proxyAddress.split(':')[0].trim() : proxyAddress?.trim() ?? '');
+            : (proxyAddress != null && proxyAddress.contains(':')
+                  ? proxyAddress.split(':')[0].trim()
+                  : proxyAddress?.trim() ?? '');
         final int port = (proxyPort != null && proxyPort > 0)
             ? proxyPort
-            : (proxyAddress != null && proxyAddress.contains(':') ? int.tryParse(proxyAddress.split(':')[1]) ?? 8080 : 8080);
+            : (proxyAddress != null && proxyAddress.contains(':')
+                  ? int.tryParse(proxyAddress.split(':')[1]) ?? 8080
+                  : 8080);
 
         if (host.isNotEmpty) {
           adapter.createHttpClient = () {
@@ -100,7 +104,10 @@ class DownloadEngine {
                   h,
                   p,
                   realm ?? '',
-                  HttpClientBasicCredentials(proxyUsername, proxyPassword ?? ''),
+                  HttpClientBasicCredentials(
+                    proxyUsername,
+                    proxyPassword ?? '',
+                  ),
                 );
                 return true;
               };
@@ -280,7 +287,8 @@ class DownloadEngine {
         punyUrl,
         options: Options(
           followRedirects: true,
-          validateStatus: (status) => status != null && status >= 200 && status < 400,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
         ),
       );
       final headerName = fileNameFromContentDisposition(response.headers);
@@ -366,7 +374,10 @@ class DownloadEngine {
       if (resolvedFileName != null) {
         final saveDir = File(localFilePath).parent.path;
         currentLocalFilePath = p.join(saveDir, safeFileName(resolvedFileName));
-        currentTempFilePath = p.join(saveDir, '${safeFileName(resolvedFileName)}.dmxpart');
+        currentTempFilePath = p.join(
+          saveDir,
+          '${safeFileName(resolvedFileName)}.dmxpart',
+        );
       }
 
       if (resolvedFileName != null || resolvedFileSize > 0) {
@@ -396,6 +407,13 @@ class DownloadEngine {
           }
           id = TorrentService.addTorrentFile(filePath, saveDir);
         }
+      }
+      if (id < 0) {
+        throw DioException(
+          requestOptions: RequestOptions(path: url),
+          type: DioExceptionType.unknown,
+          error: 'Torrent engine rejected the torrent.',
+        );
       }
 
       // Wait for metadata to resolve
@@ -427,7 +445,26 @@ class DownloadEngine {
         }
       });
 
-      await metadataCompleter.future;
+      Timer? metadataTimer;
+      metadataTimer = Timer(const Duration(seconds: 45), () {
+        metadataSub?.cancel();
+        TorrentService.pauseTorrent(id);
+        if (!metadataCompleter.isCompleted) {
+          metadataCompleter.completeError(
+            DioException(
+              requestOptions: RequestOptions(path: url),
+              type: DioExceptionType.receiveTimeout,
+              error: 'Timed out waiting for torrent metadata.',
+            ),
+          );
+        }
+      });
+
+      try {
+        await metadataCompleter.future;
+      } finally {
+        metadataTimer.cancel();
+      }
 
       // Set file priorities after metadata is loaded
       if (torrentFiles != null && torrentFiles.isNotEmpty) {
@@ -495,7 +532,8 @@ class DownloadEngine {
 
         // Finish if progress is complete or it's seeding/completed.
         // We ignore progress >= 1.0 if the torrent is in a checking, allocating, or metadata fetching state.
-        final isCheckingOrMetadata = stateLabel.contains('checking') ||
+        final isCheckingOrMetadata =
+            stateLabel.contains('checking') ||
             stateLabel.contains('metadata') ||
             stateLabel.contains('allocating');
 
@@ -679,7 +717,8 @@ class DownloadEngine {
                 requestOptions: RequestOptions(path: punyUrl),
                 type: DioExceptionType.badResponse,
                 response: chunkResponse,
-                message: 'Server returned ${chunkResponse.statusCode} instead of 206 for chunk range request.',
+                message:
+                    'Server returned ${chunkResponse.statusCode} instead of 206 for chunk range request.',
               );
             }
 
@@ -711,7 +750,9 @@ class DownloadEngine {
                   final actualElapsedMs = stopwatch.elapsedMilliseconds;
                   if (expectedElapsedMs > actualElapsedMs) {
                     await Future<void>.delayed(
-                      Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
+                      Duration(
+                        milliseconds: expectedElapsedMs - actualElapsedMs,
+                      ),
                     );
                   }
                 }
@@ -771,7 +812,9 @@ class DownloadEngine {
           rethrow;
         }
         // Fallback on range failure or range reject
-        debugPrint('Multi-threaded range request failed: $e. Falling back to single-threaded download.');
+        debugPrint(
+          'Multi-threaded range request failed: $e. Falling back to single-threaded download.',
+        );
         // Clean up part files
         for (int i = 0; i < threadCount; i++) {
           final partFile = chunkFiles[i];
@@ -836,7 +879,8 @@ class DownloadEngine {
         responseType: ResponseType.stream,
         followRedirects: true,
         headers: headers,
-        validateStatus: (status) => status != null && (status < 400 || status == 416),
+        validateStatus: (status) =>
+            status != null && (status < 400 || status == 416),
       ),
     );
 
@@ -871,7 +915,8 @@ class DownloadEngine {
     final acceptRanges = response.headers.value('accept-ranges')?.toLowerCase();
     final serverSupportsResume = isPartialResponse || (acceptRanges == 'bytes');
     final responseName = fileNameFromContentDisposition(response.headers);
-    final finalUrlName = responseName ?? fileNameFromUrl(response.realUri.toString());
+    final finalUrlName =
+        responseName ?? fileNameFromUrl(response.realUri.toString());
 
     var totalSize = knownFileSize;
     final contentLength =
@@ -880,7 +925,8 @@ class DownloadEngine {
         ) ??
         0;
     if (contentLength > 0) {
-      final actualSize = (isPartialResponse ? actualResumeFrom : 0) + contentLength;
+      final actualSize =
+          (isPartialResponse ? actualResumeFrom : 0) + contentLength;
       if (actualSize != totalSize) {
         totalSize = actualSize;
       }

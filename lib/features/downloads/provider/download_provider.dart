@@ -39,9 +39,13 @@ class DownloadProvider extends ChangeNotifier {
     _settingsProvider.addListener(_onSettingsChanged);
     _initConnectivity();
     _startSchedulingTimer();
-    _actionSubscription = _notificationService.onActionTapped.listen(_handleNotificationAction);
+    _actionSubscription = _notificationService.onActionTapped.listen(
+      _handleNotificationAction,
+    );
     if (TorrentService.isInitialized) {
-      _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen((torrents) {
+      _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen((
+        torrents,
+      ) {
         _latestTorrentStats = torrents;
       });
     }
@@ -79,7 +83,8 @@ class DownloadProvider extends ChangeNotifier {
   String _statusFilter = 'All';
   final Set<String> _categoryFilters = {};
   Set<String> get categoryFilters => _categoryFilters;
-  String? get categoryFilter => _categoryFilters.isEmpty ? null : _categoryFilters.first;
+  String? get categoryFilter =>
+      _categoryFilters.isEmpty ? null : _categoryFilters.first;
   int _activeTabIndex = 0;
   String? _lastError;
   bool _isNavbarVisible = true;
@@ -148,37 +153,42 @@ class DownloadProvider extends ChangeNotifier {
     final now = DateTime.now();
     final toDelete = <DownloadTask>[];
 
-    final loaded = _databaseService.loadTasks().map((task) {
-      // Only mark in-flight downloads as paused on initial load.
-      // If a CancelToken exists in the in-memory map, an active download
-      // stream is still running and must not be flipped to paused.
-      final hasActiveStream = _cancelTokens.containsKey(task.id);
-      if (pauseOrphanDownloads &&
-          task.status == DownloadStatus.downloading &&
-          !hasActiveStream) {
-        return task.copyWith(
-          status: DownloadStatus.paused,
-          speed: 0,
-          clearEta: true,
-          errorMessage:
-              'Paused because XDM was closed during a foreground download.',
-        );
-      }
-      return task.copyWith(
-        speed: 0,
-        clearEta: task.status != DownloadStatus.downloading,
-      );
-    }).where((task) {
-      if (cleanupDays > 0 &&
-          (task.status == DownloadStatus.completed || task.status == DownloadStatus.failed)) {
-        final difference = now.difference(task.createdAt).inDays;
-        if (difference >= cleanupDays) {
-          toDelete.add(task);
-          return false;
-        }
-      }
-      return true;
-    }).toList();
+    final loaded = _databaseService
+        .loadTasks()
+        .map((task) {
+          // Only mark in-flight downloads as paused on initial load.
+          // If a CancelToken exists in the in-memory map, an active download
+          // stream is still running and must not be flipped to paused.
+          final hasActiveStream = _cancelTokens.containsKey(task.id);
+          if (pauseOrphanDownloads &&
+              task.status == DownloadStatus.downloading &&
+              !hasActiveStream) {
+            return task.copyWith(
+              status: DownloadStatus.paused,
+              speed: 0,
+              clearEta: true,
+              errorMessage:
+                  'Paused because XDM was closed during a foreground download.',
+            );
+          }
+          return task.copyWith(
+            speed: 0,
+            clearEta: task.status != DownloadStatus.downloading,
+          );
+        })
+        .where((task) {
+          if (cleanupDays > 0 &&
+              (task.status == DownloadStatus.completed ||
+                  task.status == DownloadStatus.failed)) {
+            final difference = now.difference(task.createdAt).inDays;
+            if (difference >= cleanupDays) {
+              toDelete.add(task);
+              return false;
+            }
+          }
+          return true;
+        })
+        .toList();
 
     _tasks
       ..clear()
@@ -193,7 +203,9 @@ class DownloadProvider extends ChangeNotifier {
 
     // Automatically restart seeding for completed torrents with seeding enabled
     for (final task in _tasks) {
-      if (task.isTorrent && task.status == DownloadStatus.completed && task.seedingEnabled) {
+      if (task.isTorrent &&
+          task.status == DownloadStatus.completed &&
+          task.seedingEnabled) {
         _startSeedingTorrent(task);
       }
     }
@@ -247,7 +259,11 @@ class DownloadProvider extends ChangeNotifier {
     return jsonStr;
   }
 
-  Future<bool> importBackupJson(String content, {bool replace = false, String? password}) async {
+  Future<bool> importBackupJson(
+    String content, {
+    bool replace = false,
+    String? password,
+  }) async {
     try {
       String jsonStr = content.trim();
       bool isEncrypted = false;
@@ -279,7 +295,9 @@ class DownloadProvider extends ChangeNotifier {
       final list = jsonDecode(jsonStr) as List;
       for (final item in list) {
         if (item is! Map) return false;
-        if (!item.containsKey('id') || !item.containsKey('url') || !item.containsKey('fileName')) {
+        if (!item.containsKey('id') ||
+            !item.containsKey('url') ||
+            !item.containsKey('fileName')) {
           return false;
         }
       }
@@ -328,7 +346,8 @@ class DownloadProvider extends ChangeNotifier {
           task.url.toLowerCase().contains(_searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
-      if (_categoryFilters.isNotEmpty && !_categoryFilters.contains(task.category)) {
+      if (_categoryFilters.isNotEmpty &&
+          !_categoryFilters.contains(task.category)) {
         return false;
       }
 
@@ -336,7 +355,9 @@ class DownloadProvider extends ChangeNotifier {
         'Downloading' =>
           task.status == DownloadStatus.downloading ||
               task.status == DownloadStatus.queued ||
-              (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled),
+              (task.status == DownloadStatus.completed &&
+                  task.isTorrent &&
+                  task.seedingEnabled),
         'Completed' => task.status == DownloadStatus.completed,
         'Failed' => task.status == DownloadStatus.failed,
         'Paused' => task.status == DownloadStatus.paused,
@@ -354,7 +375,9 @@ class DownloadProvider extends ChangeNotifier {
           comparison = a.fileSize.compareTo(b.fileSize);
           break;
         case SortOption.fileName:
-          comparison = a.fileName.toLowerCase().compareTo(b.fileName.toLowerCase());
+          comparison = a.fileName.toLowerCase().compareTo(
+            b.fileName.toLowerCase(),
+          );
           break;
         case SortOption.status:
           comparison = a.status.name.compareTo(b.status.name);
@@ -436,7 +459,11 @@ class DownloadProvider extends ChangeNotifier {
     String? downloadPageUrl,
   }) async {
     _lastError = null;
-    final urls = url.split(RegExp(r'[\r\n]+')).map((u) => u.trim()).where((u) => u.isNotEmpty).toList();
+    final urls = url
+        .split(RegExp(r'[\r\n]+'))
+        .map((u) => u.trim())
+        .where((u) => u.isNotEmpty)
+        .toList();
     if (urls.isEmpty) {
       _lastError = 'URL signal required.';
       notifyListeners();
@@ -450,7 +477,8 @@ class DownloadProvider extends ChangeNotifier {
       return;
     }
 
-    final resolvedThreadCount = threadCount ?? _settingsProvider.defaultThreadCount;
+    final resolvedThreadCount =
+        threadCount ?? _settingsProvider.defaultThreadCount;
 
     try {
       if (urls.length > 1) {
@@ -458,7 +486,9 @@ class DownloadProvider extends ChangeNotifier {
           final singleUrl = urls[i];
           if (!isValidTransmissionUrl(singleUrl)) continue;
           final suffix = i + 1;
-          final singleName = name.trim().isNotEmpty ? '${name.trim()}_$suffix' : '';
+          final singleName = name.trim().isNotEmpty
+              ? '${name.trim()}_$suffix'
+              : '';
           await _addSingleDownload(
             name: singleName,
             url: singleUrl,
@@ -506,7 +536,8 @@ class DownloadProvider extends ChangeNotifier {
     List<Map<String, dynamic>>? torrentFiles,
     String? downloadPageUrl,
   }) async {
-    final defaultDirectory = _settingsProvider.customDownloadPath?.isNotEmpty == true
+    final defaultDirectory =
+        _settingsProvider.customDownloadPath?.isNotEmpty == true
         ? _settingsProvider.customDownloadPath!
         : await _permissionService.defaultDownloadDirectory();
 
@@ -522,7 +553,9 @@ class DownloadProvider extends ChangeNotifier {
     if (isMagnet) {
       final parsed = parseMagnetUrl(url.trim());
       final magnetName = parsed['name'] ?? 'Torrent Download';
-      fileName = name.trim().isNotEmpty ? safeFileName(name.trim()) : magnetName;
+      fileName = name.trim().isNotEmpty
+          ? safeFileName(name.trim())
+          : magnetName;
       fileSize = size > 0 ? size : 0;
       resolvedCategory = category.trim().isNotEmpty ? category : 'Archive';
       supportsResume = true;
@@ -537,7 +570,9 @@ class DownloadProvider extends ChangeNotifier {
       supportsResume = true; // Assume resume support initially
     }
 
-    var directory = savePath.trim().isNotEmpty ? savePath.trim() : defaultDirectory;
+    var directory = savePath.trim().isNotEmpty
+        ? savePath.trim()
+        : defaultDirectory;
     if (_settingsProvider.categoryFolders) {
       String subFolder = resolvedCategory;
       if (_settingsProvider.languageCode == 'ar') {
@@ -553,7 +588,10 @@ class DownloadProvider extends ChangeNotifier {
       }
       directory = p.join(directory, subFolder);
     }
-    final localFilePath = _downloadEngine.buildLocalFilePath(directory, fileName);
+    final localFilePath = _downloadEngine.buildLocalFilePath(
+      directory,
+      fileName,
+    );
     final tempFilePath = _downloadEngine.buildTempFilePath(directory, fileName);
     final now = DateTime.now();
 
@@ -603,6 +641,10 @@ class DownloadProvider extends ChangeNotifier {
     _retryCounts.remove(id);
 
     if (task.status == DownloadStatus.downloading) {
+      final torrentId = _torrentIds[id];
+      if (torrentId != null) {
+        TorrentService.pauseTorrent(torrentId);
+      }
       _cancelTokens[id]?.cancel('paused');
     }
     await _setTask(
@@ -751,7 +793,9 @@ class DownloadProvider extends ChangeNotifier {
                   await file.delete();
                 }
               } catch (e) {
-                debugPrint('Failed to delete torrent file segment $relPath: $e');
+                debugPrint(
+                  'Failed to delete torrent file segment $relPath: $e',
+                );
               }
             }
           }
@@ -846,7 +890,9 @@ class DownloadProvider extends ChangeNotifier {
         final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
         if (updatedIdx != -1) {
           final t = _tasks[updatedIdx];
-          if (t.status == DownloadStatus.completed && t.fileSize > 0 && t.downloadedBytes < t.fileSize) {
+          if (t.status == DownloadStatus.completed &&
+              t.fileSize > 0 &&
+              t.downloadedBytes < t.fileSize) {
             _tasks[updatedIdx] = t.copyWith(
               downloadedBytes: t.fileSize,
               chunks: List<double>.filled(t.threadCount, 1.0),
@@ -891,7 +937,12 @@ class DownloadProvider extends ChangeNotifier {
 
   double get currentUploadSpeed {
     return _tasks
-        .where((task) => task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
+        .where(
+          (task) =>
+              task.status == DownloadStatus.completed &&
+              task.isTorrent &&
+              task.seedingEnabled,
+        )
         .fold(0.0, (sum, task) => sum + task.speed);
   }
 
@@ -899,10 +950,12 @@ class DownloadProvider extends ChangeNotifier {
       '${formatBytes(currentUploadSpeed)}/s';
 
   int get seedingTasksCount => _tasks
-      .where((task) =>
-          task.status == DownloadStatus.completed &&
-          task.isTorrent &&
-          task.seedingEnabled)
+      .where(
+        (task) =>
+            task.status == DownloadStatus.completed &&
+            task.isTorrent &&
+            task.seedingEnabled,
+      )
       .length;
 
   int getTorrentSeeds(String taskId) {
@@ -959,17 +1012,25 @@ class DownloadProvider extends ChangeNotifier {
     int? torrentId;
     if (task.isTorrent) {
       try {
-        final saveDir = task.savePath;
-        if (task.url.startsWith('magnet:')) {
-          torrentId = TorrentService.addMagnet(task.url, saveDir);
+        final existingTorrentId = _torrentIds[task.id];
+        if (existingTorrentId != null) {
+          torrentId = existingTorrentId;
         } else {
-          String filePath = task.url;
-          if (task.url.startsWith('file://')) {
-            filePath = Uri.parse(task.url).toFilePath();
+          final saveDir = task.savePath;
+          if (task.url.startsWith('magnet:')) {
+            torrentId = TorrentService.addMagnet(task.url, saveDir);
+          } else {
+            String filePath = task.url;
+            if (task.url.startsWith('file://')) {
+              filePath = Uri.parse(task.url).toFilePath();
+            }
+            torrentId = TorrentService.addTorrentFile(filePath, saveDir);
           }
-          torrentId = TorrentService.addTorrentFile(filePath, saveDir);
+          if (torrentId < 0) {
+            throw Exception('Torrent engine rejected the torrent.');
+          }
+          _torrentIds[task.id] = torrentId;
         }
-        _torrentIds[task.id] = torrentId;
       } catch (e) {
         _cancelTokens.remove(task.id);
         await _setTask(
@@ -1006,9 +1067,9 @@ class DownloadProvider extends ChangeNotifier {
       ),
     );
 
-
     final notificationId = task.id.hashCode.abs();
-    final isAutoName = task.fileName == 'torrent_download.zip' ||
+    final isAutoName =
+        task.fileName == 'torrent_download.zip' ||
         task.fileName.isEmpty ||
         task.fileName == fileNameFromUrl(task.url) ||
         task.fileName.startsWith('download_');
@@ -1061,7 +1122,8 @@ class DownloadProvider extends ChangeNotifier {
               speedList.removeAt(0);
             }
 
-            final isAutoName = current.fileName == 'torrent_download.zip' ||
+            final isAutoName =
+                current.fileName == 'torrent_download.zip' ||
                 current.fileName.isEmpty ||
                 current.fileName == fileNameFromUrl(current.url) ||
                 current.fileName.startsWith('download_');
@@ -1075,10 +1137,14 @@ class DownloadProvider extends ChangeNotifier {
                 : current.localFilePath;
 
             final newTempPath = newFileName != current.fileName
-                ? p.join(p.dirname(current.tempFilePath), '$newFileName.dmxpart')
+                ? p.join(
+                    p.dirname(current.tempFilePath),
+                    '$newFileName.dmxpart',
+                  )
                 : current.tempFilePath;
 
-            final newCategory = newFileName != current.fileName && current.category == 'Other'
+            final newCategory =
+                newFileName != current.fileName && current.category == 'Other'
                 ? categoryFromFileName(newFileName)
                 : current.category;
 
@@ -1087,17 +1153,23 @@ class DownloadProvider extends ChangeNotifier {
               localFilePath: newLocalPath,
               tempFilePath: newTempPath,
               category: newCategory,
-              fileSize: progress.fileSize > 0 ? progress.fileSize : current.fileSize,
+              fileSize: progress.fileSize > 0
+                  ? progress.fileSize
+                  : current.fileSize,
               downloadedBytes: progress.downloadedBytes,
               speed: progress.speed,
               eta: progress.eta,
-              chunks: progress.chunks ??
+              chunks:
+                  progress.chunks ??
                   _buildChunks(
                     current.threadCount,
-                    progress.fileSize > 0 ? progress.fileSize : current.fileSize,
+                    progress.fileSize > 0
+                        ? progress.fileSize
+                        : current.fileSize,
                     progress.downloadedBytes,
                   ),
-              torrentFiles: current.torrentFiles == null || current.torrentFiles!.isEmpty
+              torrentFiles:
+                  current.torrentFiles == null || current.torrentFiles!.isEmpty
                   ? progress.torrentFiles
                   : _updateTorrentFilesProgress(
                       current.torrentFiles!,
@@ -1199,19 +1271,23 @@ class DownloadProvider extends ChangeNotifier {
           if (_isRetryableError(error) && currentRetry < maxRetries) {
             _retryCounts[task.id] = currentRetry + 1;
             final delaySeconds = pow(2, currentRetry + 1).toInt();
-            debugPrint('Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...');
-            
+            debugPrint(
+              'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
+            );
+
             await _setTask(
               current.copyWith(
                 status: DownloadStatus.queued,
                 speed: 0,
-                errorMessage: 'Retrying in $delaySeconds seconds: ${_errorMessage(error)}',
+                errorMessage:
+                    'Retrying in $delaySeconds seconds: ${_errorMessage(error)}',
               ),
             );
-            
+
             Timer(Duration(seconds: delaySeconds), () {
               final checkedTask = _findTask(task.id);
-              if (checkedTask != null && checkedTask.status == DownloadStatus.queued) {
+              if (checkedTask != null &&
+                  checkedTask.status == DownloadStatus.queued) {
                 _pumpQueue();
               }
             });
@@ -1319,7 +1395,8 @@ class DownloadProvider extends ChangeNotifier {
           error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.receiveTimeout ||
           error.type == DioExceptionType.connectionError ||
-          (error.response?.statusCode != null && error.response!.statusCode! >= 500);
+          (error.response?.statusCode != null &&
+              error.response!.statusCode! >= 500);
     }
     return error is SocketException || error is HttpException;
   }
@@ -1330,7 +1407,9 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   void _initConnectivity() {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) {
       _currentConnectivity = results;
       _hasResolvedInitialConnectivity = true;
       _checkWifiOnlyConstraint();
@@ -1352,9 +1431,10 @@ class DownloadProvider extends ChangeNotifier {
       return;
     }
 
-    final hasWifi = _currentConnectivity.contains(ConnectivityResult.wifi) ||
-                    _currentConnectivity.contains(ConnectivityResult.ethernet) ||
-                    _currentConnectivity.contains(ConnectivityResult.vpn);
+    final hasWifi =
+        _currentConnectivity.contains(ConnectivityResult.wifi) ||
+        _currentConnectivity.contains(ConnectivityResult.ethernet) ||
+        _currentConnectivity.contains(ConnectivityResult.vpn);
 
     if (!hasWifi) {
       await _pauseForWifiOnly();
@@ -1364,32 +1444,44 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<void> _pauseForWifiOnly() async {
-    final active = _tasks.where((task) =>
-        task.status == DownloadStatus.downloading ||
-        task.status == DownloadStatus.queued);
+    final active = _tasks.where(
+      (task) =>
+          task.status == DownloadStatus.downloading ||
+          task.status == DownloadStatus.queued,
+    );
     for (final task in active.toList()) {
       if (task.status == DownloadStatus.downloading) {
+        final torrentId = _torrentIds[task.id];
+        if (torrentId != null) {
+          TorrentService.pauseTorrent(torrentId);
+        }
         _cancelTokens[task.id]?.cancel('wifi_only_pause');
       }
-      await _setTask(task.copyWith(
-        status: DownloadStatus.paused,
-        speed: 0,
-        clearEta: true,
-        errorMessage: 'Waiting for WiFi connection',
-      ));
+      await _setTask(
+        task.copyWith(
+          status: DownloadStatus.paused,
+          speed: 0,
+          clearEta: true,
+          errorMessage: 'Waiting for WiFi connection',
+        ),
+      );
     }
   }
 
   Future<void> _resumeWaitingForWifi() async {
-    final waiting = _tasks.where((task) =>
-        task.status == DownloadStatus.paused &&
-        task.errorMessage == 'Waiting for WiFi connection');
+    final waiting = _tasks.where(
+      (task) =>
+          task.status == DownloadStatus.paused &&
+          task.errorMessage == 'Waiting for WiFi connection',
+    );
     for (final task in waiting.toList()) {
-      await _setTask(task.copyWith(
-        status: DownloadStatus.queued,
-        clearError: true,
-        clearEta: true,
-      ));
+      await _setTask(
+        task.copyWith(
+          status: DownloadStatus.queued,
+          clearError: true,
+          clearEta: true,
+        ),
+      );
     }
     _pumpQueue();
   }
@@ -1430,12 +1522,14 @@ class DownloadProvider extends ChangeNotifier {
   void _updateTelemetryWidget() {
     if (!kIsWeb && Platform.isAndroid) {
       try {
-        const MethodChannel('com.example.dmx/widget').invokeMethod('updateWidget', {
-          'activeCount': downloadingTasksCount,
-          'totalSpeed': currentDownloadSpeedFormatted,
-        }).catchError((e) {
-          debugPrint('Failed to update telemetry widget via future: $e');
-        });
+        const MethodChannel('com.example.dmx/widget')
+            .invokeMethod('updateWidget', {
+              'activeCount': downloadingTasksCount,
+              'totalSpeed': currentDownloadSpeedFormatted,
+            })
+            .catchError((e) {
+              debugPrint('Failed to update telemetry widget via future: $e');
+            });
       } catch (e) {
         debugPrint('Failed to update telemetry widget: $e');
       }
@@ -1446,7 +1540,9 @@ class DownloadProvider extends ChangeNotifier {
     var changed = false;
     for (var i = 0; i < _tasks.length; i++) {
       final task = _tasks[i];
-      if (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled) {
+      if (task.status == DownloadStatus.completed &&
+          task.isTorrent &&
+          task.seedingEnabled) {
         double speed = 0.0;
         final torrentId = _torrentIds[task.id];
         if (torrentId != null) {
@@ -1532,7 +1628,10 @@ class DownloadProvider extends ChangeNotifier {
     _updateTelemetryWidget();
   }
 
-  Future<void> updateTorrentTaskFiles(String taskId, List<Map<String, dynamic>> files) async {
+  Future<void> updateTorrentTaskFiles(
+    String taskId,
+    List<Map<String, dynamic>> files,
+  ) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
 
@@ -1586,7 +1685,8 @@ class DownloadProvider extends ChangeNotifier {
     }
 
     final wasTorrent = task.isTorrent;
-    final isNewTorrent = cleanUrl.startsWith('magnet:') ||
+    final isNewTorrent =
+        cleanUrl.startsWith('magnet:') ||
         cleanUrl.toLowerCase().endsWith('.torrent');
 
     if (wasTorrent || isNewTorrent) {
@@ -1626,7 +1726,8 @@ class DownloadProvider extends ChangeNotifier {
         downloadedBytes: 0,
         chunks: List<double>.filled(task.threadCount, 0.0),
         torrentFiles: metadata.torrentFiles,
-        fileName: (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
+        fileName:
+            (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
             ? metadata.fileName
             : task.fileName,
         clearError: true,
@@ -1662,7 +1763,9 @@ class DownloadProvider extends ChangeNotifier {
     }
 
     bool sizeChanged = false;
-    if (metadata.fileSize > 0 && task.fileSize > 0 && metadata.fileSize != task.fileSize) {
+    if (metadata.fileSize > 0 &&
+        task.fileSize > 0 &&
+        metadata.fileSize != task.fileSize) {
       sizeChanged = true;
     }
 
@@ -1678,7 +1781,8 @@ class DownloadProvider extends ChangeNotifier {
       chunks: sizeChanged
           ? List<double>.filled(task.threadCount, 0.0)
           : task.chunks,
-      fileName: (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
+      fileName:
+          (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
           ? metadata.fileName
           : task.fileName,
       clearError: true,
@@ -1753,14 +1857,12 @@ class DownloadProvider extends ChangeNotifier {
     double totalSpeed,
   ) {
     final result = files.map((f) => Map<String, dynamic>.from(f)).toList();
-    
+
     int selectedSize = result
         .where((f) => f['selected'] == true)
         .fold(0, (sum, f) => sum + (f['length'] as int));
 
     if (selectedSize == 0) return result;
-
-    int remainingDownloaded = totalDownloaded;
 
     for (var f in result) {
       if (f['selected'] != true) {
@@ -1770,18 +1872,14 @@ class DownloadProvider extends ChangeNotifier {
       }
 
       final length = f['length'] as int;
-      if (remainingDownloaded >= length) {
-        f['downloadedBytes'] = length;
-        f['speed'] = 0.0;
-        remainingDownloaded -= length;
-      } else if (remainingDownloaded > 0) {
-        f['downloadedBytes'] = remainingDownloaded;
-        f['speed'] = totalSpeed;
-        remainingDownloaded = 0;
-      } else {
-        f['downloadedBytes'] = 0;
-        f['speed'] = 0.0;
-      }
+      final share = selectedSize > 0
+          ? (totalDownloaded * (length / selectedSize)).round()
+          : 0;
+      final downloadedBytes = share.clamp(0, length);
+      f['downloadedBytes'] = downloadedBytes;
+      f['speed'] = totalSpeed > 0 && downloadedBytes < length
+          ? totalSpeed * (length / selectedSize)
+          : 0.0;
     }
 
     return result;
@@ -1818,7 +1916,9 @@ class DownloadProvider extends ChangeNotifier {
     return result;
   }
 
-  List<Map<String, dynamic>> _markTorrentFilesCompleted(List<Map<String, dynamic>> files) {
+  List<Map<String, dynamic>> _markTorrentFilesCompleted(
+    List<Map<String, dynamic>> files,
+  ) {
     return files.map((f) {
       final copy = Map<String, dynamic>.from(f);
       if (copy['selected'] == true) {
@@ -1830,7 +1930,6 @@ class DownloadProvider extends ChangeNotifier {
       return copy;
     }).toList();
   }
-
 
   @override
   void dispose() {
