@@ -13,7 +13,7 @@ class StatusChip extends StatefulWidget {
   State<StatusChip> createState() => _StatusChipState();
 }
 
-class _StatusChipState extends State<StatusChip> with SingleTickerProviderStateMixin {
+class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
   AnimationController? _controller;
   Animation<double>? _pulseAnimation;
 

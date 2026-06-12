@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/utils/file_opener.dart';
@@ -1047,163 +1048,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     if (!task.isTorrent || task.torrentFiles == null || task.torrentFiles!.isEmpty) {
       return const SizedBox.shrink();
     }
-
-    final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-
-    final files = task.torrentFiles!;
-
-    return Column(
-      children: [
-        GlassCard(
-          borderRadius: 20,
-          padding: const EdgeInsets.all(16),
-          isDarkMode: isDark,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isRtl ? 'ملفات التورنت المضمنة' : 'TORRENT INCLUDED FILES',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: secClr,
-                  fontSize: 10,
-                  letterSpacing: 1.0,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: files.length,
-                separatorBuilder: (context, index) => const Divider(height: 16, thickness: 0.3),
-                itemBuilder: (context, index) {
-                  final f = files[index];
-                  final name = f['name'] as String? ?? 'unknown';
-                  final length = f['length'] as int? ?? 0;
-                  final selected = f['selected'] as bool? ?? true;
-                  final downloadedBytes = f['downloadedBytes'] as int? ?? 0;
-                  final speed = (f['speed'] as num?)?.toDouble() ?? 0.0;
-
-                  final fileProgress = length > 0 ? (downloadedBytes / length).clamp(0.0, 1.0) : 0.0;
-                  final isDownloading = task.status == DownloadStatus.downloading;
-                  final isCompleted = task.status == DownloadStatus.completed;
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: Checkbox(
-                          value: selected,
-                          activeColor: blueClr,
-                          side: BorderSide(color: glassBorder, width: 1.0),
-                          onChanged: (isCompleted || isDownloading)
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    triggerHaptic(settings);
-                                    final updatedFiles = List<Map<String, dynamic>>.from(files);
-                                    updatedFiles[index] = {
-                                      ...f,
-                                      'selected': val,
-                                    };
-                                    provider.updateTorrentTaskFiles(task.id, updatedFiles);
-                                  }
-                                },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.insert_drive_file_outlined,
-                        size: 16,
-                        color: selected ? textClr : secClr,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: TextStyle(
-                                color: selected ? textClr : secClr,
-                                fontSize: 12,
-                                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                                decoration: selected ? null : TextDecoration.lineThrough,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            if (selected) ...[
-                              Stack(
-                                children: [
-                                  Container(
-                                    height: 4,
-                                    width: double.infinity,
-                                    decoration: BoxDecoration(
-                                      color: glassBorder.withValues(alpha: 0.3),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                  FractionallySizedBox(
-                                    widthFactor: fileProgress,
-                                    child: Container(
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                        color: isDownloading ? blueClr : (isCompleted ? greenClr : secClr),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    '${formatBytes(downloadedBytes)} / ${formatBytes(length)}',
-                                    style: TextStyle(color: secClr, fontSize: 10),
-                                  ),
-                                  if (speed > 0)
-                                    Text(
-                                      '${formatBytes(speed)}/s',
-                                      style: TextStyle(color: blueClr, fontSize: 10, fontWeight: FontWeight.bold),
-                                    ),
-                                  Text(
-                                    '${(fileProgress * 100).toStringAsFixed(1)}%',
-                                    style: TextStyle(color: textClr, fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            ] else ...[
-                              Text(
-                                isRtl ? 'تم تخطيه' : 'Skipped',
-                                style: TextStyle(color: secClr, fontSize: 10, fontStyle: FontStyle.italic),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-      ],
-    );
+    return _TorrentFilesPanel(task: task, provider: provider, settings: settings);
   }
+
 
   void _showUpdateUrlDialog(
     BuildContext context,
@@ -1489,9 +1336,17 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     final isRtl = L10n.isRtl(context);
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
 
     final seeds = provider.getTorrentSeeds(task.id);
     final peers = provider.getTorrentPeers(task.id);
+    final isActive = task.status == DownloadStatus.downloading;
+    final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
+
+    // Current download speed (from task) and upload speed (from provider)
+    final dlSpeed = task.speed;
+    final ulSpeed = isSeeding ? task.speed : 0.0; // seeding reports upload speed
 
     return GlassCard(
       borderRadius: 20,
@@ -1510,68 +1365,100 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             ),
           ),
           const SizedBox(height: 16),
+
+          // Speed row — download speed + upload speed
+          if (isActive || isSeeding) ...[
+            Row(
+              children: [
+                if (isActive) Expanded(
+                  child: _buildStatCell(
+                    context,
+                    icon: Icons.download_rounded,
+                    color: blueClr,
+                    label: isRtl ? 'سرعة التحميل' : 'DOWNLOAD',
+                    value: '${formatBytes(dlSpeed)}/s',
+                    textClr: textClr,
+                    secClr: secClr,
+                  ),
+                ),
+                if (isSeeding) Expanded(
+                  child: _buildStatCell(
+                    context,
+                    icon: Icons.upload_rounded,
+                    color: violetClr,
+                    label: isRtl ? 'سرعة الرفع' : 'UPLOAD',
+                    value: '${formatBytes(ulSpeed)}/s',
+                    textClr: textClr,
+                    secClr: secClr,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Overall progress bar for active downloads
+          if (isActive && task.fileSize > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  isRtl ? 'التقدم الكلي' : 'OVERALL PROGRESS',
+                  style: TextStyle(color: secClr, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  task.progressPercentString,
+                  style: TextStyle(color: blueClr, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: task.progress,
+                backgroundColor: (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder).withValues(alpha: 0.3),
+                valueColor: AlwaysStoppedAnimation<Color>(blueClr),
+                minHeight: 5,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Seeds + Peers row
           Row(
             children: [
               Expanded(
-                child: Row(
-                  children: [
-                    Icon(Icons.upload_outlined, color: greenClr, size: 20),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isRtl ? 'المصادر النشطة' : 'ACTIVE SEEDS',
-                          style: TextStyle(
-                            color: secClr,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$seeds',
-                          style: TextStyle(
-                            color: textClr,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: _buildStatCell(
+                  context,
+                  icon: Icons.upload_outlined,
+                  color: greenClr,
+                  label: isRtl ? 'المصادر النشطة' : 'SEEDS',
+                  value: '$seeds',
+                  textClr: textClr,
+                  secClr: secClr,
                 ),
               ),
               Expanded(
-                child: Row(
-                  children: [
-                    Icon(Icons.download_outlined, color: blueClr, size: 20),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isRtl ? 'النظراء النشطين' : 'ACTIVE PEERS',
-                          style: TextStyle(
-                            color: secClr,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '$peers',
-                          style: TextStyle(
-                            color: textClr,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: _buildStatCell(
+                  context,
+                  icon: Icons.people_outline,
+                  color: amberClr,
+                  label: isRtl ? 'النظراء النشطين' : 'PEERS',
+                  value: '$peers',
+                  textClr: textClr,
+                  secClr: secClr,
+                ),
+              ),
+              Expanded(
+                child: _buildStatCell(
+                  context,
+                  icon: Icons.storage_outlined,
+                  color: secClr,
+                  label: isRtl ? 'المنقول' : 'TRANSFERRED',
+                  value: task.downloadedSizeFormatted,
+                  textClr: textClr,
+                  secClr: secClr,
                 ),
               ),
             ],
@@ -1580,4 +1467,352 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
       ),
     );
   }
+
+  Widget _buildStatCell(
+    BuildContext context, {
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+    required Color textClr,
+    required Color secClr,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(color: secClr, fontSize: 9, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              value,
+              style: TextStyle(
+                color: textClr,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Torrent Files Panel — reads actual file sizes from disk for accurate progress
+// ---------------------------------------------------------------------------
+class _TorrentFilesPanel extends StatefulWidget {
+  final DownloadTask task;
+  final DownloadProvider provider;
+  final SettingsProvider settings;
+
+  const _TorrentFilesPanel({
+    required this.task,
+    required this.provider,
+    required this.settings,
+  });
+
+  @override
+  State<_TorrentFilesPanel> createState() => _TorrentFilesPanelState();
+}
+
+class _TorrentFilesPanelState extends State<_TorrentFilesPanel> with HapticHelper {
+  /// Actual bytes confirmed on disk for each file (parallel to torrentFiles list).
+  List<int> _diskBytes = [];
+  Timer? _refreshTimer;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    _scheduleRefresh();
+  }
+
+  @override
+  void didUpdateWidget(_TorrentFilesPanel old) {
+    super.didUpdateWidget(old);
+    // Re-read disk when the task's downloaded bytes change noticeably
+    // (avoids redundant I/O on every minor provider notification).
+    if (old.task.downloadedBytes != widget.task.downloadedBytes ||
+        old.task.status != widget.task.status) {
+      _refresh();
+    }
+    // Start/stop polling based on active status
+    if (widget.task.status == DownloadStatus.downloading && _refreshTimer == null) {
+      _scheduleRefresh();
+    } else if (widget.task.status != DownloadStatus.downloading) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
+  }
+
+  void _scheduleRefresh() {
+    if (widget.task.status != DownloadStatus.downloading) return;
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) => _refresh());
+  }
+
+  Future<void> _refresh() async {
+    final bytes = await widget.provider.getTorrentFileActualBytes(widget.task.id);
+    if (mounted) {
+      setState(() {
+        _diskBytes = bytes;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Returns the best-available downloaded byte count for file [index].
+  /// Prefers the disk-verified value; falls back to the provider estimate.
+  int _resolvedBytes(int index, int estimatedBytes) {
+    if (_diskBytes.length > index) {
+      final disk = _diskBytes[index];
+      // If the file doesn't exist on disk yet (0 bytes) but we have a
+      // proportional estimate, keep the estimate so the bar isn't blank.
+      return disk > 0 ? disk : estimatedBytes;
+    }
+    return estimatedBytes;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final task = widget.task;
+    final provider = widget.provider;
+    final settings = widget.settings;
+    final files = task.torrentFiles!;
+
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final isDownloading = task.status == DownloadStatus.downloading;
+    final isCompleted = task.status == DownloadStatus.completed;
+
+    return Column(
+      children: [
+        GlassCard(
+          borderRadius: 20,
+          padding: const EdgeInsets.all(16),
+          isDarkMode: isDark,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.folder_open_outlined, color: blueClr, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      isRtl ? 'ملفات التورنت المضمنة' : 'TORRENT INCLUDED FILES',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: secClr,
+                        fontSize: 10,
+                        letterSpacing: 1.0,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  // Disk-verify indicator
+                  if (isDownloading)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.storage_rounded, size: 11, color: greenClr),
+                        const SizedBox(width: 3),
+                        Text(
+                          isRtl ? 'تحقق فعلي' : 'DISK VERIFIED',
+                          style: TextStyle(color: greenClr, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (_loading)
+                Center(
+                  child: SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: blueClr),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: files.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 16,
+                    thickness: 0.3,
+                    color: glassBorder.withValues(alpha: 0.4),
+                  ),
+                  itemBuilder: (context, index) {
+                    final f = files[index];
+                    final name = f['name'] as String? ?? 'unknown';
+                    final length = (f['length'] as int?) ?? 0;
+                    final selected = (f['selected'] as bool?) ?? true;
+                    final estimatedBytes = (f['downloadedBytes'] as int?) ?? 0;
+                    final speed = (f['speed'] as num?)?.toDouble() ?? 0.0;
+
+                    // Use disk-verified bytes when available
+                    final resolvedBytes = _resolvedBytes(index, estimatedBytes);
+                    final diskVerified = _diskBytes.length > index && _diskBytes[index] > 0;
+                    final fileProgress = length > 0
+                        ? (resolvedBytes / length).clamp(0.0, 1.0)
+                        : 0.0;
+
+                    // Show ✓ badge when file is fully on disk
+                    final fileComplete = fileProgress >= 1.0;
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: selected,
+                            activeColor: blueClr,
+                            side: BorderSide(color: glassBorder, width: 1.0),
+                            onChanged: isCompleted
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      triggerHaptic(settings);
+                                      final updatedFiles =
+                                          List<Map<String, dynamic>>.from(files);
+                                      updatedFiles[index] = {...f, 'selected': val};
+                                      provider.updateTorrentTaskFiles(task.id, updatedFiles);
+                                    }
+                                  },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          fileComplete
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.insert_drive_file_outlined,
+                          size: 16,
+                          color: fileComplete ? greenClr : (selected ? textClr : secClr),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: TextStyle(
+                                  color: selected ? textClr : secClr,
+                                  fontSize: 12,
+                                  fontWeight:
+                                      selected ? FontWeight.bold : FontWeight.normal,
+                                  decoration:
+                                      selected ? null : TextDecoration.lineThrough,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              if (selected) ...[
+                                Stack(
+                                  children: [
+                                    Container(
+                                      height: 4,
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        color: glassBorder.withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                    FractionallySizedBox(
+                                      widthFactor: fileProgress,
+                                      child: Container(
+                                        height: 4,
+                                        decoration: BoxDecoration(
+                                          color: fileComplete
+                                              ? greenClr
+                                              : (isDownloading ? blueClr : secClr),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '${formatBytes(resolvedBytes)} / ${formatBytes(length)}',
+                                          style: TextStyle(color: secClr, fontSize: 10),
+                                        ),
+                                        if (diskVerified) ...[
+                                          const SizedBox(width: 4),
+                                          Icon(Icons.storage_rounded,
+                                              size: 9, color: greenClr),
+                                        ],
+                                      ],
+                                    ),
+                                    if (speed > 0 && isDownloading)
+                                      Text(
+                                        '${formatBytes(speed)}/s',
+                                        style: TextStyle(
+                                            color: blueClr,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                    Text(
+                                      '${(fileProgress * 100).toStringAsFixed(1)}%',
+                                      style: TextStyle(
+                                        color: fileComplete ? greenClr : textClr,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ] else ...[
+                                Text(
+                                  isRtl ? 'تم تخطيه' : 'Skipped',
+                                  style: TextStyle(
+                                    color: secClr,
+                                    fontSize: 10,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+}
+

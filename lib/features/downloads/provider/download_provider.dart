@@ -835,8 +835,24 @@ class DownloadProvider extends ChangeNotifier {
           _startSeedingTorrent(_tasks[index]);
         }
       } else {
-        if (torrentId != null) {
+        // Only pause/remove the torrent session if the task has already
+        // finished downloading (status == completed).  Calling pauseTorrent
+        // while still downloading would abort the in-progress transfer.
+        if (torrentId != null && oldTask.status == DownloadStatus.completed) {
           TorrentService.pauseTorrent(torrentId);
+          _torrentIds.remove(taskId);
+        }
+        // Snap downloadedBytes to fileSize so the Completed tab shows 100%.
+        final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
+        if (updatedIdx != -1) {
+          final t = _tasks[updatedIdx];
+          if (t.status == DownloadStatus.completed && t.fileSize > 0 && t.downloadedBytes < t.fileSize) {
+            _tasks[updatedIdx] = t.copyWith(
+              downloadedBytes: t.fileSize,
+              chunks: List<double>.filled(t.threadCount, 1.0),
+            );
+            await _databaseService.saveTask(_tasks[updatedIdx]);
+          }
         }
       }
     }
@@ -970,13 +986,26 @@ class DownloadProvider extends ChangeNotifier {
 
     // Fire-and-await so the queued→downloading transition is committed
     // before the first progress callback fires.
+    // For torrents: also reset per-file downloaded bytes so the file list
+    // starts from 0% (not carrying over stale 100% from a previous completion).
+    final resetTorrentFiles = task.isTorrent && task.torrentFiles != null
+        ? task.torrentFiles!.map((f) {
+            final copy = Map<String, dynamic>.from(f);
+            copy['downloadedBytes'] = 0;
+            copy['speed'] = 0.0;
+            return copy;
+          }).toList()
+        : null;
+
     await _setTask(
       task.copyWith(
         status: DownloadStatus.downloading,
         clearError: true,
         clearCompletedAt: true,
+        torrentFiles: resetTorrentFiles ?? task.torrentFiles,
       ),
     );
+
 
     final notificationId = task.id.hashCode.abs();
     final isAutoName = task.fileName == 'torrent_download.zip' ||
@@ -1123,7 +1152,12 @@ class DownloadProvider extends ChangeNotifier {
           await _setTask(
             current.copyWith(
               status: DownloadStatus.completed,
-              downloadedBytes: current.downloadedBytes,
+              // For torrents, always snap to fileSize so progress shows 100%.
+              // For HTTP, use the actual bytes written (may differ if server
+              // reported a wrong Content-Length).
+              downloadedBytes: current.isTorrent && current.fileSize > 0
+                  ? current.fileSize
+                  : current.downloadedBytes,
               speed: 0,
               eta: 0,
               chunks: List<double>.filled(current.threadCount, 1.0),
@@ -1147,7 +1181,14 @@ class DownloadProvider extends ChangeNotifier {
           if (current == null) return;
           if (error is DioException && error.type == DioExceptionType.cancel) {
             _retryCounts.remove(task.id);
-            await _setTask(current.copyWith(speed: 0, clearEta: true));
+            // Only clear the speed/eta fields — do NOT override the status.
+            // pauseTask() / cancelTask() may have already transitioned the
+            // status to paused/failed; overwriting it here would undo that
+            // transition (race condition between the async catchError and the
+            // synchronous state machine in pauseTask).
+            if (current.status == DownloadStatus.downloading) {
+              await _setTask(current.copyWith(speed: 0, clearEta: true));
+            }
             _notificationService.cancelNotification(notificationId);
             return;
           }
@@ -1496,7 +1537,7 @@ class DownloadProvider extends ChangeNotifier {
     if (index == -1) return;
 
     final task = _tasks[index];
-    
+
     // Calculate new total size of selected files
     final selectedSize = files
         .where((f) => f['selected'] == true)
@@ -1509,6 +1550,16 @@ class DownloadProvider extends ChangeNotifier {
 
     _tasks[index] = updated;
     await _databaseService.saveTask(updated);
+
+    // Propagate priority changes to the live torrent engine.
+    final torrentId = _torrentIds[taskId];
+    if (torrentId != null) {
+      final priorities = files
+          .map((f) => (f['selected'] as bool? ?? true) ? 1 : 0)
+          .toList();
+      TorrentService.setFilePriorities(torrentId, priorities);
+    }
+
     notifyListeners();
   }
 
@@ -1736,6 +1787,37 @@ class DownloadProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Reads each torrent file's actual byte count from disk.
+  /// Returns a list parallel to [task.torrentFiles] where each entry is the
+  /// number of bytes confirmed written to disk (clamped to the declared length).
+  /// Files that don't exist yet return 0.  For completed files the value equals
+  /// the declared length (i.e. 100%).
+  Future<List<int>> getTorrentFileActualBytes(String taskId) async {
+    final task = _findTask(taskId);
+    if (task == null || task.torrentFiles == null) return [];
+    final result = <int>[];
+    for (final f in task.torrentFiles!) {
+      final name = f['name'] as String? ?? '';
+      final length = (f['length'] as int?) ?? 0;
+      if (name.isEmpty || length == 0) {
+        result.add(0);
+        continue;
+      }
+      try {
+        final file = File(p.join(task.savePath, name));
+        if (await file.exists()) {
+          final size = await file.length();
+          result.add(size.clamp(0, length));
+        } else {
+          result.add(0);
+        }
+      } catch (_) {
+        result.add(0);
+      }
+    }
+    return result;
+  }
+
   List<Map<String, dynamic>> _markTorrentFilesCompleted(List<Map<String, dynamic>> files) {
     return files.map((f) {
       final copy = Map<String, dynamic>.from(f);
@@ -1748,6 +1830,7 @@ class DownloadProvider extends ChangeNotifier {
       return copy;
     }).toList();
   }
+
 
   @override
   void dispose() {

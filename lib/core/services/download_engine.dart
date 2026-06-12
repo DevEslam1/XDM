@@ -493,8 +493,13 @@ class DownloadEngine {
           ),
         );
 
-        // Finish if progress is complete or it's seeding/completed
-        if (progress >= 1.0 ||
+        // Finish if progress is complete or it's seeding/completed.
+        // We ignore progress >= 1.0 if the torrent is in a checking, allocating, or metadata fetching state.
+        final isCheckingOrMetadata = stateLabel.contains('checking') ||
+            stateLabel.contains('metadata') ||
+            stateLabel.contains('allocating');
+
+        if ((progress >= 1.0 && !isCheckingOrMetadata) ||
             stateLabel == 'seeding' ||
             stateLabel == 'completed' ||
             stateLabel == 'finished') {
