@@ -531,16 +531,20 @@ class DownloadEngine {
         );
 
         // Finish if progress is complete or it's seeding/completed.
-        // We ignore progress >= 1.0 if the torrent is in a checking, allocating, or metadata fetching state.
+        // We ignore progress >= 1.0 if the torrent is in a checking, allocating, or metadata fetching state,
+        // or if the files have not actually been fully downloaded on disk.
         final isCheckingOrMetadata =
             stateLabel.contains('checking') ||
             stateLabel.contains('metadata') ||
             stateLabel.contains('allocating');
 
-        if ((progress >= 1.0 && !isCheckingOrMetadata) ||
-            stateLabel == 'seeding' ||
-            stateLabel == 'completed' ||
-            stateLabel == 'finished') {
+        final isFullyDownloaded = totalSize > 0 && downloadedBytes >= totalSize;
+
+        if (isFullyDownloaded &&
+            ((progress >= 1.0 && !isCheckingOrMetadata) ||
+                stateLabel == 'seeding' ||
+                stateLabel == 'completed' ||
+                stateLabel == 'finished')) {
           downloadSub?.cancel();
           if (!downloadCompleter.isCompleted) {
             downloadCompleter.complete();
