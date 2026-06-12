@@ -9,7 +9,6 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
-import '../../add_download/screens/add_screen.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
@@ -21,6 +20,7 @@ class BrowserDownloadSheet extends StatelessWidget {
   final String? text;
   final String? suggestedName;
   final VoidCallback? onQuality;
+  final String? downloadPageUrl;
 
   const BrowserDownloadSheet({
     super.key,
@@ -29,6 +29,7 @@ class BrowserDownloadSheet extends StatelessWidget {
     this.text,
     this.suggestedName,
     this.onQuality,
+    this.downloadPageUrl,
   });
 
   static Future<void> show(
@@ -38,6 +39,7 @@ class BrowserDownloadSheet extends StatelessWidget {
     String? text,
     String? suggestedName,
     VoidCallback? onQuality,
+    String? downloadPageUrl,
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     runHaptic(settings);
@@ -53,6 +55,7 @@ class BrowserDownloadSheet extends StatelessWidget {
         text: text,
         suggestedName: suggestedName,
         onQuality: onQuality,
+        downloadPageUrl: downloadPageUrl,
       ),
     );
   }
@@ -347,10 +350,13 @@ class BrowserDownloadSheet extends StatelessWidget {
 
                               // 4. Determine category
                               String resolvedCategory = '';
-                              if (type == 'video') resolvedCategory = 'Video';
-                              else if (type == 'audio') resolvedCategory = 'Audio';
-                              else if (type == 'image') resolvedCategory = 'Other';
-                              else {
+                              if (type == 'video') {
+                                resolvedCategory = 'Video';
+                              } else if (type == 'audio') {
+                                resolvedCategory = 'Audio';
+                              } else if (type == 'image') {
+                                resolvedCategory = 'Other';
+                              } else {
                                 resolvedCategory = categoryFromFileName(finalFileName);
                               }
 
@@ -362,6 +368,7 @@ class BrowserDownloadSheet extends StatelessWidget {
                                   size: 0,
                                   category: resolvedCategory,
                                   savePath: '', // Falls back to default directory
+                                  downloadPageUrl: downloadPageUrl,
                                 );
 
                                 if (context.mounted) {

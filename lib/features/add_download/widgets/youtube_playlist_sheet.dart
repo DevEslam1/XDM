@@ -139,6 +139,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
             size: size,
             category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
             savePath: savePath,
+            downloadPageUrl: widget.playlistUrl,
           );
         }
       } catch (_) {

@@ -93,6 +93,18 @@ class DownloadProvider extends ChangeNotifier {
   bool get sortAscending => _sortAscending;
   bool get isNavbarVisible => _isNavbarVisible;
 
+  String? _browserUrlToLoad;
+  String? get browserUrlToLoad => _browserUrlToLoad;
+
+  void openUrlInBrowser(String url) {
+    _browserUrlToLoad = url;
+    setActiveTabIndex(1);
+  }
+
+  void clearBrowserUrlToLoad() {
+    _browserUrlToLoad = null;
+  }
+
   void setCategoryFilter(String? category) {
     _categoryFilters.clear();
     if (category != null) {
@@ -421,6 +433,7 @@ class DownloadProvider extends ChangeNotifier {
     int? threadCount,
     DateTime? scheduledAt,
     List<Map<String, dynamic>>? torrentFiles,
+    String? downloadPageUrl,
   }) async {
     _lastError = null;
     final urls = url.split(RegExp(r'[\r\n]+')).map((u) => u.trim()).where((u) => u.isNotEmpty).toList();
@@ -454,6 +467,7 @@ class DownloadProvider extends ChangeNotifier {
             savePath: savePath,
             threadCount: resolvedThreadCount,
             scheduledAt: scheduledAt,
+            downloadPageUrl: downloadPageUrl,
           );
         }
       } else {
@@ -472,6 +486,7 @@ class DownloadProvider extends ChangeNotifier {
           threadCount: resolvedThreadCount,
           scheduledAt: scheduledAt,
           torrentFiles: torrentFiles,
+          downloadPageUrl: downloadPageUrl,
         );
       }
     } catch (e) {
@@ -489,6 +504,7 @@ class DownloadProvider extends ChangeNotifier {
     required int threadCount,
     DateTime? scheduledAt,
     List<Map<String, dynamic>>? torrentFiles,
+    String? downloadPageUrl,
   }) async {
     final defaultDirectory = _settingsProvider.customDownloadPath?.isNotEmpty == true
         ? _settingsProvider.customDownloadPath!
@@ -565,6 +581,7 @@ class DownloadProvider extends ChangeNotifier {
       seedingLimited: _settingsProvider.globalTorrentSeedingLimited,
       seedingLimitKbps: _settingsProvider.globalTorrentSeedingLimitKbps,
       torrentFiles: torrentFiles,
+      downloadPageUrl: downloadPageUrl,
     );
 
     _tasks.insert(0, task);

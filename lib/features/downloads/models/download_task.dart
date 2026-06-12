@@ -30,6 +30,7 @@ class DownloadTask {
   final bool seedingLimited;
   final int seedingLimitKbps;
   final List<Map<String, dynamic>>? torrentFiles;
+  final String? downloadPageUrl;
 
   DownloadTask({
     required this.id,
@@ -57,6 +58,7 @@ class DownloadTask {
     this.seedingLimited = false,
     this.seedingLimitKbps = 500,
     this.torrentFiles,
+    this.downloadPageUrl,
   });
 
   bool get isTorrent =>
@@ -142,6 +144,8 @@ class DownloadTask {
     bool? seedingLimited,
     int? seedingLimitKbps,
     List<Map<String, dynamic>>? torrentFiles,
+    String? downloadPageUrl,
+    bool clearDownloadPageUrl = false,
   }) {
     return DownloadTask(
       id: id,
@@ -169,6 +173,7 @@ class DownloadTask {
       seedingLimited: seedingLimited ?? this.seedingLimited,
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
       torrentFiles: torrentFiles ?? this.torrentFiles,
+      downloadPageUrl: clearDownloadPageUrl ? null : downloadPageUrl ?? this.downloadPageUrl,
     );
   }
 
@@ -199,6 +204,7 @@ class DownloadTask {
       'seedingLimited': seedingLimited,
       'seedingLimitKbps': seedingLimitKbps,
       'torrentFiles': torrentFiles,
+      'downloadPageUrl': downloadPageUrl,
     };
   }
 
@@ -258,6 +264,7 @@ class DownloadTask {
       torrentFiles: map['torrentFiles'] != null
           ? (map['torrentFiles'] as List).map((f) => Map<String, dynamic>.from(f as Map)).toList()
           : null,
+      downloadPageUrl: map['downloadPageUrl'] as String?,
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/utils/file_opener.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -634,7 +635,39 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             onEditPressed: () {
               _showUpdateUrlDialog(context, task, provider, settings);
             },
+            onCopyPressed: () {
+              Clipboard.setData(ClipboardData(text: task.url));
+              ThemedSnackbar.show(
+                context,
+                message: L10n.isRtl(context) ? 'تم نسخ الرابط' : 'URL copied to clipboard',
+                color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                icon: Icons.check_circle_outline,
+                isDarkMode: isDark,
+              );
+            },
           ),
+          if (task.downloadPageUrl != null && task.downloadPageUrl!.isNotEmpty)
+            _buildMetaRow(
+              context,
+              label: L10n.isRtl(context) ? 'صفحة التنزيل الأصلية' : 'ORIGIN DOWNLOAD PAGE',
+              value: task.downloadPageUrl!,
+              isUrl: true,
+              settings: settings,
+              onCopyPressed: () {
+                Clipboard.setData(ClipboardData(text: task.downloadPageUrl!));
+                ThemedSnackbar.show(
+                  context,
+                  message: L10n.isRtl(context) ? 'تم نسخ رابط الصفحة' : 'Page URL copied to clipboard',
+                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  icon: Icons.check_circle_outline,
+                  isDarkMode: isDark,
+                );
+              },
+              onOpenPressed: () {
+                provider.openUrlInBrowser(task.downloadPageUrl!);
+                Navigator.pop(context);
+              },
+            ),
           _buildMetaRow(context, label: L10n.of(context, 'details_path'), value: task.savePath, settings: settings),
           _buildMetaRow(
             context,
@@ -680,6 +713,8 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     bool isUrl = false,
     required SettingsProvider settings,
     VoidCallback? onEditPressed,
+    VoidCallback? onCopyPressed,
+    VoidCallback? onOpenPressed,
   }) {
     final isDark = settings.isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
@@ -723,6 +758,28 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                   constraints: const BoxConstraints(),
                   visualDensity: VisualDensity.compact,
                   tooltip: L10n.isRtl(context) ? 'تحديث الرابط' : 'Update URL',
+                ),
+              ],
+              if (onCopyPressed != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  onPressed: onCopyPressed,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: L10n.isRtl(context) ? 'نسخ الرابط' : 'Copy URL',
+                ),
+              ],
+              if (onOpenPressed != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  onPressed: onOpenPressed,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: L10n.isRtl(context) ? 'فتح في المتصفح' : 'Open in Browser',
                 ),
               ],
             ],

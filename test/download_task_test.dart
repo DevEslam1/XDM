@@ -25,6 +25,7 @@ void main() {
       updatedAt: now,
       completedAt: completed,
       supportsResume: true,
+      downloadPageUrl: 'https://example.com/download-page',
     );
 
     final restored = DownloadTask.fromMap(task.toMap());
@@ -37,5 +38,6 @@ void main() {
     expect(restored.chunks, task.chunks);
     expect(restored.supportsResume, isTrue);
     expect(restored.completedAt, completed);
+    expect(restored.downloadPageUrl, 'https://example.com/download-page');
   });
 }

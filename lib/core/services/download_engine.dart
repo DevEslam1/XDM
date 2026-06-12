@@ -365,8 +365,8 @@ class DownloadEngine {
 
       if (resolvedFileName != null) {
         final saveDir = File(localFilePath).parent.path;
-        currentLocalFilePath = p.join(saveDir, safeFileName(resolvedFileName!));
-        currentTempFilePath = p.join(saveDir, '${safeFileName(resolvedFileName!)}.dmxpart');
+        currentLocalFilePath = p.join(saveDir, safeFileName(resolvedFileName));
+        currentTempFilePath = p.join(saveDir, '${safeFileName(resolvedFileName)}.dmxpart');
       }
 
       if (resolvedFileName != null || resolvedFileSize > 0) {

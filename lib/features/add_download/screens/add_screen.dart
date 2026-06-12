@@ -27,7 +27,8 @@ import '../widgets/youtube_playlist_sheet.dart';
 class AddScreen extends StatefulWidget {
   final String? prefilledUrl;
   final String? prefilledName;
-  const AddScreen({super.key, this.prefilledUrl, this.prefilledName});
+  final String? downloadPageUrl;
+  const AddScreen({super.key, this.prefilledUrl, this.prefilledName, this.downloadPageUrl});
 
   @override
   State<AddScreen> createState() => _AddScreenState();
@@ -1460,6 +1461,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                       threadCount: _selectedThreads,
                       scheduledAt: _isScheduled ? _scheduledDateTime : null,
                       torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
+                      downloadPageUrl: widget.downloadPageUrl,
                     );
                     if (!mounted) return;
                     setState(() => _isSubmitting = false);
@@ -1511,6 +1513,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         threadCount: _selectedThreads,
         scheduledAt: _isScheduled ? _scheduledDateTime : null,
         torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
+        downloadPageUrl: widget.downloadPageUrl,
       );
       if (!mounted) return;
       setState(() => _isSubmitting = false);

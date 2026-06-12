@@ -89,15 +89,25 @@ class DatabaseService {
     return list;
   }
 
-  Future<void> addBrowserHistory(Map<String, dynamic> entry) async {
+  Future<String> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
-    if (url.isEmpty || url == 'about:blank') return;
+    if (url.isEmpty || url == 'about:blank') return '';
     final id = '${DateTime.now().millisecondsSinceEpoch}_$url';
     await _browserHistoryBox.put(id, {
       'url': url,
       'title': entry['title'] as String? ?? url,
       'visitedAt': entry['visitedAt'] as String? ?? DateTime.now().toIso8601String(),
     });
+    return id;
+  }
+
+  Future<void> updateBrowserHistoryTitle(String id, String title) async {
+    final val = _browserHistoryBox.get(id);
+    if (val is Map) {
+      final map = Map<String, dynamic>.from(val);
+      map['title'] = title;
+      await _browserHistoryBox.put(id, map);
+    }
   }
 
   Future<void> deleteBrowserHistory(String id) {

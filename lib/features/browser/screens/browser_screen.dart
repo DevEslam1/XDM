@@ -22,7 +22,6 @@ import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../../add_download/screens/add_screen.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -88,6 +87,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {}; // tab.url -> sources
   final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
   final Set<String> _recordedHistoryThisSession = {};
+  String? _lastHistoryEntryUrl;
+  String? _lastHistoryEntryId;
+  DateTime? _lastHistoryEntryTime;
   final Set<String> _bypassedSniffUrls = {};
   final ScrollController _dashboardScrollController = ScrollController();
   static const String _snifferPrefKey = 'browserSnifferEnabled';
@@ -341,12 +343,20 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _detectedDownloadUrls.remove(tab.id);
               });
               
+              if (!tab.isIncognito && !settings.incognitoEnabled && settings.saveBrowserHistory) {
+                _recordHistory(url);
+              }
+              
               tab.controller.getTitle().then((t) {
                 if (t != null && t.isNotEmpty && mounted) {
                   setState(() {
                     tab.title = t;
                   });
                   _saveTabs();
+                  
+                  if (!tab.isIncognito && !settings.incognitoEnabled && settings.saveBrowserHistory) {
+                    _recordHistory(url, title: t);
+                  }
                 }
               });
             }
@@ -416,6 +426,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           tab.title = t;
                         });
                         _saveTabs();
+                        
+                        if (!tab.isIncognito && !settings.incognitoEnabled && settings.saveBrowserHistory) {
+                          _recordHistory(cleanUrl, title: t);
+                        }
                       }
                     });
                   }
@@ -461,16 +475,47 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     return tab;
   }
 
-  void _recordHistory(String url) {
+  void _recordHistory(String url, {String? title}) {
     if (url.isEmpty || url == 'about:blank') return;
-    if (_recordedHistoryThisSession.contains(url)) return;
-    _recordedHistoryThisSession.add(url);
+    final clean = _cleanUrl(url);
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    if (settings.incognitoEnabled) return;
+    
+    final now = DateTime.now();
+    
+    if (clean == _lastHistoryEntryUrl && _lastHistoryEntryId != null) {
+      if (title != null && title.isNotEmpty && title != clean) {
+        try {
+          final db = Provider.of<DatabaseService>(context, listen: false);
+          db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
+        } catch (_) {}
+      }
+      return;
+    }
+    
+    if (clean == _lastHistoryEntryUrl && _lastHistoryEntryTime != null) {
+      if (now.difference(_lastHistoryEntryTime!) < const Duration(seconds: 5)) {
+        if (title != null && title.isNotEmpty && title != clean) {
+          try {
+            final db = Provider.of<DatabaseService>(context, listen: false);
+            db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
+          } catch (_) {}
+        }
+        return;
+      }
+    }
+    
+    _lastHistoryEntryUrl = clean;
+    _lastHistoryEntryTime = now;
+    
     try {
       final db = Provider.of<DatabaseService>(context, listen: false);
       db.addBrowserHistory({
-        'url': url,
-        'title': url,
-        'visitedAt': DateTime.now().toIso8601String(),
+        'url': clean,
+        'title': (title != null && title.isNotEmpty) ? title : clean,
+        'visitedAt': now.toIso8601String(),
+      }).then((id) {
+        _lastHistoryEntryId = id;
       });
     } catch (_) {}
   }
@@ -784,10 +829,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   void _showLongPressSheet(BuildContext context, String url, String type) {
+    final activeTab = _tabs[_currentTabIndex];
     BrowserDownloadSheet.show(
       context,
       url,
       type: type,
+      downloadPageUrl: activeTab.isHome ? null : activeTab.url,
       onQuality: () => _showQualityPicker(url),
     );
   }
@@ -1246,6 +1293,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   suggestedName: filename,
                                   type: label.toLowerCase().contains('audio') ? 'audio' : 'video',
                                   onQuality: () => _showQualityPicker(srcUrl),
+                                  downloadPageUrl: pageUrl,
                                 );
                               },
                             );
@@ -1870,6 +1918,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final downloadProvider = context.watch<DownloadProvider>();
+    if (downloadProvider.browserUrlToLoad != null) {
+      final urlToLoad = downloadProvider.browserUrlToLoad!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        downloadProvider.clearBrowserUrlToLoad();
+        _navigateToUrl(urlToLoad);
+      });
+    }
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
@@ -2469,6 +2524,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             url,
             suggestedName: filename,
             onQuality: () => _showQualityPicker(url),
+            downloadPageUrl: activeTab.isHome ? null : activeTab.url,
           );
         }
       },
@@ -2479,7 +2535,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     );
   }
 
-  Future<void> _startDirectDownload(String url, {String? suggestedName, String? type}) async {
+  Future<void> _startDirectDownload(String url, {String? suggestedName, String? type, String? downloadPageUrl}) async {
     final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
     final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
     final isRtl = L10n.isRtl(context);
@@ -2542,21 +2598,27 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
     // 4. Determine category
     String resolvedCategory = '';
-    if (type == 'video') resolvedCategory = 'Video';
-    else if (type == 'audio') resolvedCategory = 'Audio';
-    else if (type == 'image') resolvedCategory = 'Other';
-    else {
+    if (type == 'video') {
+      resolvedCategory = 'Video';
+    } else if (type == 'audio') {
+      resolvedCategory = 'Audio';
+    } else if (type == 'image') {
+      resolvedCategory = 'Other';
+    } else {
       resolvedCategory = categoryFromFileName(finalFileName);
     }
 
     // 5. Trigger download in background
     try {
+      final activeTab = _tabs[_currentTabIndex];
+      final resolvedOriginUrl = downloadPageUrl ?? (activeTab.isHome ? null : activeTab.url);
       await downloadProvider.addDownload(
         name: finalFileName,
         url: url,
         size: 0,
         category: resolvedCategory,
         savePath: '', // Falls back to default directory
+        downloadPageUrl: resolvedOriginUrl,
       );
 
       if (mounted) {
