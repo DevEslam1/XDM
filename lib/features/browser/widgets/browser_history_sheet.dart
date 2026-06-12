@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
+import '../../../core/utils/file_utils.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../downloads/models/download_task.dart';
@@ -32,11 +36,71 @@ class BrowserHistorySheet extends StatefulWidget {
 class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
   int _selectedTab = 0; // 0: Surfing History, 1: Downloads
   List<Map<String, dynamic>> _surfingHistory = [];
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadSurfingHistory();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase().trim();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  String _formatTimestamp(String? isoString) {
+    if (isoString == null || isoString.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(isoString);
+      return _formatDateTime(dt);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _formatDateTime(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _exportHistoryToJson() async {
+    final settings = context.read<SettingsProvider>();
+    runHaptic(settings);
+    try {
+      final List<Map<String, dynamic>> exportData = [];
+      if (_selectedTab == 0) {
+        exportData.addAll(_surfingHistory);
+      } else {
+        final provider = context.read<DownloadProvider>();
+        for (final task in provider.tasks) {
+          exportData.add({
+            'fileName': task.fileName,
+            'url': task.url,
+            'fileSize': task.fileSize,
+            'status': task.status.name,
+            'category': task.category,
+            'createdAt': task.createdAt.toIso8601String(),
+            'completedAt': task.completedAt?.toIso8601String(),
+          });
+        }
+      }
+      
+      final jsonStr = const JsonEncoder.withIndent('  ').convert(exportData);
+      await Share.share(jsonStr, subject: _selectedTab == 0 ? 'XDM Surfing History' : 'XDM Download History');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
   }
 
   void _loadSurfingHistory() {
@@ -137,6 +201,15 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                                   ),
                             ),
                           ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.ios_share,
+                              color: accent,
+                              size: 20,
+                            ),
+                            tooltip: 'Export to JSON',
+                            onPressed: _exportHistoryToJson,
+                          ),
                           if (_selectedTab == 0 && _surfingHistory.isNotEmpty)
                             IconButton(
                               icon: Icon(
@@ -147,7 +220,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                               tooltip: 'Clear history',
                               onPressed: () {
                                 runHaptic(settings);
-                                _clearAllSurfingHistory();
+                                _showClearHistoryConfirmation(settings);
                               },
                             ),
                           TextButton(
@@ -188,33 +261,92 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                       ),
                     ),
 
+                    // Search Bar
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                      child: Container(
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: (isDark ? AppTheme.background : AppTheme.lightBackground).withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                            width: 0.8,
+                          ),
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          style: TextStyle(
+                            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                            fontSize: 12,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                            prefixIcon: Icon(Icons.search, size: 16, color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? GestureDetector(
+                                    onTap: () {
+                                      _searchController.clear();
+                                    },
+                                    child: Icon(Icons.close, size: 16, color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                                  )
+                                : null,
+                            hintText: L10n.isRtl(context) ? 'البحث في السجل...' : 'Search history...',
+                            hintStyle: TextStyle(
+                              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                              fontSize: 12,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            fillColor: Colors.transparent,
+                          ),
+                        ),
+                      ),
+                    ),
+
                     // Content Area
                     Expanded(
                       child: _selectedTab == 0
-                          ? _surfingHistory.isEmpty
-                              ? _emptySurfingState(context, isDark)
-                              : ListView.separated(
-                                  controller: controller,
-                                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                                  itemCount: _surfingHistory.length,
-                                  separatorBuilder: (context, index) => const SizedBox(height: 6),
-                                  itemBuilder: (context, i) {
-                                    final item = _surfingHistory[i];
-                                    return _surfingTile(context, item, isDark, settings);
-                                  },
-                                )
-                          : downloadTasks.isEmpty
-                              ? _emptyDownloadsState(context, isDark)
-                              : ListView.separated(
-                                  controller: controller,
-                                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                                  itemCount: downloadTasks.length,
-                                  separatorBuilder: (context, index) => const SizedBox(height: 6),
-                                  itemBuilder: (context, i) {
-                                    final task = downloadTasks[i];
-                                    return _taskTile(context, task, isDark);
-                                  },
-                                ),
+                          ? (() {
+                              final filteredSurfing = _surfingHistory.where((item) {
+                                final title = (item['title'] as String? ?? '').toLowerCase();
+                                final url = (item['url'] as String? ?? '').toLowerCase();
+                                return title.contains(_searchQuery) || url.contains(_searchQuery);
+                              }).toList();
+                              return filteredSurfing.isEmpty
+                                  ? _emptySurfingState(context, isDark)
+                                  : ListView.separated(
+                                      controller: controller,
+                                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                                      itemCount: filteredSurfing.length,
+                                      separatorBuilder: (context, index) => const SizedBox(height: 6),
+                                      itemBuilder: (context, i) {
+                                        final item = filteredSurfing[i];
+                                        return _surfingTile(context, item, isDark, settings);
+                                      },
+                                    );
+                            })()
+                          : (() {
+                              final filteredDownloads = downloadTasks.where((task) {
+                                final name = task.fileName.toLowerCase();
+                                final url = task.url.toLowerCase();
+                                return name.contains(_searchQuery) || url.contains(_searchQuery);
+                              }).toList();
+                              return filteredDownloads.isEmpty
+                                  ? _emptyDownloadsState(context, isDark)
+                                  : ListView.separated(
+                                      controller: controller,
+                                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                                      itemCount: filteredDownloads.length,
+                                      separatorBuilder: (context, index) => const SizedBox(height: 6),
+                                      itemBuilder: (context, i) {
+                                        final task = filteredDownloads[i];
+                                        return _taskTile(context, task, isDark);
+                                      },
+                                    );
+                            })(),
                     ),
                   ],
                 ),
@@ -336,12 +468,79 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     );
   }
 
+  Future<void> _showClearHistoryConfirmation(SettingsProvider settings) async {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    
+    showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+          ),
+          title: Text(
+            isRtl ? 'مسح السجل؟' : 'CLEAR HISTORY?',
+            style: TextStyle(
+              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            isRtl 
+              ? 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟' 
+              : 'Are you sure you want to clear all history?',
+            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                runHaptic(settings);
+                Navigator.pop(context, false);
+              },
+              child: Text(
+                isRtl ? 'إلغاء' : 'CANCEL',
+                style: TextStyle(color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? AppTheme.neonRed.withValues(alpha: 0.2) : AppTheme.lightNeonRed.withValues(alpha: 0.1),
+                side: BorderSide(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                runHaptic(settings);
+                Navigator.pop(context, true);
+              },
+              child: Text(
+                isRtl ? 'مسح' : 'CLEAR',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ).then((confirmed) {
+      if (confirmed == true) {
+        _clearAllSurfingHistory();
+      }
+    });
+  }
+
   Widget _surfingTile(
       BuildContext context, Map<String, dynamic> item, bool isDark, SettingsProvider settings) {
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final url = item['url'] as String? ?? '';
     final title = item['title'] as String? ?? url;
     final id = item['id'] as String? ?? '';
+    final visitedAt = item['visitedAt'] as String? ?? '';
+    final timeStr = _formatTimestamp(visitedAt);
 
     return Container(
       decoration: BoxDecoration(
@@ -399,6 +598,16 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                           fontSize: 10,
                         ),
                       ),
+                      if (timeStr.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          timeStr,
+                          style: TextStyle(
+                            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -438,6 +647,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
   Widget _taskTile(BuildContext context, DownloadTask t, bool isDark) {
     final color = _statusColor(t.status, isDark);
+    final sizeStr = formatBytes(t.fileSize);
+    final timeStr = _formatDateTime(t.completedAt ?? t.createdAt);
+
     return Container(
       decoration: BoxDecoration(
         color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
@@ -491,14 +703,29 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        t.url,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                          fontSize: 10,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            sizeStr,
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '•  $timeStr',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

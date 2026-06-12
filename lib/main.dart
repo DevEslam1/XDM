@@ -69,7 +69,7 @@ class DmxApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: settings.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+            themeMode: settings.currentThemeMode,
             locale: Locale(settings.languageCode),
             home: const SplashScreen(),
           );

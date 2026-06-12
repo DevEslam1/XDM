@@ -12,6 +12,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _wifiOnlyKey = 'wifiOnly';
   static const _languageCodeKey = 'languageCode';
   static const _isDarkModeKey = 'isDarkMode';
+  static const _themeModeKey = 'themeMode';
   static const _showOnboardingKey = 'showOnboarding';
   static const _classicUiKey = 'classicUi';
 
@@ -49,6 +50,7 @@ class SettingsProvider extends ChangeNotifier {
   bool wifiOnly = false;
   String languageCode = 'en';
   bool isDarkMode = true;
+  String themeMode = 'system';
   bool showOnboarding = true;
   bool _classicUi = false;
   bool get classicUi => batterySaverMode ? true : _classicUi;
@@ -91,6 +93,7 @@ class SettingsProvider extends ChangeNotifier {
     vibration = _prefs.getBool(_vibrationKey) ?? vibration;
     wifiOnly = _prefs.getBool(_wifiOnlyKey) ?? wifiOnly;
     languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
+    themeMode = _prefs.getString(_themeModeKey) ?? 'system';
     isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
     showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
     _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
@@ -306,6 +309,26 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setSaveBrowserHistory(bool value) async {
     saveBrowserHistory = value;
     await _prefs.setBool(_saveBrowserHistoryKey, value);
+    notifyListeners();
+  }
+
+  ThemeMode get currentThemeMode {
+    switch (themeMode) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      case 'system':
+      default:
+        return ThemeMode.system;
+    }
+  }
+
+  Future<void> setThemeMode(String value) async {
+    themeMode = value;
+    await _prefs.setString(_themeModeKey, value);
+    isDarkMode = (value == 'dark');
+    await _prefs.setBool(_isDarkModeKey, isDarkMode);
     notifyListeners();
   }
 }
