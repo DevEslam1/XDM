@@ -161,7 +161,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             runSpacing: 4,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              StatusChip(status: task.status),
+                              StatusChip(task: task),
                               Text(
                                 L10n.translateCategory(context, task.category).toUpperCase(),
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -247,7 +247,22 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             },
                             tooltip: 'Retry Download',
                           )
-                        else if (task.status == DownloadStatus.completed)
+                        else if (task.status == DownloadStatus.completed) ...[
+                          if (task.isTorrent)
+                            IconButton(
+                              icon: Icon(
+                                task.seedingEnabled ? Icons.pause : Icons.play_arrow,
+                                color: task.seedingEnabled
+                                    ? (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)
+                                    : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                triggerHaptic(settings);
+                                provider.updateTaskSeeding(task.id, enabled: !task.seedingEnabled);
+                              },
+                              tooltip: task.seedingEnabled ? 'Pause Seeding' : 'Start Seeding',
+                            ),
                           IconButton(
                             icon: Icon(
                               Icons.folder_open_outlined,
@@ -260,6 +275,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             },
                             tooltip: 'Open File',
                           ),
+                        ],
                         IconButton(
                           icon: Icon(
                             Icons.close,

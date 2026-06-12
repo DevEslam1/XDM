@@ -40,9 +40,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     // Filter for completed or failed tasks matching search
     final historyTasks = provider.tasks.where((task) {
+      final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
       final isHistory =
-          task.status == DownloadStatus.completed ||
-          task.status == DownloadStatus.failed;
+          (task.status == DownloadStatus.completed ||
+          task.status == DownloadStatus.failed) && !isSeeding;
       if (!isHistory) return false;
 
       if (_searchQuery.trim().isEmpty) return true;

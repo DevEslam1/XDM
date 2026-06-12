@@ -143,8 +143,10 @@ class NotificationService {
       importance: Importance.low,
       priority: Priority.low,
       showProgress: true,
-      maxProgress: maxProgress > 0 ? maxProgress : 100,
-      progress: progress.clamp(0, maxProgress > 0 ? maxProgress : 100),
+      maxProgress: 100,
+      progress: maxProgress > 0
+          ? ((progress / maxProgress) * 100).round().clamp(0, 100)
+          : 0,
       onlyAlertOnce: true,
       ongoing: true,
       autoCancel: false,

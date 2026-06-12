@@ -48,10 +48,11 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
 
     // Filter tasks into active vs completed/failed
     final displayTasks = tasks.where((task) {
+      final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
       if (_selectedTab == 0) {
-        return task.status != DownloadStatus.completed && task.status != DownloadStatus.failed;
+        return (task.status != DownloadStatus.completed && task.status != DownloadStatus.failed) || isSeeding;
       } else {
-        return task.status == DownloadStatus.completed || task.status == DownloadStatus.failed;
+        return (task.status == DownloadStatus.completed || task.status == DownloadStatus.failed) && !isSeeding;
       }
     }).toList();
 

@@ -5,9 +5,9 @@ import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 
 class StatusChip extends StatefulWidget {
-  final DownloadStatus status;
+  final DownloadTask task;
 
-  const StatusChip({super.key, required this.status});
+  const StatusChip({super.key, required this.task});
 
   @override
   State<StatusChip> createState() => _StatusChipState();
@@ -17,10 +17,15 @@ class _StatusChipState extends State<StatusChip> with SingleTickerProviderStateM
   AnimationController? _controller;
   Animation<double>? _pulseAnimation;
 
+  bool _shouldPulse(DownloadTask task) {
+    return task.status == DownloadStatus.downloading ||
+        (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled);
+  }
+
   @override
   void initState() {
     super.initState();
-    if (widget.status == DownloadStatus.downloading) {
+    if (_shouldPulse(widget.task)) {
       _startPulse();
     }
   }
@@ -28,7 +33,7 @@ class _StatusChipState extends State<StatusChip> with SingleTickerProviderStateM
   @override
   void didUpdateWidget(StatusChip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.status == DownloadStatus.downloading) {
+    if (_shouldPulse(widget.task)) {
       _startPulse();
     } else {
       _stopPulse();
@@ -69,31 +74,38 @@ class _StatusChipState extends State<StatusChip> with SingleTickerProviderStateM
 
     Color color;
     String label;
+    final task = widget.task;
+    final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
 
-    switch (widget.status) {
-      case DownloadStatus.queued:
-        color = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-        label = 'QUEUED';
-        break;
-      case DownloadStatus.downloading:
-        color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-        label = 'DOWNLOADING';
-        break;
-      case DownloadStatus.paused:
-        color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-        label = 'PAUSED';
-        break;
-      case DownloadStatus.completed:
-        color = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-        label = 'COMPLETED';
-        break;
-      case DownloadStatus.failed:
-        color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-        label = 'FAILED';
-        break;
+    if (isSeeding) {
+      color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+      label = 'SEEDING';
+    } else {
+      switch (task.status) {
+        case DownloadStatus.queued:
+          color = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+          label = 'QUEUED';
+          break;
+        case DownloadStatus.downloading:
+          color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+          label = 'DOWNLOADING';
+          break;
+        case DownloadStatus.paused:
+          color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+          label = 'PAUSED';
+          break;
+        case DownloadStatus.completed:
+          color = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+          label = 'COMPLETED';
+          break;
+        case DownloadStatus.failed:
+          color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+          label = 'FAILED';
+          break;
+      }
     }
 
-    final isPulseActive = widget.status == DownloadStatus.downloading && _pulseAnimation != null;
+    final isPulseActive = _shouldPulse(task) && _pulseAnimation != null;
 
     final chipContent = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),

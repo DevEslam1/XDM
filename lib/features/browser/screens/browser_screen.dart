@@ -15,6 +15,9 @@ import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/url_utils.dart';
+import '../../../core/utils/file_utils.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -920,12 +923,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                 color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                                 onPressed: () {
                                   Navigator.pop(context);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => AddScreen(prefilledUrl: downloadUrl),
-                                    ),
-                                  );
+                                  _startDirectDownload(downloadUrl);
                                 },
                                 text: isRtl ? 'تحميل' : 'DOWNLOAD',
                               ),
@@ -1139,12 +1137,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       ),
       onTap: () {
         Navigator.pop(context);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AddScreen(prefilledUrl: streamUrl),
-          ),
-        );
+        _startDirectDownload(streamUrl, type: 'video');
       },
     );
   }
@@ -2119,14 +2112,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   if (stream != null && context.mounted) {
                                     final title = stream['title'] as String? ?? 'YouTube Video';
                                     final ext = stream['ext'] as String? ?? 'mp4';
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => AddScreen(
-                                          prefilledUrl: stream['src'] as String,
-                                          prefilledName: '$title.$ext',
-                                        ),
-                                      ),
+                                    _startDirectDownload(
+                                      stream['src'] as String,
+                                      suggestedName: '$title.$ext',
+                                      type: 'video',
                                     );
                                   }
                                 }
@@ -2439,14 +2428,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             if (stream != null && context.mounted) {
               final title = stream['title'] as String? ?? 'YouTube Video';
               final ext = stream['ext'] as String? ?? 'mp4';
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AddScreen(
-                    prefilledUrl: stream['src'] as String,
-                    prefilledName: '$title.$ext',
-                  ),
-                ),
+              _startDirectDownload(
+                stream['src'] as String,
+                suggestedName: '$title.$ext',
+                type: 'video',
               );
             }
           }
@@ -2492,6 +2477,120 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ? 'DOWNLOADS (${detectedSources.length})' 
           : 'DOWNLOAD'),
     );
+  }
+
+  Future<void> _startDirectDownload(String url, {String? suggestedName, String? type}) async {
+    final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final isRtl = L10n.isRtl(context);
+    final isDark = settingsProvider.isDarkMode;
+
+    // 1. Check if the exact same URL is already present in task list
+    final existingTasks = downloadProvider.tasks.where((t) => t.url == url).toList();
+    if (existingTasks.isNotEmpty) {
+      final existingTask = existingTasks.first;
+      if (existingTask.status == DownloadStatus.completed) {
+        ThemedSnackbar.show(
+          context,
+          message: isRtl ? 'هذا التنزيل مكتمل بالفعل' : 'This download is already completed.',
+          color: AppTheme.neonGreen,
+          icon: Icons.check_circle_outline,
+          isDarkMode: isDark,
+        );
+      } else if (existingTask.status == DownloadStatus.downloading || existingTask.status == DownloadStatus.queued) {
+        ThemedSnackbar.show(
+          context,
+          message: isRtl ? 'هذا التنزيل قيد التشغيل بالفعل' : 'This download is already in progress.',
+          color: AppTheme.neonBlue,
+          icon: Icons.info_outline,
+          isDarkMode: isDark,
+        );
+      } else {
+        downloadProvider.resumeTask(existingTask.id);
+        ThemedSnackbar.show(
+          context,
+          message: isRtl ? 'تم استئناف التنزيل' : 'Download resumed.',
+          color: AppTheme.neonBlue,
+          icon: Icons.play_arrow,
+          isDarkMode: isDark,
+        );
+      }
+      return;
+    }
+
+    // 2. Resolve default filename
+    String finalFileName = suggestedName ?? '';
+    if (finalFileName.isEmpty) {
+      if (url.startsWith('magnet:')) {
+        final parsed = parseMagnetUrl(url);
+        finalFileName = parsed['name'] ?? 'Torrent Download';
+      } else {
+        finalFileName = fileNameFromUrl(url);
+      }
+    }
+
+    // 3. Deduplicate filename to prevent conflicts
+    String numberedName = finalFileName;
+    final ext = p.extension(finalFileName);
+    final base = p.basenameWithoutExtension(finalFileName);
+    var counter = 1;
+    while (downloadProvider.tasks.any((t) => t.fileName.toLowerCase() == numberedName.toLowerCase())) {
+      numberedName = '${base}_$counter$ext';
+      counter++;
+    }
+    finalFileName = numberedName;
+
+    // 4. Determine category
+    String resolvedCategory = '';
+    if (type == 'video') resolvedCategory = 'Video';
+    else if (type == 'audio') resolvedCategory = 'Audio';
+    else if (type == 'image') resolvedCategory = 'Other';
+    else {
+      resolvedCategory = categoryFromFileName(finalFileName);
+    }
+
+    // 5. Trigger download in background
+    try {
+      await downloadProvider.addDownload(
+        name: finalFileName,
+        url: url,
+        size: 0,
+        category: resolvedCategory,
+        savePath: '', // Falls back to default directory
+      );
+
+      if (mounted) {
+        if (downloadProvider.lastError != null) {
+          ThemedSnackbar.show(
+            context,
+            message: downloadProvider.lastError!,
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+        } else {
+          ThemedSnackbar.show(
+            context,
+            message: isRtl
+                ? 'تم إنشاء الاتصال. القنوات متصلة.'
+                : 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
+            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            icon: Icons.rocket_launch_outlined,
+            isDarkMode: isDark,
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: e.toString(),
+          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          icon: Icons.error_outline,
+          isDarkMode: isDark,
+        );
+      }
+    }
   }
 
 }
