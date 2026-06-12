@@ -1,0 +1,288 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:dio/dio.dart';
+import 'package:dmx/core/services/database_service.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/permission_service.dart';
+import 'package:dmx/features/downloads/models/download_task.dart';
+import 'package:dmx/features/downloads/provider/download_provider.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:dmx/features/onboarding/screens/biometric_lock_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:provider/provider.dart';
+
+bool mockAuthResult = false;
+late String uniqueHivePath;
+
+class MockConnectivityPlatform extends ConnectivityPlatform {
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async {
+    return [ConnectivityResult.wifi];
+  }
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged {
+    return Stream.value([ConnectivityResult.wifi]);
+  }
+}
+
+class FakeDownloadEngine extends DownloadEngine {
+  final startedUrls = <String>[];
+
+  @override
+  Future<DownloadMetadata> resolveMetadata({
+    required String url,
+    String? requestedFileName,
+    String? customUserAgent,
+    bool enableProxy = false,
+    String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
+    bool bypassSSL = false,
+  }) async {
+    return DownloadMetadata(
+      fileName: requestedFileName ?? 'file.zip',
+      category: 'Archive',
+      fileSize: 100,
+      supportsResume: true,
+    );
+  }
+
+  @override
+  Future<void> download({
+    required String url,
+    required String tempFilePath,
+    required String localFilePath,
+    required int knownFileSize,
+    required bool supportsResume,
+    required CancelToken cancelToken,
+    required ValueChangedProgress onProgress,
+    required int Function() speedLimitBytesPerSecond,
+    required int Function() activeDownloadCount,
+    int threadCount = 1,
+    String? customUserAgent,
+    bool enableProxy = false,
+    String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
+    bool bypassSSL = false,
+    List<Map<String, dynamic>>? torrentFiles,
+    int? torrentId,
+  }) {
+    startedUrls.add(url);
+    final completer = Completer<void>();
+    
+    Timer(const Duration(milliseconds: 10), () {
+      onProgress(DownloadProgress(
+        downloadedBytes: 50,
+        fileSize: knownFileSize,
+        speed: 1000,
+        eta: 1,
+      ));
+    });
+
+    Timer(const Duration(milliseconds: 20), () {
+      onProgress(DownloadProgress(
+        downloadedBytes: knownFileSize,
+        fileSize: knownFileSize,
+        speed: 1000,
+        eta: 0,
+      ));
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    cancelToken.whenCancel.then((_) {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+          ),
+        );
+      }
+    });
+    return completer.future;
+  }
+}
+
+class FakePermissionService extends PermissionService {
+  @override
+  Future<String> defaultDownloadDirectory() async => 'build/test_downloads';
+
+  @override
+  Future<bool> ensureStorageAccess() async => true;
+}
+
+Future<(DatabaseService, SettingsProvider)> _setupServices() async {
+  SharedPreferences.setMockInitialValues({});
+  if (!Hive.isBoxOpen(DatabaseService.downloadsBoxName)) {
+    await Hive.openBox<dynamic>(DatabaseService.downloadsBoxName);
+  }
+  await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
+
+  final database = DatabaseService();
+  await database.init();
+  final settings = SettingsProvider();
+  await settings.load();
+  return (database, settings);
+}
+
+void main() {
+  setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    uniqueHivePath = 'build/test_hive_int_${DateTime.now().microsecondsSinceEpoch}';
+    try {
+      final dir = Directory(uniqueHivePath);
+      if (dir.existsSync()) {
+        dir.deleteSync(recursive: true);
+      }
+    } catch (_) {}
+    Hive.init(uniqueHivePath);
+    ConnectivityPlatform.instance = MockConnectivityPlatform();
+
+    const MethodChannel localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      localAuthChannel,
+      (MethodCall methodCall) async {
+        if (methodCall.method == 'canCheckBiometrics') {
+          return true;
+        }
+        if (methodCall.method == 'isDeviceSupported') {
+          return true;
+        }
+        if (methodCall.method == 'authenticate') {
+          return mockAuthResult;
+        }
+        if (methodCall.method == 'getAvailableBiometrics') {
+          return <String>['fingerprint'];
+        }
+        return null;
+      },
+    );
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.example.dmx/widget'),
+      (methodCall) async => null,
+    );
+  });
+
+  tearDown(() async {
+    if (Hive.isBoxOpen(DatabaseService.downloadsBoxName)) {
+      await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
+    }
+  });
+
+  tearDownAll(() async {
+    await Hive.close();
+    try {
+      final dir = Directory(uniqueHivePath);
+      if (dir.existsSync()) {
+        dir.deleteSync(recursive: true);
+      }
+    } catch (_) {}
+  });
+
+  test('DownloadProvider full download flow and pause/resume', () async {
+    final (database, settings) = await _setupServices();
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    await provider.addDownload(
+      name: 'test_flow.zip',
+      url: 'https://example.com/test_flow.zip',
+      size: 100,
+      category: 'Archive',
+      savePath: 'build/test_downloads',
+    );
+
+    expect(provider.tasks.length, 1);
+    final taskId = provider.tasks.first.id;
+    expect(provider.tasks.first.status, anyOf(DownloadStatus.downloading, DownloadStatus.queued));
+
+    await provider.pauseTask(taskId);
+    expect(provider.tasks.first.status, DownloadStatus.paused);
+
+    await provider.resumeTask(taskId);
+    expect(provider.tasks.first.status, anyOf(DownloadStatus.downloading, DownloadStatus.queued));
+  });
+
+  testWidgets('BiometricLockScreen authentication flow', (WidgetTester tester) async {
+    mockAuthResult = true;
+    final (database, settings) = (await tester.runAsync(() => _setupServices()))!;
+
+    await tester.pumpWidget(ChangeNotifierProvider<SettingsProvider>.value(
+      value: settings,
+      child: MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              return ElevatedButton(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const BiometricLockScreen(isDark: true, isRtl: false),
+                    ),
+                  );
+                  expect(result, isTrue);
+                },
+                child: const Text('Go'),
+              );
+            },
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Go'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(BiometricLockScreen), findsNothing);
+  });
+
+  testWidgets('BiometricLockScreen auth failure shows retry screen', (WidgetTester tester) async {
+    mockAuthResult = false;
+    final (database, settings) = (await tester.runAsync(() => _setupServices()))!;
+
+    await tester.pumpWidget(ChangeNotifierProvider<SettingsProvider>.value(
+      value: settings,
+      child: const MaterialApp(
+        home: BiometricLockScreen(isDark: true, isRtl: false),
+      ),
+    ));
+    
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byType(BiometricLockScreen), findsOneWidget);
+    expect(find.textContaining('FAILED'), findsOneWidget);
+    
+    mockAuthResult = true;
+    await tester.tap(find.text('RETRY VERIFICATION'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    
+    expect(find.byType(BiometricLockScreen), findsNothing);
+  });
+}

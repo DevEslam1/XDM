@@ -176,7 +176,6 @@ class YoutubeService {
       [YoutubeApiClient.ios],
       [YoutubeApiClient.tv],
       [YoutubeApiClient.androidVr],
-      [YoutubeApiClient.webCreator],
       [YoutubeApiClient.mweb],
     ];
 
@@ -327,7 +326,6 @@ class YoutubeService {
       [YoutubeApiClient.ios],
       [YoutubeApiClient.tv],
       [YoutubeApiClient.androidVr],
-      [YoutubeApiClient.webCreator],
       [YoutubeApiClient.mweb],
     ];
 

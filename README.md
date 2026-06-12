@@ -131,9 +131,9 @@ lib/
 
 ### Running Tests
 
-To verify package systems and range chunk builders, execute the unit test suite:
+To verify package systems, range chunk builders, integration flow, and biometric lock gates, run the test suite:
 ```bash
-flutter test test/download_provider_test.dart test/download_task_test.dart test/url_file_utils_test.dart
+flutter test
 ```
 
 ---

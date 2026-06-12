@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,6 +36,11 @@ class SettingsProvider extends ChangeNotifier {
   static const _pinchToZoomKey = 'pinchToZoom';
   static const _batterySaverModeKey = 'batterySaverMode';
   static const _saveBrowserHistoryKey = 'saveBrowserHistory';
+  static const _notificationsEnabledKey = 'notificationsEnabled';
+  static const _proxyHostKey = 'proxyHost';
+  static const _proxyPortKey = 'proxyPort';
+  static const _proxyUsernameKey = 'proxyUsername';
+  static const _proxyPasswordKey = 'proxyPassword';
 
   late final SharedPreferences _prefs;
 
@@ -81,6 +87,12 @@ class SettingsProvider extends ChangeNotifier {
   bool pinchToZoom = true;
   bool saveBrowserHistory = false;
 
+  bool notificationsEnabled = true;
+  String proxyHost = '';
+  int proxyPort = 8080;
+  String proxyUsername = '';
+  String proxyPassword = '';
+
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
     autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
@@ -118,6 +130,11 @@ class SettingsProvider extends ChangeNotifier {
     adBlockerEnabled = _prefs.getBool(_adBlockerEnabledKey) ?? adBlockerEnabled;
     pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
     saveBrowserHistory = _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
+    notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
+    proxyHost = _prefs.getString(_proxyHostKey) ?? '';
+    proxyPort = _prefs.getInt(_proxyPortKey) ?? 8080;
+    proxyUsername = _prefs.getString(_proxyUsernameKey) ?? '';
+    proxyPassword = _prefs.getString(_proxyPasswordKey) ?? '';
   }
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
@@ -329,6 +346,106 @@ class SettingsProvider extends ChangeNotifier {
     await _prefs.setString(_themeModeKey, value);
     isDarkMode = (value == 'dark');
     await _prefs.setBool(_isDarkModeKey, isDarkMode);
+    notifyListeners();
+  }
+
+  Future<void> setNotificationsEnabled(bool value) async {
+    notificationsEnabled = value;
+    await _prefs.setBool(_notificationsEnabledKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setProxyHost(String value) async {
+    proxyHost = value;
+    await _prefs.setString(_proxyHostKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setProxyPort(int value) async {
+    proxyPort = value;
+    await _prefs.setInt(_proxyPortKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setProxyUsername(String value) async {
+    proxyUsername = value;
+    await _prefs.setString(_proxyUsernameKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setProxyPassword(String value) async {
+    proxyPassword = value;
+    await _prefs.setString(_proxyPasswordKey, value);
+    notifyListeners();
+  }
+
+  Future<bool> testProxyConnection(String host, int port, String username, String password) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      client.findProxy = (uri) {
+        return "PROXY $host:$port";
+      };
+      if (username.isNotEmpty) {
+        client.authenticateProxy = (h, p, scheme, realm) async {
+          client.addProxyCredentials(
+            h,
+            p,
+            realm ?? '',
+            HttpClientBasicCredentials(username, password),
+          );
+          return true;
+        };
+      }
+      final request = await client.getUrl(Uri.parse("https://www.google.com"));
+      final response = await request.close();
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Proxy connection test failed: $e');
+      return false;
+    }
+  }
+
+  Future<void> resetToDefaults() async {
+    await _prefs.clear();
+    autoStart = true;
+    customDownloadPath = null;
+    _maxDownloads = 3;
+    speedLimitMb = 0.0;
+    enableGlow = true;
+    gridOpacity = 12.0;
+    soundNotification = true;
+    vibration = false;
+    wifiOnly = false;
+    languageCode = 'en';
+    themeMode = 'system';
+    isDarkMode = true;
+    showOnboarding = true;
+    _classicUi = false;
+    batterySaverMode = false;
+    biometricLock = false;
+    enableProxy = false;
+    proxyAddress = '';
+    bypassSSL = false;
+    reduceVisuals = false;
+    customUserAgent = '';
+    cleanupDays = 0;
+    categoryFolders = false;
+    globalTorrentSeeding = true;
+    globalTorrentSeedingLimited = false;
+    globalTorrentSeedingLimitKbps = 500;
+    _defaultThreadCount = 5;
+    incognitoEnabled = false;
+    desktopMode = false;
+    adBlockerEnabled = true;
+    pinchToZoom = true;
+    saveBrowserHistory = false;
+    notificationsEnabled = true;
+    proxyHost = '';
+    proxyPort = 8080;
+    proxyUsername = '';
+    proxyPassword = '';
+    await load();
     notifyListeners();
   }
 }

@@ -42,6 +42,10 @@ class DatabaseService {
     return _downloadsBox.delete(id);
   }
 
+  Future<void> clearAllTasks() {
+    return _downloadsBox.clear();
+  }
+
   List<Bookmark> loadBookmarks() {
     return _bookmarksBox.values
         .whereType<Map>()

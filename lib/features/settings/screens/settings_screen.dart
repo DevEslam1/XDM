@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -28,6 +29,10 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   late final TextEditingController _uaController;
   late final TextEditingController _proxyController;
+  late final TextEditingController _proxyHostController;
+  late final TextEditingController _proxyPortController;
+  late final TextEditingController _proxyUsernameController;
+  late final TextEditingController _proxyPasswordController;
   bool _isUpdatingHosts = false;
 
   @override
@@ -36,19 +41,168 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _uaController = TextEditingController(text: settings.customUserAgent);
     _proxyController = TextEditingController(text: settings.proxyAddress);
+    _proxyHostController = TextEditingController(text: settings.proxyHost);
+    _proxyPortController = TextEditingController(text: settings.proxyPort.toString());
+    _proxyUsernameController = TextEditingController(text: settings.proxyUsername);
+    _proxyPasswordController = TextEditingController(text: settings.proxyPassword);
   }
 
   @override
   void dispose() {
     _uaController.dispose();
     _proxyController.dispose();
+    _proxyHostController.dispose();
+    _proxyPortController.dispose();
+    _proxyUsernameController.dispose();
+    _proxyPasswordController.dispose();
     super.dispose();
+  }
+
+  Future<String?> _showPasswordDialog(BuildContext context, {required bool isExport, required bool isRtl, required bool isDark}) async {
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          title: Text(
+            isExport
+                ? (isRtl ? 'حماية النسخة الاحتياطية' : 'ENCRYPT BACKUP')
+                : (isRtl ? 'فك تشفير النسخة الاحتياطية' : 'DECRYPT BACKUP'),
+            style: TextStyle(
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isExport
+                    ? (isRtl
+                        ? 'أدخل كلمة مرور لتشفير ملف النسخ الاحتياطي (اتركه فارغاً للتصدير بدون تشفير):'
+                        : 'Enter a password to encrypt the backup file (leave empty to export unencrypted):')
+                    : (isRtl
+                        ? 'هذا الملف مشفر. يرجى إدخال كلمة المرور لفك التشفير:'
+                        : 'This backup file is encrypted. Enter the password to decrypt:'),
+                style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 11),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                    width: 0.8,
+                  ),
+                ),
+                child: TextField(
+                  controller: controller,
+                  obscureText: true,
+                  style: TextStyle(color: textClr, fontSize: 12),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: isRtl ? 'كلمة المرور' : 'Password',
+                    hintStyle: TextStyle(color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted, fontSize: 12),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 12)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: Text(
+                isExport
+                    ? (isRtl ? 'تصدير' : 'EXPORT')
+                    : (isRtl ? 'فك التشفير' : 'DECRYPT'),
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<bool?> _showImportOptionDialog(BuildContext context, {required bool isRtl, required bool isDark}) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          title: Text(
+            isRtl ? 'خيارات الاستيراد' : 'IMPORT OPTIONS',
+            style: TextStyle(
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          content: Text(
+            isRtl
+                ? 'كيف ترغب في استيراد سجلات التحميل؟\n\n• دمج: إضافة السجلات الجديدة والاحتفاظ بالحالية.\n• استبدال: مسح السجلات الحالية بالكامل وتطبيق الجديدة.'
+                : 'How would you like to restore the download logs?\n\n• MERGE: Add new logs and keep existing ones.\n• REPLACE: Wipe all existing logs and apply the new ones.',
+            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 11, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 12)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false), // merge
+              child: Text(
+                isRtl ? 'دمج' : 'MERGE',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true), // replace
+              child: Text(
+                isRtl ? 'استبدال' : 'REPLACE',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _exportBackup(BuildContext context, SettingsProvider settings) async {
     triggerHaptic(settings);
     final provider = Provider.of<DownloadProvider>(context, listen: false);
-    final jsonStr = provider.exportBackupJson();
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    // Prompt for password
+    final password = await _showPasswordDialog(context, isExport: true, isRtl: isRtl, isDark: isDark);
+    // If they closed dialog (returned null), cancel the export
+    if (password == null) return;
+
+    final jsonStr = provider.exportBackupJson(password: password);
     await Share.share(jsonStr, subject: 'XDM Backup Signal Logs');
   }
 
@@ -57,28 +211,57 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     final isDark = settings.isDarkMode;
     final provider = Provider.of<DownloadProvider>(context, listen: false);
     final isRtl = L10n.isRtl(context);
+
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json', 'txt'],
     );
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      final jsonStr = await file.readAsString();
-      final success = await provider.importBackupJson(jsonStr);
-      if (context.mounted) {
-        ThemedSnackbar.show(
-          context,
-          message: success
-              ? (isRtl ? 'تم استيراد النسخة الاحتياطية بنجاح' : 'Backup imported successfully')
-              : (isRtl ? 'فشل استيراد النسخة الاحتياطية' : 'Failed to import backup'),
-          color: success
-              ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-              : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
-          icon: success ? Icons.check_circle_outline : Icons.error_outline,
-          isDarkMode: isDark,
-        );
+    if (result == null || result.files.single.path == null) return;
+    if (!context.mounted) return;
+
+    // Ask for Merge vs Replace
+    final replace = await _showImportOptionDialog(context, isRtl: isRtl, isDark: isDark);
+    if (replace == null) return; // User cancelled
+
+    final file = File(result.files.single.path!);
+    final jsonStr = await file.readAsString();
+
+    // Detect if encrypted
+    bool isEncrypted = false;
+    try {
+      final bytes = base64Decode(jsonStr.trim());
+      final magic = utf8.encode('XDMCRYPT');
+      if (bytes.length >= magic.length) {
+        isEncrypted = true;
+        for (int i = 0; i < magic.length; i++) {
+          if (bytes[i] != magic[i]) {
+            isEncrypted = false;
+            break;
+          }
+        }
       }
+    } catch (_) {}
+
+    String? password = '';
+    if (isEncrypted) {
+      if (!context.mounted) return;
+      password = await _showPasswordDialog(context, isExport: false, isRtl: isRtl, isDark: isDark);
+      if (password == null) return; // User cancelled password dialog
     }
+
+    final success = await provider.importBackupJson(jsonStr, replace: replace, password: password);
+    if (!context.mounted) return;
+    ThemedSnackbar.show(
+      context,
+      message: success
+          ? (isRtl ? 'تم استيراد النسخة الاحتياطية بنجاح' : 'Backup imported successfully')
+          : (isRtl ? 'فشل استيراد النسخة الاحتياطية (تأكد من صحة كلمة المرور)' : 'Failed to import backup (check password)'),
+      color: success
+          ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+          : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+      icon: success ? Icons.check_circle_outline : Icons.error_outline,
+      isDarkMode: isDark,
+    );
   }
 
   @override
@@ -86,6 +269,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final dividerColor = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final isRtl = L10n.isRtl(context);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
     return GeometricGridBackground(
       child: Scaffold(
@@ -296,14 +481,22 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     settings: settings,
                     title: L10n.of(context, 'settings_cockpit'),
                     children: [
-                      _buildSwitchTile(
+                      _buildDropdownTile<String>(
                         settings: settings,
-                        title: L10n.of(context, 'settings_theme'),
-                        subtitle: L10n.of(context, 'settings_theme_sub'),
-                        value: settings.isDarkMode,
+                        title: L10n.isRtl(context) ? 'سمة المظهر' : 'THEME MODE',
+                        subtitle: L10n.isRtl(context) ? 'اختر سمة مظهر التطبيق' : 'Select application theme mode',
+                        value: settings.themeMode,
+                        items: const ['light', 'dark', 'system'],
+                        itemLabels: {
+                          'light': L10n.isRtl(context) ? 'فاتح' : 'LIGHT',
+                          'dark': L10n.isRtl(context) ? 'داكن' : 'DARK',
+                          'system': L10n.isRtl(context) ? 'تلقائي' : 'SYSTEM DEFAULT',
+                        },
                         onChanged: (val) {
-                          settings.setIsDarkMode(val);
-                          triggerHaptic(settings);
+                          if (val != null) {
+                            settings.setThemeMode(val);
+                            triggerHaptic(settings);
+                          }
                         },
                       ),
                       Divider(color: dividerColor, height: 1),
@@ -354,6 +547,17 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     settings: settings,
                     title: L10n.of(context, 'settings_alerters'),
                     children: [
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context) ? 'الإشعارات العامة' : 'GLOBAL NOTIFICATIONS',
+                        subtitle: L10n.isRtl(context) ? 'تفعيل أو تعطيل جميع إشعارات التطبيق' : 'Enable or disable all app notifications',
+                        value: settings.notificationsEnabled,
+                        onChanged: (val) {
+                          settings.setNotificationsEnabled(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
                         settings: settings,
                         title: L10n.of(context, 'settings_chime'),
@@ -471,13 +675,85 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       if (settings.enableProxy) ...[
                         Divider(color: dividerColor, height: 1),
                         _buildTextFieldTile(
-                          title: L10n.of(context, 'settings_proxy_address'),
-                          subtitle: 'e.g. 10.0.0.1:8080',
-                          controller: _proxyController,
+                          title: isRtl ? 'عنوان الوكيل (Host)' : 'PROXY HOST',
+                          subtitle: isRtl ? 'اسم المضيف أو عنوان IP' : 'Host name or IP address',
+                          controller: _proxyHostController,
                           onChanged: (val) {
-                            settings.setProxyAddress(val);
+                            settings.setProxyHost(val.trim());
+                            settings.setProxyAddress('${val.trim()}:${settings.proxyPort}');
                           },
                           isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildTextFieldTile(
+                          title: isRtl ? 'منفذ الوكيل (Port)' : 'PROXY PORT',
+                          subtitle: isRtl ? 'منفذ الاتصال بالوكيل' : 'Port number for connection',
+                          controller: _proxyPortController,
+                          onChanged: (val) {
+                            final port = int.tryParse(val.trim()) ?? 8080;
+                            settings.setProxyPort(port);
+                            settings.setProxyAddress('${settings.proxyHost}:$port');
+                          },
+                          isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildTextFieldTile(
+                          title: isRtl ? 'اسم المستخدم (اختياري)' : 'PROXY USERNAME (OPTIONAL)',
+                          subtitle: isRtl ? 'اسم المستخدم لمصادقة الوكيل' : 'Username for proxy credentials',
+                          controller: _proxyUsernameController,
+                          onChanged: (val) {
+                            settings.setProxyUsername(val.trim());
+                          },
+                          isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildTextFieldTile(
+                          title: isRtl ? 'كلمة المرور (اختياري)' : 'PROXY PASSWORD (OPTIONAL)',
+                          subtitle: isRtl ? 'كلمة المرور لمصادقة الوكيل' : 'Password for proxy credentials',
+                          controller: _proxyPasswordController,
+                          onChanged: (val) {
+                            settings.setProxyPassword(val.trim());
+                          },
+                          isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                          child: NeonGlowButton(
+                            isFilled: false,
+                            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                            text: isRtl ? 'اختبار الاتصال' : 'TEST CONNECTION',
+                            onPressed: () async {
+                              triggerHaptic(settings);
+                              ThemedSnackbar.show(
+                                context,
+                                message: isRtl ? 'جاري اختبار اتصال الوكيل...' : 'Testing proxy connection...',
+                                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                icon: Icons.sync,
+                                isDarkMode: isDark,
+                              );
+                              final success = await settings.testProxyConnection(
+                                _proxyHostController.text.trim(),
+                                int.tryParse(_proxyPortController.text.trim()) ?? 8080,
+                                _proxyUsernameController.text.trim(),
+                                _proxyPasswordController.text.trim(),
+                              );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: success
+                                      ? (isRtl ? 'نجح الاتصال بالوكيل!' : 'Proxy connection successful!')
+                                      : (isRtl ? 'فشل الاتصال بالوكيل' : 'Proxy connection failed'),
+                                  color: success
+                                      ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                                      : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                                  icon: success ? Icons.check_circle_outline : Icons.error_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            },
+                          ),
                         ),
                         Divider(color: dividerColor, height: 1),
                         _buildSwitchTile(
@@ -485,16 +761,152 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           title: L10n.of(context, 'settings_bypass_ssl'),
                           subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
                           value: settings.bypassSSL,
-                          onChanged: (val) {
-                            settings.setBypassSSL(val);
+                          onChanged: (val) async {
+                            if (val) {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) {
+                                  return AlertDialog(
+                                    backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                                    title: Text(
+                                      isRtl ? 'تحذير أمني' : 'SECURITY WARNING',
+                                      style: TextStyle(
+                                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    content: Text(
+                                      isRtl
+                                          ? 'تخطي التحقق من شهادة SSL يعرض اتصالاتك لخطر التنصت وهجمات رجل في المنتصف (MITM). هل تريد الاستمرار؟'
+                                          : 'Bypassing SSL verification exposes your connections to eavesdropping and Man-in-the-Middle (MITM) attacks. Do you want to continue?',
+                                      style: TextStyle(color: textClr),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, false),
+                                        child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context, true),
+                                        child: Text(isRtl ? 'متابعة' : 'CONTINUE', style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                              if (confirm == true) {
+                                settings.setBypassSSL(true);
+                              }
+                            } else {
+                              settings.setBypassSSL(false);
+                            }
                             triggerHaptic(settings);
                           },
                         ),
+                        if (settings.bypassSSL) ...[
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    isRtl
+                                        ? 'تحذير: تم تمكين تخطي شهادة SSL. اتصالاتك غير آمنة.'
+                                        : 'WARNING: SSL certificate bypass is active. Your connections are insecure.',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                       Divider(color: dividerColor, height: 1),
                       _buildUpdateHostsTile(context, settings),
                       Divider(color: dividerColor, height: 1),
                       _buildBackupTile(context, settings),
+                      Divider(color: dividerColor, height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: NeonGlowButton(
+                          isFilled: false,
+                          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          text: isRtl ? 'إعادة تعيين إلى الافتراضيات' : 'RESET TO DEFAULTS',
+                          onPressed: () async {
+                            triggerHaptic(settings);
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) {
+                                return AlertDialog(
+                                  backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                                  title: Text(
+                                    isRtl ? 'إعادة تعيين الإعدادات' : 'RESET SETTINGS',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  content: Text(
+                                    isRtl
+                                        ? 'هل أنت متأكد من رغبتك في إعادة تعيين جميع الإعدادات إلى القيم الافتراضية؟'
+                                        : 'Are you sure you want to reset all settings to their default values?',
+                                    style: TextStyle(color: textClr),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: Text(isRtl ? 'إعادة تعيين' : 'RESET', style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                            if (confirm == true) {
+                              await settings.resetToDefaults();
+                              _uaController.text = settings.customUserAgent;
+                              _proxyController.text = settings.proxyAddress;
+                              _proxyHostController.text = settings.proxyHost;
+                              _proxyPortController.text = settings.proxyPort.toString();
+                              _proxyUsernameController.text = settings.proxyUsername;
+                              _proxyPasswordController.text = settings.proxyPassword;
+                              
+                              if (context.mounted) {
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: isRtl ? 'تمت إعادة تعيين الإعدادات بنجاح!' : 'Settings reset to default values!',
+                                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                                  icon: Icons.check_circle_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -1212,6 +1624,34 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                   isRtl
                       ? 'يقيد قنوات الاتصال إلى ٢، والتحميلات المتزامنة إلى ١، ويفرض الواجهة الكلاسيكية لتوفير الطاقة'
                       : 'Limits threads to 2, downloads to 1, and forces Classic UI to save battery',
+                  style: TextStyle(color: subClr, fontSize: 10),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Reduce Visuals Toggle
+              SwitchListTile(
+                value: settings.reduceVisuals,
+                onChanged: (val) {
+                  settings.setReduceVisuals(val);
+                  triggerHaptic(settings);
+                },
+                activeThumbColor: accentColor,
+                activeTrackColor: accentColor.withValues(alpha: 0.2),
+                inactiveThumbColor: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                inactiveTrackColor: isDark ? AppTheme.border : AppTheme.lightBorder,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  isRtl ? 'تقليل المؤثرات البصرية' : 'REDUCE VISUAL EFFECTS',
+                  style: TextStyle(
+                    color: textClr,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  isRtl
+                      ? 'إيقاف تأثيرات التوهج والضبابية لتحسين الأداء على الأجهزة الضعيفة'
+                      : 'Disable glow and blur effects to improve performance on low-end devices',
                   style: TextStyle(color: subClr, fontSize: 10),
                 ),
               ),

@@ -963,6 +963,10 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         customUserAgent: settings.customUserAgent,
         enableProxy: settings.enableProxy,
         proxyAddress: settings.proxyAddress,
+        proxyHost: settings.proxyHost,
+        proxyPort: settings.proxyPort,
+        proxyUsername: settings.proxyUsername,
+        proxyPassword: settings.proxyPassword,
         bypassSSL: settings.bypassSSL,
       );
 

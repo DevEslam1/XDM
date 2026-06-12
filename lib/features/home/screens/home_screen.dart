@@ -567,6 +567,13 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
 
     final hasNoData = totalSizeMb == 0.0;
 
+    final List<String> activeCategoryNames = hasNoData
+        ? []
+        : categoryCards
+            .where((card) => (sizes[card['name']] ?? 0.0) > 0)
+            .map<String>((card) => card['name'] as String)
+            .toList();
+
     final List<PieChartSectionData> sections = hasNoData
         ? [
             PieChartSectionData(
@@ -576,8 +583,8 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
               title: '',
             )
           ]
-        : categoryCards.map((card) {
-            final String name = card['name'];
+        : activeCategoryNames.map((name) {
+            final card = categoryCards.firstWhere((c) => c['name'] == name);
             final Color color = card['color'];
             final sizeMb = sizes[name] ?? 0.0;
             final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
@@ -593,7 +600,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 fontWeight: FontWeight.bold,
               ),
             );
-          }).where((section) => section.value > 0).toList();
+          }).toList();
 
     final chartBody = Container(
       width: double.infinity,
@@ -618,6 +625,22 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
               children: [
                 PieChart(
                   PieChartData(
+                    pieTouchData: PieTouchData(
+                      touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                        if (!event.isInterestedForInteractions ||
+                            pieTouchResponse == null ||
+                            pieTouchResponse.touchedSection == null) {
+                          return;
+                        }
+                        final touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                        if (touchedIndex >= 0 && touchedIndex < activeCategoryNames.length) {
+                          final category = activeCategoryNames[touchedIndex];
+                          final provider = Provider.of<DownloadProvider>(context, listen: false);
+                          lightPulse(settings);
+                          provider.toggleCategoryFilter(category);
+                        }
+                      },
+                    ),
                     sections: sections,
                     centerSpaceRadius: 32,
                     sectionsSpace: 2.5,

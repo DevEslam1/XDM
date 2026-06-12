@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -75,7 +76,9 @@ class DownloadProvider extends ChangeNotifier {
 
   String _searchQuery = '';
   String _statusFilter = 'All';
-  String? _categoryFilter;
+  final Set<String> _categoryFilters = {};
+  Set<String> get categoryFilters => _categoryFilters;
+  String? get categoryFilter => _categoryFilters.isEmpty ? null : _categoryFilters.first;
   int _activeTabIndex = 0;
   String? _lastError;
   bool _isNavbarVisible = true;
@@ -83,7 +86,6 @@ class DownloadProvider extends ChangeNotifier {
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
   String get searchQuery => _searchQuery;
   String get statusFilter => _statusFilter;
-  String? get categoryFilter => _categoryFilter;
   int get activeTabIndex => _activeTabIndex;
   String? get lastError => _lastError;
   SortOption get sortOption => _sortOption;
@@ -91,7 +93,24 @@ class DownloadProvider extends ChangeNotifier {
   bool get isNavbarVisible => _isNavbarVisible;
 
   void setCategoryFilter(String? category) {
-    _categoryFilter = category;
+    _categoryFilters.clear();
+    if (category != null) {
+      _categoryFilters.add(category);
+    }
+    notifyListeners();
+  }
+
+  void toggleCategoryFilter(String category) {
+    if (_categoryFilters.contains(category)) {
+      _categoryFilters.remove(category);
+    } else {
+      _categoryFilters.add(category);
+    }
+    notifyListeners();
+  }
+
+  void clearCategoryFilters() {
+    _categoryFilters.clear();
     notifyListeners();
   }
 
@@ -172,14 +191,91 @@ class DownloadProvider extends ChangeNotifier {
     _updateTelemetryWidget();
   }
 
-  String exportBackupJson() {
-    final list = _tasks.map((t) => t.toMap()).toList();
-    return jsonEncode(list);
+  List<int> _xorCipher(List<int> data, List<int> key) {
+    final List<int> result = List<int>.filled(data.length, 0);
+    for (int i = 0; i < data.length; i++) {
+      result[i] = data[i] ^ key[i % key.length];
+    }
+    return result;
   }
 
-  Future<bool> importBackupJson(String jsonStr) async {
+  String _encryptBackup(String jsonStr, String password) {
+    final dataBytes = utf8.encode(jsonStr);
+    final keyBytes = sha256.convert(utf8.encode(password)).bytes;
+    final cipherBytes = _xorCipher(dataBytes, keyBytes);
+    final magic = utf8.encode('XDMCRYPT');
+    final finalBytes = [...magic, ...cipherBytes];
+    return base64Encode(finalBytes);
+  }
+
+  String? _decryptBackup(String encryptedBase64, String password) {
     try {
+      final bytes = base64Decode(encryptedBase64);
+      final magic = utf8.encode('XDMCRYPT');
+      if (bytes.length < magic.length) return null;
+      for (int i = 0; i < magic.length; i++) {
+        if (bytes[i] != magic[i]) return null;
+      }
+      final cipherBytes = bytes.sublist(magic.length);
+      final keyBytes = sha256.convert(utf8.encode(password)).bytes;
+      final dataBytes = _xorCipher(cipherBytes, keyBytes);
+      return utf8.decode(dataBytes);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  String exportBackupJson({String? password}) {
+    final list = _tasks.map((t) => t.toMap()).toList();
+    final jsonStr = jsonEncode(list);
+    if (password != null && password.isNotEmpty) {
+      return _encryptBackup(jsonStr, password);
+    }
+    return jsonStr;
+  }
+
+  Future<bool> importBackupJson(String content, {bool replace = false, String? password}) async {
+    try {
+      String jsonStr = content.trim();
+      bool isEncrypted = false;
+      try {
+        final bytes = base64Decode(jsonStr);
+        final magic = utf8.encode('XDMCRYPT');
+        if (bytes.length >= magic.length) {
+          isEncrypted = true;
+          for (int i = 0; i < magic.length; i++) {
+            if (bytes[i] != magic[i]) {
+              isEncrypted = false;
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (isEncrypted) {
+        if (password == null || password.isEmpty) {
+          return false;
+        }
+        final decrypted = _decryptBackup(jsonStr, password);
+        if (decrypted == null) {
+          return false;
+        }
+        jsonStr = decrypted;
+      }
+
       final list = jsonDecode(jsonStr) as List;
+      for (final item in list) {
+        if (item is! Map) return false;
+        if (!item.containsKey('id') || !item.containsKey('url') || !item.containsKey('fileName')) {
+          return false;
+        }
+      }
+
+      if (replace) {
+        await _databaseService.clearAllTasks();
+        _tasks.clear();
+      }
+
       var hasChanges = false;
       for (final item in list) {
         final Map<String, dynamic> map = Map<String, dynamic>.from(item as Map);
@@ -190,12 +286,14 @@ class DownloadProvider extends ChangeNotifier {
           hasChanges = true;
         }
       }
-      if (hasChanges) {
+
+      if (hasChanges || replace) {
         notifyListeners();
         _updateTelemetryWidget();
       }
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Backup import error: $e');
       return false;
     }
   }
@@ -217,7 +315,7 @@ class DownloadProvider extends ChangeNotifier {
           task.url.toLowerCase().contains(_searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
-      if (_categoryFilter != null && task.category != _categoryFilter) {
+      if (_categoryFilters.isNotEmpty && !_categoryFilters.contains(task.category)) {
         return false;
       }
 
@@ -419,6 +517,10 @@ class DownloadProvider extends ChangeNotifier {
         customUserAgent: _settingsProvider.customUserAgent,
         enableProxy: _settingsProvider.enableProxy,
         proxyAddress: _settingsProvider.proxyAddress,
+        proxyHost: _settingsProvider.proxyHost,
+        proxyPort: _settingsProvider.proxyPort,
+        proxyUsername: _settingsProvider.proxyUsername,
+        proxyPassword: _settingsProvider.proxyPassword,
         bypassSSL: _settingsProvider.bypassSSL,
       );
       resolvedCategory = category.trim().isNotEmpty ? category : metadata.category;
@@ -431,7 +533,19 @@ class DownloadProvider extends ChangeNotifier {
 
     var directory = savePath.trim().isNotEmpty ? savePath.trim() : defaultDirectory;
     if (_settingsProvider.categoryFolders) {
-      directory = p.join(directory, resolvedCategory);
+      String subFolder = resolvedCategory;
+      if (_settingsProvider.languageCode == 'ar') {
+        subFolder = switch (resolvedCategory) {
+          'Video' => 'الفيديو',
+          'Audio' => 'الصوت',
+          'Document' => 'المستندات',
+          'Archive' => 'الأرشيف',
+          'APK' => 'التطبيقات',
+          'Other' || 'General' => 'أخرى',
+          _ => resolvedCategory,
+        };
+      }
+      directory = p.join(directory, subFolder);
     }
     final localFilePath = _downloadEngine.buildLocalFilePath(directory, fileName);
     final tempFilePath = _downloadEngine.buildTempFilePath(directory, fileName);
@@ -440,7 +554,7 @@ class DownloadProvider extends ChangeNotifier {
     final isScheduled = scheduledAt != null && scheduledAt.isAfter(now);
 
     final task = DownloadTask(
-      id: '${now.microsecondsSinceEpoch}_${url.hashCode.abs()}_${Random().nextInt(999999)}',
+      id: '${now.microsecondsSinceEpoch}_${Random.secure().nextInt(1000000000)}',
       fileName: fileName,
       url: url.trim(),
       fileSize: fileSize,
@@ -870,6 +984,10 @@ class DownloadProvider extends ChangeNotifier {
           customUserAgent: _settingsProvider.customUserAgent,
           enableProxy: _settingsProvider.enableProxy,
           proxyAddress: _settingsProvider.proxyAddress,
+          proxyHost: _settingsProvider.proxyHost,
+          proxyPort: _settingsProvider.proxyPort,
+          proxyUsername: _settingsProvider.proxyUsername,
+          proxyPassword: _settingsProvider.proxyPassword,
           bypassSSL: _settingsProvider.bypassSSL,
           torrentFiles: task.torrentFiles,
           torrentId: torrentId,
@@ -922,16 +1040,18 @@ class DownloadProvider extends ChangeNotifier {
               _tasks[index] = updatedTask;
               notifyListeners();
 
-              _notificationService.showDownloadProgress(
-                notificationId: notificationId,
-                title: task.fileName,
-                progress: progress.downloadedBytes,
-                maxProgress: progress.fileSize,
-                speed: updatedTask.speedFormatted,
-                eta: updatedTask.etaFormatted,
-                languageCode: _settingsProvider.languageCode,
-                payload: task.id,
-              );
+              if (_settingsProvider.notificationsEnabled) {
+                _notificationService.showDownloadProgress(
+                  notificationId: notificationId,
+                  title: task.fileName,
+                  progress: progress.downloadedBytes,
+                  maxProgress: progress.fileSize,
+                  speed: updatedTask.speedFormatted,
+                  eta: updatedTask.etaFormatted,
+                  languageCode: _settingsProvider.languageCode,
+                  payload: task.id,
+                );
+              }
             } else {
               _tasks[index] = updatedTask;
             }
@@ -970,10 +1090,12 @@ class DownloadProvider extends ChangeNotifier {
                   : null,
             ),
           );
-          _notificationService.showDownloadComplete(
-            notificationId: notificationId,
-            title: task.fileName,
-          );
+          if (_settingsProvider.notificationsEnabled) {
+            _notificationService.showDownloadComplete(
+              notificationId: notificationId,
+              title: task.fileName,
+            );
+          }
         })
         .catchError((Object error) async {
           await _flushPendingProgress(task.id);
@@ -992,11 +1114,13 @@ class DownloadProvider extends ChangeNotifier {
               errorMessage: _errorMessage(error),
             ),
           );
-          _notificationService.showDownloadFailed(
-            notificationId: notificationId,
-            title: task.fileName,
-            error: _errorMessage(error),
-          );
+          if (_settingsProvider.notificationsEnabled) {
+            _notificationService.showDownloadFailed(
+              notificationId: notificationId,
+              title: task.fileName,
+              error: _errorMessage(error),
+            );
+          }
         })
         .whenComplete(() {
           _cancelTokens.remove(task.id);
@@ -1351,6 +1475,10 @@ class DownloadProvider extends ChangeNotifier {
           customUserAgent: _settingsProvider.customUserAgent,
           enableProxy: _settingsProvider.enableProxy,
           proxyAddress: _settingsProvider.proxyAddress,
+          proxyHost: _settingsProvider.proxyHost,
+          proxyPort: _settingsProvider.proxyPort,
+          proxyUsername: _settingsProvider.proxyUsername,
+          proxyPassword: _settingsProvider.proxyPassword,
           bypassSSL: _settingsProvider.bypassSSL,
         );
       } catch (e) {
@@ -1389,6 +1517,10 @@ class DownloadProvider extends ChangeNotifier {
         customUserAgent: _settingsProvider.customUserAgent,
         enableProxy: _settingsProvider.enableProxy,
         proxyAddress: _settingsProvider.proxyAddress,
+        proxyHost: _settingsProvider.proxyHost,
+        proxyPort: _settingsProvider.proxyPort,
+        proxyUsername: _settingsProvider.proxyUsername,
+        proxyPassword: _settingsProvider.proxyPassword,
         bypassSSL: _settingsProvider.bypassSSL,
       );
     } catch (e) {

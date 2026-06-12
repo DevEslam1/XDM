@@ -15,7 +15,6 @@ class FilterChipsBar extends StatelessWidget {
     final settings = Provider.of<SettingsProvider>(context);
     final isDark = settings.isDarkMode;
     final activeFilter = provider.statusFilter;
-    final categoryFilter = provider.categoryFilter;
     final isRtl = L10n.isRtl(context);
 
     final glassBg = isDark ? AppTheme.glassBg : AppTheme.lightGlassBg;
@@ -32,12 +31,13 @@ class FilterChipsBar extends StatelessWidget {
       height: 40,
       child: Row(
         children: [
-          if (categoryFilter != null) ...[
-            Padding(
+          ...provider.categoryFilters.map((category) {
+            final count = provider.tasks.where((t) => t.category.toLowerCase() == category.toLowerCase()).length;
+            return Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: InputChip(
                 label: Text(
-                  '${isRtl ? 'تصنيف: ' : 'CAT: '}${categoryFilter.toUpperCase()}',
+                  '${isRtl ? 'تصنيف: ' : 'CAT: '}${category.toUpperCase()} ($count)',
                   style: TextStyle(
                     color: isDark
                         ? AppTheme.neonGreen
@@ -55,7 +55,7 @@ class FilterChipsBar extends StatelessWidget {
                   if (settings.vibration) {
                     HapticFeedback.lightImpact();
                   }
-                  provider.setCategoryFilter(null);
+                  provider.toggleCategoryFilter(category);
                 },
                 backgroundColor:
                     (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
@@ -69,8 +69,8 @@ class FilterChipsBar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
-            ),
-          ],
+            );
+          }),
           Expanded(
             child: ListView.builder(
               scrollDirection: Axis.horizontal,

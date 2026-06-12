@@ -35,6 +35,10 @@ class FakeDownloadEngine extends DownloadEngine {
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
     bool bypassSSL = false,
   }) async {
     return DownloadMetadata(
@@ -60,6 +64,10 @@ class FakeDownloadEngine extends DownloadEngine {
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
     bool bypassSSL = false,
     List<Map<String, dynamic>>? torrentFiles,
     int? torrentId,

@@ -65,6 +65,10 @@ class DownloadEngine {
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
     bool bypassSSL = false,
   }) {
     final client = Dio();
@@ -74,19 +78,37 @@ class DownloadEngine {
 
     final adapter = client.httpClientAdapter;
     if (adapter is IOHttpClientAdapter) {
-      if (enableProxy &&
-          proxyAddress != null &&
-          proxyAddress.trim().isNotEmpty) {
-        adapter.createHttpClient = () {
-          final httpClient = HttpClient();
-          httpClient.findProxy = (uri) {
-            return 'PROXY ${proxyAddress.trim()}';
+      if (enableProxy) {
+        final String host = (proxyHost != null && proxyHost.trim().isNotEmpty)
+            ? proxyHost.trim()
+            : (proxyAddress != null && proxyAddress.contains(':') ? proxyAddress.split(':')[0].trim() : proxyAddress?.trim() ?? '');
+        final int port = (proxyPort != null && proxyPort > 0)
+            ? proxyPort
+            : (proxyAddress != null && proxyAddress.contains(':') ? int.tryParse(proxyAddress.split(':')[1]) ?? 8080 : 8080);
+
+        if (host.isNotEmpty) {
+          adapter.createHttpClient = () {
+            final httpClient = HttpClient();
+            httpClient.findProxy = (uri) {
+              return 'PROXY $host:$port';
+            };
+            if (proxyUsername != null && proxyUsername.isNotEmpty) {
+              httpClient.authenticateProxy = (h, p, scheme, realm) async {
+                httpClient.addProxyCredentials(
+                  h,
+                  p,
+                  realm ?? '',
+                  HttpClientBasicCredentials(proxyUsername, proxyPassword ?? ''),
+                );
+                return true;
+              };
+            }
+            if (bypassSSL) {
+              httpClient.badCertificateCallback = (cert, host, port) => true;
+            }
+            return httpClient;
           };
-          if (bypassSSL) {
-            httpClient.badCertificateCallback = (cert, host, port) => true;
-          }
-          return httpClient;
-        };
+        }
       }
     }
     return client;
@@ -98,6 +120,10 @@ class DownloadEngine {
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
     bool bypassSSL = false,
   }) async {
     final isTorrent =
@@ -240,6 +266,10 @@ class DownloadEngine {
       customUserAgent: customUserAgent,
       enableProxy: enableProxy,
       proxyAddress: proxyAddress,
+      proxyHost: proxyHost,
+      proxyPort: proxyPort,
+      proxyUsername: proxyUsername,
+      proxyPassword: proxyPassword,
       bypassSSL: bypassSSL,
     );
 
@@ -292,6 +322,10 @@ class DownloadEngine {
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
     bool bypassSSL = false,
     List<Map<String, dynamic>>? torrentFiles,
     int? torrentId,
@@ -450,6 +484,10 @@ class DownloadEngine {
       customUserAgent: customUserAgent,
       enableProxy: enableProxy,
       proxyAddress: proxyAddress,
+      proxyHost: proxyHost,
+      proxyPort: proxyPort,
+      proxyUsername: proxyUsername,
+      proxyPassword: proxyPassword,
       bypassSSL: bypassSSL,
     );
 
@@ -457,134 +495,19 @@ class DownloadEngine {
         threadCount > 1 && supportsResume && knownFileSize > 0;
 
     if (!isMultiThread) {
-      final tempFile = File(tempFilePath);
-      await tempFile.parent.create(recursive: true);
-
-      var resumeFrom = 0;
-      if (supportsResume && await tempFile.exists()) {
-        resumeFrom = await tempFile.length();
-      } else if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
-
-      final headers = <String, dynamic>{};
-      if (resumeFrom > 0) {
-        headers['range'] = 'bytes=$resumeFrom-';
-      }
-
-      final response = await isolatedDio.get<ResponseBody>(
-        punyUrl,
+      await _downloadSingleThreaded(
+        url: url,
+        punyUrl: punyUrl,
+        tempFilePath: tempFilePath,
+        localFilePath: localFilePath,
+        knownFileSize: knownFileSize,
+        supportsResume: supportsResume,
         cancelToken: cancelToken,
-        options: Options(
-          responseType: ResponseType.stream,
-          followRedirects: true,
-          headers: headers,
-        ),
+        onProgress: onProgress,
+        speedLimitBytesPerSecond: speedLimitBytesPerSecond,
+        activeDownloadCount: activeDownloadCount,
+        isolatedDio: isolatedDio,
       );
-
-      var totalSize = knownFileSize;
-      final contentLength =
-          int.tryParse(
-            response.headers.value(Headers.contentLengthHeader) ?? '',
-          ) ??
-          0;
-      if (contentLength > 0) {
-        final actualSize = (response.statusCode == 206 ? resumeFrom : 0) + contentLength;
-        if (actualSize != totalSize) {
-          totalSize = actualSize;
-        }
-      }
-
-      final sink = tempFile.openWrite(
-        mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
-      );
-      final stopwatch = Stopwatch()..start();
-      var downloadedThisSession = 0;
-      var downloadedTotal = resumeFrom;
-      final speedSamples = <_SpeedSample>[];
-
-      try {
-        await for (final chunk in response.data!.stream) {
-          if (cancelToken.isCancelled) {
-            throw DioException(
-              requestOptions: RequestOptions(path: punyUrl),
-              type: DioExceptionType.cancel,
-              message: 'Download cancelled.',
-            );
-          }
-          sink.add(chunk);
-          downloadedThisSession += chunk.length;
-          downloadedTotal += chunk.length;
-
-          final nowMs = stopwatch.elapsedMilliseconds;
-          speedSamples.add(_SpeedSample(nowMs, downloadedTotal));
-
-          // Keep samples from the last 3 seconds (3000 ms)
-          while (speedSamples.isNotEmpty &&
-              nowMs - speedSamples.first.timestampMs > 3000) {
-            speedSamples.removeAt(0);
-          }
-
-          var speed = 0.0;
-          if (speedSamples.length > 1) {
-            final first = speedSamples.first;
-            final elapsedSeconds = (nowMs - first.timestampMs) / 1000.0;
-            if (elapsedSeconds > 0) {
-              speed = (downloadedTotal - first.bytes) / elapsedSeconds;
-            }
-          }
-
-          final remaining = totalSize > 0 ? totalSize - downloadedTotal : 0;
-          final eta = speed > 0 && remaining > 0
-              ? (remaining / speed).round()
-              : null;
-
-          onProgress(
-            DownloadProgress(
-              downloadedBytes: downloadedTotal,
-              fileSize: totalSize,
-              speed: speed,
-              eta: eta,
-            ),
-          );
-
-          final limit = speedLimitBytesPerSecond();
-          if (limit > 0) {
-            final activeCount = activeDownloadCount().clamp(1, 1000);
-            final perTaskLimit = limit / activeCount;
-            final expectedElapsedMs =
-                (downloadedThisSession / perTaskLimit * 1000).round();
-            final actualElapsedMs = stopwatch.elapsedMilliseconds;
-            if (expectedElapsedMs > actualElapsedMs) {
-              await Future<void>.delayed(
-                Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
-              );
-            }
-          }
-        }
-      } finally {
-        // Closing the sink can throw on Windows if the underlying handle
-        // was already invalidated by the cancellation path. Swallow it
-        // so the real error reaches the caller.
-        try {
-          await sink.flush();
-        } catch (_) {}
-        try {
-          await sink.close();
-        } catch (_) {}
-      }
-
-      await File(localFilePath).parent.create(recursive: true);
-      if (await File(localFilePath).exists()) {
-        await File(localFilePath).delete();
-      }
-      try {
-        await tempFile.rename(localFilePath);
-      } catch (_) {
-        // Fallback for cross-device/cross-filesystem move
-        await tempFile.copy(localFilePath);
-        await tempFile.delete();
-      }
     } else {
       // Real Multi-Thread segment downloading
       final futures = <Future<void>>[];
@@ -663,108 +586,279 @@ class DownloadEngine {
         );
       }
 
-      for (int i = 0; i < threadCount; i++) {
-        final idx = i;
-        final start = idx * partSize;
-        final end = (idx == threadCount - 1)
-            ? (totalSize - 1)
-            : (start + partSize - 1);
-        final file = chunkFiles[idx];
+      try {
+        for (int i = 0; i < threadCount; i++) {
+          final idx = i;
+          final start = idx * partSize;
+          final end = (idx == threadCount - 1)
+              ? (totalSize - 1)
+              : (start + partSize - 1);
+          final file = chunkFiles[idx];
 
-        futures.add(() async {
-          final resumeFrom = chunkProgress[idx];
-          if (resumeFrom >= chunkSizes[idx]) {
-            // Already finished this chunk
-            return;
-          }
+          futures.add(() async {
+            final resumeFrom = chunkProgress[idx];
+            if (resumeFrom >= chunkSizes[idx]) {
+              // Already finished this chunk
+              return;
+            }
 
-          final headers = <String, dynamic>{};
-          headers['range'] = 'bytes=${start + resumeFrom}-$end';
+            final headers = <String, dynamic>{};
+            headers['range'] = 'bytes=${start + resumeFrom}-$end';
 
-          final chunkResponse = await isolatedDio.get<ResponseBody>(
-            punyUrl,
-            cancelToken: cancelToken,
-            options: Options(
-              responseType: ResponseType.stream,
-              followRedirects: true,
-              headers: headers,
-            ),
-          );
+            final chunkResponse = await isolatedDio.get<ResponseBody>(
+              punyUrl,
+              cancelToken: cancelToken,
+              options: Options(
+                responseType: ResponseType.stream,
+                followRedirects: true,
+                headers: headers,
+              ),
+            );
 
-          final sink = file.openWrite(
-            mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
-          );
+            final sink = file.openWrite(
+              mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
+            );
 
-          try {
-            await for (final chunk in chunkResponse.data!.stream) {
-              if (cancelToken.isCancelled) {
-                throw DioException(
-                  requestOptions: RequestOptions(path: punyUrl),
-                  type: DioExceptionType.cancel,
-                  message: 'Download cancelled.',
-                );
-              }
-              sink.add(chunk);
-              chunkProgress[idx] += chunk.length;
-              downloadedThisSession += chunk.length;
-
-              reportProgress();
-
-              final limit = speedLimitBytesPerSecond();
-              if (limit > 0) {
-                final activeCount = activeDownloadCount().clamp(1, 1000);
-                final perTaskLimit = limit / activeCount;
-                final expectedElapsedMs =
-                    (downloadedThisSession / perTaskLimit * 1000).round();
-                final actualElapsedMs = stopwatch.elapsedMilliseconds;
-                if (expectedElapsedMs > actualElapsedMs) {
-                  await Future<void>.delayed(
-                    Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
+            try {
+              await for (final chunk in chunkResponse.data!.stream) {
+                if (cancelToken.isCancelled) {
+                  throw DioException(
+                    requestOptions: RequestOptions(path: punyUrl),
+                    type: DioExceptionType.cancel,
+                    message: 'Download cancelled.',
                   );
                 }
+                sink.add(chunk);
+                chunkProgress[idx] += chunk.length;
+                downloadedThisSession += chunk.length;
+
+                reportProgress();
+
+                final limit = speedLimitBytesPerSecond();
+                if (limit > 0) {
+                  final activeCount = activeDownloadCount().clamp(1, 1000);
+                  final perTaskLimit = limit / activeCount;
+                  final expectedElapsedMs =
+                      (downloadedThisSession / perTaskLimit * 1000).round();
+                  final actualElapsedMs = stopwatch.elapsedMilliseconds;
+                  if (expectedElapsedMs > actualElapsedMs) {
+                    await Future<void>.delayed(
+                      Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
+                    );
+                  }
+                }
               }
+            } finally {
+              try {
+                await sink.flush();
+              } catch (_) {}
+              try {
+                await sink.close();
+              } catch (_) {}
             }
-          } finally {
-            try {
-              await sink.flush();
-            } catch (_) {}
-            try {
-              await sink.close();
-            } catch (_) {}
+          }());
+        }
+
+        // Wait for all threads to complete
+        await Future.wait(futures);
+
+        // Merge chunk files into localFilePath
+        final localFile = File(localFilePath);
+        await localFile.parent.create(recursive: true);
+        if (await localFile.exists()) {
+          await localFile.delete();
+        }
+
+        final outputSink = localFile.openWrite();
+        try {
+          for (int i = 0; i < threadCount; i++) {
+            final partFile = chunkFiles[i];
+            if (await partFile.exists()) {
+              final partStream = partFile.openRead();
+              await for (final data in partStream) {
+                outputSink.add(data);
+              }
+              await partFile.delete();
+            }
           }
-        }());
-      }
-
-      // Wait for all threads to complete
-      await Future.wait(futures);
-
-      // Merge chunk files into localFilePath
-      final localFile = File(localFilePath);
-      await localFile.parent.create(recursive: true);
-      if (await localFile.exists()) {
-        await localFile.delete();
-      }
-
-      final outputSink = localFile.openWrite();
-      try {
+        } finally {
+          try {
+            await outputSink.flush();
+          } catch (_) {}
+          try {
+            await outputSink.close();
+          } catch (_) {}
+        }
+      } catch (e) {
+        if (e is DioException && e.type == DioExceptionType.cancel) {
+          rethrow;
+        }
+        // Fallback on range failure or range reject
+        debugPrint('Multi-threaded range request failed: $e. Falling back to single-threaded download.');
+        // Clean up part files
         for (int i = 0; i < threadCount; i++) {
           final partFile = chunkFiles[i];
           if (await partFile.exists()) {
-            final partStream = partFile.openRead();
-            await for (final data in partStream) {
-              outputSink.add(data);
-            }
-            await partFile.delete();
+            try {
+              await partFile.delete();
+            } catch (_) {}
           }
         }
-      } finally {
-        try {
-          await outputSink.flush();
-        } catch (_) {}
-        try {
-          await outputSink.close();
-        } catch (_) {}
+        // Fallback to single threaded stream download
+        await _downloadSingleThreaded(
+          url: url,
+          punyUrl: punyUrl,
+          tempFilePath: tempFilePath,
+          localFilePath: localFilePath,
+          knownFileSize: knownFileSize,
+          supportsResume: false,
+          cancelToken: cancelToken,
+          onProgress: onProgress,
+          speedLimitBytesPerSecond: speedLimitBytesPerSecond,
+          activeDownloadCount: activeDownloadCount,
+          isolatedDio: isolatedDio,
+        );
       }
+    }
+  }
+
+  Future<void> _downloadSingleThreaded({
+    required String url,
+    required String punyUrl,
+    required String tempFilePath,
+    required String localFilePath,
+    required int knownFileSize,
+    required bool supportsResume,
+    required CancelToken cancelToken,
+    required ValueChangedProgress onProgress,
+    required int Function() speedLimitBytesPerSecond,
+    required int Function() activeDownloadCount,
+    required Dio isolatedDio,
+  }) async {
+    final tempFile = File(tempFilePath);
+    await tempFile.parent.create(recursive: true);
+
+    var resumeFrom = 0;
+    if (supportsResume && await tempFile.exists()) {
+      resumeFrom = await tempFile.length();
+    } else if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+
+    final headers = <String, dynamic>{};
+    if (resumeFrom > 0) {
+      headers['range'] = 'bytes=$resumeFrom-';
+    }
+
+    final response = await isolatedDio.get<ResponseBody>(
+      punyUrl,
+      cancelToken: cancelToken,
+      options: Options(
+        responseType: ResponseType.stream,
+        followRedirects: true,
+        headers: headers,
+      ),
+    );
+
+    var totalSize = knownFileSize;
+    final contentLength =
+        int.tryParse(
+          response.headers.value(Headers.contentLengthHeader) ?? '',
+        ) ??
+        0;
+    if (contentLength > 0) {
+      final actualSize = (response.statusCode == 206 ? resumeFrom : 0) + contentLength;
+      if (actualSize != totalSize) {
+        totalSize = actualSize;
+      }
+    }
+
+    final sink = tempFile.openWrite(
+      mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
+    );
+    final stopwatch = Stopwatch()..start();
+    var downloadedThisSession = 0;
+    var downloadedTotal = resumeFrom;
+    final speedSamples = <_SpeedSample>[];
+
+    try {
+      await for (final chunk in response.data!.stream) {
+        if (cancelToken.isCancelled) {
+          throw DioException(
+            requestOptions: RequestOptions(path: punyUrl),
+            type: DioExceptionType.cancel,
+            message: 'Download cancelled.',
+          );
+        }
+        sink.add(chunk);
+        downloadedThisSession += chunk.length;
+        downloadedTotal += chunk.length;
+
+        final nowMs = stopwatch.elapsedMilliseconds;
+        speedSamples.add(_SpeedSample(nowMs, downloadedTotal));
+
+        // Keep samples from the last 3 seconds (3000 ms)
+        while (speedSamples.isNotEmpty &&
+            nowMs - speedSamples.first.timestampMs > 3000) {
+          speedSamples.removeAt(0);
+        }
+
+        var speed = 0.0;
+        if (speedSamples.length > 1) {
+          final first = speedSamples.first;
+          final elapsedSeconds = (nowMs - first.timestampMs) / 1000.0;
+          if (elapsedSeconds > 0) {
+            speed = (downloadedTotal - first.bytes) / elapsedSeconds;
+          }
+        }
+
+        final remaining = totalSize > 0 ? totalSize - downloadedTotal : 0;
+        final eta = speed > 0 && remaining > 0
+            ? (remaining / speed).round()
+            : null;
+
+        onProgress(
+          DownloadProgress(
+            downloadedBytes: downloadedTotal,
+            fileSize: totalSize,
+            speed: speed,
+            eta: eta,
+          ),
+        );
+
+        final limit = speedLimitBytesPerSecond();
+        if (limit > 0) {
+          final activeCount = activeDownloadCount().clamp(1, 1000);
+          final perTaskLimit = limit / activeCount;
+          final expectedElapsedMs =
+              (downloadedThisSession / perTaskLimit * 1000).round();
+          final actualElapsedMs = stopwatch.elapsedMilliseconds;
+          if (expectedElapsedMs > actualElapsedMs) {
+            await Future<void>.delayed(
+              Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
+            );
+          }
+        }
+      }
+    } finally {
+      try {
+        await sink.flush();
+      } catch (_) {}
+      try {
+        await sink.close();
+      } catch (_) {}
+    }
+
+    await File(localFilePath).parent.create(recursive: true);
+    if (await File(localFilePath).exists()) {
+      await File(localFilePath).delete();
+    }
+    try {
+      await tempFile.rename(localFilePath);
+    } catch (_) {
+      // Fallback for cross-device/cross-filesystem move
+      await tempFile.copy(localFilePath);
+      await tempFile.delete();
     }
   }
 
