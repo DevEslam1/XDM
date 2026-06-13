@@ -242,6 +242,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       setState(() {
         _isFocused = _focusNode.hasFocus;
       });
+      if (_focusNode.hasFocus) {
+        Future.delayed(Duration.zero, () {
+          if (_focusNode.hasFocus && mounted) {
+            _urlController.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: _urlController.text.length,
+            );
+          }
+        });
+      }
     });
     _loadSnifferPref();
     _loadCustomJsCss();
@@ -674,12 +684,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme) return url;
     var clean = uri.toString();
-    if (uri.query.isNotEmpty) {
-      clean = '${uri.scheme}://${uri.host}${uri.path.isEmpty ? '' : uri.path}?${uri.query}';
-    } else {
-      clean = '${uri.scheme}://${uri.host}${uri.path.isEmpty ? '' : uri.path}';
-    }
-    if (clean.endsWith('/') && clean.length > 8) {
+    if (uri.path == '/' && uri.query.isEmpty && uri.fragment.isEmpty && clean.endsWith('/')) {
       clean = clean.substring(0, clean.length - 1);
     }
     return clean;
@@ -771,7 +776,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             await t.controller.setUserAgent(
               settings.desktopMode
                   ? 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-                  : null,
+                  : (t.isIncognito
+                      ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+                      : null),
             );
             if (!t.isHome) {
               await t.controller.reload();
@@ -805,9 +812,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           );
           if (settings.incognitoEnabled) {
             _recordedHistoryThisSession.clear();
-            try {
-              await context.read<DatabaseService>().clearBrowserHistory();
-            } catch (_) {}
             
             // Clear current tabs cookies, cache, local storage
             final cookieManager = WebViewCookieManager();
@@ -1567,81 +1571,78 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     },
                                     child: GlassCard(
                                       borderRadius: 16,
-                                      padding: const EdgeInsets.all(12),
+                                      padding: const EdgeInsets.all(16),
                                       isDarkMode: isDark,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          border: isActive
-                                              ? Border.all(color: tab.isIncognito ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet) : accent, width: 2)
-                                              : null,
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                      border: isActive
+                                          ? Border.all(
+                                              color: tab.isIncognito
+                                                  ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                                                  : accent,
+                                              width: 2,
+                                            )
+                                          : null,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
                                             children: [
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    tab.isIncognito ? Icons.visibility_off : Icons.language,
-                                                    size: 14,
-                                                    color: tab.isIncognito ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet) : accent,
-                                                  ),
-                                                  const Spacer(),
-                                                  IconButton(
-                                                    icon: const Icon(Icons.close, size: 16),
-                                                    padding: EdgeInsets.zero,
-                                                    constraints: const BoxConstraints(),
-                                                    onPressed: () {
-                                                      triggerHaptic(settings);
-                                                      setModalState(() {
-                                                        setState(() {
-                                                          _detectedDownloadUrls.remove(tab.id);
-                                                          _tabs.removeAt(index);
-                                                          
-                                                          if (_currentTabIndex >= _tabs.length) {
-                                                            _currentTabIndex = _tabs.length - 1;
-                                                          }
-                                                          if (_tabs.isEmpty) {
-                                                            _tabs.add(_createNewTab());
-                                                            _currentTabIndex = 0;
-                                                          }
-                                                          final activeTab = _tabs[_currentTabIndex];
-                                                          _urlController.text = activeTab.isHome ? '' : activeTab.url;
-                                                        });
-                                                        _saveTabs();
-                                                      });
-                                                    },
-                                                  ),
-                                                ],
+                                              Icon(
+                                                tab.isIncognito ? Icons.visibility_off : Icons.language,
+                                                size: 14,
+                                                color: tab.isIncognito ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet) : accent,
                                               ),
-                                              const SizedBox(height: 12),
-                                              Expanded(
-                                                child: Text(
-                                                  tab.title.isEmpty ? 'New Tab' : tab.title,
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                    color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                tab.isHome ? 'Dashboard' : tab.url,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                                                  fontSize: 9,
-                                                ),
+                                              const Spacer(),
+                                              IconButton(
+                                                icon: const Icon(Icons.close, size: 16),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                                onPressed: () {
+                                                  triggerHaptic(settings);
+                                                  setModalState(() {
+                                                    setState(() {
+                                                      _detectedDownloadUrls.remove(tab.id);
+                                                      _tabs.removeAt(index);
+                                                      
+                                                      if (_currentTabIndex >= _tabs.length) {
+                                                        _currentTabIndex = _tabs.length - 1;
+                                                      }
+                                                      if (_tabs.isEmpty) {
+                                                        _tabs.add(_createNewTab());
+                                                        _currentTabIndex = 0;
+                                                      }
+                                                      final activeTab = _tabs[_currentTabIndex];
+                                                      _urlController.text = activeTab.isHome ? '' : activeTab.url;
+                                                    });
+                                                    _saveTabs();
+                                                  });
+                                                },
                                               ),
                                             ],
                                           ),
-                                        ),
+                                          const SizedBox(height: 12),
+                                          Expanded(
+                                            child: Text(
+                                              tab.title.isEmpty ? 'New Tab' : tab.title,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            tab.isHome ? 'Dashboard' : tab.url,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   );
@@ -2808,9 +2809,10 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
         maxLines: null,
         expands: true,
         keyboardType: TextInputType.multiline,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 11,
+          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
         ),
         decoration: InputDecoration(
           hintText: hint,
