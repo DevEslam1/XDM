@@ -98,7 +98,7 @@ class SettingsProvider extends ChangeNotifier {
   bool desktopMode = false;
   bool adBlockerEnabled = true;
   bool pinchToZoom = true;
-  bool saveBrowserHistory = false;
+  bool saveBrowserHistory = true;
 
   bool notificationsEnabled = true;
   String proxyHost = '';
@@ -452,7 +452,7 @@ class SettingsProvider extends ChangeNotifier {
     desktopMode = false;
     adBlockerEnabled = true;
     pinchToZoom = true;
-    saveBrowserHistory = false;
+    saveBrowserHistory = true;
     notificationsEnabled = true;
     proxyHost = '';
     proxyPort = 8080;

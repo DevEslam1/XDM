@@ -89,7 +89,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Set<String> _recordedHistoryThisSession = {};
   String? _lastHistoryEntryUrl;
   String? _lastHistoryEntryId;
-  DateTime? _lastHistoryEntryTime;
+  String? _pendingTitleUpdate;
   final Set<String> _bypassedSniffUrls = {};
   final ScrollController _dashboardScrollController = ScrollController();
   static const String _snifferPrefKey = 'browserSnifferEnabled';
@@ -483,30 +483,23 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     
     final now = DateTime.now();
     
-    if (clean == _lastHistoryEntryUrl && _lastHistoryEntryId != null) {
+    if (clean == _lastHistoryEntryUrl) {
       if (title != null && title.isNotEmpty && title != clean) {
-        try {
-          final db = Provider.of<DatabaseService>(context, listen: false);
-          db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
-        } catch (_) {}
-      }
-      return;
-    }
-    
-    if (clean == _lastHistoryEntryUrl && _lastHistoryEntryTime != null) {
-      if (now.difference(_lastHistoryEntryTime!) < const Duration(seconds: 5)) {
-        if (title != null && title.isNotEmpty && title != clean) {
+        if (_lastHistoryEntryId != null) {
           try {
             final db = Provider.of<DatabaseService>(context, listen: false);
             db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
           } catch (_) {}
+        } else {
+          _pendingTitleUpdate = title;
         }
-        return;
       }
+      return;
     }
     
     _lastHistoryEntryUrl = clean;
-    _lastHistoryEntryTime = now;
+    _lastHistoryEntryId = null;
+    _pendingTitleUpdate = title;
     
     try {
       final db = Provider.of<DatabaseService>(context, listen: false);
@@ -515,7 +508,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         'title': (title != null && title.isNotEmpty) ? title : clean,
         'visitedAt': now.toIso8601String(),
       }).then((id) {
-        _lastHistoryEntryId = id;
+        if (clean == _lastHistoryEntryUrl) {
+          _lastHistoryEntryId = id;
+          if (_pendingTitleUpdate != null &&
+              _pendingTitleUpdate!.isNotEmpty &&
+              _pendingTitleUpdate != clean) {
+            db.updateBrowserHistoryTitle(id, _pendingTitleUpdate!);
+          }
+        }
       });
     } catch (_) {}
   }
