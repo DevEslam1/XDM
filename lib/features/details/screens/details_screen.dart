@@ -81,6 +81,20 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             }
 
             final task = provider.tasks[taskIndex];
+            final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
+            final isDownloadingTorrent = task.status == DownloadStatus.downloading && task.isTorrent;
+
+            String speedTextInsideCircle;
+            if (isDownloadingTorrent) {
+              final ulSpeed = provider.getTorrentUploadSpeed(task.id);
+              speedTextInsideCircle = 'DL: ${task.speedFormatted} | UL: ${formatBytes(ulSpeed)}/s';
+            } else if (isSeeding) {
+              speedTextInsideCircle = 'UL: ${task.speedFormatted}';
+            } else {
+              speedTextInsideCircle = task.status == DownloadStatus.downloading
+                  ? task.speedFormatted
+                  : L10n.translateStatusName(context, task.status).toUpperCase();
+            }
 
             // Status colors
             Color statusColor;
@@ -127,13 +141,8 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       Center(
                         child: CircularProgressWidget(
                           progress: task.progress,
-                          speedText: task.status == DownloadStatus.downloading
-                              ? task.speedFormatted
-                              : L10n.translateStatusName(
-                                  context,
-                                  task.status,
-                                ).toUpperCase(),
-                          etaText: task.status == DownloadStatus.downloading
+                          speedText: speedTextInsideCircle,
+                          etaText: (task.status == DownloadStatus.downloading || isSeeding)
                               ? L10n.translateStatus(
                                   context,
                                   task.status,
@@ -1580,7 +1589,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     final dlSpeed = task.speed;
     final ulSpeed = isSeeding
         ? task.speed
-        : 0.0; // seeding reports upload speed
+        : (task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0);
 
     return GlassCard(
       borderRadius: 20,
@@ -1616,7 +1625,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       secClr: secClr,
                     ),
                   ),
-                if (isSeeding)
+                if (isActive || isSeeding)
                   Expanded(
                     child: _buildStatCell(
                       context,
@@ -1997,20 +2006,52 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                name,
-                                style: TextStyle(
-                                  color: selected ? textClr : secClr,
-                                  fontSize: 12,
-                                  fontWeight: selected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  decoration: selected
-                                      ? null
-                                      : TextDecoration.lineThrough,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        color: selected ? textClr : secClr,
+                                        fontSize: 12,
+                                        fontWeight: selected
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        decoration: selected
+                                            ? null
+                                            : TextDecoration.lineThrough,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (selected) ...[
+                                    const SizedBox(width: 8),
+                                    _buildPrioritySelector(
+                                      context: context,
+                                      priority: f['priority'] as int? ?? 4,
+                                      isDark: isDark,
+                                      isRtl: isRtl,
+                                      isCompleted: isCompleted,
+                                      onChanged: (newPriority) {
+                                        triggerHaptic(settings);
+                                        final updatedFiles =
+                                            List<Map<String, dynamic>>.from(
+                                              files,
+                                            );
+                                        updatedFiles[index] = {
+                                          ...f,
+                                          'priority': newPriority,
+                                        };
+                                        provider.updateTorrentTaskFiles(
+                                          task.id,
+                                          updatedFiles,
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ],
                               ),
                               const SizedBox(height: 6),
                               if (selected) ...[
@@ -2110,6 +2151,160 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
           ),
         ),
         const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildPrioritySelector({
+    required BuildContext context,
+    required int priority,
+    required bool isDark,
+    required bool isRtl,
+    required bool isCompleted,
+    required ValueChanged<int> onChanged,
+  }) {
+    final Color priorityColor;
+    final String label;
+    switch (priority) {
+      case 7:
+        priorityColor = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+        label = isRtl ? 'عالية' : 'High';
+        break;
+      case 1:
+        priorityColor = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+        label = isRtl ? 'منخفضة' : 'Low';
+        break;
+      case 4:
+      default:
+        priorityColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        label = isRtl ? 'عادية' : 'Normal';
+        break;
+    }
+
+    final child = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: priorityColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: priorityColor.withValues(alpha: 0.3),
+          width: 0.8,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: priorityColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: priorityColor,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (!isCompleted) ...[
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 12,
+              color: priorityColor,
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (isCompleted) {
+      return child;
+    }
+
+    return PopupMenuButton<int>(
+      tooltip: isRtl ? 'تحديد الأولوية' : 'Set priority',
+      padding: EdgeInsets.zero,
+      onSelected: onChanged,
+      child: child,
+      itemBuilder: (context) => [
+        PopupMenuItem<int>(
+          value: 7,
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'عالية' : 'High',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<int>(
+          value: 4,
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'عادية' : 'Normal',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<int>(
+          value: 1,
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'منخفضة' : 'Low',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

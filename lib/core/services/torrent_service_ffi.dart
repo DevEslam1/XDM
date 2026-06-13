@@ -109,6 +109,15 @@ class TorrentService {
       )));
     });
   }
+
+  static void setUploadLimit(int bps) {
+    _startTrackingUpdates();
+    if (isInitialized) {
+      try {
+        LibtorrentFlutter.instance.setUploadLimit(bps);
+      } catch (_) {}
+    }
+  }
 }
 
 class TorrentFileItem {

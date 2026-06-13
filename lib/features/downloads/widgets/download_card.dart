@@ -1,3 +1,4 @@
+import 'package:dmx/core/utils/file_utils.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/utils/file_opener.dart';
 import 'package:provider/provider.dart';
@@ -69,17 +70,25 @@ class DownloadCard extends StatelessWidget with HapticHelper {
     final cardBg = settings.classicUi
         ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
         : (task.status == DownloadStatus.downloading
-            ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.06)
-            : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg));
+              ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                    .withValues(alpha: 0.06)
+              : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg));
     final cardBorder = settings.classicUi
-        ? Border.all(color: isDark ? AppTheme.border : AppTheme.lightBorder, width: 1.0)
+        ? Border.all(
+            color: isDark ? AppTheme.border : AppTheme.lightBorder,
+            width: 1.0,
+          )
         : Border.all(
             color: task.status == DownloadStatus.downloading
-                ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.2)
+                ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                      .withValues(alpha: 0.2)
                 : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
             width: 0.8,
           );
-    final cardShadow = (settings.classicUi || task.status != DownloadStatus.downloading || !isDark)
+    final cardShadow =
+        (settings.classicUi ||
+            task.status != DownloadStatus.downloading ||
+            !isDark)
         ? null
         : [
             BoxShadow(
@@ -147,10 +156,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                         children: [
                           Text(
                             task.fileName,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-                                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                  color: isDark
+                                      ? AppTheme.textPrimary
+                                      : AppTheme.lightTextPrimary,
                                 ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -163,38 +175,54 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             children: [
                               StatusChip(task: task),
                               Text(
-                                L10n.translateCategory(context, task.category).toUpperCase(),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                L10n.translateCategory(
+                                  context,
+                                  task.category,
+                                ).toUpperCase(),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
                                       fontSize: 9,
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.8,
-                                      color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                                      color: isDark
+                                          ? AppTheme.textSecondary
+                                          : AppTheme.lightTextSecondary,
                                     ),
                               ),
                               if (task.isTorrent &&
                                   (task.status == DownloadStatus.downloading ||
-                                      (task.status == DownloadStatus.completed && task.seedingEnabled))) ...[
+                                      (task.status ==
+                                              DownloadStatus.completed &&
+                                          task.seedingEnabled))) ...[
                                 Text(
                                   '|',
                                   style: TextStyle(
                                     fontSize: 9,
-                                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                    color: isDark
+                                        ? AppTheme.textMuted
+                                        : AppTheme.lightTextMuted,
                                   ),
                                 ),
                                 Text(
                                   '${L10n.of(context, 'seeds')}: ${provider.getTorrentSeeds(task.id)}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
-                                        color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                                        color: isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen,
                                       ),
                                 ),
                                 Text(
                                   '${L10n.of(context, 'peers')}: ${provider.getTorrentPeers(task.id)}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
-                                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                        color: isDark
+                                            ? AppTheme.neonBlue
+                                            : AppTheme.lightNeonBlue,
                                       ),
                                 ),
                               ],
@@ -211,7 +239,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           IconButton(
                             icon: Icon(
                               Icons.pause,
-                              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                              color: isDark
+                                  ? AppTheme.textSecondary
+                                  : AppTheme.lightTextSecondary,
                               size: 20,
                             ),
                             onPressed: () {
@@ -225,7 +255,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           IconButton(
                             icon: Icon(
                               Icons.play_arrow,
-                              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                              color: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
                               size: 20,
                             ),
                             onPressed: () {
@@ -238,7 +270,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           IconButton(
                             icon: Icon(
                               Icons.refresh,
-                              color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                              color: isDark
+                                  ? AppTheme.neonViolet
+                                  : AppTheme.lightNeonViolet,
                               size: 20,
                             ),
                             onPressed: () {
@@ -251,22 +285,35 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           if (task.isTorrent)
                             IconButton(
                               icon: Icon(
-                                task.seedingEnabled ? Icons.pause : Icons.play_arrow,
+                                task.seedingEnabled
+                                    ? Icons.pause
+                                    : Icons.play_arrow,
                                 color: task.seedingEnabled
-                                    ? (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)
-                                    : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                                    ? (isDark
+                                          ? AppTheme.textSecondary
+                                          : AppTheme.lightTextSecondary)
+                                    : (isDark
+                                          ? AppTheme.neonBlue
+                                          : AppTheme.lightNeonBlue),
                                 size: 20,
                               ),
                               onPressed: () {
                                 triggerHaptic(settings);
-                                provider.updateTaskSeeding(task.id, enabled: !task.seedingEnabled);
+                                provider.updateTaskSeeding(
+                                  task.id,
+                                  enabled: !task.seedingEnabled,
+                                );
                               },
-                              tooltip: task.seedingEnabled ? 'Pause Seeding' : 'Start Seeding',
+                              tooltip: task.seedingEnabled
+                                  ? 'Pause Seeding'
+                                  : 'Start Seeding',
                             ),
                           IconButton(
                             icon: Icon(
                               Icons.folder_open_outlined,
-                              color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                              color: isDark
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.lightNeonGreen,
                               size: 20,
                             ),
                             onPressed: () {
@@ -279,19 +326,33 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                         IconButton(
                           icon: Icon(
                             Icons.close,
-                            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                            color: isDark
+                                ? AppTheme.neonRed
+                                : AppTheme.lightNeonRed,
                             size: 18,
                           ),
                           onPressed: () async {
                             triggerHaptic(settings);
-                            final deleteFiles = await _showDeleteConfirmationDialog(context, task, settings);
+                            final deleteFiles =
+                                await _showDeleteConfirmationDialog(
+                                  context,
+                                  task,
+                                  settings,
+                                );
                             if (deleteFiles != null) {
-                              provider.deleteTask(task.id, deleteFiles: deleteFiles);
+                              provider.deleteTask(
+                                task.id,
+                                deleteFiles: deleteFiles,
+                              );
                               if (context.mounted) {
                                 ThemedSnackbar.show(
                                   context,
-                                  message: L10n.isRtl(context) ? 'تم حذف التنزيل بنجاح' : 'Download deleted successfully',
-                                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                  message: L10n.isRtl(context)
+                                      ? 'تم حذف التنزيل بنجاح'
+                                      : 'Download deleted successfully',
+                                  color: isDark
+                                      ? AppTheme.neonRed
+                                      : AppTheme.lightNeonRed,
                                   icon: Icons.delete,
                                   isDarkMode: isDark,
                                 );
@@ -308,7 +369,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                 // Segmented Progress Bar for Chunks
                 Builder(
                   builder: (context) {
-                    final showSplitBar = (task.status == DownloadStatus.downloading || task.status == DownloadStatus.paused) &&
+                    final showSplitBar =
+                        (task.status == DownloadStatus.downloading ||
+                            task.status == DownloadStatus.paused) &&
                         task.chunks.isNotEmpty &&
                         task.chunks.length > 1;
 
@@ -320,32 +383,44 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             child: Padding(
                               padding: EdgeInsets.only(
                                 left: index == 0 ? 0.0 : 2.0,
-                                right: index == task.chunks.length - 1 ? 0.0 : 2.0,
+                                right: index == task.chunks.length - 1
+                                    ? 0.0
+                                    : 2.0,
                               ),
                               child: Stack(
                                 children: [
                                   Container(
                                     height: 6,
                                     decoration: BoxDecoration(
-                                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                      color: isDark
+                                          ? AppTheme.glassBorder
+                                          : AppTheme.lightGlassBorder,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                   ),
                                   if (chunkProgress > 0)
                                     AnimatedFractionallySizedBox(
                                       widthFactor: chunkProgress,
-                                      duration: const Duration(milliseconds: 300),
+                                      duration: const Duration(
+                                        milliseconds: 300,
+                                      ),
                                       curve: Curves.easeOutCubic,
                                       child: Container(
                                         height: 6,
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(4),
-                                          boxShadow: task.status == DownloadStatus.downloading && isDark && !settings.classicUi
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                          boxShadow:
+                                              task.status ==
+                                                      DownloadStatus
+                                                          .downloading &&
+                                                  isDark &&
+                                                  !settings.classicUi
                                               ? [
                                                   BoxShadow(
-                                                    color: statusColor.withValues(
-                                                      alpha: 0.4,
-                                                    ),
+                                                    color: statusColor
+                                                        .withValues(alpha: 0.4),
                                                     blurRadius: 4.0,
                                                     spreadRadius: 0.5,
                                                   ),
@@ -354,7 +429,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                           gradient: LinearGradient(
                                             colors: [
                                               statusColor,
-                                              statusColor.withValues(alpha: 0.7),
+                                              statusColor.withValues(
+                                                alpha: 0.7,
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -380,7 +457,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               height: 6,
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                color: isDark
+                                    ? AppTheme.glassBorder
+                                    : AppTheme.lightGlassBorder,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                             ),
@@ -391,7 +470,11 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                   height: 6,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(8),
-                                    boxShadow: task.status == DownloadStatus.downloading && isDark && !settings.classicUi
+                                    boxShadow:
+                                        task.status ==
+                                                DownloadStatus.downloading &&
+                                            isDark &&
+                                            !settings.classicUi
                                         ? [
                                             BoxShadow(
                                               color: statusColor.withValues(
@@ -426,7 +509,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     Text(
                       '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                        color: isDark
+                            ? AppTheme.textSecondary
+                            : AppTheme.lightTextSecondary,
                         fontSize: 11,
                       ),
                     ),
@@ -434,7 +519,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     Text(
                       task.progressPercentString,
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                        color: isDark
+                            ? AppTheme.textPrimary
+                            : AppTheme.lightTextPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 11,
                       ),
@@ -442,21 +529,67 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     // ETA or status message
                     Row(
                       children: [
-                        if (task.status == DownloadStatus.downloading || (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)) ...[
+                        if (task.status == DownloadStatus.downloading) ...[
                           Icon(
-                            (task.status == DownloadStatus.completed) ? Icons.upload : Icons.download,
+                            Icons.download,
                             size: 12,
-                            color: (task.status == DownloadStatus.completed)
-                                ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
-                                : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                            color: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             task.speedFormatted,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: (task.status == DownloadStatus.completed)
-                                      ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
-                                      : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: isDark
+                                      ? AppTheme.neonBlue
+                                      : AppTheme.lightNeonBlue,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11,
+                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (task.isTorrent) ...[
+                            Icon(
+                              Icons.upload,
+                              size: 12,
+                              color: isDark
+                                  ? AppTheme.neonViolet
+                                  : AppTheme.lightNeonViolet,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${formatBytes(provider.getTorrentUploadSpeed(task.id))}/s',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: isDark
+                                        ? AppTheme.neonViolet
+                                        : AppTheme.lightNeonViolet,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ] else if (task.status == DownloadStatus.completed &&
+                            task.isTorrent &&
+                            task.seedingEnabled) ...[
+                          Icon(
+                            Icons.upload,
+                            size: 12,
+                            color: isDark
+                                ? AppTheme.neonViolet
+                                : AppTheme.lightNeonViolet,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            task.speedFormatted,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: isDark
+                                      ? AppTheme.neonViolet
+                                      : AppTheme.lightNeonViolet,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 11,
                                 ),
@@ -464,27 +597,52 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           const SizedBox(width: 8),
                         ],
                         Icon(
-                          (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
+                          (task.status == DownloadStatus.completed &&
+                                  task.isTorrent &&
+                                  task.seedingEnabled)
                               ? Icons.cloud_upload_outlined
                               : (task.status == DownloadStatus.completed
-                                  ? Icons.check_circle_outline
-                                  : Icons.schedule),
+                                    ? Icons.check_circle_outline
+                                    : Icons.schedule),
                           size: 12,
-                          color: (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
-                              ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                          color:
+                              (task.status == DownloadStatus.completed &&
+                                  task.isTorrent &&
+                                  task.seedingEnabled)
+                              ? (isDark
+                                    ? AppTheme.neonViolet
+                                    : AppTheme.lightNeonViolet)
                               : (task.status == DownloadStatus.completed
-                                  ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                                  : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)),
+                                    ? (isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen)
+                                    : (isDark
+                                          ? AppTheme.textMuted
+                                          : AppTheme.lightTextMuted)),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          L10n.translateStatus(context, task.status, task.etaFormatted),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled)
-                                    ? (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
+                          L10n.translateStatus(
+                            context,
+                            task.status,
+                            task.etaFormatted,
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color:
+                                    (task.status == DownloadStatus.completed &&
+                                        task.isTorrent &&
+                                        task.seedingEnabled)
+                                    ? (isDark
+                                          ? AppTheme.neonViolet
+                                          : AppTheme.lightNeonViolet)
                                     : (task.status == DownloadStatus.completed
-                                        ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                                        : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)),
+                                          ? (isDark
+                                                ? AppTheme.neonGreen
+                                                : AppTheme.lightNeonGreen)
+                                          : (isDark
+                                                ? AppTheme.textSecondary
+                                                : AppTheme.lightTextSecondary)),
                                 fontSize: 11,
                               ),
                         ),
@@ -507,11 +665,14 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 24.0),
         decoration: BoxDecoration(
-          color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.12),
+          color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+              .withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Icon(
-          task.status == DownloadStatus.downloading ? Icons.pause : Icons.play_arrow,
+          task.status == DownloadStatus.downloading
+              ? Icons.pause
+              : Icons.play_arrow,
           color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
         ),
       ),
@@ -520,7 +681,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24.0),
         decoration: BoxDecoration(
-          color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.12),
+          color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(
+            alpha: 0.12,
+          ),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Icon(
@@ -531,13 +694,19 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       confirmDismiss: (direction) async {
         triggerHaptic(settings);
         if (direction == DismissDirection.endToStart) {
-          final deleteFiles = await _showDeleteConfirmationDialog(context, task, settings);
+          final deleteFiles = await _showDeleteConfirmationDialog(
+            context,
+            task,
+            settings,
+          );
           if (deleteFiles != null) {
             provider.deleteTask(task.id, deleteFiles: deleteFiles);
             if (context.mounted) {
               ThemedSnackbar.show(
                 context,
-                message: L10n.isRtl(context) ? 'تم حذف التنزيل بنجاح' : 'Download deleted successfully',
+                message: L10n.isRtl(context)
+                    ? 'تم حذف التنزيل بنجاح'
+                    : 'Download deleted successfully',
                 color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                 icon: Icons.delete,
                 isDarkMode: isDark,
@@ -549,7 +718,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         } else {
           if (task.status == DownloadStatus.downloading) {
             provider.pauseTask(task.id);
-          } else if (task.status == DownloadStatus.paused || task.status == DownloadStatus.queued) {
+          } else if (task.status == DownloadStatus.paused ||
+              task.status == DownloadStatus.queued) {
             provider.resumeTask(task.id);
           } else if (task.status == DownloadStatus.failed) {
             provider.retryTask(task.id);
@@ -590,10 +760,17 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             return Directionality(
               textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
               child: AlertDialog(
-                backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.92),
+                backgroundColor:
+                    (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                        .withValues(alpha: 0.92),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
-                  side: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.8),
+                  side: BorderSide(
+                    color: isDark
+                        ? AppTheme.glassBorder
+                        : AppTheme.lightGlassBorder,
+                    width: 0.8,
+                  ),
                 ),
                 title: Text(
                   L10n.of(context, 'delete_title'),
@@ -612,7 +789,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           ? 'هل أنت متأكد من حذف "${task.fileName}" من القائمة؟'
                           : 'Are you sure you want to remove "${task.fileName}" from the list?',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                        color: isDark
+                            ? AppTheme.textSecondary
+                            : AppTheme.lightTextSecondary,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -623,9 +802,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           height: 24,
                           child: Checkbox(
                             value: deleteFiles,
-                            activeColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                            activeColor: isDark
+                                ? AppTheme.neonRed
+                                : AppTheme.lightNeonRed,
                             side: BorderSide(
-                              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                              color: isDark
+                                  ? AppTheme.glassBorder
+                                  : AppTheme.lightGlassBorder,
                               width: 1.0,
                             ),
                             onChanged: (val) {
@@ -649,10 +832,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             },
                             child: Text(
                               L10n.of(context, 'delete_files_label'),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                                fontSize: 12,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: isDark
+                                        ? AppTheme.textPrimary
+                                        : AppTheme.lightTextPrimary,
+                                    fontSize: 12,
+                                  ),
                             ),
                           ),
                         ),
@@ -663,31 +849,43 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                 actions: [
                   TextButton(
                     style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     child: Text(
                       L10n.of(context, 'cancel_btn'),
-                      style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                      style: TextStyle(
+                        color: isDark
+                            ? AppTheme.textSecondary
+                            : AppTheme.lightTextSecondary,
+                      ),
                     ),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                   TextButton(
                     style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                     child: Text(
                       L10n.of(context, 'delete_btn'),
                       style: TextStyle(
-                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        color: isDark
+                            ? AppTheme.neonRed
+                            : AppTheme.lightNeonRed,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    onPressed: () => Navigator.of(context).pop({'confirmed': true, 'deleteFiles': deleteFiles}),
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop({'confirmed': true, 'deleteFiles': deleteFiles}),
                   ),
                 ],
               ),
             );
-          }
+          },
         );
       },
     ).then((result) {

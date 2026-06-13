@@ -184,6 +184,7 @@ class DownloadEngine {
                     'name': f.name,
                     'length': f.size,
                     'selected': true,
+                    'priority': 4,
                     'downloadedBytes': 0,
                     'speed': 0.0,
                   },
@@ -244,6 +245,7 @@ class DownloadEngine {
                     'name': f['name'] as String? ?? '',
                     'length': f['length'] as int? ?? 0,
                     'selected': true,
+                    'priority': 4,
                     'downloadedBytes': 0,
                     'speed': 0.0,
                   },
@@ -469,7 +471,11 @@ class DownloadEngine {
       // Set file priorities after metadata is loaded
       if (torrentFiles != null && torrentFiles.isNotEmpty) {
         final priorities = torrentFiles
-            .map((f) => (f['selected'] as bool? ?? true) ? 1 : 0)
+            .map((f) {
+              final selected = f['selected'] as bool? ?? true;
+              if (!selected) return 0;
+              return f['priority'] as int? ?? 4;
+            })
             .toList();
         TorrentService.setFilePriorities(id, priorities);
       }
@@ -510,6 +516,7 @@ class DownloadEngine {
                     'name': f.name,
                     'length': f.size,
                     'selected': true,
+                    'priority': 4,
                     'downloadedBytes': 0,
                     'speed': 0.0,
                   },

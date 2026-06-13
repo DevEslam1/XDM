@@ -313,6 +313,7 @@ class L10n {
     if (!isRtl(context)) return rawEta;
     switch (status) {
       case DownloadStatus.completed:
+        if (rawEta == 'Seeding') return 'مشاركة (Seeding)';
         return 'مكتمل';
       case DownloadStatus.queued:
         return 'في الانتظار';

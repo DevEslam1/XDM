@@ -12,6 +12,7 @@ class TorrentService {
   static void pauseTorrent(int id) {}
   static void resumeTorrent(int id) {}
   static void setFilePriorities(int id, List<int> priorities) {}
+  static void setUploadLimit(int bps) {}
   static List<TorrentFileItem> getFiles(int id) => [];
 
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => const Stream.empty();

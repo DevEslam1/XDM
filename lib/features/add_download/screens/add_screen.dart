@@ -841,6 +841,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                       'name': f['name'] as String? ?? '',
                       'length': f['length'] as int? ?? 0,
                       'selected': true,
+                      'priority': 4,
                       'downloadedBytes': 0,
                       'speed': 0.0,
                     })
@@ -982,6 +983,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                         'name': f['name'] as String? ?? '',
                         'length': f['length'] as int? ?? 0,
                         'selected': true,
+                        'priority': 4,
                         'downloadedBytes': 0,
                         'speed': 0.0,
                       })
@@ -1244,15 +1246,38 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              name,
-                              style: TextStyle(
-                                color: selected ? textClr : secClr,
-                                fontSize: 11,
-                                decoration: selected ? null : TextDecoration.lineThrough,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: TextStyle(
+                                      color: selected ? textClr : secClr,
+                                      fontSize: 11,
+                                      decoration: selected ? null : TextDecoration.lineThrough,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (selected) ...[
+                                  const SizedBox(width: 8),
+                                  _buildPrioritySelector(
+                                    context: context,
+                                    priority: f['priority'] as int? ?? 4,
+                                    isDark: isDark,
+                                    isRtl: isRtl,
+                                    onChanged: (newPriority) {
+                                      setState(() {
+                                        _torrentFiles[index] = {
+                                          ...f,
+                                          'priority': newPriority,
+                                        };
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -1539,5 +1564,150 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
       );
       Navigator.pop(context);
     }
+  }
+
+  Widget _buildPrioritySelector({
+    required BuildContext context,
+    required int priority,
+    required bool isDark,
+    required bool isRtl,
+    required ValueChanged<int> onChanged,
+  }) {
+    final Color priorityColor;
+    final String label;
+    switch (priority) {
+      case 7:
+        priorityColor = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+        label = isRtl ? 'عالية' : 'High';
+        break;
+      case 1:
+        priorityColor = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+        label = isRtl ? 'منخفضة' : 'Low';
+        break;
+      case 4:
+      default:
+        priorityColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        label = isRtl ? 'عادية' : 'Normal';
+        break;
+    }
+
+    return PopupMenuButton<int>(
+      tooltip: isRtl ? 'تحديد الأولوية' : 'Set priority',
+      padding: EdgeInsets.zero,
+      onSelected: onChanged,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: priorityColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: priorityColor.withValues(alpha: 0.3),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                color: priorityColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: priorityColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 12,
+              color: priorityColor,
+            ),
+          ],
+        ),
+      ),
+      itemBuilder: (context) => [
+        PopupMenuItem<int>(
+          value: 7,
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'عالية' : 'High',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<int>(
+          value: 4,
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'عادية' : 'Normal',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<int>(
+          value: 1,
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'منخفضة' : 'Low',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

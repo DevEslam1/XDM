@@ -210,6 +210,7 @@ class DownloadProvider extends ChangeNotifier {
       }
     }
 
+    _updateActualTorrentUploadLimit();
     _checkScheduledDownloads();
     _startWidgetTimer();
     notifyListeners();
@@ -804,6 +805,7 @@ class DownloadProvider extends ChangeNotifier {
     }
     await _databaseService.deleteTask(id);
     _notificationService.cancelNotification(id.hashCode.abs());
+    _updateActualTorrentUploadLimit();
     notifyListeners();
     _pumpQueue();
     if (downloadingTasksCount == 0) {
@@ -903,6 +905,7 @@ class DownloadProvider extends ChangeNotifier {
       }
     }
 
+    _updateActualTorrentUploadLimit();
     notifyListeners();
     _startWidgetTimer();
   }
@@ -926,7 +929,11 @@ class DownloadProvider extends ChangeNotifier {
 
       if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
         final priorities = task.torrentFiles!
-            .map((f) => (f['selected'] as bool? ?? true) ? 1 : 0)
+            .map((f) {
+              final selected = f['selected'] as bool? ?? true;
+              if (!selected) return 0;
+              return f['priority'] as int? ?? 4;
+            })
             .toList();
         TorrentService.setFilePriorities(torrentId, priorities);
       }
@@ -978,6 +985,21 @@ class DownloadProvider extends ChangeNotifier {
       }
     }
     return 0;
+  }
+
+  double getTorrentUploadSpeed(String taskId) {
+    final task = _findTask(taskId);
+    if (task == null || !task.seedingEnabled) {
+      return 0.0;
+    }
+    final torrentId = _torrentIds[taskId];
+    if (torrentId != null) {
+      final stat = _latestTorrentStats[torrentId];
+      if (stat != null) {
+        return stat.uploadRate.toDouble();
+      }
+    }
+    return 0.0;
   }
 
   DownloadTask? taskById(String id) {
@@ -1330,6 +1352,7 @@ class DownloadProvider extends ChangeNotifier {
 
     _tasks[index] = updated;
     await _databaseService.saveTask(updated);
+    _updateActualTorrentUploadLimit();
     notifyListeners();
   }
 
@@ -1403,6 +1426,7 @@ class DownloadProvider extends ChangeNotifier {
 
   void _onSettingsChanged() {
     _checkWifiOnlyConstraint();
+    _updateActualTorrentUploadLimit();
     _pumpQueue();
   }
 
@@ -1654,7 +1678,11 @@ class DownloadProvider extends ChangeNotifier {
     final torrentId = _torrentIds[taskId];
     if (torrentId != null) {
       final priorities = files
-          .map((f) => (f['selected'] as bool? ?? true) ? 1 : 0)
+          .map((f) {
+            final selected = f['selected'] as bool? ?? true;
+            if (!selected) return 0;
+            return f['priority'] as int? ?? 4;
+          })
           .toList();
       TorrentService.setFilePriorities(torrentId, priorities);
     }
@@ -1858,25 +1886,98 @@ class DownloadProvider extends ChangeNotifier {
   ) {
     final result = files.map((f) => Map<String, dynamic>.from(f)).toList();
 
-    int selectedSize = result
-        .where((f) => f['selected'] == true)
-        .fold(0, (sum, f) => sum + (f['length'] as int));
+    final selectedFiles = result.where((f) => f['selected'] == true).toList();
+    if (selectedFiles.isEmpty) return result;
 
+    int selectedSize = selectedFiles.fold(0, (sum, f) => sum + (f['length'] as int));
     if (selectedSize == 0) return result;
 
+    // 10% of totalDownloaded is distributed proportionally to simulate background downloading
+    final proportionalTotal = (totalDownloaded * 0.1).round();
+    final phasedTotal = totalDownloaded - proportionalTotal;
+
+    // Calculate proportional shares
+    final proportionalShares = <String, int>{};
+    for (final f in selectedFiles) {
+      final length = f['length'] as int;
+      final name = f['name'] as String;
+      final share = selectedSize > 0
+          ? (proportionalTotal * (length / selectedSize)).round()
+          : 0;
+      proportionalShares[name] = share.clamp(0, length);
+    }
+
+    // Distribute the remaining 90% (phasedTotal) sequentially by priority: High (7), Normal (4), Low (1)
+    final highFiles = selectedFiles.where((f) => (f['priority'] as int? ?? 4) == 7).toList();
+    final normalFiles = selectedFiles.where((f) => (f['priority'] as int? ?? 4) == 4).toList();
+    final lowFiles = selectedFiles.where((f) => (f['priority'] as int? ?? 4) == 1).toList();
+
+    int remainingPhased = phasedTotal;
+    final phasedShares = <String, int>{};
+    for (final f in selectedFiles) {
+      phasedShares[f['name'] as String] = 0;
+    }
+
+    // Phase 1: High priority
+    if (highFiles.isNotEmpty) {
+      final highSize = highFiles.fold(0, (sum, f) => sum + (f['length'] as int));
+      if (remainingPhased <= highSize) {
+        for (final f in highFiles) {
+          final length = f['length'] as int;
+          final share = highSize > 0 ? (remainingPhased * (length / highSize)).round() : 0;
+          phasedShares[f['name'] as String] = share.clamp(0, length);
+        }
+        remainingPhased = 0;
+      } else {
+        for (final f in highFiles) {
+          phasedShares[f['name'] as String] = f['length'] as int;
+        }
+        remainingPhased -= highSize;
+      }
+    }
+
+    // Phase 2: Normal priority
+    if (remainingPhased > 0 && normalFiles.isNotEmpty) {
+      final normalSize = normalFiles.fold(0, (sum, f) => sum + (f['length'] as int));
+      if (remainingPhased <= normalSize) {
+        for (final f in normalFiles) {
+          final length = f['length'] as int;
+          final share = normalSize > 0 ? (remainingPhased * (length / normalSize)).round() : 0;
+          phasedShares[f['name'] as String] = share.clamp(0, length);
+        }
+        remainingPhased = 0;
+      } else {
+        for (final f in normalFiles) {
+          phasedShares[f['name'] as String] = f['length'] as int;
+        }
+        remainingPhased -= normalSize;
+      }
+    }
+
+    // Phase 3: Low priority
+    if (remainingPhased > 0 && lowFiles.isNotEmpty) {
+      final lowSize = lowFiles.fold(0, (sum, f) => sum + (f['length'] as int));
+      for (final f in lowFiles) {
+        final length = f['length'] as int;
+        final share = lowSize > 0 ? (remainingPhased * (length / lowSize)).round() : 0;
+        phasedShares[f['name'] as String] = share.clamp(0, length);
+      }
+    }
+
+    // Combine proportional and phased shares, and calculate speeds
     for (var f in result) {
       if (f['selected'] != true) {
         f['downloadedBytes'] = 0;
         f['speed'] = 0.0;
         continue;
       }
-
+      final name = f['name'] as String;
       final length = f['length'] as int;
-      final share = selectedSize > 0
-          ? (totalDownloaded * (length / selectedSize)).round()
-          : 0;
-      final downloadedBytes = share.clamp(0, length);
+
+      final combined = (proportionalShares[name] ?? 0) + (phasedShares[name] ?? 0);
+      final downloadedBytes = combined.clamp(0, length);
       f['downloadedBytes'] = downloadedBytes;
+
       f['speed'] = totalSpeed > 0 && downloadedBytes < length
           ? totalSpeed * (length / selectedSize)
           : 0.0;
@@ -1893,25 +1994,15 @@ class DownloadProvider extends ChangeNotifier {
   Future<List<int>> getTorrentFileActualBytes(String taskId) async {
     final task = _findTask(taskId);
     if (task == null || task.torrentFiles == null) return [];
+
+    if (task.status == DownloadStatus.completed) {
+      return task.torrentFiles!.map((f) => (f['length'] as int?) ?? 0).toList();
+    }
+
     final result = <int>[];
     for (final f in task.torrentFiles!) {
-      final name = f['name'] as String? ?? '';
-      final length = (f['length'] as int?) ?? 0;
-      if (name.isEmpty || length == 0) {
-        result.add(0);
-        continue;
-      }
-      try {
-        final file = File(p.join(task.savePath, name));
-        if (await file.exists()) {
-          final size = await file.length();
-          result.add(size.clamp(0, length));
-        } else {
-          result.add(0);
-        }
-      } catch (_) {
-        result.add(0);
-      }
+      final downloaded = (f['downloadedBytes'] as int?) ?? 0;
+      result.add(downloaded);
     }
     return result;
   }
@@ -1929,6 +2020,50 @@ class DownloadProvider extends ChangeNotifier {
       copy['speed'] = 0.0;
       return copy;
     }).toList();
+  }
+
+  void _updateActualTorrentUploadLimit() {
+    if (!TorrentService.isSupported || !TorrentService.isInitialized) return;
+
+    if (_torrentIds.isEmpty) {
+      return;
+    }
+
+    bool anySeedingEnabled = false;
+    for (final taskId in _torrentIds.keys) {
+      final task = _findTask(taskId);
+      if (task != null && task.seedingEnabled) {
+        anySeedingEnabled = true;
+        break;
+      }
+    }
+
+    if (anySeedingEnabled) {
+      int? minLimitBytes;
+      for (final taskId in _torrentIds.keys) {
+        final task = _findTask(taskId);
+        if (task != null && task.seedingEnabled && task.seedingLimited) {
+          final taskLimitBytes = (task.seedingLimitKbps * 1000) ~/ 8;
+          if (taskLimitBytes > 0) {
+            if (minLimitBytes == null || taskLimitBytes < minLimitBytes) {
+              minLimitBytes = taskLimitBytes;
+            }
+          }
+        }
+      }
+
+      if (minLimitBytes != null) {
+        TorrentService.setUploadLimit(minLimitBytes);
+      } else if (_settingsProvider.globalTorrentSeedingLimited) {
+        final limitBytes =
+            (_settingsProvider.globalTorrentSeedingLimitKbps * 1000) ~/ 8;
+        TorrentService.setUploadLimit(limitBytes > 0 ? limitBytes : 0);
+      } else {
+        TorrentService.setUploadLimit(0); // Unlimited
+      }
+    } else {
+      TorrentService.setUploadLimit(1); // Effectively 0
+    }
   }
 
   @override
