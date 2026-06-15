@@ -626,11 +626,6 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
               value: sizeMb,
               radius: 14,
               title: percentage >= 12 ? '${percentage.toStringAsFixed(0)}%' : '',
-              titleStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 8,
-                fontWeight: FontWeight.bold,
-              ),
             );
           }).toList();
 
@@ -712,6 +707,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 final String name = card['name'];
                 final Color color = card['color'];
                 final sizeMb = sizes[name] ?? 0.0;
+                final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
                 String sizeText = sizeMb >= 1024
                     ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
                     : '${sizeMb.toStringAsFixed(0)}M';
@@ -742,12 +738,22 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                         ),
                       ),
                       Text(
-                        sizeText,
+                        '${percentage.toStringAsFixed(0)}%',
                         style: TextStyle(
                           color: color,
-                          fontSize: 10,
+                          fontSize: 9,
                           fontFamily: 'monospace',
                           fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        sizeText,
+                        style: TextStyle(
+                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                          fontSize: 9,
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],

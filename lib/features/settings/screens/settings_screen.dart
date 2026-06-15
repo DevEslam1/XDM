@@ -994,8 +994,122 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   height: 1.4,
                 ),
               ),
+              const SizedBox(height: 16),
+              Divider(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, height: 1.0),
+              const SizedBox(height: 16),
+              // Developer info
+              Text(
+                L10n.of(context, 'settings_developer'),
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: accentClr,
+                  fontSize: 9,
+                  letterSpacing: 1.0,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildContactTile(
+                icon: Icons.person_outline,
+                label: kDeveloperName,
+                subtitle: L10n.of(context, 'developer_title'),
+                isDark: isDark,
+              ),
+              const SizedBox(height: 8),
+              _buildContactTile(
+                icon: Icons.email_outlined,
+                label: kDeveloperEmail,
+                subtitle: L10n.of(context, 'tap_to_copy'),
+                isDark: isDark,
+                copyValue: kDeveloperEmail,
+              ),
+              const SizedBox(height: 8),
+              _buildContactTile(
+                icon: Icons.code,
+                label: kDeveloperGithub,
+                subtitle: L10n.of(context, 'tap_to_copy'),
+                isDark: isDark,
+                copyValue: kDeveloperGithub,
+              ),
+              const SizedBox(height: 8),
+              _buildContactTile(
+                icon: Icons.link,
+                label: kDeveloperLinkedin,
+                subtitle: L10n.of(context, 'tap_to_copy'),
+                isDark: isDark,
+                copyValue: kDeveloperLinkedin,
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContactTile({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required bool isDark,
+    String? copyValue,
+  }) {
+    final bgClr = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final accClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    return GestureDetector(
+      onTap: copyValue != null
+          ? () {
+              Clipboard.setData(ClipboardData(text: copyValue));
+              if (mounted) {
+                ThemedSnackbar.show(
+                  context,
+                  message: L10n.of(context, 'copied'),
+                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  icon: Icons.check_circle_outline,
+                  isDarkMode: isDark,
+                );
+              }
+            }
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: bgClr.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: accClr),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: textClr,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: secClr,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (copyValue != null)
+              Icon(Icons.copy_rounded, size: 14, color: secClr),
+          ],
         ),
       ),
     );

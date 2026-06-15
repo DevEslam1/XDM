@@ -13,6 +13,7 @@ import '../../settings/provider/settings_provider.dart';
 import 'onboarding_screen.dart';
 import '../../../shared/widgets/main_navigation_container.dart';
 import '../../../core/utils/premium_route.dart';
+import '../../../core/utils/constants.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -284,7 +285,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                   const SizedBox(height: 12),
                   Text(
-                    'FIRMWARE REVISION v2.0.26',
+                    'FIRMWARE REVISION v1.1.0',
                     style: TextStyle(
                       color: isDark
                           ? AppTheme.textMuted
@@ -293,6 +294,19 @@ class _SplashScreenState extends State<SplashScreen>
                       fontFamily: 'monospace',
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'DEVELOPED BY $kDeveloperName',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textMuted
+                          : AppTheme.lightTextMuted,
+                      fontSize: 7,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
                     ),
                   ),
                 ],

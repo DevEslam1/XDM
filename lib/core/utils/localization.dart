@@ -42,7 +42,7 @@ class L10n {
       'settings_default_threads_sub':
           'Default connection threads count for new downloads',
       'settings_about': 'ABOUT XDM',
-      'settings_firmware': 'VERSION 2.0.26',
+      'settings_firmware': 'FIRMWARE v1.1.0',
       'settings_about_desc':
           'High-efficiency parallel multithreaded download processor.',
       'add_download': 'ADD NEW DOWNLOAD',
@@ -136,6 +136,14 @@ class L10n {
       'settings_backup_sub': 'Archive and retrieve download logs',
       'settings_export': 'EXPORT BACKUP',
       'settings_import': 'IMPORT BACKUP',
+      'settings_developer': 'DEVELOPER',
+      'developer_title': 'Mobile Development Engineer',
+      'developer_email': 'xdev.eslam@gmail.com',
+      'developer_github': 'github.com/DevEslam1',
+      'developer_linkedin': 'linkedin.com/in/deveslam-mahmoud',
+      'developer_phone': '+20 112 229 9831',
+      'tap_to_copy': 'Tap to copy',
+      'copied': 'Copied to clipboard!',
     },
     'ar': {
       'app_title': 'XDM',
@@ -174,7 +182,7 @@ class L10n {
       'settings_default_threads_sub':
           'عدد خيوط الأجزاء الافتراضية للتنزيلات الجديدة',
       'settings_about': 'حول XDM',
-      'settings_firmware': 'الإصدار v2.0.26',
+      'settings_firmware': 'البرنامج الثابت v1.1.0',
       'settings_about_desc':
           'معالج تنزيل متوازي متعدد الخيوط عالي الكفاءة.',
       'add_download': 'إضافة تنزيل جديد',
@@ -267,6 +275,14 @@ class L10n {
       'settings_backup_sub': 'أرشفة واسترجاع سجلات التنزيل',
       'settings_export': 'تصدير النسخة الاحتياطية',
       'settings_import': 'استيراد النسخة الاحتياطية',
+      'settings_developer': 'المطور',
+      'developer_title': 'مهندس تطوير تطبيقات الجوال',
+      'developer_email': 'xdev.eslam@gmail.com',
+      'developer_github': 'github.com/DevEslam1',
+      'developer_linkedin': 'linkedin.com/in/deveslam-mahmoud',
+      'developer_phone': '+20 112 229 9831',
+      'tap_to_copy': 'اضغط للنسخ',
+      'copied': 'تم النسخ إلى الحافظة!',
     },
   };
 
