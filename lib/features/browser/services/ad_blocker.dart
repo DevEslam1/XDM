@@ -7,12 +7,52 @@ class AdBlocker {
   static final Set<String> _blockedDomains = {};
   static bool _initialized = false;
 
+  static const List<String> _allowedDomains = [
+    'youtube.com',
+    'www.youtube.com',
+    'm.youtube.com',
+    'music.youtube.com',
+    'youtu.be',
+    'googlevideo.com',
+    'ytimg.com',
+    'yt3.ggpht.com',
+  ];
+
+  static const List<String> _allowedUrlPatterns = [
+    '/youtubei/v1/',
+    '/player?',
+    '/watch?v=',
+    '/embed/',
+  ];
+
   // Well-known, high-quality, mobile-optimized hosts lists
   static const List<String> hostsSources = [
     'https://adaway.org/hosts.txt',
     'https://v.firebog.net/hosts/AdguardDNS.txt',
     'https://v.firebog.net/hosts/Easyprivacy.txt',
   ];
+
+  static const List<String> _allowedDomainSuffixes = [
+    '.googlevideo.com',
+    '.ytimg.com',
+    '.ggpht.com',
+    '.youtube.com',
+  ];
+
+  // Check if URL belongs to YouTube or its CDNs — always allowed
+  static bool _isAllowedUrl(String url) {
+    final lower = url.toLowerCase();
+    for (final domain in _allowedDomains) {
+      if (lower.contains(domain)) return true;
+    }
+    for (final suffix in _allowedDomainSuffixes) {
+      if (lower.endsWith(suffix)) return true;
+    }
+    for (final pattern in _allowedUrlPatterns) {
+      if (lower.contains(pattern)) return true;
+    }
+    return false;
+  }
 
   static const List<String> _fallbackDomains = [
     'doubleclick.net',
@@ -182,6 +222,9 @@ class AdBlocker {
       _initialized = true;
     }
 
+    // 0. Always allow YouTube domains and API paths
+    if (_isAllowedUrl(url)) return false;
+
     final lower = url.toLowerCase();
 
     // 1. Fast match against common URL patterns
@@ -279,9 +322,11 @@ class AdBlocker {
   } catch(e) {}
 
   // 3. Synchronous check for blocking script injections instantly
+  const ytPattern = /youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com|ggpht\.com/i;
   const adPattern = /adservice|doubleclick|googlesyndication|googleadservices|adnxs|adsystem|outbrain|taboola|criteo|pubmatic|rubiconproject|openx|adform|yieldmo|adcolony|admob|airpush|applovin|pagead|analytics|gtag/i;
   function isAdUrlSync(url) {
     if (!url) return false;
+    if (ytPattern.test(url)) return false;
     return adPattern.test(url);
   }
 
@@ -289,6 +334,11 @@ class AdBlocker {
   function checkBlockedAsync(url) {
     return new Promise((resolve) => {
       if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('file:')) {
+        resolve(false);
+        return;
+      }
+      // Always allow YouTube URLs
+      if (ytPattern.test(url)) {
         resolve(false);
         return;
       }
