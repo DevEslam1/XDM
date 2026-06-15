@@ -176,6 +176,34 @@ class AdBlocker {
     }
   }
 
+  /// Automatically updates hosts if the cached file is older than 24 hours
+  static Future<void> autoUpdateHosts({bool force = false}) async {
+    try {
+      final file = await _getHostsFile();
+      if (!await file.exists()) {
+        debugPrint('AdBlocker: No cached hosts file found. Updating...');
+        await updateHosts();
+        return;
+      }
+      if (force) {
+        debugPrint('AdBlocker: Force update requested. Updating...');
+        await updateHosts();
+        return;
+      }
+      final lastModified = await file.lastModified();
+      final difference = DateTime.now().difference(lastModified);
+      if (difference.inHours >= 24) {
+        debugPrint('AdBlocker: Cached hosts list is older than 24 hours ($difference). Auto-updating...');
+        updateHosts();
+      } else {
+        debugPrint('AdBlocker: Cached hosts list is fresh ($difference old). Skipping auto-update.');
+      }
+    } catch (e) {
+      debugPrint('AdBlocker: Error in auto-updating hosts: $e');
+      updateHosts();
+    }
+  }
+
   static Set<String> _parseHostsContent(String content) {
     final Set<String> domains = {};
     final lines = content.split('\n');

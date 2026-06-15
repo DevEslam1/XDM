@@ -21,6 +21,7 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
+import '../../browser/services/ad_blocker.dart';
 
 enum SortOption { dateAdded, fileSize, fileName, status }
 
@@ -143,6 +144,9 @@ class DownloadProvider extends ChangeNotifier {
     _activeTabIndex = index;
     _isNavbarVisible = true;
     notifyListeners();
+    if (index == 1 && _settingsProvider.adBlockerEnabled) {
+      AdBlocker.autoUpdateHosts();
+    }
   }
 
   /// [pauseOrphanDownloads] should be true only on initial app startup, when

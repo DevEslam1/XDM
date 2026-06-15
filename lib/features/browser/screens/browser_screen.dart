@@ -272,6 +272,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
     // Restore tabs from previous session
     _restoreTabs();
+
+    // Auto update adblock filters on browser launch
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    if (settings.adBlockerEnabled) {
+      AdBlocker.autoUpdateHosts();
+    }
   }
 
   BrowserTab _createNewTab({
