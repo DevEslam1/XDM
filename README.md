@@ -1,105 +1,102 @@
-# <p align="center">⚡ XDM // TRANSMISSION CONTROL COCKPIT</p>
+# ⚡ XDM // XTREME DOWNLOAD MANAGER
 
 <p align="center">
   <img src="assets/app_icon/icon.png" width="128" height="128" alt="XDM Icon" style="border-radius: 28%;" />
 </p>
 
 <p align="center">
-  <strong>A premium, high-efficiency, multi-threaded parallel download manager application for mobile and desktop environments.</strong>
+  <strong>A premium Flutter download manager — multi-threaded, YouTube-ready, torrent-capable.</strong>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Flutter-3.12+-02569B?logo=flutter&logoColor=white&style=for-the-badge" alt="Flutter" />
   <img src="https://img.shields.io/badge/Dart-3.0+-0175C2?logo=dart&logoColor=white&style=for-the-badge" alt="Dart" />
   <img src="https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Windows-000000?style=for-the-badge" alt="Platforms" />
+  <img src="https://img.shields.io/badge/Version-1.1.0-blue?style=for-the-badge" alt="Version" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
 ---
 
-## 🎨 Visual Identity & Cyberpunk Aesthetics
+## ✨ Features
 
-XDM features a curated, theme-aware user interface designed as a tactical cyberpunk/neon cockpit. Every file download is treated as a dedicated data stream:
+### Download Engine
+- **Multi-threaded parallel downloads** — dynamic file segmentation with configurable threads (1–16)
+- **Single-thread fallback** — auto-switches when servers don't support range headers
+- **Resume broken downloads** — continue from where they left off after interruptions
+- **Download scheduling** — queue tasks by time, battery-aware, speed limiter
+- **Rolling-window speed estimation** — smooth 3-second interval for accurate speed display
 
-*   **Glassmorphism Panels**: Reusable translucent backdrop-blurred cards (`GlassCard`) that adapt seamlessly to light and dark modes. Supports a **Visual Performance Mode** to bypass blurs for low-end device efficiency.
-*   **Dynamic Neon Accents**: Cyberpunk neon cyan, violet, green, red, and amber colors designed for low-latency visual alerts.
-*   **Geometric Mesh Backgrounds**: Programmatic grid mesh lines with theme-dependent gradient blobs that scale and reposition dynamically.
-*   **Tactile Vibrations**: Physical micro-haptic pulses (`HapticHelper`) mapped to transitions, downloads, and interface clicks.
-*   **Simplified Standard Terminology**: Replaced technical cyberpunk terminology (e.g. "Transmissions", "Signals", "Local Disk Allocation") with friendly, industry-standard labels ("Downloads", "Connections", "Save Location") to make the application intuitive for everyone while maintaining the premium design.
+### YouTube Integration
+- **Video & audio stream fetching** — powered by `youtube_explode_dart`
+- **Playlist support** — batch download entire playlists
+- **Auto URL detection** — recognizes all YouTube formats (watch, embed, live, music, shorts)
+- **Quality selector** — choose resolution / format before downloading
 
----
+### Built-in Browser
+- **WebView tab manager** — multiple tabs with swipe navigation
+- **Download interception** — auto-detects files, videos, and assets on any page
+- **Bookmarks & history** — persistent with search and filtering
+- **Incognito mode** — private tabs with no history tracking
+- **Offline page cache** — save pages as HTML for offline access
 
-## 🚀 Key Features & Architectural Enhancements
+### BitTorrent
+- **Magnet / torrent file support** — via libtorrent FFI binding
+- **File selection** — view and choose individual files within torrents
+- **Sequential download** — stream media while downloading
 
-### 1. Streamlined 3-Tab Interface & Unified Dashboard
-*   **Consolidated Navigation**: Bottom navigation bar reduced from 5 tabs down to 3: **Downloads** (the main dashboard), **Browser** (integrated web sandbox), and **Settings** (system configuration).
-*   **Unified Segmented Dashboard**: The Home screen features a sliding segmented control to toggle between **Active** (downloading/paused/queued) and **Completed** (completed/failed history) tasks.
-*   **Collapsible Storage Analytics**: A collapsible Category & Storage Analytics panel with an interactive Pie Chart (`fl_chart`) is embedded at the top of the downloads list and can be toggled via an AppBar action icon.
-*   **Simplified Add Download Screen**: Clean "Quick Download" input (URL, filename, save path) with an expandable/collapsible **Advanced Options** drawer (hidden by default) containing Category, Connections, and Schedule settings.
+### UI / UX
+- **Cyberpunk neon cockpit** — glassmorphism, dynamic mesh backgrounds, haptic feedback
+- **Dark / Light / System themes** — theme-aware with accent colors
+- **Analytics dashboard** — interactive donut chart with category breakdown
+- **Category filters** — tap badges to filter the active downloads list
+- **RTL support** — full Arabic localization
+- **Biometric lock** — fingerprint / face unlock on launch and resume
+- **Adaptive layouts** — responsive design for phones, tablets, and desktop
 
-### 2. Multi-Threaded Range Pipeline
-*   **Parallel Chunk Execution**: Splits files dynamically into multiple connection channels (threads) using chunked byte ranges, streaming into temporary `.part$index` segment files, and merging them sequentially upon completion.
-*   **Single-Thread Fallback**: Gracefully recovers and switches to single-threaded download streams when servers do not support range headers or expose `Content-Length`.
-*   **Rolling-Window Speed Estimation**: Tracks download speeds using a smooth 3-second rolling-window interval to prevent erratic spikes and stabilize speed indicators.
-*   **Proxy Mode & SSL Bypass**: Fully configurable proxy configuration with a setting to bypass SSL verification for debugging or local intercept, protected by user warning notices.
-*   **Monotonic Clocks**: Monotonic system stopwatches (`Stopwatch`) prevent time-warp errors during local timezone changes.
-*   **Collision-Safe Task IDs**: Cryptographically robust task IDs combining microsecond timestamp tokens with randomized offset tags.
-*   **Flexible Connection Channel Controls**: Configurable default thread counts and individual task thread adjustments (`1, 2, 4, 5, 8, 16`) backed by progress safety guards.
-
-### 3. Intelligent Categorization
-*   **Automatic Category Indexing**: Automatically filters and classifies incoming downloads into Video, Audio, Document, Archive, APK, and General categories.
-*   **Interactive Dashboard Filters**: Tapping category badges in the analytics panel filters the active files list on the main Downloads dashboard, equipped with clearable filter chips.
-*   **Categorized Folder Docks**: Automatically arranges saved files into subdirectories matching their classified categories.
-
-### 4. Integrated Web Sandbox Browser
-*   **Direct Web Sniffer**: Inline web browser allowing instant downloading.
-*   **Broad Download Interception**: Detects and captures redirects, data URIs, base64 data streams, blob URLs, custom user-agent requests, and matches complex queries.
-*   **Multi-Tab Support**: Keep multiple tabs alive concurrently in memory (using `IndexedStack`) with separate web views, support for a visual tab-grid switcher, and specialized private Incognito tabs.
-*   **Edge Swipe Navigation Gestures**: Drag from screen boundaries (left edge to go back, right edge to go forward) for a fluid, gesture-driven browsing experience.
-*   **Offline Page Cache**: Instantly save page DOM structures as offline `.html` documents inside the downloads folder with local file access.
-*   **JS Injection / Custom CSS Editor**: Persistent tabbed script editor that injects custom CSS styling and Javascript code automatically when pages load.
-*   **Video Quality Selector**: A bottom sheet modal displaying detected resolutions/qualities of video element streams, allowing users to choose their download quality.
-*   **Smart Surf & Download History**: Segmented, searchable log page containing both surfing history entries and download history tasks.
-
-### 5. Native App Protections & Services
-*   **Biometric Gate Lock**: Secure Local Authentication (`local_auth`) checking on initial app load and background-to-foreground transitions (`paused` ➔ `resumed`) using a lock screen overlay.
-*   **Heartbeat Service Monitored Backgrounds**: A 15-second background monitor heartbeat checks task progress telemetries when minimized.
-*   **System Notification Quick Actions**: Android notification drawers feature quick **Pause** and **Cancel** buttons, which map actions directly back to the main UI isolate via named `ReceivePorts`.
-*   **System Backups**: Export and import downloads cleanly to/from JSON archives.
+### Notifications & Background
+- **Foreground service** — heartbeat monitor for active downloads
+- **Quick actions** — pause / cancel from Android notification drawer
+- **System notifications** — download complete, error, and progress updates
 
 ---
 
-## 🛠️ Technology Stack
+## 🛠️ Tech Stack
 
-*   **Framework**: [Flutter](https://flutter.dev/) (Dart SDK `^3.12.0`)
-*   **State Management**: [Provider](https://pub.dev/packages/provider)
-*   **Local Database**: [Hive](https://pub.dev/packages/hive) & [Hive Flutter](https://pub.dev/packages/hive_flutter)
-*   **Networking Engine**: [Dio](https://pub.dev/packages/dio)
-*   **Local Auth**: [LocalAuthentication](https://pub.dev/packages/local_auth)
-*   **Telemetry Notifications**: [Flutter Local Notifications](https://pub.dev/packages/flutter_local_notifications)
-*   **Background Runner**: [Flutter Background Service](https://pub.dev/packages/flutter_background_service)
+| Layer | Technology |
+|-------|-----------|
+| **Framework** | Flutter (Dart SDK ^3.12.0) |
+| **State Management** | Provider |
+| **Local Storage** | Hive + SharedPreferences |
+| **Networking** | Dio ^5.9.2 |
+| **YouTube** | youtube_explode_dart ^3.1.0 |
+| **Torrent** | libtorrent FFI |
+| **Auth** | local_auth |
+| **Charts** | fl_chart |
+| **Notifications** | flutter_local_notifications |
+| **Background Service** | flutter_background_service |
 
 ---
 
-## 📂 Project Structure
+## 📁 Project Structure
 
 ```
 lib/
 ├── core/
-│   ├── services/       # Database, Download Engine, Permissions, Notifications
-│   └── utils/          # Haptics, Localization, File Openers, ID Builders
+│   ├── services/       # Database, Download Engine, Permissions, Notifications, YouTube, Torrent
+│   └── utils/          # Haptics, Localization, Constants, File Utils, URL Utils
 ├── features/
-│   ├── add_download/   # Establish new download screens and configurations
-│   ├── browser/        # Embedded sniffer webview components
-│   ├── categories/     # Legacy folder (now integrated into home dashboard)
-│   ├── details/        # Telemetry logs, speed graphs, thread modifiers
-│   ├── downloads/      # Main active list and state provider
-│   ├── history/        # Legacy folder (now integrated into home dashboard)
-│   ├── home/           # Main cockpit and segmented downloads tab view
-│   ├── onboarding/     # Splash authentication and tutorial flows
-│   └── settings/       # Global cockpit configuration adjustments
+│   ├── add_download/   # New download screen (URL, filename, category, threads, schedule)
+│   ├── browser/        # WebView browser with download sniffing, bookmarks, history
+│   ├── categories/     # Legacy — integrated into home dashboard
+│   ├── details/        # Task detail screen (speed graph, thread control, logs)
+│   ├── downloads/      # Download provider & state management
+│   ├── history/        # Legacy — integrated into home dashboard
+│   ├── home/           # Dashboard (analytics, active/completed tabs, filters)
+│   ├── onboarding/     # Splash screen + biometric lock
+│   └── settings/       # App configuration (themes, network, notifications, about)
 └── shared/
-    └── widgets/        # Glassmorphic panels, neon buttons, grid meshes
+    └── widgets/        # Reusable components (GlassCard, NeonButton, GridMesh, etc.)
 ```
 
 ---
@@ -107,53 +104,45 @@ lib/
 ## 🚀 Getting Started
 
 ### Prerequisites
-
-*   Flutter SDK (version `>= 3.12.0`)
-*   Android SDK (min API 24), iOS (iOS 12.0+), or Windows 10+ SDK
+- Flutter SDK `>= 3.12.0`
+- Android SDK (min API 24), iOS 12.0+, or Windows 10+
 
 ### Installation
+```bash
+git clone https://github.com/DevEslam1/XDM.git
+cd XDM
+flutter pub get
+flutter run
+```
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/yourusername/xdm.git
-    cd xdm
-    ```
-
-2.  Fetch pub dependencies:
-    ```bash
-    flutter pub get
-    ```
-
-3.  Run the development cockpit:
-    ```bash
-    flutter run
-    ```
-
-### Running Tests
-
-To verify package systems, range chunk builders, integration flow, and biometric lock gates, run the test suite:
+### Run Tests
 ```bash
 flutter test
 ```
 
 ---
 
-## ⚙️ Advanced Configuration (Native Platforms)
+## ⚙️ Platform Configuration
 
-### Android Permissions
-The application requires the following permissions declared in `AndroidManifest.xml`:
-*   `android.permission.INTERNET`
-*   `android.permission.FOREGROUND_SERVICE`
-*   `android.permission.FOREGROUND_SERVICE_DATA_SYNC`
-*   `android.permission.ACCESS_NETWORK_STATE`
-*   `android.permission.RECEIVE_BOOT_COMPLETED`
-*   `android.permission.POST_NOTIFICATIONS`
+### Android Permissions (`AndroidManifest.xml`)
+- `INTERNET`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`
+- `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED`, `POST_NOTIFICATIONS`
 
-### iOS Configuration
-*   Background processing tasks and local networking access are registered under the iOS background scheduler task registry (`Info.plist`).
+### iOS
+- Background processing registered in `Info.plist`
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE).
+
+---
+
+## 👨‍💻 Developer
+
+**Eslam Mahmoud** — Mobile Development Engineer
+
+- Email: xdev.eslam@gmail.com
+- GitHub: [github.com/DevEslam1](https://github.com/DevEslam1)
+- LinkedIn: [linkedin.com/in/deveslam-mahmoud](https://linkedin.com/in/deveslam-mahmoud)
