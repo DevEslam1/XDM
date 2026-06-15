@@ -53,6 +53,14 @@ class NotificationService {
 
   Future<void> init() async {
     if (!isSupported) return;
+
+    // Clean up any previous ReceivePort/subscription to prevent leaks on re-init
+    _receivePortSub?.cancel();
+    _receivePortSub = null;
+    _receivePort?.close();
+    _receivePort = null;
+    IsolateNameServer.removePortNameMapping('dmx_notification_port');
+
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );

@@ -28,6 +28,7 @@ class MainNavigationContainer extends StatefulWidget {
 class _MainNavigationContainerState extends State<MainNavigationContainer> with WidgetsBindingObserver {
   bool _isLocked = false;
   bool _isLockScreenOpen = false;
+  String? _lastClipboardUrl;
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -121,7 +122,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
 
   Future<void> _checkClipboard() async {
     final url = await ClipboardService().checkClipboardForUrl();
-    if (url != null && mounted) {
+    if (url != null && mounted && url != _lastClipboardUrl) {
+      _lastClipboardUrl = url;
       _showClipboardBottomSheet(url);
     }
   }

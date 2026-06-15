@@ -42,10 +42,10 @@ class TorrentService {
   static void removeTorrent(int id, {bool deleteFiles = false}) {
     _startTrackingUpdates();
     if (id >= 0 && _activeTorrentIds.contains(id)) {
-      _activeTorrentIds.remove(id);
       try {
         LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
       } catch (_) {}
+      _activeTorrentIds.remove(id);
     }
   }
 

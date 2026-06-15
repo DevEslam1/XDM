@@ -391,7 +391,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     if (showSplitBar) {
                       return Row(
                         children: List.generate(task.chunks.length, (index) {
-                          final chunkProgress = task.chunks[index];
+                          final chunkProgress = task.chunks[index].clamp(0.0, 1.0);
                           return Expanded(
                             child: Padding(
                               padding: EdgeInsets.only(
@@ -478,7 +478,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             ),
                             if (val > 0)
                               FractionallySizedBox(
-                                widthFactor: val,
+                                widthFactor: val.clamp(0.0, 1.0),
                                 child: Container(
                                   height: compact ? 4 : 6,
                                   decoration: BoxDecoration(

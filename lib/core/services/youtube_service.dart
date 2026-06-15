@@ -60,24 +60,36 @@ class YoutubeService {
   }
 
   static bool isYoutubeVideoUrl(String url) {
-    final lower = url.toLowerCase();
-    return lower.contains('youtube.com/watch') ||
-        lower.contains('youtu.be/') ||
-        lower.contains('youtube.com/shorts/') ||
-        lower.contains('m.youtube.com/watch') ||
-        lower.contains('youtube.com/embed/') ||
-        lower.contains('youtube.com/v/') ||
-        lower.contains('youtube.com/live/') ||
-        lower.contains('music.youtube.com/watch');
+    try {
+      final uri = Uri.parse(url);
+      final host = uri.host.toLowerCase();
+      final isYoutube = host == 'youtube.com' || host.endsWith('.youtube.com');
+      final isYoutuBe = host == 'youtu.be' || host.endsWith('.youtu.be');
+      if (!isYoutube && !isYoutuBe) return false;
+      if (isYoutuBe) return uri.pathSegments.isNotEmpty;
+      final path = uri.path.toLowerCase();
+      return path.contains('/watch') ||
+          path.contains('/shorts/') ||
+          path.contains('/embed/') ||
+          path.contains('/v/') ||
+          path.contains('/live/');
+    } catch (_) {
+      final lower = url.toLowerCase();
+      return lower.contains('youtube.com/watch') ||
+          lower.contains('youtu.be/') ||
+          lower.contains('youtube.com/shorts/') ||
+          lower.contains('youtube.com/embed/');
+    }
   }
 
   static bool isPlaylistUrl(String url) {
-    final lower = url.toLowerCase();
-    if (!lower.contains('youtube.com') && !lower.contains('youtu.be')) {
-      return false;
-    }
     try {
       final uri = Uri.parse(url);
+      final host = uri.host.toLowerCase();
+      if (host != 'youtube.com' && !host.endsWith('.youtube.com') &&
+          host != 'youtu.be' && !host.endsWith('.youtu.be')) {
+        return false;
+      }
       final listParam = uri.queryParameters['list'];
       return listParam != null && listParam.isNotEmpty;
     } catch (_) {
@@ -90,11 +102,25 @@ class YoutubeService {
   static String? extractVideoId(String url) {
     try {
       final uri = Uri.parse(url);
-      if (uri.host.contains('youtu.be')) {
+      if (uri.host == 'youtu.be' || uri.host.endsWith('.youtu.be')) {
         return uri.pathSegments.first;
       }
       if (uri.path.contains('shorts')) {
-        return uri.pathSegments.last;
+        final parts = uri.pathSegments;
+        final shortsIdx = parts.indexOf('shorts');
+        if (shortsIdx >= 0 && shortsIdx + 1 < parts.length) {
+          return parts[shortsIdx + 1];
+        }
+      }
+      // Handle /embed/, /v/, /live/ path-based IDs
+      for (final prefix in ['/embed/', '/v/', '/live/']) {
+        final path = uri.path;
+        final idx = path.indexOf(prefix);
+        if (idx >= 0) {
+          final afterPrefix = path.substring(idx + prefix.length);
+          final slashIdx = afterPrefix.indexOf('/');
+          return slashIdx >= 0 ? afterPrefix.substring(0, slashIdx) : afterPrefix;
+        }
       }
       return uri.queryParameters['v'];
     } catch (_) {
@@ -145,8 +171,8 @@ class YoutubeService {
   /// Enables verbose logging from YoutubeExplode.
   /// Call this before any other YoutubeService method.
   static void enableLogging() {
-    Logger.root.level = Level.FINER;
-    Logger.root.onRecord.listen((e) {
+    Logger('YoutubeExplode').level = Level.FINER;
+    Logger('YoutubeExplode').onRecord.listen((e) {
       // ignore: avoid_print
       print(e);
       if (e.error != null) {

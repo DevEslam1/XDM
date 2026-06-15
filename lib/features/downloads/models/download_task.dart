@@ -54,18 +54,28 @@ class DownloadTask {
     this.scheduledAt,
     this.supportsResume = false,
     this.speedLimitKbps = 0,
-    this.seedingEnabled = true,
+    this.seedingEnabled = false,
     this.seedingLimited = false,
     this.seedingLimitKbps = 500,
     this.torrentFiles,
     this.downloadPageUrl,
   });
 
-  bool get isTorrent =>
-      url.trim().startsWith('magnet:') ||
-      url.trim().startsWith('file://') ||
-      url.trim().toLowerCase().endsWith('.torrent') ||
-      fileName.trim().toLowerCase().endsWith('.torrent');
+  bool get isTorrent {
+    final urlLower = url.trim().toLowerCase();
+    if (urlLower.startsWith('magnet:')) return true;
+    if (urlLower.startsWith('file://')) {
+      return fileName.trim().toLowerCase().endsWith('.torrent');
+    }
+    try {
+      final uri = Uri.parse(urlLower);
+      final path = uri.path.toLowerCase();
+      if (path.endsWith('.torrent')) return true;
+    } catch (_) {
+      if (urlLower.endsWith('.torrent')) return true;
+    }
+    return fileName.trim().toLowerCase().endsWith('.torrent');
+  }
 
   double get progress {
     if (fileSize <= 0) return 0.0;
@@ -162,7 +172,7 @@ class DownloadTask {
       tempFilePath: tempFilePath ?? this.tempFilePath,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       threadCount: threadCount ?? this.threadCount,
-      chunks: chunks ?? this.chunks,
+      chunks: chunks != null ? List.of(chunks!) : List.of(this.chunks),
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
@@ -214,8 +224,8 @@ class DownloadTask {
       (value) => value.name == statusName,
       orElse: () => DownloadStatus.paused,
     );
-    final rawChunks = (map['chunks'] as List? ?? const [0.0])
-        .map((value) => (value as num).toDouble().clamp(0.0, 1.0))
+    final rawChunks = (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
+        .map((value) => (value as num?)?.toDouble().clamp(0.0, 1.0) ?? 0.0)
         .toList();
     final threadCount = (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
 
@@ -261,8 +271,10 @@ class DownloadTask {
       seedingEnabled: map['seedingEnabled'] as bool? ?? true,
       seedingLimited: map['seedingLimited'] as bool? ?? false,
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
-      torrentFiles: map['torrentFiles'] != null
-          ? (map['torrentFiles'] as List).map((f) => Map<String, dynamic>.from(f as Map)).toList()
+      torrentFiles: map['torrentFiles'] is List
+          ? (map['torrentFiles'] as List)
+              .map((f) => f is Map ? Map<String, dynamic>.from(f) : <String, dynamic>{})
+              .toList()
           : null,
       downloadPageUrl: map['downloadPageUrl'] as String?,
     );

@@ -41,13 +41,15 @@ class AdBlocker {
 
   // Check if URL belongs to YouTube or its CDNs — always allowed
   static bool _isAllowedUrl(String url) {
-    final lower = url.toLowerCase();
+    final host = _extractHost(url);
+    if (host.isEmpty) return false;
     for (final domain in _allowedDomains) {
-      if (lower.contains(domain)) return true;
+      if (host == domain || host.endsWith('.$domain')) return true;
     }
     for (final suffix in _allowedDomainSuffixes) {
-      if (lower.endsWith(suffix)) return true;
+      if (host == suffix.substring(1) || host.endsWith(suffix)) return true;
     }
+    final lower = url.toLowerCase();
     for (final pattern in _allowedUrlPatterns) {
       if (lower.contains(pattern)) return true;
     }
@@ -162,9 +164,10 @@ class AdBlocker {
     }
 
     if (newDomains.isNotEmpty) {
-      _blockedDomains.clear();
-      _blockedDomains.addAll(_fallbackDomains);
-      _blockedDomains.addAll(newDomains);
+      final updated = <String>{..._fallbackDomains, ...newDomains};
+      _blockedDomains
+        ..clear()
+        ..addAll(updated);
 
       try {
         final file = await _getHostsFile();

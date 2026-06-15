@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
-import '../../../../core/app_theme.dart';
-import '../../../../shared/widgets/geometric_grid_background.dart';
-import '../../../../shared/widgets/dmx_app_icon.dart';
-import '../../../../shared/widgets/neon_glow_button.dart';
+import '../../../core/app_theme.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/widgets/dmx_app_icon.dart';
+import '../../../shared/widgets/neon_glow_button.dart';
 
 class BiometricLockScreen extends StatefulWidget {
   final bool isDark;

@@ -638,7 +638,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
           const SizedBox(height: 16),
           Column(
             children: List.generate(task.chunks.length, (index) {
-              final chunkProgress = task.chunks[index];
+              final chunkProgress = task.chunks[index].clamp(0.0, 1.0);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10.0),
                 child: Row(

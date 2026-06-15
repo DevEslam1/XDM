@@ -136,7 +136,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             duration: const Duration(milliseconds: 300),
                             width: isActive ? 24 : 8,
                             height: 8,
-                            margin: const EdgeInsets.only(right: 6.0),
+                            margin: const EdgeInsetsDirectional.only(end: 6.0),
                             decoration: BoxDecoration(
                               color: isActive
                                   ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)

@@ -35,25 +35,25 @@ class PermissionService {
       }
     }
 
-    // On Android, try the shared Downloads folder. If creation fails (e.g. Android 10+ scoped storage restrictions),
-    // fallback to app-specific external downloads directory which is always writable.
+    // On Android:
+    // - API 30+ (Android 11+): use scoped storage APIs only (hardcoded paths don't work)
+    // - API 29 and below: try shared Downloads folder first, fall back to scoped storage
     if (!kIsWeb && Platform.isAndroid) {
-      const publicPath = '/storage/emulated/0/Download/XDM';
-      try {
-        final dir = Directory(publicPath);
-        if (!await dir.exists()) {
-          await dir.create(recursive: true);
-        }
-        return publicPath;
-      } catch (e) {
+      final sdk = _androidSdkLevel();
+
+      // On API 30+, skip hardcoded path — it requires MANAGE_EXTERNAL_STORAGE which
+      // most users won't grant. Use path_provider scoped storage APIs directly.
+      if (sdk >= 30) {
         try {
           final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
           if (extDirs != null && extDirs.isNotEmpty) {
             final dir = extDirs.first;
-            if (!await dir.exists()) {
-              await dir.create(recursive: true);
+            final pth = p.join(dir.path, 'XDM');
+            final xdmDir = Directory(pth);
+            if (!await xdmDir.exists()) {
+              await xdmDir.create(recursive: true);
             }
-            return dir.path;
+            return pth;
           }
         } catch (_) {}
         try {
@@ -67,6 +67,38 @@ class PermissionService {
             return pth;
           }
         } catch (_) {}
+      } else {
+        // API 29 and below: the hardcoded public path is still accessible
+        const publicPath = '/storage/emulated/0/Download/XDM';
+        try {
+          final dir = Directory(publicPath);
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          return publicPath;
+        } catch (e) {
+          try {
+            final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+            if (extDirs != null && extDirs.isNotEmpty) {
+              final dir = extDirs.first;
+              if (!await dir.exists()) {
+                await dir.create(recursive: true);
+              }
+              return dir.path;
+            }
+          } catch (_) {}
+          try {
+            final extDir = await getExternalStorageDirectory();
+            if (extDir != null) {
+              final pth = p.join(extDir.path, 'Download');
+              final dir = Directory(pth);
+              if (!await dir.exists()) {
+                await dir.create(recursive: true);
+              }
+              return pth;
+            }
+          } catch (_) {}
+        }
       }
     }
 

@@ -77,6 +77,8 @@ class DownloadProvider extends ChangeNotifier {
   bool _hasResolvedInitialConnectivity = false;
   Timer? _schedulingTimer;
   Timer? _widgetTimer;
+  Timer? _retryTimer;
+  bool _queueProcessing = false;
   SortOption _sortOption = SortOption.dateAdded;
   bool _sortAscending = false;
 
@@ -141,6 +143,7 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   void setActiveTabIndex(int index) {
+    if (_activeTabIndex == index) return;
     _activeTabIndex = index;
     _isNavbarVisible = true;
     notifyListeners();
@@ -335,20 +338,23 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
+    if (_searchQuery == query) return;
     _searchQuery = query;
     notifyListeners();
   }
 
   void setStatusFilter(String filter) {
+    if (_statusFilter == filter) return;
     _statusFilter = filter;
     notifyListeners();
   }
 
   List<DownloadTask> get filteredTasks {
     final list = _tasks.where((task) {
+      final queryLower = _searchQuery.toLowerCase();
       final matchesSearch =
-          task.fileName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          task.url.toLowerCase().contains(_searchQuery.toLowerCase());
+          task.fileName.toLowerCase().contains(queryLower) ||
+          task.url.toLowerCase().contains(queryLower);
       if (!matchesSearch) return false;
 
       if (_categoryFilters.isNotEmpty &&
@@ -395,6 +401,7 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   void setSortOption(SortOption option) {
+    if (_sortOption == option) return;
     _sortOption = option;
     notifyListeners();
   }
@@ -487,6 +494,7 @@ class DownloadProvider extends ChangeNotifier {
 
     try {
       if (urls.length > 1) {
+        var addedCount = 0;
         for (var i = 0; i < urls.length; i++) {
           final singleUrl = urls[i];
           if (!isValidTransmissionUrl(singleUrl)) continue;
@@ -504,6 +512,11 @@ class DownloadProvider extends ChangeNotifier {
             scheduledAt: scheduledAt,
             downloadPageUrl: downloadPageUrl,
           );
+          addedCount++;
+        }
+        if (addedCount == 0) {
+          _lastError = 'No valid URLs found in the list.';
+          notifyListeners();
         }
       } else {
         final singleUrl = urls.first;
@@ -708,6 +721,7 @@ class DownloadProvider extends ChangeNotifier {
     for (final task in active) {
       await pauseTask(task.id);
     }
+    _pumpQueue();
   }
 
   Future<void> resumeAllTasks() async {
@@ -1042,16 +1056,22 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   void _pumpQueue() {
-    final availableSlots =
-        _settingsProvider.maxDownloads - downloadingTasksCount;
-    if (availableSlots <= 0) return;
+    if (_queueProcessing) return;
+    _queueProcessing = true;
+    try {
+      final availableSlots =
+          _settingsProvider.maxDownloads - downloadingTasksCount;
+      if (availableSlots <= 0) return;
 
-    final queued = _tasks
-        .where((task) => task.status == DownloadStatus.queued)
-        .take(availableSlots)
-        .toList();
-    for (final task in queued) {
-      _startTask(task);
+      final queued = _tasks
+          .where((task) => task.status == DownloadStatus.queued)
+          .take(availableSlots)
+          .toList();
+      for (final task in queued) {
+        _startTask(task);
+      }
+    } finally {
+      _queueProcessing = false;
     }
   }
 
@@ -1341,7 +1361,8 @@ class DownloadProvider extends ChangeNotifier {
               ),
             );
 
-            Timer(Duration(seconds: delaySeconds), () {
+            _retryTimer?.cancel();
+            _retryTimer = Timer(Duration(seconds: delaySeconds), () {
               final checkedTask = _findTask(task.id);
               if (checkedTask != null &&
                   checkedTask.status == DownloadStatus.queued) {
@@ -1566,13 +1587,12 @@ class DownloadProvider extends ChangeNotifier {
           clearCompletedAt: true,
           clearScheduledAt: true,
         );
-        // Await the write so a crash between schedule-check and persist
-        // doesn't leave the task in an inconsistent state.
-        unawaited(_databaseService.saveTask(_tasks[i]));
+        _databaseService.saveTask(_tasks[i]);
         hasChanges = true;
       }
     }
     if (hasChanges) {
+      _updateActualTorrentUploadLimit();
       notifyListeners();
       _pumpQueue();
     }
@@ -1699,7 +1719,7 @@ class DownloadProvider extends ChangeNotifier {
     // Calculate new total size of selected files
     final selectedSize = files
         .where((f) => f['selected'] == true)
-        .fold(0, (sum, f) => sum + (f['length'] as int));
+        .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
 
     final updated = task.copyWith(
       torrentFiles: files,
@@ -1934,7 +1954,7 @@ class DownloadProvider extends ChangeNotifier {
     // Calculate proportional shares
     final proportionalShares = <String, int>{};
     for (final f in selectedFiles) {
-      final length = f['length'] as int;
+      final length = (f['length'] as num?)?.toInt() ?? 0;
       final name = f['name'] as String;
       final share = selectedSize > 0
           ? (proportionalTotal * (length / selectedSize)).round()
@@ -2048,7 +2068,7 @@ class DownloadProvider extends ChangeNotifier {
     return files.map((f) {
       final copy = Map<String, dynamic>.from(f);
       if (copy['selected'] == true) {
-        copy['downloadedBytes'] = copy['length'] as int;
+        copy['downloadedBytes'] = (copy['length'] as num?)?.toInt() ?? 0;
       } else {
         copy['downloadedBytes'] = 0;
       }
@@ -2097,7 +2117,7 @@ class DownloadProvider extends ChangeNotifier {
         TorrentService.setUploadLimit(0); // Unlimited
       }
     } else {
-      TorrentService.setUploadLimit(1); // Effectively 0
+      TorrentService.setUploadLimit(0); // Effectively 0
     }
   }
 
@@ -2108,6 +2128,7 @@ class DownloadProvider extends ChangeNotifier {
     _torrentUpdatesSubscription?.cancel();
     _connectivitySubscription?.cancel();
     _schedulingTimer?.cancel();
+    _retryTimer?.cancel();
     _widgetTimer?.cancel();
     for (final token in _cancelTokens.values) {
       token.cancel('provider disposed');
