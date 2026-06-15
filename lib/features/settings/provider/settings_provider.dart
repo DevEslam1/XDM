@@ -20,7 +20,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _biometricLockKey = 'biometricLock';
   static const _enableProxyKey = 'enableProxy';
   static const _proxyAddressKey = 'proxyAddress';
-  static const _bypassSSLKey = 'bypassSSL';
+  static const _bypassSSLKey = 'bypassSSL_v2'; // v2: default true
   static const _reduceVisualsKey = 'reduceVisuals';
   static const _customUserAgentKey = 'customUserAgent';
   static const _cleanupDaysKey = 'cleanupDays';
@@ -78,7 +78,7 @@ class SettingsProvider extends ChangeNotifier {
   bool biometricLock = false;
   bool enableProxy = false;
   String proxyAddress = '';
-  bool bypassSSL = false;
+  bool bypassSSL = true;
   bool reduceVisuals = false;
   String customUserAgent = '';
   int cleanupDays = 0;
@@ -127,7 +127,9 @@ class SettingsProvider extends ChangeNotifier {
     biometricLock = _prefs.getBool(_biometricLockKey) ?? biometricLock;
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
     proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
-    bypassSSL = _prefs.getBool(_bypassSSLKey) ?? bypassSSL;
+    // Bypass SSL enabled by default for broader compatibility
+    final stored = _prefs.getBool(_bypassSSLKey);
+    bypassSSL = stored ?? bypassSSL;
     reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
     customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
@@ -439,7 +441,7 @@ class SettingsProvider extends ChangeNotifier {
     biometricLock = false;
     enableProxy = false;
     proxyAddress = '';
-    bypassSSL = false;
+    bypassSSL = true;
     reduceVisuals = false;
     customUserAgent = '';
     cleanupDays = 0;
