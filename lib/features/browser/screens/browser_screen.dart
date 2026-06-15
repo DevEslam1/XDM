@@ -512,7 +512,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       });
 
     if (cleanInitialUrl != 'about:blank') {
-      controller.loadRequest(Uri.parse(cleanInitialUrl));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.loadRequest(Uri.parse(cleanInitialUrl));
+      });
     }
 
     return tab;

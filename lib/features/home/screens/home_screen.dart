@@ -370,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                         child: isTablet(context)
                             ? GridView.builder(
                                 padding: EdgeInsets.symmetric(
-                                  horizontal: screenPadding(context).horizontal,
+                                  horizontal: screenPadding(context).left,
                                   vertical: 8,
                                 ),
                                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -387,13 +387,16 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                                   final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
                                   return FadeInSlide(
                                     delay: delay,
-                                    child: DownloadCard(task: displayTasks[index]),
+                                    child: DownloadCard(
+                                      task: displayTasks[index],
+                                      compact: true,
+                                    ),
                                   );
                                 },
                               )
                             : ListView.builder(
                                 padding: EdgeInsets.symmetric(
-                                  horizontal: screenPadding(context).horizontal,
+                                  horizontal: screenPadding(context).left,
                                 ),
                                 physics: const AlwaysScrollableScrollPhysics(
                                   parent: BouncingScrollPhysics(),
@@ -403,7 +406,10 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                                   final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
                                   return FadeInSlide(
                                     delay: delay,
-                                    child: DownloadCard(task: displayTasks[index]),
+                                    child: DownloadCard(
+                                      task: displayTasks[index],
+                                      compact: true,
+                                    ),
                                   );
                                 },
                               ),

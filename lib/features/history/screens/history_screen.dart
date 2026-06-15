@@ -190,7 +190,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           physics: const BouncingScrollPhysics(),
                           itemCount: historyTasks.length,
                           itemBuilder: (context, index) {
-                            return DownloadCard(task: historyTasks[index]);
+                            return DownloadCard(
+                              task: historyTasks[index],
+                              compact: true,
+                            );
                           },
                         ),
                 ),

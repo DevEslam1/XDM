@@ -280,7 +280,7 @@ class AdBlocker {
   }
 
   /// Adblocking and Anti-Adblock bypass JavaScript script to inject into pages
-  static String get adBlockJavaScript => '''
+  static String get adBlockJavaScript => r'''
 (function() {
   if (window.__xdmAdBlockerInjected) return;
   window.__xdmAdBlockerInjected = true;

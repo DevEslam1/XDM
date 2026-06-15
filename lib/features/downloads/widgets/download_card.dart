@@ -16,8 +16,9 @@ import '../../../../core/utils/premium_route.dart';
 
 class DownloadCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
+  final bool compact;
 
-  const DownloadCard({super.key, required this.task});
+  const DownloadCard({super.key, required this.task, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -101,16 +102,16 @@ class DownloadCard extends StatelessWidget with HapticHelper {
     final cardBody = Container(
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(compact ? 16 : 20),
         border: cardBorder,
         boxShadow: cardShadow,
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(compact ? 16 : 20),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(compact ? 16 : 20),
           onTap: () {
             triggerHaptic(settings);
             Navigator.push(
@@ -122,7 +123,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             );
           },
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(compact ? 12.0 : 16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -132,11 +133,11 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                   children: [
                     // File category icon
                     Container(
-                      width: 46,
-                      height: 46,
+                      width: compact ? 36 : 46,
+                      height: compact ? 36 : 46,
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(compact ? 10 : 14),
                         border: Border.all(
                           color: statusColor.withValues(alpha: 0.15),
                           width: 0.8,
@@ -145,10 +146,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                       child: Icon(
                         categoryIcon,
                         color: statusColor.withValues(alpha: 0.85),
-                        size: 22,
+                        size: compact ? 18 : 22,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: compact ? 10 : 12),
                     // File name and status chip
                     Expanded(
                       child: Column(
@@ -158,7 +159,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             task.fileName,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
-                                  fontSize: 14,
+                                  fontSize: compact ? 13 : 14,
                                   fontWeight: FontWeight.bold,
                                   color: isDark
                                       ? AppTheme.textPrimary
@@ -167,10 +168,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 6),
+                          SizedBox(height: compact ? 4 : 6),
                           Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
+                            spacing: compact ? 6 : 8,
+                            runSpacing: compact ? 2 : 4,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               StatusChip(task: task),
@@ -181,7 +182,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                 ).toUpperCase(),
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
-                                      fontSize: 9,
+                                      fontSize: compact ? 8.5 : 9,
                                       fontWeight: FontWeight.w600,
                                       letterSpacing: 0.8,
                                       color: isDark
@@ -197,7 +198,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                 Text(
                                   '|',
                                   style: TextStyle(
-                                    fontSize: 9,
+                                    fontSize: compact ? 8.5 : 9,
                                     color: isDark
                                         ? AppTheme.textMuted
                                         : AppTheme.lightTextMuted,
@@ -207,7 +208,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                   '${L10n.of(context, 'seeds')}: ${provider.getTorrentSeeds(task.id)}',
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
-                                        fontSize: 9,
+                                        fontSize: compact ? 8.5 : 9,
                                         fontWeight: FontWeight.bold,
                                         color: isDark
                                             ? AppTheme.neonGreen
@@ -218,7 +219,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                   '${L10n.of(context, 'peers')}: ${provider.getTorrentPeers(task.id)}',
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
-                                        fontSize: 9,
+                                        fontSize: compact ? 8.5 : 9,
                                         fontWeight: FontWeight.bold,
                                         color: isDark
                                             ? AppTheme.neonBlue
@@ -242,13 +243,15 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               color: isDark
                                   ? AppTheme.textSecondary
                                   : AppTheme.lightTextSecondary,
-                              size: 20,
+                              size: compact ? 18 : 20,
                             ),
                             onPressed: () {
                               triggerHaptic(settings);
                               provider.pauseTask(task.id);
                             },
                             tooltip: 'Pause Download',
+                            constraints: compact ? const BoxConstraints() : null,
+                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
                           )
                         else if (task.status == DownloadStatus.paused ||
                             task.status == DownloadStatus.queued)
@@ -258,13 +261,15 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               color: isDark
                                   ? AppTheme.neonBlue
                                   : AppTheme.lightNeonBlue,
-                              size: 20,
+                              size: compact ? 18 : 20,
                             ),
                             onPressed: () {
                               triggerHaptic(settings);
                               provider.resumeTask(task.id);
                             },
                             tooltip: 'Resume Download',
+                            constraints: compact ? const BoxConstraints() : null,
+                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
                           )
                         else if (task.status == DownloadStatus.failed)
                           IconButton(
@@ -273,13 +278,15 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               color: isDark
                                   ? AppTheme.neonViolet
                                   : AppTheme.lightNeonViolet,
-                              size: 20,
+                              size: compact ? 18 : 20,
                             ),
                             onPressed: () {
                               triggerHaptic(settings);
                               provider.retryTask(task.id);
                             },
                             tooltip: 'Retry Download',
+                            constraints: compact ? const BoxConstraints() : null,
+                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
                           )
                         else if (task.status == DownloadStatus.completed) ...[
                           if (task.isTorrent)
@@ -295,7 +302,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                     : (isDark
                                           ? AppTheme.neonBlue
                                           : AppTheme.lightNeonBlue),
-                                size: 20,
+                                size: compact ? 18 : 20,
                               ),
                               onPressed: () {
                                 triggerHaptic(settings);
@@ -307,6 +314,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               tooltip: task.seedingEnabled
                                   ? 'Pause Seeding'
                                   : 'Start Seeding',
+                              constraints: compact ? const BoxConstraints() : null,
+                              padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
                             ),
                           IconButton(
                             icon: Icon(
@@ -314,13 +323,15 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               color: isDark
                                   ? AppTheme.neonGreen
                                   : AppTheme.lightNeonGreen,
-                              size: 20,
+                              size: compact ? 18 : 20,
                             ),
                             onPressed: () {
                               triggerHaptic(settings);
                               openFile(context, task.localFilePath, settings);
                             },
                             tooltip: 'Open File',
+                            constraints: compact ? const BoxConstraints() : null,
+                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
                           ),
                         ],
                         IconButton(
@@ -329,7 +340,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             color: isDark
                                 ? AppTheme.neonRed
                                 : AppTheme.lightNeonRed,
-                            size: 18,
+                            size: compact ? 16 : 18,
                           ),
                           onPressed: () async {
                             triggerHaptic(settings);
@@ -360,12 +371,14 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             }
                           },
                           tooltip: 'Delete Task',
+                          constraints: compact ? const BoxConstraints() : null,
+                          padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
                         ),
                       ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                SizedBox(height: compact ? 10 : 14),
                 // Segmented Progress Bar for Chunks
                 Builder(
                   builder: (context) {
@@ -390,7 +403,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               child: Stack(
                                 children: [
                                   Container(
-                                    height: 6,
+                                    height: compact ? 4 : 6,
                                     decoration: BoxDecoration(
                                       color: isDark
                                           ? AppTheme.glassBorder
@@ -406,7 +419,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                       ),
                                       curve: Curves.easeOutCubic,
                                       child: Container(
-                                        height: 6,
+                                        height: compact ? 4 : 6,
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(
                                             4,
@@ -454,7 +467,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                         return Stack(
                           children: [
                             Container(
-                              height: 6,
+                              height: compact ? 4 : 6,
                               width: double.infinity,
                               decoration: BoxDecoration(
                                 color: isDark
@@ -467,7 +480,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               FractionallySizedBox(
                                 widthFactor: val,
                                 child: Container(
-                                  height: 6,
+                                  height: compact ? 4 : 6,
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(8),
                                     boxShadow:
@@ -500,7 +513,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     );
                   },
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: compact ? 8 : 10),
                 // Footer metadata
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -512,7 +525,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                         color: isDark
                             ? AppTheme.textSecondary
                             : AppTheme.lightTextSecondary,
-                        fontSize: 11,
+                        fontSize: compact ? 10 : 11,
                       ),
                     ),
                     // Progress percent
@@ -523,7 +536,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             ? AppTheme.textPrimary
                             : AppTheme.lightTextPrimary,
                         fontWeight: FontWeight.bold,
-                        fontSize: 11,
+                        fontSize: compact ? 10 : 11,
                       ),
                     ),
                     // ETA or status message
@@ -532,7 +545,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                         if (task.status == DownloadStatus.downloading) ...[
                           Icon(
                             Icons.download,
-                            size: 12,
+                            size: compact ? 11 : 12,
                             color: isDark
                                 ? AppTheme.neonBlue
                                 : AppTheme.lightNeonBlue,
@@ -546,14 +559,14 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                       ? AppTheme.neonBlue
                                       : AppTheme.lightNeonBlue,
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 11,
+                                  fontSize: compact ? 10 : 11,
                                 ),
                           ),
                           const SizedBox(width: 8),
                           if (task.isTorrent) ...[
                             Icon(
                               Icons.upload,
-                              size: 12,
+                              size: compact ? 11 : 12,
                               color: isDark
                                   ? AppTheme.neonViolet
                                   : AppTheme.lightNeonViolet,
@@ -567,7 +580,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                         ? AppTheme.neonViolet
                                         : AppTheme.lightNeonViolet,
                                     fontWeight: FontWeight.w600,
-                                    fontSize: 11,
+                                    fontSize: compact ? 10 : 11,
                                   ),
                             ),
                             const SizedBox(width: 8),
@@ -577,7 +590,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                             task.seedingEnabled) ...[
                           Icon(
                             Icons.upload,
-                            size: 12,
+                            size: compact ? 11 : 12,
                             color: isDark
                                 ? AppTheme.neonViolet
                                 : AppTheme.lightNeonViolet,
@@ -591,7 +604,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                       ? AppTheme.neonViolet
                                       : AppTheme.lightNeonViolet,
                                   fontWeight: FontWeight.w600,
-                                  fontSize: 11,
+                                  fontSize: compact ? 10 : 11,
                                 ),
                           ),
                           const SizedBox(width: 8),
@@ -604,7 +617,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               : (task.status == DownloadStatus.completed
                                     ? Icons.check_circle_outline
                                     : Icons.schedule),
-                          size: 12,
+                          size: compact ? 11 : 12,
                           color:
                               (task.status == DownloadStatus.completed &&
                                   task.isTorrent &&
@@ -643,7 +656,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                                           : (isDark
                                                 ? AppTheme.textSecondary
                                                 : AppTheme.lightTextSecondary)),
-                                fontSize: 11,
+                                fontSize: compact ? 10 : 11,
                               ),
                         ),
                       ],
@@ -661,13 +674,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       key: Key(task.id),
       direction: DismissDirection.horizontal,
       background: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: EdgeInsets.only(bottom: compact ? 8 : 12),
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 24.0),
         decoration: BoxDecoration(
           color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
               .withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(compact ? 16 : 20),
         ),
         child: Icon(
           task.status == DownloadStatus.downloading
@@ -677,14 +690,14 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         ),
       ),
       secondaryBackground: Container(
-        margin: const EdgeInsets.only(bottom: 12),
+        margin: EdgeInsets.only(bottom: compact ? 8 : 12),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24.0),
         decoration: BoxDecoration(
           color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(
             alpha: 0.12,
           ),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(compact ? 16 : 20),
         ),
         child: Icon(
           Icons.delete_outline,
@@ -728,11 +741,11 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         }
       },
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: EdgeInsets.only(bottom: compact ? 8.0 : 12.0),
         child: settings.classicUi
             ? cardBody
             : ClipRRect(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(compact ? 16 : 20),
                 child: DmxBackdropFilter(
                   sigmaX: 10,
                   sigmaY: 10,
