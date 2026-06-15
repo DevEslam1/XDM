@@ -663,7 +663,6 @@ class DownloadEngine {
       }
 
       final stopwatch = Stopwatch()..start();
-      var downloadedThisSession = 0;
       final speedSamples = <_SpeedSample>[];
 
       void reportProgress() {
@@ -775,7 +774,6 @@ class DownloadEngine {
                 sink.add(chunk);
                 chunkProgress[idx] += chunk.length;
                 chunkDownloadedThisSession += chunk.length;
-                downloadedThisSession += chunk.length;
 
                 reportProgress();
 

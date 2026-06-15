@@ -20,19 +20,21 @@ class ShareService {
     dispose();
 
     // Listen to shared text/URL streams (when app is in background/foreground)
-    _intentSub = ReceiveSharingIntent.instance.getTextStream().listen((text) {
-      final trimmed = text.trim();
-      if (isHttpUrl(trimmed)) {
-        onUrlReceived(trimmed);
+    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
+      for (final file in value) {
+        final trimmed = file.path.trim();
+        if (isHttpUrl(trimmed)) {
+          onUrlReceived(trimmed);
+        }
       }
     }, onError: (err) {
       // Handle or ignore errors
     });
 
     // Handle shared text/URL on initial app launch (when app was closed)
-    ReceiveSharingIntent.instance.getInitialText().then((text) {
-      if (text != null) {
-        final trimmed = text.trim();
+    ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+      for (final file in value) {
+        final trimmed = file.path.trim();
         if (isHttpUrl(trimmed)) {
           onUrlReceived(trimmed);
         }

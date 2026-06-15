@@ -172,7 +172,7 @@ class DownloadTask {
       tempFilePath: tempFilePath ?? this.tempFilePath,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       threadCount: threadCount ?? this.threadCount,
-      chunks: chunks != null ? List.of(chunks!) : List.of(this.chunks),
+      chunks: chunks != null ? List.of(chunks) : List.of(this.chunks),
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
       completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
