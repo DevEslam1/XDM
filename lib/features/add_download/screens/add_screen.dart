@@ -1,7 +1,8 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import '../../../core/app_theme.dart';
@@ -56,6 +57,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   bool _supportsResume = false;
   List<Map<String, dynamic>> _torrentFiles = [];
   String _lastCheckedUrl = '';
+  Timer? _ytDebounceTimer;
 
   final List<String> _categories = [
     'Auto',

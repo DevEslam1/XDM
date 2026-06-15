@@ -56,12 +56,7 @@ class YoutubeService {
   // ───────────────────────── URL Detection ──────────────────────────
 
   static bool isYoutubeUrl(String url) {
-    final lower = url.toLowerCase();
-    return lower.contains('youtube.com/watch') ||
-        lower.contains('youtu.be/') ||
-        lower.contains('youtube.com/shorts/') ||
-        lower.contains('m.youtube.com/watch') ||
-        isPlaylistUrl(url);
+    return isYoutubeVideoUrl(url) || isPlaylistUrl(url);
   }
 
   static bool isYoutubeVideoUrl(String url) {
@@ -69,7 +64,11 @@ class YoutubeService {
     return lower.contains('youtube.com/watch') ||
         lower.contains('youtu.be/') ||
         lower.contains('youtube.com/shorts/') ||
-        lower.contains('m.youtube.com/watch');
+        lower.contains('m.youtube.com/watch') ||
+        lower.contains('youtube.com/embed/') ||
+        lower.contains('youtube.com/v/') ||
+        lower.contains('youtube.com/live/') ||
+        lower.contains('music.youtube.com/watch');
   }
 
   static bool isPlaylistUrl(String url) {

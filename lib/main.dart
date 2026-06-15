@@ -40,6 +40,7 @@ Future<void> main() async {
 
   runApp(
     DmxApp(
+      databaseService: databaseService,
       settingsProvider: settingsProvider,
       downloadProvider: downloadProvider,
     ),
@@ -49,10 +50,12 @@ Future<void> main() async {
 class DmxApp extends StatelessWidget {
   const DmxApp({
     super.key,
+    required this.databaseService,
     required this.settingsProvider,
     required this.downloadProvider,
   });
 
+  final DatabaseService databaseService;
   final SettingsProvider settingsProvider;
   final DownloadProvider downloadProvider;
 
@@ -60,6 +63,7 @@ class DmxApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<DatabaseService>.value(value: databaseService),
         ChangeNotifierProvider<SettingsProvider>.value(value: settingsProvider),
         ChangeNotifierProvider<DownloadProvider>.value(value: downloadProvider),
       ],

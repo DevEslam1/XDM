@@ -39,6 +39,7 @@ Future<DmxApp> _buildTestApp() async {
   );
   await downloadProvider!.load();
   return DmxApp(
+    databaseService: databaseService,
     settingsProvider: settingsProvider!,
     downloadProvider: downloadProvider!,
   );

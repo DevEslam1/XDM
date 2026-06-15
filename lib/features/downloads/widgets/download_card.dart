@@ -1,4 +1,4 @@
-import 'package:dmx/core/utils/file_utils.dart';
+import '../../../../core/utils/file_utils.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/utils/file_opener.dart';
 import 'package:provider/provider.dart';
