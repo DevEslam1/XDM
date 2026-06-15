@@ -360,7 +360,7 @@ class CategoriesScreen extends StatelessWidget {
             PieChartSectionData(
               color: isDark ? AppTheme.border : AppTheme.lightBorder,
               value: 1.0,
-              radius: 14,
+              radius: 16,
               title: '',
             )
           ]
@@ -373,8 +373,8 @@ class CategoriesScreen extends StatelessWidget {
             return PieChartSectionData(
               color: color,
               value: sizeMb,
-              radius: 14,
-              title: percentage >= 12 ? '${percentage.toStringAsFixed(0)}%' : '',
+              radius: 16,
+              title: percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
               titleStyle: const TextStyle(
                 color: Colors.white,
                 fontSize: 8,
@@ -397,14 +397,14 @@ class CategoriesScreen extends StatelessWidget {
             children: [
               // 1. Donut PieChart
               SizedBox(
-                width: 100,
+                width: 110,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
                     PieChart(
                       PieChartData(
                         sections: sections,
-                        centerSpaceRadius: 32,
+                        centerSpaceRadius: 28,
                         sectionsSpace: 2.5,
                       ),
                     ),

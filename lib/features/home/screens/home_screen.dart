@@ -611,7 +611,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
             PieChartSectionData(
               color: isDark ? AppTheme.border : AppTheme.lightBorder,
               value: 1.0,
-              radius: 14,
+              radius: 16,
               title: '',
             )
           ]
@@ -624,8 +624,13 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
             return PieChartSectionData(
               color: color,
               value: sizeMb,
-              radius: 14,
-              title: percentage >= 12 ? '${percentage.toStringAsFixed(0)}%' : '',
+              radius: 16,
+              title: percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+              ),
             );
           }).toList();
 
@@ -646,7 +651,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
       child: Row(
         children: [
           SizedBox(
-            width: 100,
+            width: 110,
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -669,7 +674,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                       },
                     ),
                     sections: sections,
-                    centerSpaceRadius: 32,
+                    centerSpaceRadius: 28,
                     sectionsSpace: 2.5,
                   ),
                 ),

@@ -272,15 +272,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   BrowserTab _createNewTab({String initialUrl = 'about:blank', bool isIncognito = false}) {
+    final cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank') ? 'about:blank' : initialUrl;
     final id = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
     final controller = WebViewController();
     final tab = BrowserTab(
       id: id,
       controller: controller,
-      url: initialUrl,
-      title: initialUrl == 'about:blank' ? 'New Tab' : initialUrl,
+      url: cleanInitialUrl == 'about:blank' ? '' : cleanInitialUrl,
+      title: cleanInitialUrl == 'about:blank' ? 'New Tab' : cleanInitialUrl,
       isIncognito: isIncognito,
-      isHome: initialUrl == 'about:blank',
+      isHome: cleanInitialUrl == 'about:blank',
     );
 
     final settings = Provider.of<SettingsProvider>(context, listen: false);
@@ -480,8 +481,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         }
       });
 
-    if (initialUrl != 'about:blank') {
-      controller.loadRequest(Uri.parse(initialUrl));
+    if (cleanInitialUrl != 'about:blank') {
+      controller.loadRequest(Uri.parse(cleanInitialUrl));
     }
 
     return tab;
