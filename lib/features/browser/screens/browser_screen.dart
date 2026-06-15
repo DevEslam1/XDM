@@ -86,6 +86,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, String> _detectedDownloadUrls = {}; // tab.id -> url
   final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {}; // tab.url -> sources
   final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
+  final Set<String> _ytDetectionFailed = {}; // tab.url -> yt fetch failed
   final Set<String> _recordedHistoryThisSession = {};
   String? _lastHistoryEntryUrl;
   String? _lastHistoryEntryId;
@@ -424,6 +425,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 // Clear cached download/playlist tags on dynamic navigation & trigger scan
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedPlaylistUrls.remove(tab.id);
+                _ytDetectionFailed.remove(tab.url);
                 _scanPageMedia(tab);
                 _saveTabs();
                 
@@ -1032,6 +1034,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         if (youtubeStreams.isNotEmpty && mounted) {
           setState(() {
             _detectedMediaSources[tab.url] = youtubeStreams;
+            _ytDetectionFailed.remove(tab.url);
             if (_detectedDownloadUrls[tab.id] == null) {
               _detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
             }
@@ -1039,6 +1042,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           return; // Skip normal DOM scanning since we retrieved streams via YouTube API
         }
       } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _ytDetectionFailed.add(tab.url);
+        });
+      }
     }
 
     try {
@@ -2496,6 +2504,25 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         label: Text(detectedSources.length > 1
             ? 'YOUTUBE (${detectedSources.length})'
             : 'YOUTUBE'),
+      );
+    }
+
+    // YouTube detected but stream fetch failed — show retry FAB
+    if (YoutubeService.isYoutubeVideoUrl(activeTab.url) && _ytDetectionFailed.contains(activeTab.url)) {
+      return FloatingActionButton.extended(
+        heroTag: null,
+        backgroundColor: Colors.red.withValues(alpha: 0.6),
+        foregroundColor: Colors.white70,
+        elevation: 4,
+        onPressed: () async {
+          triggerHaptic(settings);
+          setState(() {
+            _ytDetectionFailed.remove(activeTab.url);
+          });
+          _scanPageMedia(activeTab);
+        },
+        icon: const Icon(Icons.refresh_rounded, size: 18),
+        label: const Text('YOUTUBE (RETRY)'),
       );
     }
 

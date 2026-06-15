@@ -108,6 +108,8 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
     if (url == _lastCheckedUrl) return;
     _lastCheckedUrl = url;
 
+    _ytDebounceTimer?.cancel();
+
     if (url.toLowerCase().startsWith('magnet:')) {
       final parsed = parseMagnetUrl(url);
       final dnName = parsed['name'] ?? 'Torrent Download';
@@ -120,6 +122,14 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         _selectedCategory = 'Archive';
         _isMetadataResolved = true;
       });
+    } else if (YoutubeService.isYoutubeVideoUrl(url) || YoutubeService.isPlaylistUrl(url)) {
+      if (!_isResolvingLink && !_isMetadataResolved) {
+        _ytDebounceTimer = Timer(const Duration(milliseconds: 800), () {
+          if (_urlController.text.trim() == url && mounted) {
+            _resolveLinkMetadata();
+          }
+        });
+      }
     } else {
       // If we previously resolved as a magnet, but it's no longer a magnet, reset
       if (_isMetadataResolved && _torrentFiles.isEmpty && _resolvedFileSize == 0 && _resolvedCategory == 'Archive') {
@@ -147,6 +157,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
 
   @override
   void dispose() {
+    _ytDebounceTimer?.cancel();
     _urlController.removeListener(_onUrlChanged);
     _urlController.dispose();
     _nameController.dispose();

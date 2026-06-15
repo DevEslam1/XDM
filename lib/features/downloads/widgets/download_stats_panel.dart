@@ -4,8 +4,10 @@ import '../../../../core/app_theme.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../provider/download_provider.dart';
 import '../../../../shared/widgets/glass_card.dart';
+import '../../../../core/utils/haptic_helper.dart';
+import '../../../../core/utils/localization.dart';
 
-class DownloadStatsPanel extends StatelessWidget {
+class DownloadStatsPanel extends StatelessWidget with HapticHelper {
   const DownloadStatsPanel({super.key});
 
   @override
@@ -20,6 +22,12 @@ class DownloadStatsPanel extends StatelessWidget {
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final dividerClr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+
+    final hasActive = provider.downloadingTasksCount > 0 || provider.queuedTasksCount > 0;
+    final isRtl = L10n.isRtl(context);
+    final tooltipMsg = hasActive
+        ? (isRtl ? 'إيقاف مؤقت للكل' : 'PAUSE ALL')
+        : (isRtl ? 'استئناف الكل' : 'RESUME ALL');
 
     return GlassCard(
       borderRadius: 20,
@@ -62,22 +70,35 @@ class DownloadStatsPanel extends StatelessWidget {
                   ),
                 ],
               ),
-              // Sensor icon
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: blueClr.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: blueClr.withValues(alpha: 0.15),
-                    width: 0.8,
+              // Sensor / Signal Icon (Toggles Start/Stop All)
+              Material(
+                color: Colors.transparent,
+                child: Tooltip(
+                  message: tooltipMsg,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      triggerHaptic(settings);
+                      provider.toggleStartStopAll();
+                    },
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: (hasActive ? redClr : greenClr).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: (hasActive ? redClr : greenClr).withValues(alpha: 0.15),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Icon(
+                        hasActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        color: hasActive ? redClr : greenClr,
+                        size: 20,
+                      ),
+                    ),
                   ),
-                ),
-                child: Icon(
-                  Icons.sensors,
-                  color: blueClr,
-                  size: 20,
                 ),
               ),
             ],

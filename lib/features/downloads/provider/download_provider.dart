@@ -695,6 +695,37 @@ class DownloadProvider extends ChangeNotifier {
     _updateTelemetryWidget();
   }
 
+  Future<void> pauseAllTasks() async {
+    final active = _tasks
+        .where((task) =>
+            task.status == DownloadStatus.downloading ||
+            task.status == DownloadStatus.queued)
+        .toList();
+    for (final task in active) {
+      await pauseTask(task.id);
+    }
+  }
+
+  Future<void> resumeAllTasks() async {
+    final resumable = _tasks
+        .where((task) =>
+            task.status == DownloadStatus.paused ||
+            task.status == DownloadStatus.failed)
+        .toList();
+    for (final task in resumable) {
+      await resumeTask(task.id);
+    }
+  }
+
+  Future<void> toggleStartStopAll() async {
+    final activeCount = downloadingTasksCount + queuedTasksCount;
+    if (activeCount > 0) {
+      await pauseAllTasks();
+    } else {
+      await resumeAllTasks();
+    }
+  }
+
   Future<void> cancelTask(String id) async {
     final task = _findTask(id);
     if (task == null) return;
