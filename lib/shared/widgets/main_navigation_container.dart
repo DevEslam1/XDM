@@ -5,6 +5,7 @@ import '../../core/app_theme.dart';
 import '../../core/services/clipboard_service.dart';
 import '../../core/services/share_service.dart';
 import '../../core/utils/localization.dart';
+import '../../core/utils/responsive.dart';
 import '../../features/add_download/screens/add_screen.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/home/screens/home_screen.dart';
@@ -148,77 +149,215 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final currentIndex = downloadProvider.activeTabIndex;
+    final screenType = getScreenType(context);
+
+    final bodyContent = Directionality(
+      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+      child: FadeIndexedStack(
+        index: currentIndex,
+        children: _screens,
+      ),
+    );
 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.background : AppTheme.lightBackground,
       extendBody: true,
-      body: Directionality(
-        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-        child: FadeIndexedStack(
-          index: currentIndex,
-          children: _screens,
-        ),
-      ),
-      bottomNavigationBar: AnimatedSlide(
-        offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.0),
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
-        child: ClipRRect(
-          borderRadius: settings.classicUi
-              ? BorderRadius.zero
-              : const BorderRadius.vertical(top: Radius.circular(24)),
-          child: DmxBackdropFilter(
-            sigmaX: 15,
-            sigmaY: 15,
-            child: Container(
-              decoration: BoxDecoration(
-                color: settings.classicUi
-                    ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                    : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+      body: screenType != ScreenType.phone
+          ? Row(
+              children: [
+                _buildNavigationRail(settings, downloadProvider, isDark, isRtl, currentIndex),
+                const VerticalDivider(width: 1),
+                Expanded(child: bodyContent),
+              ],
+            )
+          : bodyContent,
+      bottomNavigationBar: screenType == ScreenType.phone
+          ? AnimatedSlide(
+              offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.0),
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: ClipRRect(
                 borderRadius: settings.classicUi
                     ? BorderRadius.zero
                     : const BorderRadius.vertical(top: Radius.circular(24)),
-                border: Border(
-                  top: BorderSide(
-                    color: settings.classicUi
-                        ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                        : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
-                    width: settings.classicUi ? 1.0 : 0.6,
-                  ),
-                ),
-              ),
-              child: SafeArea(
-                child: Directionality(
-                  textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                child: DmxBackdropFilter(
+                  sigmaX: 15,
+                  sigmaY: 15,
                   child: Container(
-                    height: 68,
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildNavItem(
-                          index: 0,
-                          icon: Icons.file_download_outlined,
-                          activeIcon: Icons.file_download,
-                          label: L10n.of(context, 'title_transmissions'),
+                    decoration: BoxDecoration(
+                      color: settings.classicUi
+                          ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                          : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+                      borderRadius: settings.classicUi
+                          ? BorderRadius.zero
+                          : const BorderRadius.vertical(top: Radius.circular(24)),
+                      border: Border(
+                        top: BorderSide(
+                          color: settings.classicUi
+                              ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                              : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                          width: settings.classicUi ? 1.0 : 0.6,
                         ),
-                        _buildNavItem(
-                          index: 1,
-                          icon: Icons.language_outlined,
-                          activeIcon: Icons.language,
-                          label: L10n.of(context, 'title_browser'),
+                      ),
+                    ),
+                    child: SafeArea(
+                      child: Directionality(
+                        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                        child: Container(
+                          height: 68,
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildNavItem(
+                                index: 0,
+                                icon: Icons.file_download_outlined,
+                                activeIcon: Icons.file_download,
+                                label: L10n.of(context, 'title_transmissions'),
+                              ),
+                              _buildNavItem(
+                                index: 1,
+                                icon: Icons.language_outlined,
+                                activeIcon: Icons.language,
+                                label: L10n.of(context, 'title_browser'),
+                              ),
+                              _buildNavItem(
+                                index: 2,
+                                icon: Icons.settings_outlined,
+                                activeIcon: Icons.settings_rounded,
+                                label: L10n.of(context, 'title_config'),
+                              ),
+                            ],
+                          ),
                         ),
-                        _buildNavItem(
-                          index: 2,
-                          icon: Icons.settings_outlined,
-                          activeIcon: Icons.settings_rounded,
-                          label: L10n.of(context, 'title_config'),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildNavigationRail(SettingsProvider settings, DownloadProvider downloadProvider, bool isDark, bool isRtl, int currentIndex) {
+    final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final inactiveColor = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
+    return DmxBackdropFilter(
+      sigmaX: 15,
+      sigmaY: 15,
+      child: Container(
+        decoration: BoxDecoration(
+          color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.85),
+          border: Border(
+            right: BorderSide(
+              color: isDark ? AppTheme.border : AppTheme.lightBorder,
+              width: 1.0,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Icon(
+                  Icons.download_for_offline_rounded,
+                  color: activeColor,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildRailItem(
+                index: 0,
+                icon: Icons.file_download_outlined,
+                selectedIcon: Icons.file_download,
+                label: L10n.of(context, 'title_transmissions'),
+                isSelected: currentIndex == 0,
+                activeColor: activeColor,
+                inactiveColor: inactiveColor,
+                onTap: () {
+                  if (settings.vibration) HapticFeedback.lightImpact();
+                  downloadProvider.setActiveTabIndex(0);
+                },
+              ),
+              _buildRailItem(
+                index: 1,
+                icon: Icons.language_outlined,
+                selectedIcon: Icons.language,
+                label: L10n.of(context, 'title_browser'),
+                isSelected: currentIndex == 1,
+                activeColor: activeColor,
+                inactiveColor: inactiveColor,
+                onTap: () {
+                  if (settings.vibration) HapticFeedback.lightImpact();
+                  downloadProvider.setActiveTabIndex(1);
+                },
+              ),
+              _buildRailItem(
+                index: 2,
+                icon: Icons.settings_outlined,
+                selectedIcon: Icons.settings_rounded,
+                label: L10n.of(context, 'title_config'),
+                isSelected: currentIndex == 2,
+                activeColor: activeColor,
+                inactiveColor: inactiveColor,
+                onTap: () {
+                  if (settings.vibration) HapticFeedback.lightImpact();
+                  downloadProvider.setActiveTabIndex(2);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRailItem({
+    required int index,
+    required IconData icon,
+    required IconData selectedIcon,
+    required String label,
+    required bool isSelected,
+    required Color activeColor,
+    required Color inactiveColor,
+    required VoidCallback onTap,
+  }) {
+    final color = isSelected ? activeColor : inactiveColor;
+    final displayIcon = isSelected ? selectedIcon : icon;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: isSelected ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(displayIcon, color: color, size: 24),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ),

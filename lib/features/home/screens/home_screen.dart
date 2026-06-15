@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/responsive.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/widgets/download_card.dart';
@@ -162,7 +163,10 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           ],
         ),
         body: SafeArea(
-          child: Column(
+          child: Center(
+            child: SizedBox(
+              width: contentMaxWidth(context),
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Sliding Segmented Tab Selector
@@ -363,23 +367,51 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                             );
                           }
                         },
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          physics: const AlwaysScrollableScrollPhysics(
-                            parent: BouncingScrollPhysics(),
-                          ),
-                          itemCount: displayTasks.length,
-                          itemBuilder: (context, index) {
-                            final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
-                            return FadeInSlide(
-                              delay: delay,
-                              child: DownloadCard(task: displayTasks[index]),
-                            );
-                          },
-                        ),
+                        child: isTablet(context)
+                            ? GridView.builder(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: screenPadding(context).horizontal,
+                                  vertical: 8,
+                                ),
+                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  childAspectRatio: gridChildAspectRatio(context, columns: 2),
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                ),
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
+                                itemCount: displayTasks.length,
+                                itemBuilder: (context, index) {
+                                  final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
+                                  return FadeInSlide(
+                                    delay: delay,
+                                    child: DownloadCard(task: displayTasks[index]),
+                                  );
+                                },
+                              )
+                            : ListView.builder(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: screenPadding(context).horizontal,
+                                ),
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
+                                itemCount: displayTasks.length,
+                                itemBuilder: (context, index) {
+                                  final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
+                                  return FadeInSlide(
+                                    delay: delay,
+                                    child: DownloadCard(task: displayTasks[index]),
+                                  );
+                                },
+                              ),
                       ),
               ),
             ],
+              ),
+            ),
           ),
         ),
         floatingActionButton: Padding(
