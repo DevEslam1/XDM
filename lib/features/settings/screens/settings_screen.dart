@@ -344,23 +344,28 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
-    final isDark = settings.isDarkMode;
-    final dividerColor = isDark
-        ? AppTheme.glassBorder
-        : AppTheme.lightGlassBorder;
+    final settings = context.read<SettingsProvider>();
     final isRtl = L10n.isRtl(context);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+
+    return Selector<SettingsProvider, ({int isDarkInt, bool classicUi})>(
+      selector: (_, s) => (isDarkInt: s.isDarkMode ? 1 : 0, classicUi: s.classicUi),
+      builder: (context, sel, _) {
+        final isDark = sel.isDarkInt == 1;
+        final classicUi = sel.classicUi;
+        final dividerColor = isDark
+            ? AppTheme.glassBorder
+            : AppTheme.lightGlassBorder;
+        final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
     return GeometricGridBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          backgroundColor: settings.classicUi
+          backgroundColor: classicUi
               ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
               : Colors.transparent,
           elevation: 0,
-          shape: settings.classicUi
+          shape: classicUi
               ? Border(
                   bottom: BorderSide(
                     color: isDark ? AppTheme.border : AppTheme.lightBorder,
@@ -368,7 +373,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   ),
                 )
               : null,
-          flexibleSpace: settings.classicUi
+          flexibleSpace: classicUi
               ? null
               : ClipRect(
                   child: DmxBackdropFilter(
@@ -586,6 +591,53 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                             },
                           ),
                         ],
+                      ],
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.of(context, 'settings_auto_retry'),
+                        subtitle: L10n.of(context, 'settings_auto_retry_sub'),
+                        value: settings.autoRetryEnabled,
+                        onChanged: (val) {
+                          settings.setAutoRetryEnabled(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      if (settings.autoRetryEnabled) ...[
+                        Divider(color: dividerColor, height: 1),
+                        _buildDropdownTile<int>(
+                          settings: settings,
+                          title: L10n.of(context, 'settings_retry_max'),
+                          subtitle: L10n.of(context, 'settings_retry_max_sub'),
+                          value: settings.maxRetries,
+                          items: const [1, 2, 3, 5, 10],
+                          onChanged: (val) {
+                            if (val != null) {
+                              settings.setMaxRetries(val);
+                              triggerHaptic(settings);
+                            }
+                          },
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildDropdownTile<int>(
+                          settings: settings,
+                          title: L10n.of(context, 'settings_retry_delay'),
+                          subtitle: L10n.of(context, 'settings_retry_delay_sub'),
+                          value: settings.retryDelaySeconds,
+                          items: const [5, 10, 30, 60],
+                          itemLabels: {
+                            5: L10n.of(context, 'settings_retry_5s'),
+                            10: L10n.of(context, 'settings_retry_10s'),
+                            30: L10n.of(context, 'settings_retry_30s'),
+                            60: L10n.of(context, 'settings_retry_60s'),
+                          },
+                          onChanged: (val) {
+                            if (val != null) {
+                              settings.setRetryDelaySeconds(val);
+                              triggerHaptic(settings);
+                            }
+                          },
+                        ),
                       ],
                     ],
                   ),
@@ -1156,6 +1208,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           ),
         ),
       ),
+    );
+      },
     );
   }
 

@@ -297,8 +297,7 @@ class DownloadEngine {
         punyUrl,
         options: Options(
           followRedirects: true,
-          validateStatus: (status) =>
-              status != null && status >= 200 && status < 400,
+          validateStatus: (_) => true,
         ),
       );
       final headerName = fileNameFromContentDisposition(response.headers);
@@ -736,6 +735,7 @@ class DownloadEngine {
                 responseType: ResponseType.stream,
                 followRedirects: true,
                 headers: headers,
+                validateStatus: (_) => true,
               ),
             );
 
@@ -916,8 +916,7 @@ class DownloadEngine {
         responseType: ResponseType.stream,
         followRedirects: true,
         headers: headers,
-        validateStatus: (status) =>
-            status != null && (status < 400 || status == 416),
+        validateStatus: (_) => true,
       ),
     );
 
@@ -936,6 +935,7 @@ class DownloadEngine {
           responseType: ResponseType.stream,
           followRedirects: true,
           headers: headers,
+          validateStatus: (_) => true,
         ),
       );
     }

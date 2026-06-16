@@ -30,7 +30,7 @@ class NeonGlowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
+    final isDark = Provider.of<SettingsProvider>(context, listen: false).isDarkMode;
     final effectiveGlowColor = glowColor ?? color;
     final glassBgColor = isDark ? AppTheme.glassBg : AppTheme.lightGlassBg;
 

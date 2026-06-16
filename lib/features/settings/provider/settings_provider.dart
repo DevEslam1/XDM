@@ -41,6 +41,9 @@ class SettingsProvider extends ChangeNotifier {
   static const _proxyPortKey = 'proxyPort';
   static const _proxyUsernameKey = 'proxyUsername';
   static const _proxyPasswordKey = 'proxyPassword';
+  static const _autoRetryEnabledKey = 'autoRetryEnabled';
+  static const _maxRetriesKey = 'maxRetries';
+  static const _retryDelaySecondsKey = 'retryDelaySeconds';
 
   late final SharedPreferences _prefs;
 
@@ -105,6 +108,9 @@ class SettingsProvider extends ChangeNotifier {
   int proxyPort = 8080;
   String proxyUsername = '';
   String proxyPassword = '';
+  bool autoRetryEnabled = true;
+  int maxRetries = 3;
+  int retryDelaySeconds = 10;
 
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
@@ -150,6 +156,9 @@ class SettingsProvider extends ChangeNotifier {
     proxyPort = _prefs.getInt(_proxyPortKey) ?? 8080;
     proxyUsername = _prefs.getString(_proxyUsernameKey) ?? '';
     proxyPassword = _prefs.getString(_proxyPasswordKey) ?? '';
+    autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
+    maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
+    retryDelaySeconds = _prefs.getInt(_retryDelaySecondsKey) ?? retryDelaySeconds;
   }
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
@@ -356,6 +365,24 @@ class SettingsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> setAutoRetryEnabled(bool value) async {
+    autoRetryEnabled = value;
+    await _prefs.setBool(_autoRetryEnabledKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setMaxRetries(int value) async {
+    maxRetries = value;
+    await _prefs.setInt(_maxRetriesKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setRetryDelaySeconds(int value) async {
+    retryDelaySeconds = value;
+    await _prefs.setInt(_retryDelaySecondsKey, value);
+    notifyListeners();
+  }
+
   Future<void> setThemeMode(String value) async {
     themeMode = value;
     await _prefs.setString(_themeModeKey, value);
@@ -460,6 +487,9 @@ class SettingsProvider extends ChangeNotifier {
     proxyPort = 8080;
     proxyUsername = '';
     proxyPassword = '';
+    autoRetryEnabled = true;
+    maxRetries = 3;
+    retryDelaySeconds = 10;
     await load();
     notifyListeners();
   }

@@ -1342,12 +1342,12 @@ class DownloadProvider extends ChangeNotifier {
             return;
           }
 
-          final maxRetries = 3;
+          final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
           final currentRetry = _retryCounts[task.id] ?? 0;
 
-          if (_isRetryableError(error) && currentRetry < maxRetries) {
+          if (currentRetry < maxRetries) {
             _retryCounts[task.id] = currentRetry + 1;
-            final delaySeconds = pow(2, currentRetry + 1).toInt();
+            final delaySeconds = _settingsProvider.retryDelaySeconds;
             debugPrint(
               'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
             );
@@ -1466,18 +1466,6 @@ class DownloadProvider extends ChangeNotifier {
       return error.message ?? error.type.name;
     }
     return error.toString();
-  }
-
-  bool _isRetryableError(Object error) {
-    if (error is DioException) {
-      return error.type == DioExceptionType.connectionTimeout ||
-          error.type == DioExceptionType.sendTimeout ||
-          error.type == DioExceptionType.receiveTimeout ||
-          error.type == DioExceptionType.connectionError ||
-          (error.response?.statusCode != null &&
-              error.response!.statusCode! >= 500);
-    }
-    return error is SocketException || error is HttpException;
   }
 
   void _onSettingsChanged() {

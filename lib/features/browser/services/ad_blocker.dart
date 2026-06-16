@@ -151,7 +151,10 @@ class AdBlocker {
       try {
         final response = await dio.get<String>(
           source,
-          options: Options(responseType: ResponseType.plain),
+          options: Options(
+            responseType: ResponseType.plain,
+            validateStatus: (_) => true,
+          ),
         );
         if (response.data != null) {
           final parsed = _parseHostsContent(response.data!);
