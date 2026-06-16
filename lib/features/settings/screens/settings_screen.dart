@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -36,6 +37,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   late final TextEditingController _proxyUsernameController;
   late final TextEditingController _proxyPasswordController;
   bool _isUpdatingHosts = false;
+  final Map<String, bool> _expandedSections = {};
 
   @override
   void initState() {
@@ -799,9 +801,112 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         title: L10n.of(context, 'settings_biometric'),
                         subtitle: L10n.of(context, 'settings_biometric_sub'),
                         value: settings.biometricLock,
-                        onChanged: (val) {
-                          settings.setBiometricLock(val);
+                        onChanged: (val) async {
                           triggerHaptic(settings);
+                          final isRtl = L10n.isRtl(context);
+                          final isDark = settings.isDarkMode;
+                          final localAuth = LocalAuthentication();
+                          try {
+                            final bool canCheck = await localAuth.canCheckBiometrics;
+                            final bool isSupported = await localAuth.isDeviceSupported();
+                            if (!context.mounted) return;
+                            if (canCheck || isSupported) {
+                              final bool didAuth = await localAuth.authenticate(
+                                localizedReason: isRtl
+                                    ? 'يرجى تأكيد هويتك لتعديل إعداد القفل البيومتري'
+                                    : 'Please authenticate to change biometric lock setting',
+                                biometricOnly: false,
+                                persistAcrossBackgrounding: true,
+                              );
+                              if (didAuth) {
+                                await settings.setBiometricLock(val);
+                                if (!context.mounted) return;
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: isRtl
+                                      ? (val ? 'تم تفعيل القفل البيومتري' : 'تم تعطيل القفل البيومتري')
+                                      : (val ? 'Biometric lock enabled' : 'Biometric lock disabled'),
+                                  color: isDark
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.lightNeonGreen,
+                                  icon: Icons.check_circle_outline,
+                                  isDarkMode: isDark,
+                                );
+                              } else {
+                                if (!context.mounted) return;
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: isRtl
+                                      ? 'فشل التحقق من الهوية'
+                                      : 'Identity verification failed',
+                                  color: isDark
+                                      ? AppTheme.neonRed
+                                      : AppTheme.lightNeonRed,
+                                  icon: Icons.error_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            } else {
+                              if (!context.mounted) return;
+                              ThemedSnackbar.show(
+                                context,
+                                message: isRtl
+                                    ? 'الجهاز لا يدعم التحقق البيومتري'
+                                    : 'Device does not support biometric authentication',
+                                color: isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed,
+                                icon: Icons.warning_amber_rounded,
+                                isDarkMode: isDark,
+                              );
+                            }
+                          } catch (e) {
+                            debugPrint('Biometric setting error: $e');
+                            String errorMsg = isRtl
+                                ? 'فشل التحقق من الهوية أو غير مهيأ'
+                                : 'Identity verification failed or not configured';
+                            
+                            bool isMissingHardwareOrCreds = false;
+                            if (e is LocalAuthException) {
+                              if (e.code == LocalAuthExceptionCode.noCredentialsSet ||
+                                  e.code == LocalAuthExceptionCode.noBiometricsEnrolled ||
+                                  e.code == LocalAuthExceptionCode.noBiometricHardware) {
+                                isMissingHardwareOrCreds = true;
+                              }
+                            }
+                            if (e is PlatformException) {
+                              final code = e.code.toLowerCase();
+                              if (code == 'notavailable' ||
+                                  code == 'notenrolled' ||
+                                  code == 'passcodenotset' ||
+                                  code == 'nocredentialsset' ||
+                                  code == 'nohardware' ||
+                                  code == 'nobiometricsenrolled' ||
+                                  code == 'nobiometrichardware' ||
+                                  code.contains('nocredentials') ||
+                                  code.contains('nobiometrics') ||
+                                  code.contains('nohardware')) {
+                                isMissingHardwareOrCreds = true;
+                              }
+                            }
+
+                            if (isMissingHardwareOrCreds) {
+                              errorMsg = isRtl
+                                  ? 'يرجى تهيئة Windows Hello أو قفل الشاشة أولاً في إعدادات النظام'
+                                  : 'Please configure Windows Hello or screen lock first in system settings';
+                            }
+
+                            if (!context.mounted) return;
+                            ThemedSnackbar.show(
+                              context,
+                              message: errorMsg,
+                              color: isDark
+                                  ? AppTheme.neonRed
+                                  : AppTheme.lightNeonRed,
+                              icon: Icons.error_outline,
+                              isDarkMode: isDark,
+                            );
+                          }
                         },
                       ),
                       Divider(color: dividerColor, height: 1),
@@ -1426,6 +1531,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     required String title,
     required List<Widget> children,
   }) {
+    final isExpanded = _expandedSections[title] ?? false;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: DmxBackdropFilter(
@@ -1444,26 +1551,68 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(
-                    left: 16.0,
-                    top: 16.0,
-                    right: 16.0,
-                    bottom: 8.0,
-                  ),
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: settings.isDarkMode
-                          ? AppTheme.textSecondary
-                          : AppTheme.lightTextSecondary,
-                      fontSize: 9,
-                      letterSpacing: 1.0,
-                      fontWeight: FontWeight.bold,
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _expandedSections[title] = !isExpanded;
+                    });
+                    triggerHaptic(settings);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 14.0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              color: settings.isDarkMode
+                                  ? AppTheme.textSecondary
+                                  : AppTheme.lightTextSecondary,
+                              fontSize: 9,
+                              letterSpacing: 1.0,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        AnimatedRotation(
+                          turns: isExpanded ? 0 : 0.5,
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            Icons.keyboard_arrow_up,
+                            size: 16,
+                            color: settings.isDarkMode
+                                ? AppTheme.textSecondary
+                                : AppTheme.lightTextSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                ...children,
+                AnimatedCrossFade(
+                  firstChild: Container(),
+                  secondChild: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Divider(
+                        color: settings.isDarkMode
+                            ? AppTheme.glassBorder
+                            : AppTheme.lightGlassBorder,
+                        height: 1.0,
+                      ),
+                      ...children,
+                    ],
+                  ),
+                  crossFadeState: isExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                ),
               ],
             ),
           ),

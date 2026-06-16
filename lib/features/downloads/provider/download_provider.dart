@@ -1342,7 +1342,10 @@ class DownloadProvider extends ChangeNotifier {
             return;
           }
 
-          final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
+          final isRetryable = _isRetryableError(error);
+          final maxRetries = _settingsProvider.autoRetryEnabled && isRetryable
+              ? _settingsProvider.maxRetries
+              : 0;
           final currentRetry = _retryCounts[task.id] ?? 0;
 
           if (currentRetry < maxRetries) {
@@ -1463,9 +1466,43 @@ class DownloadProvider extends ChangeNotifier {
 
   String _errorMessage(Object error) {
     if (error is DioException) {
+      if (error.response?.statusCode != null) {
+        final code = error.response!.statusCode;
+        return switch (code) {
+          403 => '403 Forbidden: Access denied. The download link may have expired or permission is required.',
+          401 => '401 Unauthorized: Authentication is required to access this file.',
+          404 => '404 Not Found: The file was not found on the server.',
+          410 => '410 Gone: The file has been permanently removed from the server.',
+          416 => '416 Range Not Satisfiable: The server returned an invalid byte range error.',
+          500 => '500 Internal Server Error: Server-side issue occurred.',
+          503 => '503 Service Unavailable: The server is temporarily down or overloaded.',
+          _ => 'HTTP Error $code: ${error.message ?? "Server returned invalid response."}',
+        };
+      }
       return error.message ?? error.type.name;
     }
     return error.toString();
+  }
+
+  bool _isRetryableError(Object error) {
+    if (error is DioException) {
+      if (error.type == DioExceptionType.cancel) {
+        return false;
+      }
+      if (error.response?.statusCode != null) {
+        final code = error.response!.statusCode;
+        // Do not retry client errors (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 410 Gone, 416 Range Not Satisfiable)
+        if (code == 400 ||
+            code == 401 ||
+            code == 403 ||
+            code == 404 ||
+            code == 410 ||
+            code == 416) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   void _onSettingsChanged() {
