@@ -58,4 +58,45 @@ void main() {
     if (tempFile.existsSync()) tempFile.deleteSync();
     if (localFile.existsSync()) localFile.deleteSync();
   });
+
+  test('DownloadEngine throws badResponse exception on non-2xx status code', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final port = server.port;
+    final url = 'http://localhost:$port/errorfile.bin';
+
+    server.listen((HttpRequest request) async {
+      final response = request.response;
+      response.statusCode = HttpStatus.notFound;
+      await response.close();
+    });
+
+    final engine = DownloadEngine();
+    final tempFile = File('build/test_error.tmp');
+    final localFile = File('build/test_error.bin');
+    if (tempFile.existsSync()) tempFile.deleteSync();
+    if (localFile.existsSync()) localFile.deleteSync();
+
+    try {
+      await engine.download(
+        url: url,
+        tempFilePath: tempFile.path,
+        localFilePath: localFile.path,
+        knownFileSize: 100,
+        supportsResume: false,
+        cancelToken: CancelToken(),
+        onProgress: (_) {},
+        speedLimitBytesPerSecond: () => 0,
+        activeDownloadCount: () => 1,
+        threadCount: 1,
+      );
+      fail('Expected DownloadEngine to throw DioException');
+    } catch (e) {
+      expect(e, isA<DioException>());
+      expect((e as DioException).type, equals(DioExceptionType.badResponse));
+    } finally {
+      await server.close();
+      if (tempFile.existsSync()) tempFile.deleteSync();
+      if (localFile.existsSync()) localFile.deleteSync();
+    }
+  });
 }

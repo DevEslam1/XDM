@@ -138,7 +138,16 @@ class _SplashScreenState extends State<SplashScreen>
         }
         if (e is PlatformException) {
           final code = e.code.toLowerCase();
-          if (code == 'notavailable' || code == 'notenrolled' || code == 'passcodenotset') {
+          if (code == 'notavailable' ||
+              code == 'notenrolled' ||
+              code == 'passcodenotset' ||
+              code == 'nocredentialsset' ||
+              code == 'nohardware' ||
+              code == 'nobiometricsenrolled' ||
+              code == 'nobiometrichardware' ||
+              code.contains('nocredentials') ||
+              code.contains('nobiometrics') ||
+              code.contains('nohardware')) {
             debugPrint('Device has no biometric or passcode configured. Letting the user in.');
             _navigateToNext();
             return;

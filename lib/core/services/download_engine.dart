@@ -940,6 +940,15 @@ class DownloadEngine {
       );
     }
 
+    if (response.statusCode != 200 && response.statusCode != 206) {
+      throw DioException(
+        requestOptions: RequestOptions(path: punyUrl),
+        type: DioExceptionType.badResponse,
+        response: response,
+        message: 'Server returned status code ${response.statusCode}',
+      );
+    }
+
     final isPartialResponse = response.statusCode == 206;
     if (actualResumeFrom > 0 && !isPartialResponse) {
       // Server returned 200 instead of 206 — restart from scratch
