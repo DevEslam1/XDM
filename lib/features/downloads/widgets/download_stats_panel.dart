@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../../../core/app_theme.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../provider/download_provider.dart';
-import '../../../../shared/widgets/glass_card.dart';
 import '../../../../core/utils/haptic_helper.dart';
 import '../../../../core/utils/localization.dart';
 
@@ -24,10 +23,16 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
 
     final isRtl = L10n.isRtl(context);
 
-    return GlassCard(
-      borderRadius: 20,
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(18),
-      isDarkMode: isDark,
+      decoration: settings.classicUi
+          ? BoxDecoration(
+              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+              border: Border.all(color: isDark ? AppTheme.border : AppTheme.lightBorder, width: 1.0),
+              borderRadius: BorderRadius.circular(20),
+            )
+          : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
