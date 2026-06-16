@@ -42,7 +42,7 @@ class L10n {
       'settings_default_threads_sub':
           'Default connection threads count for new downloads',
       'settings_about': 'ABOUT XDM',
-      'settings_firmware': 'FIRMWARE v1.1.0',
+      'settings_firmware': 'FIRMWARE v2.0.0',
       'settings_about_desc':
           'High-efficiency parallel multithreaded download processor.',
       'add_download': 'ADD NEW DOWNLOAD',
@@ -183,7 +183,7 @@ class L10n {
       'settings_default_threads_sub':
           'عدد خيوط الأجزاء الافتراضية للتنزيلات الجديدة',
       'settings_about': 'حول XDM',
-      'settings_firmware': 'البرنامج الثابت v1.1.0',
+      'settings_firmware': 'البرنامج الثابت v2.0.0',
       'settings_about_desc':
           'معالج تنزيل متوازي متعدد الخيوط عالي الكفاءة.',
       'add_download': 'إضافة تنزيل جديد',

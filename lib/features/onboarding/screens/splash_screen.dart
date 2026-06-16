@@ -285,7 +285,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                   const SizedBox(height: 12),
                   Text(
-                    'FIRMWARE REVISION v1.1.0',
+                    'FIRMWARE REVISION v2.0.0',
                     style: TextStyle(
                       color: isDark
                           ? AppTheme.textMuted
