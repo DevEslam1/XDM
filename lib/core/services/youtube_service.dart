@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:logging/logging.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -54,7 +56,6 @@ class YoutubeService {
   /// Returns the current YouTube auth cookie for display/debug, or null.
   static String? get currentCookies => _cookies;
 
-
   // ───────────────────────── URL Detection ──────────────────────────
 
   static bool isYoutubeUrl(String url) {
@@ -88,8 +89,10 @@ class YoutubeService {
     try {
       final uri = Uri.parse(url);
       final host = uri.host.toLowerCase();
-      if (host != 'youtube.com' && !host.endsWith('.youtube.com') &&
-          host != 'youtu.be' && !host.endsWith('.youtu.be')) {
+      if (host != 'youtube.com' &&
+          !host.endsWith('.youtube.com') &&
+          host != 'youtu.be' &&
+          !host.endsWith('.youtu.be')) {
         return false;
       }
       final listParam = uri.queryParameters['list'];
@@ -121,13 +124,17 @@ class YoutubeService {
         if (idx >= 0) {
           final afterPrefix = path.substring(idx + prefix.length);
           final slashIdx = afterPrefix.indexOf('/');
-          return slashIdx >= 0 ? afterPrefix.substring(0, slashIdx) : afterPrefix;
+          return slashIdx >= 0
+              ? afterPrefix.substring(0, slashIdx)
+              : afterPrefix;
         }
       }
       return uri.queryParameters['v'];
     } catch (_) {
       // Fallback regex matching in case queries are structured differently
-      final regex = RegExp(r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})');
+      final regex = RegExp(
+        r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})',
+      );
       final match = regex.firstMatch(url);
       if (match != null && match.groupCount >= 1) {
         return match.group(1);
@@ -222,7 +229,9 @@ class YoutubeService {
         }
       } catch (e) {
         // Log locally and continue to next fallback client
-        Logger.root.warning('YoutubeService.getStreams: getManifest failed for client $clients: $e');
+        Logger.root.warning(
+          'YoutubeService.getStreams: getManifest failed for client $clients: $e',
+        );
       }
     }
 
@@ -233,7 +242,9 @@ class YoutubeService {
             .getManifest(videoId, requireWatchPage: true)
             .timeout(const Duration(seconds: 30));
       } catch (e) {
-        Logger.root.warning('YoutubeService.getStreams: requireWatchPage fallback failed: $e');
+        Logger.root.warning(
+          'YoutubeService.getStreams: requireWatchPage fallback failed: $e',
+        );
       }
     }
 
@@ -293,7 +304,9 @@ class YoutubeService {
     // Combined streams (video-only + best audio-only) for higher qualities
     if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
       final sortedAudio = manifest.audioOnly.toList()
-        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+        ..sort(
+          (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
+        );
       final bestAudio = sortedAudio.first;
       for (final stream in manifest.videoOnly) {
         final qLabel = _formatQuality(stream.videoQuality);
@@ -323,27 +336,44 @@ class YoutubeService {
     final playlistId = extractPlaylistId(url);
     if (playlistId == null) return null;
 
+    // Try the library first
     try {
-      final playlist = await _yt.playlists.get(playlistId).timeout(const Duration(seconds: 30));
-      return {
-        'id': playlist.id.value,
-        'title': playlist.title,
-        'author': playlist.author,
-        'videoCount': playlist.videoCount ?? 0,
-        'thumbnailUrl': playlist.thumbnails.highResUrl,
-      };
+      final playlist = await _yt.playlists
+          .get(playlistId)
+          .timeout(const Duration(seconds: 30));
+      if (playlist.title.isNotEmpty) {
+        return {
+          'id': playlist.id.value,
+          'title': playlist.title,
+          'author': playlist.author,
+          'videoCount': playlist.videoCount ?? 0,
+          'thumbnailUrl': playlist.thumbnails.highResUrl,
+        };
+      }
     } catch (e) {
-      Logger.root.warning('YoutubeService.getPlaylistInfo: $e');
+      Logger.root.warning('YoutubeService.getPlaylistInfo: library failed: $e');
+    }
+
+    // Fallback: direct InnerTube browse API
+    try {
+      return await _InnerTubeFallback.getPlaylistInfo(playlistId);
+    } catch (e) {
+      Logger.root.warning(
+        'YoutubeService.getPlaylistInfo: InnerTube fallback failed: $e',
+      );
       return null;
     }
   }
 
   /// Returns all videos in a playlist as a lightweight list.
   /// Each entry has: id, title, author, duration (seconds), thumbnailUrl.
-  static Future<List<Map<String, dynamic>>> getPlaylistVideos(String url) async {
+  static Future<List<Map<String, dynamic>>> getPlaylistVideos(
+    String url,
+  ) async {
     final playlistId = extractPlaylistId(url);
     if (playlistId == null) return [];
 
+    // Try the library first
     try {
       final videos = <Map<String, dynamic>>[];
       final stream = _yt.playlists.getVideos(playlistId);
@@ -357,12 +387,29 @@ class YoutubeService {
           'selected': true,
         });
       }
-      return videos;
+      if (videos.isNotEmpty) return videos;
     } on TimeoutException {
-      Logger.root.warning('YoutubeService.getPlaylistVideos: timed out after 60s');
+      Logger.root.warning(
+        'YoutubeService.getPlaylistVideos: library timed out',
+      );
+    } catch (e) {
+      Logger.root.warning(
+        'YoutubeService.getPlaylistVideos: library failed: $e',
+      );
+    }
+
+    // Fallback: direct InnerTube browse API
+    try {
+      return await _InnerTubeFallback.getPlaylistVideos(playlistId);
+    } on TimeoutException {
+      Logger.root.warning(
+        'YoutubeService.getPlaylistVideos: InnerTube fallback timed out',
+      );
       return [];
     } catch (e) {
-      Logger.root.warning('YoutubeService.getPlaylistVideos: $e');
+      Logger.root.warning(
+        'YoutubeService.getPlaylistVideos: InnerTube fallback failed: $e',
+      );
       return [];
     }
   }
@@ -400,7 +447,9 @@ class YoutubeService {
           break;
         }
       } catch (e) {
-        Logger.root.warning('YoutubeService.getStreamForVideo: getManifest failed for client $clients: $e');
+        Logger.root.warning(
+          'YoutubeService.getStreamForVideo: getManifest failed for client $clients: $e',
+        );
       }
     }
 
@@ -411,7 +460,9 @@ class YoutubeService {
             .getManifest(videoId, requireWatchPage: true)
             .timeout(const Duration(seconds: 30));
       } catch (e) {
-        Logger.root.warning('YoutubeService.getStreamForVideo: requireWatchPage fallback failed: $e');
+        Logger.root.warning(
+          'YoutubeService.getStreamForVideo: requireWatchPage fallback failed: $e',
+        );
       }
     }
 
@@ -426,11 +477,14 @@ class YoutubeService {
     if (qualityPreset == 'audio_only') {
       if (manifest.audioOnly.isEmpty) return null;
       final sorted = manifest.audioOnly.toList()
-        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+        ..sort(
+          (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
+        );
       final stream = sorted.first;
       return {
         'src': stream.url.toString(),
-        'label': 'Audio Only: (${stream.bitrate.kiloBitsPerSecond.round()} Kbps)',
+        'label':
+            'Audio Only: (${stream.bitrate.kiloBitsPerSecond.round()} Kbps)',
         'size': stream.size.totalBytes,
         'ext': stream.container.name,
         'title': title,
@@ -461,9 +515,11 @@ class YoutubeService {
         }
       }
 
-      chosen ??= (manifest.muxed.toList()
-            ..sort((a, b) => b.videoQuality.index.compareTo(a.videoQuality.index)))
-          .first;
+      chosen ??=
+          (manifest.muxed.toList()..sort(
+                (a, b) => b.videoQuality.index.compareTo(a.videoQuality.index),
+              ))
+              .first;
     }
 
     // If muxed found, return it
@@ -503,13 +559,18 @@ class YoutubeService {
       } else {
         // best_muxed — use highest video-only
         final sorted = manifest.videoOnly.toList()
-          ..sort((a, b) => b.videoQuality.index.compareTo(a.videoQuality.index));
+          ..sort(
+            (a, b) => b.videoQuality.index.compareTo(a.videoQuality.index),
+          );
         chosenVideo = sorted.first;
       }
 
       if (chosenVideo != null) {
         final sortedAudio = manifest.audioOnly.toList()
-          ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+          ..sort(
+            (a, b) =>
+                b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
+          );
         final bestAudio = sortedAudio.first;
         final qLabel = _formatQuality(chosenVideo.videoQuality);
         return {
@@ -655,7 +716,523 @@ class _AuthenticatedHttpClient extends YoutubeHttpClient {
 
   @override
   Map<String, String> get headers => {
-        ...super.headers,
-        'cookie': _cookieString,
+    ...super.headers,
+    'cookie': _cookieString,
+  };
+}
+
+/// Direct InnerTube API fallback for when youtube_explode_dart's parsing
+/// is broken due to YouTube HTML/API changes.
+///
+/// YouTube migrated playlists to use `lockupViewModel` instead of
+/// `playlistVideoRenderer` for video items, which breaks the library.
+/// This fallback parses both formats.
+class _InnerTubeFallback {
+  static const _browseUrl =
+      'https://www.youtube.com/youtubei/v1/browse?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+
+  static final _log = Logger('YoutubeService._InnerTubeFallback');
+
+  static Map<String, dynamic> _clientContext() => {
+    'context': {
+      'client': {
+        'clientName': 'WEB',
+        'clientVersion': '2.20241126.01.00',
+        'browserName': 'Chrome',
+        'browserVersion': '131.0.0.0',
+        'clientFormFactor': 'UNKNOWN_FORM_FACTOR',
+      },
+    },
+  };
+
+  /// Sends a POST to the InnerTube browse endpoint and returns the JSON body.
+  static Future<Map<String, dynamic>> _browse(
+    String browseId, {
+    String? continuationToken,
+  }) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_browseUrl));
+      request.headers.set('Content-Type', 'application/json');
+      request.headers.set(
+        'User-Agent',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/131.0.0.0 Safari/537.36',
+      );
+
+      final body = <String, dynamic>{..._clientContext()};
+      if (continuationToken != null) {
+        body['continuation'] = continuationToken;
+      } else {
+        body['browseId'] = browseId;
+      }
+
+      request.write(jsonEncode(body));
+      final response = await request.close().timeout(
+        const Duration(seconds: 30),
+      );
+      final raw = await response.transform(utf8.decoder).join();
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Fetches playlist info via InnerTube browse API.
+  static Future<Map<String, dynamic>?> getPlaylistInfo(
+    String playlistId,
+  ) async {
+    final data = await _browse('VL$playlistId');
+
+    // Check for error alerts (e.g. "The playlist does not exist.")
+    final alerts = data['alerts'] as List?;
+    if (alerts != null && alerts.isNotEmpty) {
+      final alertType =
+          (alerts[0] as Map?)?['alertRenderer']?['type'] as String?;
+      if (alertType == 'ERROR') {
+        _log.warning('Playlist $playlistId: alert ERROR');
+        return null;
+      }
+    }
+
+    // Extract title from metadata (works for both header types)
+    final title =
+        _extractString(data, 'metadata/playlistMetadataRenderer/title') ?? '';
+
+    // Extract author from header or sidebar
+    String author = '';
+    final header = data['header'] as Map?;
+    if (header != null) {
+      if (header.containsKey('playlistHeaderRenderer')) {
+        final ownerRuns = _extractList(
+          header['playlistHeaderRenderer'] as Map,
+          'ownerText/runs',
+        );
+        if (ownerRuns != null && ownerRuns.isNotEmpty) {
+          author = (ownerRuns[0] as Map?)?['text'] as String? ?? '';
+        }
+      }
+    }
+    if (author.isEmpty) {
+      // Try sidebar secondary info
+      final sidebarItems = _extractList(
+        data,
+        'sidebar/playlistSidebarRenderer/items',
+      );
+      if (sidebarItems != null && sidebarItems.length > 1) {
+        final ownerRuns = _extractList(
+          sidebarItems[1] as Map,
+          'playlistSidebarSecondaryInfoRenderer/videoOwner/videoOwnerRenderer/title/runs',
+        );
+        if (ownerRuns != null && ownerRuns.isNotEmpty) {
+          author = (ownerRuns[0] as Map?)?['text'] as String? ?? '';
+        }
+      }
+    }
+
+    // Extract video count from header or sidebar stats
+    int videoCount = 0;
+    if (header != null && header.containsKey('playlistHeaderRenderer')) {
+      final numRuns = _extractList(
+        header['playlistHeaderRenderer'] as Map,
+        'numVideosText/runs',
+      );
+      if (numRuns != null && numRuns.isNotEmpty) {
+        videoCount =
+            int.tryParse(
+              (numRuns[0] as Map?)?['text']?.toString().replaceAll(',', '') ??
+                  '',
+            ) ??
+            0;
+      }
+    }
+    if (videoCount == 0) {
+      final sidebarItems = _extractList(
+        data,
+        'sidebar/playlistSidebarRenderer/items',
+      );
+      if (sidebarItems != null && sidebarItems.isNotEmpty) {
+        final stats = _extractList(
+          sidebarItems[0] as Map,
+          'playlistSidebarPrimaryInfoRenderer/stats',
+        );
+        if (stats != null && stats.isNotEmpty) {
+          final firstStatRuns = _extractList(stats[0] as Map, 'runs');
+          if (firstStatRuns != null && firstStatRuns.isNotEmpty) {
+            videoCount =
+                int.tryParse(
+                  (firstStatRuns[0] as Map?)?['text']?.toString().replaceAll(
+                        ',',
+                        '',
+                      ) ??
+                      '',
+                ) ??
+                0;
+          }
+        }
+      }
+    }
+
+    // Get thumbnail from first video
+    String thumbnailUrl = '';
+    final videoItems = _extractVideoItems(data);
+    if (videoItems.isNotEmpty) {
+      thumbnailUrl = _extractThumbnailUrl(videoItems.first);
+    }
+
+    return {
+      'id': playlistId,
+      'title': title,
+      'author': author,
+      'videoCount': videoCount,
+      'thumbnailUrl': thumbnailUrl,
+    };
+  }
+
+  /// Fetches all playlist videos via InnerTube browse API, handling pagination.
+  static Future<List<Map<String, dynamic>>> getPlaylistVideos(
+    String playlistId,
+  ) async {
+    final allVideos = <Map<String, dynamic>>[];
+    String? continuationToken;
+    var pageNum = 0;
+    const maxPages = 50; // Safety limit (~5000 videos)
+
+    // First request
+    var data = await _browse('VL$playlistId');
+
+    // Check for error
+    final alerts = data['alerts'] as List?;
+    if (alerts != null && alerts.isNotEmpty) {
+      final alertType =
+          (alerts[0] as Map?)?['alertRenderer']?['type'] as String?;
+      if (alertType == 'ERROR') return [];
+    }
+
+    // Extract playlist author from header for per-video author fallback
+    String playlistAuthor = '';
+    final header = data['header'] as Map?;
+    if (header != null && header.containsKey('playlistHeaderRenderer')) {
+      final ownerRuns = _extractList(
+        header['playlistHeaderRenderer'] as Map,
+        'ownerText/runs',
+      );
+      if (ownerRuns != null && ownerRuns.isNotEmpty) {
+        playlistAuthor = (ownerRuns[0] as Map?)?['text'] as String? ?? '';
+      }
+    }
+
+    while (pageNum < maxPages) {
+      List<Map<String, dynamic>> items;
+      if (pageNum == 0) {
+        items = _extractVideoItems(data);
+        continuationToken = _extractContinuationToken(
+          data,
+          isContinuation: false,
+        );
+      } else {
+        items = _extractVideoItems(data);
+        continuationToken = _extractContinuationToken(
+          data,
+          isContinuation: true,
+        );
+      }
+
+      for (final item in items) {
+        final video = _parseVideoItem(item, playlistAuthor);
+        if (video != null) allVideos.add(video);
+      }
+
+      if (continuationToken == null || continuationToken.isEmpty) break;
+
+      pageNum++;
+      data = await _browse(
+        'VL$playlistId',
+        continuationToken: continuationToken,
+      );
+    }
+
+    return allVideos;
+  }
+
+  // ──────────────── Parsing helpers ──────────────────
+
+  /// Extracts the flat list of video items from a browse response,
+  /// handling both initial and continuation formats.
+  static List<Map<String, dynamic>> _extractVideoItems(
+    Map<String, dynamic> data,
+  ) {
+    // Continuation responses
+    final actions =
+        (data['onResponseReceivedActions'] as List?) ??
+        (data['onResponseReceivedCommands'] as List?);
+    if (actions != null) {
+      for (final action in actions) {
+        final actionMap = action as Map?;
+        final items =
+            actionMap?['appendContinuationItemsAction']?['continuationItems']
+                as List? ??
+            actionMap?['reloadContinuationItemsCommand']?['continuationItems']
+                as List?;
+        if (items != null) {
+          return items.whereType<Map<String, dynamic>>().toList();
+        }
+      }
+    }
+
+    // Initial page: tabs → sectionList → itemSection
+    final tabs = _extractList(
+      data,
+      'contents/twoColumnBrowseResultsRenderer/tabs',
+    );
+    if (tabs == null) return [];
+
+    for (final tab in tabs) {
+      final sections = _extractList(
+        tab as Map,
+        'tabRenderer/content/sectionListRenderer/contents',
+      );
+      if (sections == null) continue;
+
+      for (final section in sections) {
+        final itemContents = _extractList(
+          section as Map,
+          'itemSectionRenderer/contents',
+        );
+        if (itemContents == null) continue;
+
+        // Old format: playlistVideoListRenderer/contents
+        for (final item in itemContents) {
+          final pvlContents = _extractList(
+            item as Map,
+            'playlistVideoListRenderer/contents',
+          );
+          if (pvlContents != null) {
+            return pvlContents.whereType<Map<String, dynamic>>().toList();
+          }
+        }
+
+        // New format: items are directly lockupViewModels in itemSectionRenderer/contents
+        if (itemContents.isNotEmpty &&
+            itemContents.first is Map &&
+            (itemContents.first as Map).containsKey('lockupViewModel')) {
+          return itemContents.whereType<Map<String, dynamic>>().toList();
+        }
+      }
+    }
+    return [];
+  }
+
+  /// Parses a single video item from either `playlistVideoRenderer` (old)
+  /// or `lockupViewModel` (new) format.
+  static Map<String, dynamic>? _parseVideoItem(
+    Map<String, dynamic> item,
+    String fallbackAuthor,
+  ) {
+    // Old format: playlistVideoRenderer
+    final pvr = item['playlistVideoRenderer'] as Map?;
+    if (pvr != null) {
+      final id = pvr['videoId'] as String? ?? '';
+      if (id.isEmpty) return null;
+      final title = _parseRuns(pvr['title']?['runs'] as List?);
+      final author =
+          _parseRuns(pvr['ownerText']?['runs'] as List?) ??
+          _parseRuns(pvr['shortBylineText']?['runs'] as List?) ??
+          fallbackAuthor;
+      final durationText = pvr['lengthText']?['simpleText'] as String?;
+      final duration = _parseDuration(durationText);
+      final thumbnailUrl = _extractThumbnailUrl(item);
+      return {
+        'id': id,
+        'title': title ?? 'Video',
+        'author': author,
+        'duration': duration,
+        'thumbnailUrl': thumbnailUrl,
+        'selected': true,
       };
+    }
+
+    // New format: lockupViewModel
+    final lockup = item['lockupViewModel'] as Map?;
+    if (lockup != null) {
+      final id = lockup['contentId'] as String? ?? '';
+      if (id.isEmpty) return null;
+
+      final metaVM =
+          (lockup['metadata'] as Map?)?['lockupMetadataViewModel'] as Map?;
+      final titleMap = metaVM?['title'] as Map?;
+      final title = titleMap?['content'] as String? ?? 'Video';
+
+      // Duration from thumbnail overlay
+      int duration = 0;
+      final overlays =
+          (lockup['contentImage'] as Map?)?['thumbnailViewModel']?['overlays']
+              as List?;
+      if (overlays != null) {
+        for (final overlay in overlays) {
+          final bottomOverlay =
+              (overlay as Map?)?['thumbnailBottomOverlayViewModel'] as Map?;
+          if (bottomOverlay != null) {
+            final badges = bottomOverlay['badges'] as List?;
+            if (badges != null && badges.isNotEmpty) {
+              final durationText =
+                  (badges[0] as Map?)?['thumbnailBadgeViewModel']?['text']
+                      as String?;
+              duration = _parseDuration(durationText);
+            }
+          }
+        }
+      }
+
+      // Thumbnail URL
+      final thumbnailUrl = _extractThumbnailUrl(item);
+
+      return {
+        'id': id,
+        'title': title,
+        'author': fallbackAuthor,
+        'duration': duration,
+        'thumbnailUrl': thumbnailUrl,
+        'selected': true,
+      };
+    }
+
+    return null; // continuationItemRenderer or unknown format
+  }
+
+  /// Extracts the continuation token from the video items list.
+  static String? _extractContinuationToken(
+    Map<String, dynamic> data, {
+    required bool isContinuation,
+  }) {
+    List<dynamic>? items;
+
+    if (isContinuation) {
+      final actions =
+          (data['onResponseReceivedActions'] as List?) ??
+          (data['onResponseReceivedCommands'] as List?);
+      if (actions != null) {
+        for (final action in actions) {
+          final actionMap = action as Map?;
+          items =
+              actionMap?['appendContinuationItemsAction']?['continuationItems']
+                  as List? ??
+              actionMap?['reloadContinuationItemsCommand']?['continuationItems']
+                  as List?;
+          if (items != null) break;
+        }
+      }
+    } else {
+      // Initial page — find in the video list
+      final videoItems = _extractVideoItems(data);
+      items = videoItems;
+    }
+
+    if (items == null) return null;
+
+    for (final item in items) {
+      final cont = (item as Map?)?['continuationItemRenderer'] as Map?;
+      if (cont != null) {
+        final endpoint = cont['continuationEndpoint'] as Map?;
+        if (endpoint != null) {
+          // Direct token
+          final token = endpoint['continuationCommand']?['token'] as String?;
+          if (token != null) return token;
+          // Nested inside commandExecutorCommand
+          final commands =
+              endpoint['commandExecutorCommand']?['commands'] as List?;
+          if (commands != null) {
+            for (final cmd in commands) {
+              final t =
+                  (cmd as Map?)?['continuationCommand']?['token'] as String?;
+              if (t != null) return t;
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // ──────────────── Utility helpers ──────────────────
+
+  /// Navigates a nested JSON path like "a/b/c" and returns the value.
+  static dynamic _navigate(Map data, String path) {
+    dynamic current = data;
+    for (final key in path.split('/')) {
+      if (current is Map) {
+        current = current[key];
+      } else if (current is List) {
+        final idx = int.tryParse(key);
+        if (idx != null && idx < current.length) {
+          current = current[idx];
+        } else {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+    return current;
+  }
+
+  static String? _extractString(Map data, String path) {
+    final value = _navigate(data, path);
+    return value is String ? value : null;
+  }
+
+  static List? _extractList(Map data, String path) {
+    final value = _navigate(data, path);
+    return value is List ? value : null;
+  }
+
+  /// Joins text from a "runs" array.
+  static String? _parseRuns(List? runs) {
+    if (runs == null || runs.isEmpty) return null;
+    return runs.map((r) => (r as Map?)?['text'] as String? ?? '').join();
+  }
+
+  /// Parses a duration string like "4:00" or "1:23:45" into seconds.
+  static int _parseDuration(String? text) {
+    if (text == null || text.isEmpty) return 0;
+    final parts = text.split(':').map((p) => int.tryParse(p) ?? 0).toList();
+    if (parts.length == 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length == 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    return 0;
+  }
+
+  /// Extracts the best thumbnail URL from a video item.
+  static String _extractThumbnailUrl(Map<String, dynamic> item) {
+    // lockupViewModel format
+    final lockup = item['lockupViewModel'] as Map?;
+    if (lockup != null) {
+      final sources =
+          (lockup['contentImage']
+                  as Map?)?['thumbnailViewModel']?['image']?['sources']
+              as List?;
+      if (sources != null && sources.isNotEmpty) {
+        return (sources.last as Map?)?['url'] as String? ?? '';
+      }
+      // Fallback: construct from video ID
+      final id = lockup['contentId'] as String?;
+      if (id != null) return 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
+    }
+
+    // playlistVideoRenderer format
+    final pvr = item['playlistVideoRenderer'] as Map?;
+    if (pvr != null) {
+      final thumbnails = (pvr['thumbnail'] as Map?)?['thumbnails'] as List?;
+      if (thumbnails != null && thumbnails.isNotEmpty) {
+        return (thumbnails.last as Map?)?['url'] as String? ?? '';
+      }
+      final id = pvr['videoId'] as String?;
+      if (id != null) return 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
+    }
+
+    return '';
+  }
 }
