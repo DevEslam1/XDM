@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
@@ -54,6 +55,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   List<Map<String, dynamic>> _videos = [];
   bool _isLoading = true;
   bool _isDownloading = false;
+  bool _isCancelled = false;
   String? _errorMessage;
   String _qualityPreset = '720p';
   int _downloadProgress = 0;
@@ -74,14 +76,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
   Future<void> _fetchPlaylist() async {
     try {
-      final infoFuture = YoutubeService.getPlaylistInfo(widget.playlistUrl);
-      final videosFuture = YoutubeService.getPlaylistVideos(widget.playlistUrl);
-
-      final results = await Future.wait([infoFuture, videosFuture]);
+      final details = await YoutubeService.getPlaylistDetails(widget.playlistUrl);
 
       if (!mounted) return;
-      final info = results[0] as Map<String, dynamic>?;
-      final videos = (results[1] as List<Map<String, dynamic>>?) ?? [];
+      final info = details?['info'] as Map<String, dynamic>?;
+      final videos = (details?['videos'] as List<Map<String, dynamic>>?) ?? [];
 
       setState(() {
         _playlistInfo = info;
@@ -123,7 +122,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final selectedVideos = _videos.where((v) => v['selected'] == true).toList();
     if (selectedVideos.isEmpty) return;
 
-    setState(() => _isDownloading = true);
+    setState(() {
+      _isDownloading = true;
+      _isCancelled = false;
+    });
 
     final provider = Provider.of<DownloadProvider>(context, listen: false);
     final settings = Provider.of<SettingsProvider>(context, listen: false);
@@ -131,9 +133,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
     int completed = 0;
     int failed = 0;
+    final enqueuedVideos = <Map<String, dynamic>>[];
 
     for (final video in selectedVideos) {
       if (!mounted) break;
+      if (_isCancelled) break;
 
       final videoId = video['id'] as String;
       final videoTitle = video['title'] as String? ?? 'YouTube Video';
@@ -187,6 +191,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
               downloadPageUrl: widget.playlistUrl,
             );
           }
+          enqueuedVideos.add(video);
         } else {
           failed++;
         }
@@ -212,11 +217,13 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       }
       Navigator.pop(
         context,
-        PlaylistDownloadResult(
-          selectedVideos: selectedVideos,
-          qualityPreset: _qualityPreset,
-          playlistTitle: _playlistInfo?['title'] as String? ?? 'Playlist',
-        ),
+        enqueuedVideos.isEmpty
+            ? null
+            : PlaylistDownloadResult(
+                selectedVideos: enqueuedVideos,
+                qualityPreset: _qualityPreset,
+                playlistTitle: _playlistInfo?['title'] as String? ?? 'Playlist',
+              ),
       );
     }
   }
@@ -590,6 +597,31 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 ),
                               ],
                             ),
+                            if (_qualityPreset == '720p' || _qualityPreset == '480p')
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8, left: 60),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 12,
+                                      color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        L10n.isRtl(context)
+                                            ? 'ملاحظة: الجودات العالية قد يتم تحميلها كملفات فيديو وصوت منفصلة.'
+                                            : 'Note: HD qualities may download as separate video & audio files.',
+                                        style: TextStyle(
+                                          color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             const SizedBox(height: 12),
 
                             // Download progress or button
@@ -604,9 +636,32 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                     borderRadius: BorderRadius.circular(2),
                                   ),
                                   const SizedBox(height: 8),
-                                  Text(
-                                    'Enqueuing $_downloadProgress of $_selectedCount videos...',
-                                    style: TextStyle(color: secClr, fontSize: 11),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          L10n.isRtl(context)
+                                              ? 'جاري إضافة $_downloadProgress من $_selectedCount فيديو...'
+                                              : 'Enqueuing $_downloadProgress of $_selectedCount videos...',
+                                          style: TextStyle(color: secClr, fontSize: 11),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          runHaptic(settings);
+                                          setState(() => _isCancelled = true);
+                                        },
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        child: Text(
+                                          L10n.isRtl(context) ? 'إلغاء' : 'CANCEL',
+                                          style: TextStyle(color: redClr, fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               )
@@ -615,7 +670,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 isExpanded: true,
                                 isFilled: true,
                                 onPressed: _selectedCount == 0 ? null : _startBatchDownload,
-                                text: 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
+                                text: L10n.isRtl(context)
+                                    ? 'تحميل $_selectedCount فيديو'
+                                    : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
                                 icon: Icons.download_rounded,
                                 color: accent,
                                 glowColor: accent,

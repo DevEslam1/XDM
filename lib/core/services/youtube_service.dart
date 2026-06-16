@@ -331,38 +331,67 @@ class YoutubeService {
 
   // ───────────────────── Playlist Info ───────────────────────────────
 
-  /// Returns basic playlist metadata.
-  static Future<Map<String, dynamic>?> getPlaylistInfo(String url) async {
+  /// Returns both playlist metadata and the list of videos in a single unified flow.
+  /// Result contains:
+  /// - 'info': basic metadata Map (id, title, author, videoCount, thumbnailUrl)
+  /// - 'videos': List of video maps (id, title, author, duration, thumbnailUrl, selected)
+  static Future<Map<String, dynamic>?> getPlaylistDetails(String url) async {
     final playlistId = extractPlaylistId(url);
     if (playlistId == null) return null;
 
-    // Try the library first
+    // Try InnerTube fallback first (more reliable, faster, and consolidated)
+    try {
+      final details = await _InnerTubeFallback.getPlaylistDetails(playlistId);
+      if (details != null && (details['videos'] as List).isNotEmpty) {
+        return details;
+      }
+    } catch (e) {
+      Logger.root.warning('YoutubeService.getPlaylistDetails fallback failed: $e');
+    }
+
+    // Library fallback (last resort backup)
     try {
       final playlist = await _yt.playlists
           .get(playlistId)
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 15));
       if (playlist.title.isNotEmpty) {
+        final videos = <Map<String, dynamic>>[];
+        try {
+          final stream = _yt.playlists.getVideos(playlistId);
+          await for (final video in stream.timeout(const Duration(seconds: 15))) {
+            videos.add({
+              'id': video.id.value,
+              'title': video.title,
+              'author': video.author,
+              'duration': video.duration?.inSeconds ?? 0,
+              'thumbnailUrl': video.thumbnails.highResUrl,
+              'selected': true,
+            });
+          }
+        } catch (_) {}
+
         return {
-          'id': playlist.id.value,
-          'title': playlist.title,
-          'author': playlist.author,
-          'videoCount': playlist.videoCount ?? 0,
-          'thumbnailUrl': playlist.thumbnails.highResUrl,
+          'info': {
+            'id': playlist.id.value,
+            'title': playlist.title,
+            'author': playlist.author,
+            'videoCount': playlist.videoCount ?? 0,
+            'thumbnailUrl': playlist.thumbnails.highResUrl,
+          },
+          'videos': videos,
         };
       }
     } catch (e) {
-      Logger.root.warning('YoutubeService.getPlaylistInfo: library failed: $e');
+      Logger.root.warning('YoutubeService.getPlaylistDetails library failed: $e');
     }
 
-    // Fallback: direct InnerTube browse API
-    try {
-      return await _InnerTubeFallback.getPlaylistInfo(playlistId);
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistInfo: InnerTube fallback failed: $e',
-      );
-      return null;
-    }
+    return null;
+  }
+
+  /// Returns basic playlist metadata.
+  static Future<Map<String, dynamic>?> getPlaylistInfo(String url) async {
+    final details = await getPlaylistDetails(url);
+    return details?['info'] as Map<String, dynamic>?;
   }
 
   /// Returns all videos in a playlist as a lightweight list.
@@ -370,48 +399,8 @@ class YoutubeService {
   static Future<List<Map<String, dynamic>>> getPlaylistVideos(
     String url,
   ) async {
-    final playlistId = extractPlaylistId(url);
-    if (playlistId == null) return [];
-
-    // Try the library first
-    try {
-      final videos = <Map<String, dynamic>>[];
-      final stream = _yt.playlists.getVideos(playlistId);
-      await for (final video in stream.timeout(const Duration(seconds: 60))) {
-        videos.add({
-          'id': video.id.value,
-          'title': video.title,
-          'author': video.author,
-          'duration': video.duration?.inSeconds ?? 0,
-          'thumbnailUrl': video.thumbnails.highResUrl,
-          'selected': true,
-        });
-      }
-      if (videos.isNotEmpty) return videos;
-    } on TimeoutException {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistVideos: library timed out',
-      );
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistVideos: library failed: $e',
-      );
-    }
-
-    // Fallback: direct InnerTube browse API
-    try {
-      return await _InnerTubeFallback.getPlaylistVideos(playlistId);
-    } on TimeoutException {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistVideos: InnerTube fallback timed out',
-      );
-      return [];
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistVideos: InnerTube fallback failed: $e',
-      );
-      return [];
-    }
+    final details = await getPlaylistDetails(url);
+    return (details?['videos'] as List<Map<String, dynamic>>?) ?? [];
   }
 
   /// Fetches the best stream URL for a given video ID and quality preference.
@@ -761,6 +750,11 @@ class _InnerTubeFallback {
             'Chrome/131.0.0.0 Safari/537.36',
       );
 
+      // Inject authenticated cookies if available
+      if (YoutubeService.currentCookies != null) {
+        request.headers.set('cookie', YoutubeService.currentCookies!);
+      }
+
       final body = <String, dynamic>{..._clientContext()};
       if (continuationToken != null) {
         body['continuation'] = continuationToken;
@@ -779,11 +773,18 @@ class _InnerTubeFallback {
     }
   }
 
-  /// Fetches playlist info via InnerTube browse API.
-  static Future<Map<String, dynamic>?> getPlaylistInfo(
+  /// Fetches basic metadata and all videos in a single unified flow.
+  static Future<Map<String, dynamic>?> getPlaylistDetails(
     String playlistId,
   ) async {
-    final data = await _browse('VL$playlistId');
+    // First request
+    Map<String, dynamic> data;
+    try {
+      data = await _browse('VL$playlistId');
+    } catch (e) {
+      _log.warning('InnerTube fallback browse failed: $e');
+      return null;
+    }
 
     // Check for error alerts (e.g. "The playlist does not exist.")
     final alerts = data['alerts'] as List?;
@@ -796,7 +797,7 @@ class _InnerTubeFallback {
       }
     }
 
-    // Extract title from metadata (works for both header types)
+    // Extract title from metadata
     final title =
         _extractString(data, 'metadata/playlistMetadataRenderer/title') ?? '';
 
@@ -875,58 +876,29 @@ class _InnerTubeFallback {
     }
 
     // Get thumbnail from first video
-    String thumbnailUrl = '';
     final videoItems = _extractVideoItems(data);
+    String thumbnailUrl = '';
     if (videoItems.isNotEmpty) {
       thumbnailUrl = _extractThumbnailUrl(videoItems.first);
     }
 
-    return {
+    final info = {
       'id': playlistId,
       'title': title,
       'author': author,
       'videoCount': videoCount,
       'thumbnailUrl': thumbnailUrl,
     };
-  }
 
-  /// Fetches all playlist videos via InnerTube browse API, handling pagination.
-  static Future<List<Map<String, dynamic>>> getPlaylistVideos(
-    String playlistId,
-  ) async {
     final allVideos = <Map<String, dynamic>>[];
     String? continuationToken;
     var pageNum = 0;
     const maxPages = 50; // Safety limit (~5000 videos)
 
-    // First request
-    var data = await _browse('VL$playlistId');
-
-    // Check for error
-    final alerts = data['alerts'] as List?;
-    if (alerts != null && alerts.isNotEmpty) {
-      final alertType =
-          (alerts[0] as Map?)?['alertRenderer']?['type'] as String?;
-      if (alertType == 'ERROR') return [];
-    }
-
-    // Extract playlist author from header for per-video author fallback
-    String playlistAuthor = '';
-    final header = data['header'] as Map?;
-    if (header != null && header.containsKey('playlistHeaderRenderer')) {
-      final ownerRuns = _extractList(
-        header['playlistHeaderRenderer'] as Map,
-        'ownerText/runs',
-      );
-      if (ownerRuns != null && ownerRuns.isNotEmpty) {
-        playlistAuthor = (ownerRuns[0] as Map?)?['text'] as String? ?? '';
-      }
-    }
-
     while (pageNum < maxPages) {
       List<Map<String, dynamic>> items;
       if (pageNum == 0) {
-        items = _extractVideoItems(data);
+        items = videoItems;
         continuationToken = _extractContinuationToken(
           data,
           isContinuation: false,
@@ -940,21 +912,30 @@ class _InnerTubeFallback {
       }
 
       for (final item in items) {
-        final video = _parseVideoItem(item, playlistAuthor);
+        final video = _parseVideoItem(item, author);
         if (video != null) allVideos.add(video);
       }
 
       if (continuationToken == null || continuationToken.isEmpty) break;
 
       pageNum++;
-      data = await _browse(
-        'VL$playlistId',
-        continuationToken: continuationToken,
-      );
+      try {
+        data = await _browse(
+          'VL$playlistId',
+          continuationToken: continuationToken,
+        );
+      } catch (e) {
+        _log.warning('InnerTube fallback browse continuation failed at page $pageNum: $e');
+        break;
+      }
     }
 
-    return allVideos;
+    return {
+      'info': info,
+      'videos': allVideos,
+    };
   }
+
 
   // ──────────────── Parsing helpers ──────────────────
 
