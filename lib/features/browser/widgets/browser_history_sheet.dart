@@ -91,14 +91,19 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
           });
         }
       }
-      
+
       final jsonStr = const JsonEncoder.withIndent('  ').convert(exportData);
-      await Share.share(jsonStr, subject: _selectedTab == 0 ? 'XDM Surfing History' : 'XDM Download History');
+      await Share.share(
+        jsonStr,
+        subject: _selectedTab == 0
+            ? 'XDM Surfing History'
+            : 'XDM Download History',
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
       }
     }
   }
@@ -155,8 +160,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
               decoration: BoxDecoration(
                 color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
                     .withValues(alpha: 0.95),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
                 border: Border(
                   top: BorderSide(
                     color: isDark
@@ -182,7 +188,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                             child: Icon(
-                              _selectedTab == 0 ? Icons.history : Icons.download,
+                              _selectedTab == 0
+                                  ? Icons.history
+                                  : Icons.download,
                               color: accent,
                               size: 22,
                             ),
@@ -190,10 +198,10 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              _selectedTab == 0 ? 'BROWSER HISTORY' : 'DOWNLOAD HISTORY',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
+                              _selectedTab == 0
+                                  ? 'BROWSER HISTORY'
+                                  : 'DOWNLOAD HISTORY',
+                              style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
                                     color: accent,
                                     fontWeight: FontWeight.bold,
@@ -214,7 +222,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                             IconButton(
                               icon: Icon(
                                 Icons.delete_sweep_outlined,
-                                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                color: isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed,
                                 size: 22,
                               ),
                               tooltip: 'Clear history',
@@ -236,25 +246,44 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
                     // Custom Tabs Selector
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
+                      ),
                       child: Container(
                         height: 40,
                         padding: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: (isDark ? AppTheme.background : AppTheme.lightBackground).withValues(alpha: 0.5),
+                          color:
+                              (isDark
+                                      ? AppTheme.background
+                                      : AppTheme.lightBackground)
+                                  .withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                            color: isDark
+                                ? AppTheme.glassBorder
+                                : AppTheme.lightGlassBorder,
                             width: 0.8,
                           ),
                         ),
                         child: Row(
                           children: [
                             Expanded(
-                              child: _buildTabItem(0, 'Surfing History', accent, isDark),
+                              child: _buildTabItem(
+                                0,
+                                'Surfing History',
+                                accent,
+                                isDark,
+                              ),
                             ),
                             Expanded(
-                              child: _buildTabItem(1, 'Downloads', accent, isDark),
+                              child: _buildTabItem(
+                                1,
+                                'Downloads',
+                                accent,
+                                isDark,
+                              ),
                             ),
                           ],
                         ),
@@ -263,38 +292,67 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
                     // Search Bar
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 4.0,
+                      ),
                       child: Container(
                         height: 38,
                         decoration: BoxDecoration(
-                          color: (isDark ? AppTheme.background : AppTheme.lightBackground).withValues(alpha: 0.5),
+                          color:
+                              (isDark
+                                      ? AppTheme.background
+                                      : AppTheme.lightBackground)
+                                  .withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                            color: isDark
+                                ? AppTheme.glassBorder
+                                : AppTheme.lightGlassBorder,
                             width: 0.8,
                           ),
                         ),
                         child: TextField(
                           controller: _searchController,
                           style: TextStyle(
-                            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                            color: isDark
+                                ? AppTheme.textPrimary
+                                : AppTheme.lightTextPrimary,
                             fontSize: 12,
                           ),
                           decoration: InputDecoration(
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                            prefixIcon: Icon(Icons.search, size: 16, color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              size: 16,
+                              color: isDark
+                                  ? AppTheme.textSecondary
+                                  : AppTheme.lightTextSecondary,
+                            ),
                             suffixIcon: _searchController.text.isNotEmpty
                                 ? GestureDetector(
                                     onTap: () {
                                       _searchController.clear();
                                     },
-                                    child: Icon(Icons.close, size: 16, color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: isDark
+                                          ? AppTheme.textSecondary
+                                          : AppTheme.lightTextSecondary,
+                                    ),
                                   )
                                 : null,
-                            hintText: L10n.isRtl(context) ? 'البحث في السجل...' : 'Search history...',
+                            hintText: L10n.isRtl(context)
+                                ? 'البحث في السجل...'
+                                : 'Search history...',
                             hintStyle: TextStyle(
-                              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                              color: isDark
+                                  ? AppTheme.textMuted
+                                  : AppTheme.lightTextMuted,
                               fontSize: 12,
                             ),
                             border: InputBorder.none,
@@ -310,37 +368,62 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                     Expanded(
                       child: _selectedTab == 0
                           ? (() {
-                              final filteredSurfing = _surfingHistory.where((item) {
-                                final title = (item['title'] as String? ?? '').toLowerCase();
-                                final url = (item['url'] as String? ?? '').toLowerCase();
-                                return title.contains(_searchQuery) || url.contains(_searchQuery);
+                              final filteredSurfing = _surfingHistory.where((
+                                item,
+                              ) {
+                                final title = (item['title'] as String? ?? '')
+                                    .toLowerCase();
+                                final url = (item['url'] as String? ?? '')
+                                    .toLowerCase();
+                                return title.contains(_searchQuery) ||
+                                    url.contains(_searchQuery);
                               }).toList();
                               return filteredSurfing.isEmpty
                                   ? _emptySurfingState(context, isDark)
                                   : ListView.separated(
                                       controller: controller,
-                                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        4,
+                                        12,
+                                        24,
+                                      ),
                                       itemCount: filteredSurfing.length,
-                                      separatorBuilder: (context, index) => const SizedBox(height: 6),
+                                      separatorBuilder: (context, index) =>
+                                          const SizedBox(height: 6),
                                       itemBuilder: (context, i) {
                                         final item = filteredSurfing[i];
-                                        return _surfingTile(context, item, isDark, settings);
+                                        return _surfingTile(
+                                          context,
+                                          item,
+                                          isDark,
+                                          settings,
+                                        );
                                       },
                                     );
                             })()
                           : (() {
-                              final filteredDownloads = downloadTasks.where((task) {
+                              final filteredDownloads = downloadTasks.where((
+                                task,
+                              ) {
                                 final name = task.fileName.toLowerCase();
                                 final url = task.url.toLowerCase();
-                                return name.contains(_searchQuery) || url.contains(_searchQuery);
+                                return name.contains(_searchQuery) ||
+                                    url.contains(_searchQuery);
                               }).toList();
                               return filteredDownloads.isEmpty
                                   ? _emptyDownloadsState(context, isDark)
                                   : ListView.separated(
                                       controller: controller,
-                                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        4,
+                                        12,
+                                        24,
+                                      ),
                                       itemCount: filteredDownloads.length,
-                                      separatorBuilder: (context, index) => const SizedBox(height: 6),
+                                      separatorBuilder: (context, index) =>
+                                          const SizedBox(height: 6),
                                       itemBuilder: (context, i) {
                                         final task = filteredDownloads[i];
                                         return _taskTile(context, task, isDark);
@@ -371,12 +454,16 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isSelected
-              ? (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.8)
+              ? (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
+                  alpha: 0.8,
+                )
               : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           border: isSelected
               ? Border.all(
-                  color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                  color: isDark
+                      ? AppTheme.glassBorder
+                      : AppTheme.lightGlassBorder,
                   width: 0.8,
                 )
               : null,
@@ -386,7 +473,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
           style: TextStyle(
             color: isSelected
                 ? accent
-                : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                : (isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary),
             fontSize: 10,
             fontWeight: FontWeight.bold,
             letterSpacing: 0.8,
@@ -412,7 +501,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             Text(
               'No history found',
               style: TextStyle(
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color: isDark
+                    ? AppTheme.textPrimary
+                    : AppTheme.lightTextPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -422,7 +513,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
               'Websites you visit will be listed here.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
                 fontSize: 12,
               ),
             ),
@@ -448,7 +541,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             Text(
               'No downloads yet',
               style: TextStyle(
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color: isDark
+                    ? AppTheme.textPrimary
+                    : AppTheme.lightTextPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -458,7 +553,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
               'Files you download from the browser will appear here.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
                 fontSize: 12,
               ),
             ),
@@ -471,7 +568,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
   Future<void> _showClearHistoryConfirmation(SettingsProvider settings) async {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-    
+
     showDialog<bool>(
       context: context,
       builder: (context) {
@@ -479,7 +576,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
           backgroundColor: isDark ? AppTheme.surface : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
-            side: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+            side: BorderSide(
+              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+            ),
           ),
           title: Text(
             isRtl ? 'مسح السجل؟' : 'CLEAR HISTORY?',
@@ -489,10 +588,14 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             ),
           ),
           content: Text(
-            isRtl 
-              ? 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟' 
-              : 'Are you sure you want to clear all history?',
-            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+            isRtl
+                ? 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟'
+                : 'Are you sure you want to clear all history?',
+            style: TextStyle(
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
+            ),
           ),
           actions: [
             TextButton(
@@ -502,14 +605,22 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
               },
               child: Text(
                 isRtl ? 'إلغاء' : 'CANCEL',
-                style: TextStyle(color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+                style: TextStyle(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                ),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? AppTheme.neonRed.withValues(alpha: 0.2) : AppTheme.lightNeonRed.withValues(alpha: 0.1),
-                side: BorderSide(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: isDark
+                    ? AppTheme.neonRed.withValues(alpha: 0.2)
+                    : AppTheme.lightNeonRed.withValues(alpha: 0.1),
+                side: BorderSide(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () {
                 runHaptic(settings);
@@ -534,7 +645,11 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
   }
 
   Widget _surfingTile(
-      BuildContext context, Map<String, dynamic> item, bool isDark, SettingsProvider settings) {
+    BuildContext context,
+    Map<String, dynamic> item,
+    bool isDark,
+    SettingsProvider settings,
+  ) {
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final url = item['url'] as String? ?? '';
     final title = item['title'] as String? ?? url;
@@ -544,7 +659,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
     return Container(
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
+        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
+          alpha: 0.4,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
@@ -583,7 +700,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -594,7 +713,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                          color: isDark
+                              ? AppTheme.textMuted
+                              : AppTheme.lightTextMuted,
                           fontSize: 10,
                         ),
                       ),
@@ -603,7 +724,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                         Text(
                           timeStr,
                           style: TextStyle(
-                            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                            color: isDark
+                                ? AppTheme.textMuted
+                                : AppTheme.lightTextMuted,
                             fontSize: 9,
                           ),
                         ),
@@ -615,7 +738,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                   icon: Icon(
                     Icons.copy,
                     size: 16,
-                    color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                    color: isDark
+                        ? AppTheme.textSecondary
+                        : AppTheme.lightTextSecondary,
                   ),
                   tooltip: 'Copy URL',
                   onPressed: () {
@@ -652,7 +777,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
     return Container(
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
+        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
+          alpha: 0.4,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
@@ -697,7 +824,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
@@ -720,7 +849,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                color: isDark
+                                    ? AppTheme.textMuted
+                                    : AppTheme.lightTextMuted,
                                 fontSize: 10,
                               ),
                             ),
@@ -732,7 +863,10 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),

@@ -44,9 +44,15 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     _uaController = TextEditingController(text: settings.customUserAgent);
     _proxyController = TextEditingController(text: settings.proxyAddress);
     _proxyHostController = TextEditingController(text: settings.proxyHost);
-    _proxyPortController = TextEditingController(text: settings.proxyPort.toString());
-    _proxyUsernameController = TextEditingController(text: settings.proxyUsername);
-    _proxyPasswordController = TextEditingController(text: settings.proxyPassword);
+    _proxyPortController = TextEditingController(
+      text: settings.proxyPort.toString(),
+    );
+    _proxyUsernameController = TextEditingController(
+      text: settings.proxyUsername,
+    );
+    _proxyPasswordController = TextEditingController(
+      text: settings.proxyPassword,
+    );
   }
 
   @override
@@ -60,7 +66,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     super.dispose();
   }
 
-  Future<String?> _showPasswordDialog(BuildContext context, {required bool isExport, required bool isRtl, required bool isDark}) async {
+  Future<String?> _showPasswordDialog(
+    BuildContext context, {
+    required bool isExport,
+    required bool isRtl,
+    required bool isDark,
+  }) async {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final controller = TextEditingController();
     return showDialog<String>(
@@ -85,20 +96,29 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               Text(
                 isExport
                     ? (isRtl
-                        ? 'أدخل كلمة مرور لتشفير ملف النسخ الاحتياطي (اتركه فارغاً للتصدير بدون تشفير):'
-                        : 'Enter a password to encrypt the backup file (leave empty to export unencrypted):')
+                          ? 'أدخل كلمة مرور لتشفير ملف النسخ الاحتياطي (اتركه فارغاً للتصدير بدون تشفير):'
+                          : 'Enter a password to encrypt the backup file (leave empty to export unencrypted):')
                     : (isRtl
-                        ? 'هذا الملف مشفر. يرجى إدخال كلمة المرور لفك التشفير:'
-                        : 'This backup file is encrypted. Enter the password to decrypt:'),
-                style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 11),
+                          ? 'هذا الملف مشفر. يرجى إدخال كلمة المرور لفك التشفير:'
+                          : 'This backup file is encrypted. Enter the password to decrypt:'),
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  fontSize: 11,
+                ),
               ),
               const SizedBox(height: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                  color: isDark
+                      ? const Color(0xFF0F0F16)
+                      : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                    color: isDark
+                        ? const Color(0x15FFFFFF)
+                        : const Color(0x0D000000),
                     width: 0.8,
                   ),
                 ),
@@ -109,8 +129,16 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   decoration: InputDecoration(
                     border: InputBorder.none,
                     hintText: isRtl ? 'كلمة المرور' : 'Password',
-                    hintStyle: TextStyle(color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted, fontSize: 12),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    hintStyle: TextStyle(
+                      color: isDark
+                          ? AppTheme.textMuted
+                          : AppTheme.lightTextMuted,
+                      fontSize: 12,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),
@@ -119,7 +147,15 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, null),
-              child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 12)),
+              child: Text(
+                isRtl ? 'إلغاء' : 'CANCEL',
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  fontSize: 12,
+                ),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, controller.text),
@@ -140,7 +176,11 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     );
   }
 
-  Future<bool?> _showImportOptionDialog(BuildContext context, {required bool isRtl, required bool isDark}) async {
+  Future<bool?> _showImportOptionDialog(
+    BuildContext context, {
+    required bool isRtl,
+    required bool isDark,
+  }) async {
     return showDialog<bool>(
       context: context,
       builder: (context) {
@@ -158,12 +198,26 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
             isRtl
                 ? 'كيف ترغب في استيراد سجلات التحميل؟\n\n• دمج: إضافة السجلات الجديدة والاحتفاظ بالحالية.\n• استبدال: مسح السجلات الحالية بالكامل وتطبيق الجديدة.'
                 : 'How would you like to restore the download logs?\n\n• MERGE: Add new logs and keep existing ones.\n• REPLACE: Wipe all existing logs and apply the new ones.',
-            style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 11, height: 1.5),
+            style: TextStyle(
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
+              fontSize: 11,
+              height: 1.5,
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, null),
-              child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary, fontSize: 12)),
+              child: Text(
+                isRtl ? 'إلغاء' : 'CANCEL',
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  fontSize: 12,
+                ),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, false), // merge
@@ -200,7 +254,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     final isRtl = L10n.isRtl(context);
 
     // Prompt for password
-    final password = await _showPasswordDialog(context, isExport: true, isRtl: isRtl, isDark: isDark);
+    final password = await _showPasswordDialog(
+      context,
+      isExport: true,
+      isRtl: isRtl,
+      isDark: isDark,
+    );
     // If they closed dialog (returned null), cancel the export
     if (password == null) return;
 
@@ -222,7 +281,11 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     if (!context.mounted) return;
 
     // Ask for Merge vs Replace
-    final replace = await _showImportOptionDialog(context, isRtl: isRtl, isDark: isDark);
+    final replace = await _showImportOptionDialog(
+      context,
+      isRtl: isRtl,
+      isDark: isDark,
+    );
     if (replace == null) return; // User cancelled
 
     final file = File(result.files.single.path!);
@@ -247,17 +310,30 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     String? password = '';
     if (isEncrypted) {
       if (!context.mounted) return;
-      password = await _showPasswordDialog(context, isExport: false, isRtl: isRtl, isDark: isDark);
+      password = await _showPasswordDialog(
+        context,
+        isExport: false,
+        isRtl: isRtl,
+        isDark: isDark,
+      );
       if (password == null) return; // User cancelled password dialog
     }
 
-    final success = await provider.importBackupJson(jsonStr, replace: replace, password: password);
+    final success = await provider.importBackupJson(
+      jsonStr,
+      replace: replace,
+      password: password,
+    );
     if (!context.mounted) return;
     ThemedSnackbar.show(
       context,
       message: success
-          ? (isRtl ? 'تم استيراد النسخة الاحتياطية بنجاح' : 'Backup imported successfully')
-          : (isRtl ? 'فشل استيراد النسخة الاحتياطية (تأكد من صحة كلمة المرور)' : 'Failed to import backup (check password)'),
+          ? (isRtl
+                ? 'تم استيراد النسخة الاحتياطية بنجاح'
+                : 'Backup imported successfully')
+          : (isRtl
+                ? 'فشل استيراد النسخة الاحتياطية (تأكد من صحة كلمة المرور)'
+                : 'Failed to import backup (check password)'),
       color: success
           ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
           : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
@@ -270,7 +346,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final dividerColor = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final dividerColor = isDark
+        ? AppTheme.glassBorder
+        : AppTheme.lightGlassBorder;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
@@ -297,7 +375,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     sigmaX: 12,
                     sigmaY: 12,
                     child: Container(
-                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                          .withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -312,7 +391,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           automaticallyImplyLeading: false,
         ),
         body: Directionality(
-          textDirection: L10n.isRtl(context) ? TextDirection.rtl : TextDirection.ltr,
+          textDirection: L10n.isRtl(context)
+              ? TextDirection.rtl
+              : TextDirection.ltr,
           child: SafeArea(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -358,7 +439,10 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       _buildDropdownTile<int>(
                         settings: settings,
                         title: L10n.of(context, 'settings_default_threads'),
-                        subtitle: L10n.of(context, 'settings_default_threads_sub'),
+                        subtitle: L10n.of(
+                          context,
+                          'settings_default_threads_sub',
+                        ),
                         value: settings.defaultThreadCount,
                         items: kAvailableThreadOptions,
                         onChanged: (val) {
@@ -375,10 +459,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         subtitle: L10n.of(context, 'settings_lang_sub'),
                         value: settings.languageCode,
                         items: ['en', 'ar'],
-                        itemLabels: {
-                          'en': 'ENGLISH',
-                          'ar': 'العربية',
-                        },
+                        itemLabels: {'en': 'ENGLISH', 'ar': 'العربية'},
                         onChanged: (val) {
                           if (val != null) {
                             settings.setLanguageCode(val);
@@ -390,10 +471,15 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       _buildPathPickerTile(
                         context,
                         settings: settings,
-                        title: L10n.isRtl(context) ? 'مجلد التحميل الافتراضي' : 'Default Download Folder',
-                        subtitle: settings.customDownloadPath?.isNotEmpty == true
+                        title: L10n.isRtl(context)
+                            ? 'مجلد التحميل الافتراضي'
+                            : 'Default Download Folder',
+                        subtitle:
+                            settings.customDownloadPath?.isNotEmpty == true
                             ? settings.customDownloadPath!
-                            : (L10n.isRtl(context) ? 'تلقائي (Downloads/XDM)' : 'Default (Downloads/XDM)'),
+                            : (L10n.isRtl(context)
+                                  ? 'تلقائي (Downloads/XDM)'
+                                  : 'Default (Downloads/XDM)'),
                         onTap: () async {
                           triggerHaptic(settings);
                           final path = await FilePicker.getDirectoryPath();
@@ -448,8 +534,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
                         settings: settings,
-                        title: L10n.isRtl(context) ? 'تفعيل مشاركة التورنت (Seeding)' : 'Torrent Seeding',
-                        subtitle: L10n.isRtl(context) ? 'مشاركة أجزاء الملفات بعد اكتمال التحميل' : 'Share files back to peers after download completes',
+                        title: L10n.isRtl(context)
+                            ? 'تفعيل مشاركة التورنت (Seeding)'
+                            : 'Torrent Seeding',
+                        subtitle: L10n.isRtl(context)
+                            ? 'مشاركة أجزاء الملفات بعد اكتمال التحميل'
+                            : 'Share files back to peers after download completes',
                         value: settings.globalTorrentSeeding,
                         onChanged: (val) {
                           settings.setGlobalTorrentSeeding(val);
@@ -460,8 +550,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         Divider(color: dividerColor, height: 1),
                         _buildSwitchTile(
                           settings: settings,
-                          title: L10n.isRtl(context) ? 'تقييد سرعة المشاركة' : 'Limit Seeding Speed',
-                          subtitle: L10n.isRtl(context) ? 'تحديد حد أقصى لسرعة الرفع' : 'Set a maximum limit for upload speed',
+                          title: L10n.isRtl(context)
+                              ? 'تقييد سرعة المشاركة'
+                              : 'Limit Seeding Speed',
+                          subtitle: L10n.isRtl(context)
+                              ? 'تحديد حد أقصى لسرعة الرفع'
+                              : 'Set a maximum limit for upload speed',
                           value: settings.globalTorrentSeedingLimited,
                           onChanged: (val) {
                             settings.setGlobalTorrentSeedingLimited(val);
@@ -472,14 +566,20 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           Divider(color: dividerColor, height: 1),
                           _buildSliderTile(
                             settings: settings,
-                            title: L10n.isRtl(context) ? 'سرعة الرفع القصوى' : 'Maximum Upload Speed',
-                            subtitle: '${settings.globalTorrentSeedingLimitKbps} kbps (${(settings.globalTorrentSeedingLimitKbps / 8).toStringAsFixed(1)} KB/s)',
-                            value: settings.globalTorrentSeedingLimitKbps.toDouble(),
+                            title: L10n.isRtl(context)
+                                ? 'سرعة الرفع القصوى'
+                                : 'Maximum Upload Speed',
+                            subtitle:
+                                '${settings.globalTorrentSeedingLimitKbps} kbps (${(settings.globalTorrentSeedingLimitKbps / 8).toStringAsFixed(1)} KB/s)',
+                            value: settings.globalTorrentSeedingLimitKbps
+                                .toDouble(),
                             min: 100.0,
                             max: 10000.0,
                             divisions: 99,
                             onChanged: (val) {
-                              settings.setGlobalTorrentSeedingLimitKbps(val.round());
+                              settings.setGlobalTorrentSeedingLimitKbps(
+                                val.round(),
+                              );
                             },
                             onChangeEnd: (val) {
                               triggerHaptic(settings);
@@ -499,14 +599,20 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     children: [
                       _buildDropdownTile<String>(
                         settings: settings,
-                        title: L10n.isRtl(context) ? 'سمة المظهر' : 'THEME MODE',
-                        subtitle: L10n.isRtl(context) ? 'اختر سمة مظهر التطبيق' : 'Select application theme mode',
+                        title: L10n.isRtl(context)
+                            ? 'سمة المظهر'
+                            : 'THEME MODE',
+                        subtitle: L10n.isRtl(context)
+                            ? 'اختر سمة مظهر التطبيق'
+                            : 'Select application theme mode',
                         value: settings.themeMode,
                         items: const ['light', 'dark', 'system'],
                         itemLabels: {
                           'light': L10n.isRtl(context) ? 'فاتح' : 'LIGHT',
                           'dark': L10n.isRtl(context) ? 'داكن' : 'DARK',
-                          'system': L10n.isRtl(context) ? 'تلقائي' : 'SYSTEM DEFAULT',
+                          'system': L10n.isRtl(context)
+                              ? 'تلقائي'
+                              : 'SYSTEM DEFAULT',
                         },
                         onChanged: (val) {
                           if (val != null) {
@@ -541,7 +647,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       _buildSliderTile(
                         settings: settings,
                         title: L10n.of(context, 'settings_grid'),
-                        subtitle: '${settings.gridOpacity.toInt()}% ${L10n.of(context, 'settings_grid_sub')}',
+                        subtitle:
+                            '${settings.gridOpacity.toInt()}% ${L10n.of(context, 'settings_grid_sub')}',
                         value: settings.gridOpacity,
                         min: 0.0,
                         max: 40.0,
@@ -565,8 +672,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     children: [
                       _buildSwitchTile(
                         settings: settings,
-                        title: L10n.isRtl(context) ? 'الإشعارات العامة' : 'GLOBAL NOTIFICATIONS',
-                        subtitle: L10n.isRtl(context) ? 'تفعيل أو تعطيل جميع إشعارات التطبيق' : 'Enable or disable all app notifications',
+                        title: L10n.isRtl(context)
+                            ? 'الإشعارات العامة'
+                            : 'GLOBAL NOTIFICATIONS',
+                        subtitle: L10n.isRtl(context)
+                            ? 'تفعيل أو تعطيل جميع إشعارات التطبيق'
+                            : 'Enable or disable all app notifications',
                         value: settings.notificationsEnabled,
                         onChanged: (val) {
                           settings.setNotificationsEnabled(val);
@@ -603,10 +714,10 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   _buildSettingsSection(
                     context,
                     settings: settings,
-                    title: L10n.isRtl(context) ? 'مراقب الأداء والتحكم بالنظام' : 'TELEMETRY & PERFORMANCE GOVERNOR',
-                    children: [
-                      PerformanceTelemetryCard(settings: settings),
-                    ],
+                    title: L10n.isRtl(context)
+                        ? 'مراقب الأداء والتحكم بالنظام'
+                        : 'TELEMETRY & PERFORMANCE GOVERNOR',
+                    children: [PerformanceTelemetryCard(settings: settings)],
                   ),
                   const SizedBox(height: 16),
 
@@ -618,8 +729,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     children: [
                       _buildSwitchTile(
                         settings: settings,
-                        title: L10n.isRtl(context) ? 'حفظ سجل المتصفح' : 'Save Browser History',
-                        subtitle: L10n.isRtl(context) ? 'حفظ المواقع التي تزورها في السجل' : 'Keep a history of websites you visit',
+                        title: L10n.isRtl(context)
+                            ? 'حفظ سجل المتصفح'
+                            : 'Save Browser History',
+                        subtitle: L10n.isRtl(context)
+                            ? 'حفظ المواقع التي تزورها في السجل'
+                            : 'Keep a history of websites you visit',
                         value: settings.saveBrowserHistory,
                         onChanged: (val) {
                           settings.setSaveBrowserHistory(val);
@@ -692,30 +807,42 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         Divider(color: dividerColor, height: 1),
                         _buildTextFieldTile(
                           title: isRtl ? 'عنوان الوكيل (Host)' : 'PROXY HOST',
-                          subtitle: isRtl ? 'اسم المضيف أو عنوان IP' : 'Host name or IP address',
+                          subtitle: isRtl
+                              ? 'اسم المضيف أو عنوان IP'
+                              : 'Host name or IP address',
                           controller: _proxyHostController,
                           onChanged: (val) {
                             settings.setProxyHost(val.trim());
-                            settings.setProxyAddress('${val.trim()}:${settings.proxyPort}');
+                            settings.setProxyAddress(
+                              '${val.trim()}:${settings.proxyPort}',
+                            );
                           },
                           isDark: isDark,
                         ),
                         Divider(color: dividerColor, height: 1),
                         _buildTextFieldTile(
                           title: isRtl ? 'منفذ الوكيل (Port)' : 'PROXY PORT',
-                          subtitle: isRtl ? 'منفذ الاتصال بالوكيل' : 'Port number for connection',
+                          subtitle: isRtl
+                              ? 'منفذ الاتصال بالوكيل'
+                              : 'Port number for connection',
                           controller: _proxyPortController,
                           onChanged: (val) {
                             final port = int.tryParse(val.trim()) ?? 8080;
                             settings.setProxyPort(port);
-                            settings.setProxyAddress('${settings.proxyHost}:$port');
+                            settings.setProxyAddress(
+                              '${settings.proxyHost}:$port',
+                            );
                           },
                           isDark: isDark,
                         ),
                         Divider(color: dividerColor, height: 1),
                         _buildTextFieldTile(
-                          title: isRtl ? 'اسم المستخدم (اختياري)' : 'PROXY USERNAME (OPTIONAL)',
-                          subtitle: isRtl ? 'اسم المستخدم لمصادقة الوكيل' : 'Username for proxy credentials',
+                          title: isRtl
+                              ? 'اسم المستخدم (اختياري)'
+                              : 'PROXY USERNAME (OPTIONAL)',
+                          subtitle: isRtl
+                              ? 'اسم المستخدم لمصادقة الوكيل'
+                              : 'Username for proxy credentials',
                           controller: _proxyUsernameController,
                           onChanged: (val) {
                             settings.setProxyUsername(val.trim());
@@ -724,8 +851,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         ),
                         Divider(color: dividerColor, height: 1),
                         _buildTextFieldTile(
-                          title: isRtl ? 'كلمة المرور (اختياري)' : 'PROXY PASSWORD (OPTIONAL)',
-                          subtitle: isRtl ? 'كلمة المرور لمصادقة الوكيل' : 'Password for proxy credentials',
+                          title: isRtl
+                              ? 'كلمة المرور (اختياري)'
+                              : 'PROXY PASSWORD (OPTIONAL)',
+                          subtitle: isRtl
+                              ? 'كلمة المرور لمصادقة الوكيل'
+                              : 'Password for proxy credentials',
                           controller: _proxyPasswordController,
                           onChanged: (val) {
                             settings.setProxyPassword(val.trim());
@@ -734,37 +865,62 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         ),
                         Divider(color: dividerColor, height: 1),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 10.0,
+                          ),
                           child: NeonGlowButton(
                             isFilled: false,
-                            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                            color: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
                             text: isRtl ? 'اختبار الاتصال' : 'TEST CONNECTION',
                             onPressed: () async {
                               triggerHaptic(settings);
                               ThemedSnackbar.show(
                                 context,
-                                message: isRtl ? 'جاري اختبار اتصال الوكيل...' : 'Testing proxy connection...',
-                                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                message: isRtl
+                                    ? 'جاري اختبار اتصال الوكيل...'
+                                    : 'Testing proxy connection...',
+                                color: isDark
+                                    ? AppTheme.neonBlue
+                                    : AppTheme.lightNeonBlue,
                                 icon: Icons.sync,
                                 isDarkMode: isDark,
                               );
-                              final success = await settings.testProxyConnection(
-                                _proxyHostController.text.trim(),
-                                int.tryParse(_proxyPortController.text.trim()) ?? 8080,
-                                _proxyUsernameController.text.trim(),
-                                _proxyPasswordController.text.trim(),
-                              );
+                              final success = await settings
+                                  .testProxyConnection(
+                                    _proxyHostController.text.trim(),
+                                    int.tryParse(
+                                          _proxyPortController.text.trim(),
+                                        ) ??
+                                        8080,
+                                    _proxyUsernameController.text.trim(),
+                                    _proxyPasswordController.text.trim(),
+                                  );
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ScaffoldMessenger.of(
+                                  context,
+                                ).hideCurrentSnackBar();
                                 ThemedSnackbar.show(
                                   context,
                                   message: success
-                                      ? (isRtl ? 'نجح الاتصال بالوكيل!' : 'Proxy connection successful!')
-                                      : (isRtl ? 'فشل الاتصال بالوكيل' : 'Proxy connection failed'),
+                                      ? (isRtl
+                                            ? 'نجح الاتصال بالوكيل!'
+                                            : 'Proxy connection successful!')
+                                      : (isRtl
+                                            ? 'فشل الاتصال بالوكيل'
+                                            : 'Proxy connection failed'),
                                   color: success
-                                      ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                                      : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
-                                  icon: success ? Icons.check_circle_outline : Icons.error_outline,
+                                      ? (isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen)
+                                      : (isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed),
+                                  icon: success
+                                      ? Icons.check_circle_outline
+                                      : Icons.error_outline,
                                   isDarkMode: isDark,
                                 );
                               }
@@ -783,11 +939,15 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                                 context: context,
                                 builder: (context) {
                                   return AlertDialog(
-                                    backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                                    backgroundColor: isDark
+                                        ? AppTheme.surface
+                                        : AppTheme.lightSurface,
                                     title: Text(
                                       isRtl ? 'تحذير أمني' : 'SECURITY WARNING',
                                       style: TextStyle(
-                                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -799,12 +959,29 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                                     ),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context, false),
-                                        child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)),
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: Text(
+                                          isRtl ? 'إلغاء' : 'CANCEL',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? AppTheme.textSecondary
+                                                : AppTheme.lightTextSecondary,
+                                          ),
+                                        ),
                                       ),
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context, true),
-                                        child: Text(isRtl ? 'متابعة' : 'CONTINUE', style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, fontWeight: FontWeight.bold)),
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: Text(
+                                          isRtl ? 'متابعة' : 'CONTINUE',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   );
@@ -822,13 +999,22 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         if (settings.bypassSSL) ...[
                           Container(
                             width: double.infinity,
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.15),
+                              color:
+                                  (isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed)
+                                      .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                color: isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed,
                                 width: 0.8,
                               ),
                             ),
@@ -836,7 +1022,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                               children: [
                                 Icon(
                                   Icons.warning_amber_rounded,
-                                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                  color: isDark
+                                      ? AppTheme.neonRed
+                                      : AppTheme.lightNeonRed,
                                   size: 18,
                                 ),
                                 const SizedBox(width: 8),
@@ -846,7 +1034,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                                         ? 'تحذير: تم تمكين تخطي شهادة SSL. اتصالاتك غير آمنة.'
                                         : 'WARNING: SSL certificate bypass is active. Your connections are insecure.',
                                     style: TextStyle(
-                                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                      color: isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed,
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -866,19 +1056,29 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         padding: const EdgeInsets.all(16.0),
                         child: NeonGlowButton(
                           isFilled: false,
-                          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                          text: isRtl ? 'إعادة تعيين إلى الافتراضيات' : 'RESET TO DEFAULTS',
+                          color: isDark
+                              ? AppTheme.neonRed
+                              : AppTheme.lightNeonRed,
+                          text: isRtl
+                              ? 'إعادة تعيين إلى الافتراضيات'
+                              : 'RESET TO DEFAULTS',
                           onPressed: () async {
                             triggerHaptic(settings);
                             final confirm = await showDialog<bool>(
                               context: context,
                               builder: (context) {
                                 return AlertDialog(
-                                  backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                                  backgroundColor: isDark
+                                      ? AppTheme.surface
+                                      : AppTheme.lightSurface,
                                   title: Text(
-                                    isRtl ? 'إعادة تعيين الإعدادات' : 'RESET SETTINGS',
+                                    isRtl
+                                        ? 'إعادة تعيين الإعدادات'
+                                        : 'RESET SETTINGS',
                                     style: TextStyle(
-                                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                                      color: isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -890,12 +1090,29 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                                   ),
                                   actions: [
                                     TextButton(
-                                      onPressed: () => Navigator.pop(context, false),
-                                      child: Text(isRtl ? 'إلغاء' : 'CANCEL', style: TextStyle(color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary)),
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: Text(
+                                        isRtl ? 'إلغاء' : 'CANCEL',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.textSecondary
+                                              : AppTheme.lightTextSecondary,
+                                        ),
+                                      ),
                                     ),
                                     TextButton(
-                                      onPressed: () => Navigator.pop(context, true),
-                                      child: Text(isRtl ? 'إعادة تعيين' : 'RESET', style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, fontWeight: FontWeight.bold)),
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: Text(
+                                        isRtl ? 'إعادة تعيين' : 'RESET',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.neonRed
+                                              : AppTheme.lightNeonRed,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 );
@@ -906,15 +1123,22 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                               _uaController.text = settings.customUserAgent;
                               _proxyController.text = settings.proxyAddress;
                               _proxyHostController.text = settings.proxyHost;
-                              _proxyPortController.text = settings.proxyPort.toString();
-                              _proxyUsernameController.text = settings.proxyUsername;
-                              _proxyPasswordController.text = settings.proxyPassword;
-                              
+                              _proxyPortController.text = settings.proxyPort
+                                  .toString();
+                              _proxyUsernameController.text =
+                                  settings.proxyUsername;
+                              _proxyPasswordController.text =
+                                  settings.proxyPassword;
+
                               if (context.mounted) {
                                 ThemedSnackbar.show(
                                   context,
-                                  message: isRtl ? 'تمت إعادة تعيين الإعدادات بنجاح!' : 'Settings reset to default values!',
-                                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                                  message: isRtl
+                                      ? 'تمت إعادة تعيين الإعدادات بنجاح!'
+                                      : 'Settings reset to default values!',
+                                  color: isDark
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.lightNeonGreen,
                                   icon: Icons.check_circle_outline,
                                   isDarkMode: isDark,
                                 );
@@ -940,7 +1164,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     final accentClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
@@ -959,11 +1185,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              DmxAppIcon(
-                size: 50,
-                customColor: accentClr,
-                showGlow: true,
-              ),
+              DmxAppIcon(size: 50, customColor: accentClr, showGlow: true),
               const SizedBox(height: 12),
               Text(
                 L10n.of(context, 'app_title'),
@@ -985,7 +1207,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 ),
               ),
               const SizedBox(height: 12),
-              Divider(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, height: 1.0),
+              Divider(
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
+                height: 1.0,
+              ),
               const SizedBox(height: 12),
               Text(
                 L10n.of(context, 'settings_about_desc'),
@@ -997,7 +1224,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 ),
               ),
               const SizedBox(height: 16),
-              Divider(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, height: 1.0),
+              Divider(
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
+                height: 1.0,
+              ),
               const SizedBox(height: 16),
               // Developer info
               Text(
@@ -1011,14 +1243,22 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               ),
               const SizedBox(height: 10),
               _buildContactTile(
-                iconWidget: Icon(Icons.person_outline, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                iconWidget: Icon(
+                  Icons.person_outline,
+                  size: 16,
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ),
                 label: kDeveloperName,
                 subtitle: L10n.of(context, 'developer_title'),
                 isDark: isDark,
               ),
               const SizedBox(height: 8),
               _buildContactTile(
-                iconWidget: FaIcon(FontAwesomeIcons.google, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                iconWidget: FaIcon(
+                  FontAwesomeIcons.google,
+                  size: 16,
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ),
                 label: kDeveloperEmail,
                 subtitle: L10n.of(context, 'tap_to_open'),
                 isDark: isDark,
@@ -1026,7 +1266,11 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               ),
               const SizedBox(height: 8),
               _buildContactTile(
-                iconWidget: FaIcon(FontAwesomeIcons.github, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                iconWidget: FaIcon(
+                  FontAwesomeIcons.github,
+                  size: 16,
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ),
                 label: kDeveloperGithub,
                 subtitle: L10n.of(context, 'tap_to_open'),
                 isDark: isDark,
@@ -1034,7 +1278,11 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               ),
               const SizedBox(height: 8),
               _buildContactTile(
-                iconWidget: FaIcon(FontAwesomeIcons.linkedin, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                iconWidget: FaIcon(
+                  FontAwesomeIcons.linkedin,
+                  size: 16,
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ),
                 label: kDeveloperLinkedin,
                 subtitle: L10n.of(context, 'tap_to_open'),
                 isDark: isDark,
@@ -1056,7 +1304,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   }) {
     final bgClr = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
     return GestureDetector(
       onTap: url != null
           ? () async {
@@ -1069,7 +1319,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   ThemedSnackbar.show(
                     context,
                     message: L10n.of(context, 'copied'),
-                    color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                    color: isDark
+                        ? AppTheme.neonGreen
+                        : AppTheme.lightNeonGreen,
                     icon: Icons.check_circle_outline,
                     isDarkMode: isDark,
                   );
@@ -1102,13 +1354,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: secClr,
-                      fontSize: 9,
-                    ),
-                  ),
+                  Text(subtitle, style: TextStyle(color: secClr, fontSize: 9)),
                 ],
               ),
             ),
@@ -1133,7 +1379,10 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
         sigmaY: 10,
         child: Container(
           width: double.infinity,
-          decoration: AppTheme.glassDecoration(borderRadius: 20, isDark: settings.isDarkMode),
+          decoration: AppTheme.glassDecoration(
+            borderRadius: 20,
+            isDark: settings.isDarkMode,
+          ),
           child: Material(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(20),
@@ -1151,7 +1400,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   child: Text(
                     title,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: settings.isDarkMode ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                      color: settings.isDarkMode
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary,
                       fontSize: 9,
                       letterSpacing: 1.0,
                       fontWeight: FontWeight.bold,
@@ -1189,20 +1440,20 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           fontWeight: FontWeight.bold,
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(
-          color: subClr,
-          fontSize: 10,
-        ),
-      ),
+      subtitle: Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (onClear != null)
             IconButton(
-              icon: Icon(Icons.clear, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, size: 18),
-              tooltip: L10n.isRtl(context) ? 'إعادة تعيين الافتراضي' : 'Reset to default',
+              icon: Icon(
+                Icons.clear,
+                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                size: 18,
+              ),
+              tooltip: L10n.isRtl(context)
+                  ? 'إعادة تعيين الافتراضي'
+                  : 'Reset to default',
               onPressed: onClear,
             ),
           IconButton(
@@ -1234,7 +1485,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
       onChanged: onChanged,
       activeThumbColor: primaryClr,
       activeTrackColor: primaryClr.withValues(alpha: 0.2),
-      inactiveThumbColor: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+      inactiveThumbColor: isDark
+          ? AppTheme.textSecondary
+          : AppTheme.lightTextSecondary,
       inactiveTrackColor: borderClr,
       title: Text(
         title,
@@ -1244,10 +1497,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           fontWeight: FontWeight.bold,
         ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(color: subClr, fontSize: 10),
-      ),
+      subtitle: Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
     );
   }
 
@@ -1331,7 +1581,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     final bgClr = isDark ? AppTheme.background : AppTheme.lightBackground;
     final glassBdr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final menuBgClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -1351,13 +1603,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: subClr,
-                    fontSize: 10,
-                  ),
-                ),
+                Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
               ],
             ),
           ),
@@ -1374,11 +1620,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 dropdownColor: menuBgClr,
                 value: value,
                 isExpanded: true,
-                icon: Icon(
-                  Icons.arrow_drop_down,
-                  color: secClr,
-                  size: 18,
-                ),
+                icon: Icon(Icons.arrow_drop_down, color: secClr, size: 18),
                 style: TextStyle(
                   color: textClr,
                   fontSize: 11,
@@ -1389,7 +1631,11 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     value: item,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(itemLabels != null ? itemLabels[item]! : item.toString()),
+                      child: Text(
+                        itemLabels != null
+                            ? itemLabels[item]!
+                            : item.toString(),
+                      ),
                     ),
                   );
                 }).toList(),
@@ -1426,13 +1672,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: subClr,
-              fontSize: 10,
-            ),
-          ),
+          Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
           const SizedBox(height: 8),
           Container(
             height: 42,
@@ -1440,19 +1680,28 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                color: isDark
+                    ? const Color(0x15FFFFFF)
+                    : const Color(0x0D000000),
                 width: 0.8,
               ),
             ),
             child: TextField(
               controller: controller,
               onChanged: onChanged,
-              style: TextStyle(color: textClr, fontSize: 11, fontFamily: 'monospace'),
+              style: TextStyle(
+                color: textClr,
+                fontSize: 11,
+                fontFamily: 'monospace',
+              ),
               decoration: const InputDecoration(
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -1461,7 +1710,10 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     );
   }
 
-  Widget _buildUpdateHostsTile(BuildContext context, SettingsProvider settings) {
+  Widget _buildUpdateHostsTile(
+    BuildContext context,
+    SettingsProvider settings,
+  ) {
     final isDark = settings.isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final subClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
@@ -1481,7 +1733,11 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   children: [
                     Text(
                       isRtl ? 'تحديث فلاتر الحجب' : 'UPDATE ADBLOCKER FILTERS',
-                      style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: textClr,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -1508,7 +1764,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   : IconButton(
                       icon: Icon(
                         Icons.sync,
-                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        color: isDark
+                            ? AppTheme.neonBlue
+                            : AppTheme.lightNeonBlue,
                       ),
                       onPressed: () async {
                         triggerHaptic(settings);
@@ -1520,7 +1778,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           message: isRtl
                               ? 'جاري تنزيل وتحديث فلاتر حجب الإعلانات...'
                               : 'Downloading and updating adblocker filters...',
-                          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                          color: isDark
+                              ? AppTheme.neonBlue
+                              : AppTheme.lightNeonBlue,
                           icon: Icons.downloading,
                           isDarkMode: isDark,
                         );
@@ -1532,7 +1792,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                               message: isRtl
                                   ? 'تم تحديث فلاتر منع الإعلانات بنجاح!'
                                   : 'Adblocker filters updated successfully!',
-                              color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                              color: isDark
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.lightNeonGreen,
                               icon: Icons.check_circle_outline,
                               isDarkMode: isDark,
                             );
@@ -1544,7 +1806,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                               message: isRtl
                                   ? 'فشل تحديث فلاتر منع الإعلانات'
                                   : 'Failed to update adblocker filters',
-                              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                              color: isDark
+                                  ? AppTheme.neonRed
+                                  : AppTheme.lightNeonRed,
                               icon: Icons.error_outline,
                               isDarkMode: isDark,
                             );
@@ -1577,7 +1841,11 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
         children: [
           Text(
             L10n.of(context, 'settings_backup_title'),
-            style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: textClr,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
@@ -1599,7 +1867,9 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               Expanded(
                 child: NeonGlowButton(
                   isFilled: true,
-                  color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  color: isDark
+                      ? AppTheme.neonViolet
+                      : AppTheme.lightNeonViolet,
                   onPressed: () => _importBackup(context, settings),
                   text: L10n.of(context, 'settings_import'),
                 ),
@@ -1622,29 +1892,49 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
     final isRtl = L10n.isRtl(context);
     final accentColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final subClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final subClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
+    final glassBorder = isDark
+        ? AppTheme.glassBorder
+        : AppTheme.lightGlassBorder;
 
     return Consumer<DownloadProvider>(
       builder: (context, provider, child) {
         // Calculate metrics
-        final activeDownloads = provider.tasks.where((t) => t.status == DownloadStatus.downloading).toList();
-        final activeThreads = activeDownloads.fold<int>(0, (sum, t) => sum + t.threadCount);
-        final totalSpeedBytes = activeDownloads.fold<double>(0.0, (sum, t) => sum + t.speed);
-        
+        final activeDownloads = provider.tasks
+            .where((t) => t.status == DownloadStatus.downloading)
+            .toList();
+        final activeThreads = activeDownloads.fold<int>(
+          0,
+          (sum, t) => sum + t.threadCount,
+        );
+        final totalSpeedBytes = activeDownloads.fold<double>(
+          0.0,
+          (sum, t) => sum + t.speed,
+        );
+
         // GPU Load Estimate
         final gpuLoad = settings.classicUi
-            ? (isRtl ? 'منخفض (نمط الواجهة الكلاسيكي)' : 'LOW (Classic UI Mode)')
-            : (isRtl ? 'متوسط (تأثيرات التوهج والضبابية)' : 'MODERATE (Glows & Blurs Active)');
+            ? (isRtl
+                  ? 'منخفض (نمط الواجهة الكلاسيكي)'
+                  : 'LOW (Classic UI Mode)')
+            : (isRtl
+                  ? 'متوسط (تأثيرات التوهج والضبابية)'
+                  : 'MODERATE (Glows & Blurs Active)');
 
         // Battery impact level
         String batteryImpact;
         Color batteryColor;
         if (settings.batterySaverMode) {
-          batteryImpact = isRtl ? 'توفير الطاقة نشط (أمثل)' : 'SAVER ACTIVE (Optimal)';
+          batteryImpact = isRtl
+              ? 'توفير الطاقة نشط (أمثل)'
+              : 'SAVER ACTIVE (Optimal)';
           batteryColor = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
         } else if (activeDownloads.isNotEmpty) {
-          batteryImpact = isRtl ? 'متوسط (تحميل نشط)' : 'MODERATE (Active downloads)';
+          batteryImpact = isRtl
+              ? 'متوسط (تحميل نشط)'
+              : 'MODERATE (Active downloads)';
           batteryColor = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
         } else {
           batteryImpact = isRtl ? 'منخفض جداً (خامل)' : 'VERY LOW (Idle)';
@@ -1653,8 +1943,8 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
 
         // Memory load
         final cachedNodes = provider.tasks.length;
-        final memoryLoad = isRtl 
-            ? 'ممتاز ($cachedNodes عناصر مخزنة مؤقتاً)' 
+        final memoryLoad = isRtl
+            ? 'ممتاز ($cachedNodes عناصر مخزنة مؤقتاً)'
             : 'EXCELLENT ($cachedNodes cached nodes)';
 
         return Padding(
@@ -1691,12 +1981,14 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                 ],
               ),
               const SizedBox(height: 12),
-              
+
               // Diagnostics list
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: (isDark ? AppTheme.background : AppTheme.lightBackground).withValues(alpha: 0.6),
+                  color:
+                      (isDark ? AppTheme.background : AppTheme.lightBackground)
+                          .withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: glassBorder, width: 0.8),
                 ),
@@ -1713,7 +2005,9 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                     const Divider(height: 16),
                     _buildDiagRow(
                       context,
-                      label: isRtl ? 'حمل كارت الشاشة (GPU)' : 'GPU Rendering Load',
+                      label: isRtl
+                          ? 'حمل كارت الشاشة (GPU)'
+                          : 'GPU Rendering Load',
                       value: gpuLoad,
                       isDark: isDark,
                     ),
@@ -1746,8 +2040,12 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                 },
                 activeThumbColor: accentColor,
                 activeTrackColor: accentColor.withValues(alpha: 0.2),
-                inactiveThumbColor: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-                inactiveTrackColor: isDark ? AppTheme.border : AppTheme.lightBorder,
+                inactiveThumbColor: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
+                inactiveTrackColor: isDark
+                    ? AppTheme.border
+                    : AppTheme.lightBorder,
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   isRtl ? 'وضع توفير البطارية الأقصى' : 'Battery Saver Mode',
@@ -1774,8 +2072,12 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                 },
                 activeThumbColor: accentColor,
                 activeTrackColor: accentColor.withValues(alpha: 0.2),
-                inactiveThumbColor: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-                inactiveTrackColor: isDark ? AppTheme.border : AppTheme.lightBorder,
+                inactiveThumbColor: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
+                inactiveTrackColor: isDark
+                    ? AppTheme.border
+                    : AppTheme.lightBorder,
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   isRtl ? 'تقليل المؤثرات البصرية' : 'REDUCE VISUAL EFFECTS',
@@ -1828,7 +2130,9 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                 child: Text(
                   title,
                   style: TextStyle(
-                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    color: isDark
+                        ? AppTheme.textMuted
+                        : AppTheme.lightTextMuted,
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
@@ -1866,14 +2170,18 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
         Text(
           label,
           style: TextStyle(
-            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            color: isDark
+                ? AppTheme.textSecondary
+                : AppTheme.lightTextSecondary,
             fontSize: 10,
           ),
         ),
         Text(
           value,
           style: TextStyle(
-            color: valueColor ?? (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
+            color:
+                valueColor ??
+                (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
             fontSize: 10,
             fontWeight: FontWeight.bold,
           ),
