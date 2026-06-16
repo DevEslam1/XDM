@@ -848,9 +848,25 @@ class DownloadEngine {
         if (e is DioException && e.type == DioExceptionType.cancel) {
           rethrow;
         }
+
+        // Check if the error indicates range requests are not supported or rejected
+        bool isRangeRejection = false;
+        if (e is DioException && e.type == DioExceptionType.badResponse) {
+          final status = e.response?.statusCode;
+          if (status == 200 || status == 416) {
+            isRangeRejection = true;
+          }
+        }
+
+        if (!isRangeRejection) {
+          // Rethrow connection, timeout, or server-side transient exceptions
+          // so the download provider can retry without deleting part files.
+          rethrow;
+        }
+
         // Fallback on range failure or range reject
         debugPrint(
-          'Multi-threaded range request failed: $e. Falling back to single-threaded download.',
+          'Multi-threaded range request failed (Range Rejection): $e. Falling back to single-threaded download.',
         );
         // Clean up part files
         for (int i = 0; i < threadCount; i++) {
