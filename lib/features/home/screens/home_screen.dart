@@ -11,11 +11,9 @@ import '../../downloads/widgets/download_stats_panel.dart';
 import '../../downloads/widgets/filter_chips_bar.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../add_download/screens/add_screen.dart';
 import '../../../core/utils/haptic_helper.dart';
-import '../../../shared/widgets/fade_in_slide.dart';
 import '../../../core/utils/premium_route.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -39,23 +37,11 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<DownloadProvider>(context);
-    final settings = Provider.of<SettingsProvider>(context);
-    final tasks = provider.filteredTasks;
+    final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final isRtl = L10n.isRtl(context);
-
-    // Filter tasks into active vs completed/failed
-    final displayTasks = tasks.where((task) {
-      final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
-      if (_selectedTab == 0) {
-        return (task.status != DownloadStatus.completed && task.status != DownloadStatus.failed) || isSeeding;
-      } else {
-        return (task.status == DownloadStatus.completed || task.status == DownloadStatus.failed) && !isSeeding;
-      }
-    }).toList();
 
     return GeometricGridBackground(
       child: Scaffold(
@@ -71,18 +57,6 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   ),
                 )
               : null,
-          flexibleSpace: settings.classicUi
-              ? null
-              : ClipRect(
-                  child: DmxBackdropFilter(
-                    sigmaX: 12,
-                    sigmaY: 12,
-                    child: Container(
-                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                          .withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
           title: _isSearching
               ? Container(
                   decoration: BoxDecoration(
@@ -114,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                       focusedBorder: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    onChanged: (val) => provider.setSearchQuery(val),
+                    onChanged: (val) => context.read<DownloadProvider>().setSearchQuery(val),
                   ),
                 )
               : Text(
@@ -152,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   if (_isSearching) {
                     _isSearching = false;
                     _searchController.clear();
-                    provider.setSearchQuery('');
+                    context.read<DownloadProvider>().setSearchQuery('');
                   } else {
                     _isSearching = true;
                   }
@@ -179,11 +153,11 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 child: _showAnalytics
                     ? Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                        child: _buildDonutChartCard(
-                          context,
-                          provider.categorySizes,
-                          provider.categorySizes.values.fold(0.0, (sum, val) => sum + val),
-                          settings,
+                        child: Consumer<DownloadProvider>(
+                          builder: (context, provider, _) => _DonutChartPanel(
+                            provider: provider,
+                            settings: settings,
+                          ),
                         ),
                       )
                     : const SizedBox.shrink(),
@@ -228,192 +202,22 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
               const SizedBox(height: 8),
 
               // Controls Row: Sort Option on the Left, Delete Sweep/Task count on the Right
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    PopupMenuButton<SortOption>(
-                      tooltip: 'SORT CHANNELS',
-                      color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
-                          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-                          width: 0.6,
-                        ),
-                      ),
-                      onSelected: (option) {
-                        triggerHaptic(settings);
-                        if (provider.sortOption == option) {
-                          provider.toggleSortDirection();
-                        } else {
-                          provider.setSortOption(option);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        _buildSortMenuItem(
-                          option: SortOption.dateAdded,
-                          label: L10n.of(context, 'sort_date'),
-                          currentOption: provider.sortOption,
-                          ascending: provider.sortAscending,
-                          settings: settings,
-                        ),
-                        _buildSortMenuItem(
-                          option: SortOption.fileSize,
-                          label: L10n.of(context, 'details_size'),
-                          currentOption: provider.sortOption,
-                          ascending: provider.sortAscending,
-                          settings: settings,
-                        ),
-                        _buildSortMenuItem(
-                          option: SortOption.fileName,
-                          label: L10n.of(context, 'details_filename'),
-                          currentOption: provider.sortOption,
-                          ascending: provider.sortAscending,
-                          settings: settings,
-                        ),
-                        _buildSortMenuItem(
-                          option: SortOption.status,
-                          label: L10n.of(context, 'sort_status'),
-                          currentOption: provider.sortOption,
-                          ascending: provider.sortAscending,
-                          settings: settings,
-                        ),
-                      ],
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0x1F000000) : const Color(0x0A000000),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.sort_rounded, color: textClr, size: 14),
-                            const SizedBox(width: 6),
-                            Text(
-                              isRtl ? 'فرز' : 'SORT',
-                              style: TextStyle(
-                                color: textClr,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (_selectedTab == 1 && displayTasks.isNotEmpty)
-                      IconButton(
-                        icon: Icon(
-                          Icons.delete_sweep_outlined,
-                          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                          size: 20,
-                        ),
-                        constraints: const BoxConstraints(),
-                        padding: EdgeInsets.zero,
-                        tooltip: isRtl ? 'مسح كل السجل' : 'CLEAR ALL HISTORY',
-                        onPressed: () => _showClearHistoryConfirmation(
-                          context,
-                          provider,
-                          displayTasks,
-                          settings,
-                        ),
-                      )
-                    else
-                      Text(
-                        '${displayTasks.length} ${isRtl ? 'ملفات' : 'TASKS'}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                          fontSize: 10,
-                        ),
-                      ),
-                  ],
-                ),
+              _DownloadControlsRow(
+                selectedTab: _selectedTab,
+                isDark: isDark,
+                isRtl: isRtl,
+                settings: settings,
               ),
               const SizedBox(height: 10),
 
               // Download Tasks list with Pull-to-Refresh
               Expanded(
-                child: displayTasks.isEmpty
-                    ? _buildEmptyState(context)
-                    : RefreshIndicator(
-                        color: isDark
-                            ? AppTheme.neonBlue
-                            : AppTheme.lightNeonBlue,
-                        backgroundColor: isDark
-                            ? AppTheme.surface
-                            : AppTheme.lightSurface,
-                        onRefresh: () async {
-                          triggerHaptic(settings);
-                          await provider.load(pauseOrphanDownloads: false);
-                          if (context.mounted) {
-                            ThemedSnackbar.show(
-                              context,
-                              message: isRtl
-                                  ? 'تم إعادة تحميل سجلات الاتصال'
-                                  : 'Transmission logs reloaded',
-                              color: isDark
-                                  ? AppTheme.neonBlue
-                                  : AppTheme.lightNeonBlue,
-                              icon: Icons.sync,
-                              isDarkMode: isDark,
-                            );
-                          }
-                        },
-                        child: isTablet(context)
-                            ? GridView.builder(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: screenPadding(context).left,
-                                  vertical: 8,
-                                ),
-                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  childAspectRatio: gridChildAspectRatio(context, columns: 2),
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                ),
-                                physics: const AlwaysScrollableScrollPhysics(
-                                  parent: BouncingScrollPhysics(),
-                                ),
-                                itemCount: displayTasks.length,
-                                itemBuilder: (context, index) {
-                                  final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
-                                  return FadeInSlide(
-                                    delay: delay,
-                                    child: DownloadCard(
-                                      task: displayTasks[index],
-                                      compact: true,
-                                    ),
-                                  );
-                                },
-                              )
-                            : ListView.builder(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: screenPadding(context).left,
-                                ),
-                                physics: const AlwaysScrollableScrollPhysics(
-                                  parent: BouncingScrollPhysics(),
-                                ),
-                                itemCount: displayTasks.length,
-                                itemBuilder: (context, index) {
-                                  final delay = Duration(milliseconds: (index * 40).clamp(0, 200));
-                                  return FadeInSlide(
-                                    delay: delay,
-                                    child: DownloadCard(
-                                      task: displayTasks[index],
-                                      compact: true,
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
+                child: _DownloadTaskList(
+                  selectedTab: _selectedTab,
+                  isDark: isDark,
+                  isRtl: isRtl,
+                  settings: settings,
+                ),
               ),
             ],
               ),
@@ -590,320 +394,290 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
     );
   }
 
-  Widget _buildDonutChartCard(
-    BuildContext context,
-    Map<String, double> sizes,
-    double totalSizeMb,
-    SettingsProvider settings,
-  ) {
-    final isDark = settings.isDarkMode;
+}
+
+class _DownloadControlsRow extends StatelessWidget {
+  final int selectedTab;
+  final bool isDark;
+  final bool isRtl;
+  final SettingsProvider settings;
+
+  const _DownloadControlsRow({
+    required this.selectedTab,
+    required this.isDark,
+    required this.isRtl,
+    required this.settings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final isRtl = L10n.isRtl(context);
-
-    final List<Map<String, dynamic>> categoryCards = [
-      {
-        'name': 'Video',
-        'color': isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-      },
-      {
-        'name': 'Audio',
-        'color': isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-      },
-      {
-        'name': 'Document',
-        'color': isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-      },
-      {
-        'name': 'Archive',
-        'color': isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-      },
-      {
-        'name': 'APK',
-        'color': const Color(0xFFF15BB5),
-      },
-      {
-        'name': 'Other',
-        'color': isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-      },
-    ];
-
-    String totalSizeText;
-    if (totalSizeMb >= 1024) {
-      totalSizeText = '${(totalSizeMb / 1024).toStringAsFixed(2)} GB';
-    } else {
-      totalSizeText = '${totalSizeMb.toStringAsFixed(1)} MB';
-    }
-
-    final hasNoData = totalSizeMb == 0.0;
-
-    final List<String> activeCategoryNames = hasNoData
-        ? []
-        : categoryCards
-            .where((card) => (sizes[card['name']] ?? 0.0) > 0)
-            .map<String>((card) => card['name'] as String)
-            .toList();
-
-    final List<PieChartSectionData> sections = hasNoData
-        ? [
-            PieChartSectionData(
-              color: isDark ? AppTheme.border : AppTheme.lightBorder,
-              value: 1.0,
-              radius: 16,
-              title: '',
-            )
-          ]
-        : activeCategoryNames.map((name) {
-            final card = categoryCards.firstWhere((c) => c['name'] == name);
-            final Color color = card['color'];
-            final sizeMb = sizes[name] ?? 0.0;
-            final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
-
-            return PieChartSectionData(
-              color: color,
-              value: sizeMb,
-              radius: 16,
-              title: percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
-              titleStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 8,
-                fontWeight: FontWeight.bold,
-              ),
-            );
-          }).toList();
-
-    final chartBody = Container(
-      width: double.infinity,
-      height: 120,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: settings.classicUi
-          ? BoxDecoration(
-              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              border: Border.all(
-                color: isDark ? AppTheme.border : AppTheme.lightBorder,
-                width: 1.0,
-              ),
-              borderRadius: BorderRadius.circular(20),
-            )
-          : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+    final provider = context.read<DownloadProvider>();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(
-            width: 110,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                PieChart(
-                  PieChartData(
-                    pieTouchData: PieTouchData(
-                      touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                        if (!event.isInterestedForInteractions ||
-                            pieTouchResponse == null ||
-                            pieTouchResponse.touchedSection == null) {
-                          return;
-                        }
-                        final touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                        if (touchedIndex >= 0 && touchedIndex < activeCategoryNames.length) {
-                          final category = activeCategoryNames[touchedIndex];
-                          final provider = Provider.of<DownloadProvider>(context, listen: false);
-                          lightPulse(settings);
-                          provider.toggleCategoryFilter(category);
-                        }
-                      },
+          PopupMenuButton<SortOption>(
+            tooltip: 'SORT CHANNELS',
+            color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                width: 0.6,
+              ),
+            ),
+            onSelected: (option) {
+              if (provider.sortOption == option) {
+                provider.toggleSortDirection();
+              } else {
+                provider.setSortOption(option);
+              }
+            },
+            itemBuilder: (context) => [
+              _buildSortMenuItem(
+                option: SortOption.dateAdded,
+                label: L10n.of(context, 'sort_date'),
+                currentOption: provider.sortOption,
+                ascending: provider.sortAscending,
+                isDark: isDark,
+              ),
+              _buildSortMenuItem(
+                option: SortOption.fileSize,
+                label: L10n.of(context, 'details_size'),
+                currentOption: provider.sortOption,
+                ascending: provider.sortAscending,
+                isDark: isDark,
+              ),
+              _buildSortMenuItem(
+                option: SortOption.fileName,
+                label: L10n.of(context, 'details_filename'),
+                currentOption: provider.sortOption,
+                ascending: provider.sortAscending,
+                isDark: isDark,
+              ),
+              _buildSortMenuItem(
+                option: SortOption.status,
+                label: L10n.of(context, 'sort_status'),
+                currentOption: provider.sortOption,
+                ascending: provider.sortAscending,
+                isDark: isDark,
+              ),
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0x1F000000) : const Color(0x0A000000),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.sort_rounded, color: textClr, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    isRtl ? 'فرز' : 'SORT',
+                    style: TextStyle(
+                      color: textClr,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
-                    sections: sections,
-                    centerSpaceRadius: 28,
-                    sectionsSpace: 2.5,
                   ),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      isRtl ? 'الإجمالي' : 'TOTAL',
-                      style: TextStyle(
-                        color: mutedClr,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      totalSizeText,
-                      style: TextStyle(
-                        color: textClr,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: categoryCards.take(3).map((card) {
-                final String name = card['name'];
-                final Color color = card['color'];
-                final sizeMb = sizes[name] ?? 0.0;
-                final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
-                String sizeText = sizeMb >= 1024
-                    ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
-                    : '${sizeMb.toStringAsFixed(0)}M';
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _translateCategoryName(context, name),
-                          style: TextStyle(
-                            color: textClr,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        '${percentage.toStringAsFixed(0)}%',
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 9,
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        sizeText,
-                        style: TextStyle(
-                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                          fontSize: 9,
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+          Selector<DownloadProvider, int>(
+            selector: (_, p) => p.filteredTasks.length,
+            builder: (context, length, _) {
+              if (selectedTab == 1 && length > 0) {
+                return IconButton(
+                  icon: Icon(
+                    Icons.delete_sweep_outlined,
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    size: 20,
                   ),
+                  constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                  tooltip: isRtl ? 'مسح كل السجل' : 'CLEAR ALL HISTORY',
+                  onPressed: () => _showClearHistoryDialog(context, provider, isDark, isRtl),
                 );
-              }).toList(),
-            ),
+              }
+              return Text(
+                '$length ${isRtl ? 'ملفات' : 'TASKS'}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  fontSize: 10,
+                ),
+              );
+            },
           ),
         ],
       ),
     );
-
-    return settings.classicUi
-        ? chartBody
-        : ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: DmxBackdropFilter(
-              sigmaX: 10,
-              sigmaY: 10,
-              child: chartBody,
-            ),
-          );
   }
+}
 
-  String _translateCategoryName(BuildContext context, String name) {
-    if (!L10n.isRtl(context)) return name;
-    switch (name) {
-      case 'Video':
-        return 'الفيديو';
-      case 'Audio':
-        return 'الصوت';
-      case 'Document':
-        return 'المستندات';
-      case 'Archive':
-        return 'الأرشيف';
-      case 'APK':
-        return 'التطبيقات';
-      default:
-        return 'أخرى';
-    }
-  }
+PopupMenuItem<SortOption> _buildSortMenuItem({
+  required SortOption option,
+  required String label,
+  required SortOption currentOption,
+  required bool ascending,
+  required bool isDark,
+}) {
+  final isSelected = currentOption == option;
+  final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+  final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
-  Widget _buildEmptyState(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
-
-    if (_selectedTab == 1) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: settings.classicUi
-                    ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                    : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
-                border: Border.all(
-                  color: settings.classicUi
-                      ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                      : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
-                  width: 0.8,
-                ),
-                boxShadow: (settings.classicUi || !isDark)
-                    ? null
-                    : [
-                        BoxShadow(
-                          color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.06),
-                          blurRadius: 20.0,
-                          spreadRadius: 0,
-                        ),
-                      ],
-              ),
-              child: Icon(
-                Icons.history_toggle_off_outlined,
-                size: 40,
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              L10n.of(context, 'history_empty'),
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: isDark
-                    ? AppTheme.textSecondary
-                    : AppTheme.lightTextSecondary,
-                letterSpacing: 1.0,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isRtl
-                  ? 'سيتم تصنيف السجلات المكتملة هنا.'
-                  : 'Finished downloads will be cataloged here.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                fontSize: 11,
-              ),
-            ),
-          ],
+  return PopupMenuItem<SortOption>(
+    value: option,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: isSelected ? activeColor : textColor,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
         ),
-      );
-    }
+        if (isSelected)
+          Icon(
+            ascending ? Icons.arrow_upward : Icons.arrow_downward,
+            color: activeColor,
+            size: 16,
+          ),
+      ],
+    ),
+  );
+}
+
+class _DownloadTaskList extends StatelessWidget {
+  final int selectedTab;
+  final bool isDark;
+  final bool isRtl;
+  final SettingsProvider settings;
+
+  const _DownloadTaskList({
+    required this.selectedTab,
+    required this.isDark,
+    required this.isRtl,
+    required this.settings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<DownloadProvider, List<DownloadTask>>(
+      shouldRebuild: (prev, next) {
+        if (prev.length != next.length) return true;
+        for (var i = 0; i < prev.length; i++) {
+          if (prev[i].id != next[i].id ||
+              prev[i].status != next[i].status ||
+              prev[i].downloadedBytes != next[i].downloadedBytes ||
+              prev[i].speed != next[i].speed ||
+              prev[i].eta != next[i].eta ||
+              prev[i].chunks != next[i].chunks) {
+            return true;
+          }
+        }
+        return false;
+      },
+      selector: (_, provider) => provider.filteredTasks,
+      builder: (context, fullList, _) {
+        final displayTasks = fullList.where((task) {
+          final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
+          if (selectedTab == 0) {
+            return (task.status != DownloadStatus.completed && task.status != DownloadStatus.failed) || isSeeding;
+          } else {
+            return (task.status == DownloadStatus.completed || task.status == DownloadStatus.failed) && !isSeeding;
+          }
+        }).toList();
+
+        if (displayTasks.isEmpty) {
+          return _EmptyState(selectedTab: selectedTab, isDark: isDark, isRtl: isRtl, settings: settings);
+        }
+
+        return RefreshIndicator(
+          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          onRefresh: () async {
+            await context.read<DownloadProvider>().load(pauseOrphanDownloads: false);
+            if (context.mounted) {
+              ThemedSnackbar.show(
+                context,
+                message: isRtl ? 'تم إعادة تحميل سجلات الاتصال' : 'Transmission logs reloaded',
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                icon: Icons.sync,
+                isDarkMode: isDark,
+              );
+            }
+          },
+          child: isTablet(context)
+              ? GridView.builder(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: screenPadding(context).left,
+                    vertical: 8,
+                  ),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: gridChildAspectRatio(context, columns: 2),
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  itemCount: displayTasks.length,
+                  itemBuilder: (context, index) => RepaintBoundary(
+                    child: DownloadCard(task: displayTasks[index], compact: true),
+                  ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  itemCount: displayTasks.length,
+                  itemBuilder: (context, index) => RepaintBoundary(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: index == displayTasks.length - 1 ? 0 : 0),
+                      child: DownloadCard(task: displayTasks[index], compact: true),
+                    ),
+                  ),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final int selectedTab;
+  final bool isDark;
+  final bool isRtl;
+  final SettingsProvider settings;
+
+  const _EmptyState({
+    required this.selectedTab,
+    required this.isDark,
+    required this.isRtl,
+    required this.settings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = selectedTab == 1
+        ? Icons.history_toggle_off_outlined
+        : Icons.portable_wifi_off_outlined;
+    final title = selectedTab == 1
+        ? L10n.of(context, 'history_empty')
+        : L10n.of(context, 'empty_transmissions');
+    final subtitle = selectedTab == 1
+        ? (isRtl ? 'سيتم تصنيف السجلات المكتملة هنا.' : 'Finished downloads will be cataloged here.')
+        : (isRtl ? 'أدخل رابطاً لبدء التنزيل.' : 'Insert a URL to start downloading.');
 
     return Center(
       child: Column(
@@ -922,29 +696,14 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
                 width: 0.8,
               ),
-              boxShadow: (settings.classicUi || !isDark)
-                  ? null
-                  : [
-                      BoxShadow(
-                        color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.06),
-                        blurRadius: 20.0,
-                        spreadRadius: 0,
-                      ),
-                    ],
             ),
-            child: Icon(
-              Icons.portable_wifi_off_outlined,
-              size: 40,
-              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-            ),
+            child: Icon(icon, size: 40, color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
           ),
           const SizedBox(height: 16),
           Text(
-            L10n.of(context, 'empty_transmissions'),
+            title,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
+              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
               letterSpacing: 1.0,
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -952,9 +711,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           ),
           const SizedBox(height: 8),
           Text(
-            isRtl
-                ? 'أدخل رابطاً لبدء التنزيل.'
-                : 'Insert a URL to start downloading.',
+            subtitle,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
               fontSize: 11,
@@ -964,120 +721,204 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
       ),
     );
   }
+}
 
-  void _showClearHistoryConfirmation(
-    BuildContext context,
-    DownloadProvider provider,
-    List<DownloadTask> tasksToClear,
-    SettingsProvider settings,
-  ) {
+class _DonutChartPanel extends StatelessWidget {
+  final DownloadProvider provider;
+  final SettingsProvider settings;
+
+  const _DonutChartPanel({
+    required this.provider,
+    required this.settings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = settings.isDarkMode;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final isRtl = L10n.isRtl(context);
-    final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final sizes = provider.categorySizes;
+    final totalSizeMb = sizes.values.fold(0.0, (sum, val) => sum + val);
 
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Directionality(
-          textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-          child: AlertDialog(
-            backgroundColor: surfaceClr.withValues(alpha: 0.92),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-              side: BorderSide(color: glassBorder, width: 0.8),
-            ),
-            title: Text(
-              isRtl ? 'مسح سجل التاريخ' : 'CLEAR HISTORY LOGS',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: redClr,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
-            ),
-            content: Text(
-              isRtl
-                  ? 'هل أنت متأكد من حذف جميع سجلات التاريخ البالغ عددها ${tasksToClear.length}؟'
-                  : 'Are you sure you want to delete all ${tasksToClear.length} completed history records?',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: secClr),
-            ),
-            actions: [
-              TextButton(
-                style: TextButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: Text(
-                  L10n.of(context, 'cancel_btn'),
-                  style: TextStyle(color: secClr),
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              TextButton(
-                style: TextButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: Text(
-                  isRtl ? 'مسح الكل' : 'CLEAR ALL',
-                  style: TextStyle(
-                    color: redClr,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                onPressed: () async {
-                  for (final task in tasksToClear) {
-                    await provider.deleteTask(task.id);
-                  }
-                  if (context.mounted) {
-                    Navigator.of(context).pop();
-                  }
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+    final categoryCards = [
+      {'name': 'Video', 'color': isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue},
+      {'name': 'Audio', 'color': isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet},
+      {'name': 'Document', 'color': isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen},
+      {'name': 'Archive', 'color': isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber},
+      {'name': 'APK', 'color': const Color(0xFFF15BB5)},
+      {'name': 'Other', 'color': isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary},
+    ];
 
-  PopupMenuItem<SortOption> _buildSortMenuItem({
-    required SortOption option,
-    required String label,
-    required SortOption currentOption,
-    required bool ascending,
-    required SettingsProvider settings,
-  }) {
-    final isSelected = currentOption == option;
-    final isDark = settings.isDarkMode;
-    final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final totalSizeText = totalSizeMb >= 1024
+        ? '${(totalSizeMb / 1024).toStringAsFixed(2)} GB'
+        : '${totalSizeMb.toStringAsFixed(1)} MB';
 
-    return PopupMenuItem<SortOption>(
-      value: option,
+    final hasNoData = totalSizeMb == 0.0;
+    final activeCategoryNames = hasNoData
+        ? <String>[]
+        : categoryCards
+            .where((card) => (sizes[card['name']] ?? 0.0) > 0)
+            .map<String>((card) => card['name'] as String)
+            .toList();
+
+    final sections = hasNoData
+        ? [PieChartSectionData(color: isDark ? AppTheme.border : AppTheme.lightBorder, value: 1.0, radius: 16, title: '')]
+        : activeCategoryNames.map((name) {
+            final card = categoryCards.firstWhere((c) => c['name'] == name);
+            final sizeMb = sizes[name] ?? 0.0;
+            final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
+            return PieChartSectionData(
+              color: card['color'] as Color,
+              value: sizeMb,
+              radius: 16,
+              title: percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
+              titleStyle: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+            );
+          }).toList();
+
+    final chartBody = Container(
+      width: double.infinity,
+      height: 120,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: settings.classicUi
+          ? BoxDecoration(
+              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+              border: Border.all(color: isDark ? AppTheme.border : AppTheme.lightBorder, width: 1.0),
+              borderRadius: BorderRadius.circular(20),
+            )
+          : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              color: isSelected ? activeColor : textColor,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              fontSize: 12,
+          SizedBox(
+            width: 110,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    pieTouchData: PieTouchData(
+                      touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                        if (!event.isInterestedForInteractions || pieTouchResponse?.touchedSection == null) return;
+                        final touchedIndex = pieTouchResponse!.touchedSection!.touchedSectionIndex;
+                        if (touchedIndex >= 0 && touchedIndex < activeCategoryNames.length) {
+                          context.read<DownloadProvider>().toggleCategoryFilter(activeCategoryNames[touchedIndex]);
+                        }
+                      },
+                    ),
+                    sections: sections,
+                    centerSpaceRadius: 28,
+                    sectionsSpace: 2.5,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(isRtl ? 'الإجمالي' : 'TOTAL', style: TextStyle(color: mutedClr, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    Text(totalSizeText, style: TextStyle(color: textClr, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ],
             ),
           ),
-          if (isSelected)
-            Icon(
-              ascending ? Icons.arrow_upward : Icons.arrow_downward,
-              color: activeColor,
-              size: 16,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: categoryCards.take(3).map((card) {
+                final sizeMb = sizes[card['name']] ?? 0.0;
+                final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
+                final sizeText = sizeMb >= 1024 ? '${(sizeMb / 1024).toStringAsFixed(1)}G' : '${sizeMb.toStringAsFixed(0)}M';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Row(
+                    children: [
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: card['color'] as Color, borderRadius: BorderRadius.circular(2))),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isRtl ? _translateCat(card['name'] as String) : card['name'] as String,
+                          style: TextStyle(color: textClr, fontSize: 10, fontWeight: FontWeight.bold),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text('${percentage.toStringAsFixed(0)}%', style: TextStyle(color: card['color'] as Color, fontSize: 9, fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 4),
+                      Text(sizeText, style: TextStyle(color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted, fontSize: 9, fontFamily: 'monospace', fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
+          ),
         ],
       ),
     );
+
+    return chartBody;
   }
+
+  String _translateCat(String name) {
+    switch (name) {
+      case 'Video': return 'الفيديو';
+      case 'Audio': return 'الصوت';
+      case 'Document': return 'المستندات';
+      case 'Archive': return 'الأرشيف';
+      case 'APK': return 'التطبيقات';
+      default: return 'أخرى';
+    }
+  }
+}
+
+void _showClearHistoryDialog(BuildContext context, DownloadProvider provider, bool isDark, bool isRtl) {
+  final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
+  final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+  final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+  final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      final tasksToClear = provider.filteredTasks.where((task) {
+        return task.status == DownloadStatus.completed || task.status == DownloadStatus.failed;
+      }).toList();
+
+      return Directionality(
+        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+        child: AlertDialog(
+          backgroundColor: surfaceClr.withValues(alpha: 0.92),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: BorderSide(color: glassBorder, width: 0.8),
+          ),
+          title: Text(
+            isRtl ? 'مسح سجل التاريخ' : 'CLEAR HISTORY LOGS',
+            style: Theme.of(ctx).textTheme.titleMedium?.copyWith(color: redClr, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+          ),
+          content: Text(
+            isRtl ? 'هل أنت متأكد من حذف جميع سجلات التاريخ البالغ عددها ${tasksToClear.length}؟' : 'Are you sure you want to delete all ${tasksToClear.length} completed history records?',
+            style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: secClr),
+          ),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+              child: Text(L10n.of(ctx, 'cancel_btn'), style: TextStyle(color: secClr)),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+              child: Text(isRtl ? 'مسح الكل' : 'CLEAR ALL', style: TextStyle(color: redClr, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                for (final task in tasksToClear) {
+                  await provider.deleteTask(task.id);
+                }
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }

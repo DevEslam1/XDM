@@ -143,6 +143,7 @@ class L10n {
       'developer_linkedin': 'linkedin.com/in/deveslam-mahmoud',
       'developer_phone': '+20 112 229 9831',
       'tap_to_copy': 'Tap to copy',
+      'tap_to_open': 'Tap to open',
       'copied': 'Copied to clipboard!',
     },
     'ar': {
@@ -282,6 +283,7 @@ class L10n {
       'developer_linkedin': 'linkedin.com/in/deveslam-mahmoud',
       'developer_phone': '+20 112 229 9831',
       'tap_to_copy': 'اضغط للنسخ',
+      'tap_to_open': 'اضغط للفتح',
       'copied': 'تم النسخ إلى الحافظة!',
     },
   };

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
@@ -1009,34 +1011,34 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               ),
               const SizedBox(height: 10),
               _buildContactTile(
-                icon: Icons.person_outline,
+                iconWidget: Icon(Icons.person_outline, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
                 label: kDeveloperName,
                 subtitle: L10n.of(context, 'developer_title'),
                 isDark: isDark,
               ),
               const SizedBox(height: 8),
               _buildContactTile(
-                icon: Icons.email_outlined,
+                iconWidget: FaIcon(FontAwesomeIcons.google, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
                 label: kDeveloperEmail,
-                subtitle: L10n.of(context, 'tap_to_copy'),
+                subtitle: L10n.of(context, 'tap_to_open'),
                 isDark: isDark,
-                copyValue: kDeveloperEmail,
+                url: 'mailto:$kDeveloperEmail',
               ),
               const SizedBox(height: 8),
               _buildContactTile(
-                icon: Icons.code,
+                iconWidget: FaIcon(FontAwesomeIcons.github, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
                 label: kDeveloperGithub,
-                subtitle: L10n.of(context, 'tap_to_copy'),
+                subtitle: L10n.of(context, 'tap_to_open'),
                 isDark: isDark,
-                copyValue: kDeveloperGithub,
+                url: 'https://$kDeveloperGithub',
               ),
               const SizedBox(height: 8),
               _buildContactTile(
-                icon: Icons.link,
+                iconWidget: FaIcon(FontAwesomeIcons.linkedin, size: 16, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
                 label: kDeveloperLinkedin,
-                subtitle: L10n.of(context, 'tap_to_copy'),
+                subtitle: L10n.of(context, 'tap_to_open'),
                 isDark: isDark,
-                copyValue: kDeveloperLinkedin,
+                url: 'https://$kDeveloperLinkedin',
               ),
             ],
           ),
@@ -1046,29 +1048,32 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   }
 
   Widget _buildContactTile({
-    required IconData icon,
+    required Widget iconWidget,
     required String label,
     required String subtitle,
     required bool isDark,
-    String? copyValue,
+    String? url,
   }) {
     final bgClr = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final accClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     return GestureDetector(
-      onTap: copyValue != null
-          ? () {
-              Clipboard.setData(ClipboardData(text: copyValue));
-              if (mounted) {
-                ThemedSnackbar.show(
-                  context,
-                  message: L10n.of(context, 'copied'),
-                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                  icon: Icons.check_circle_outline,
-                  isDarkMode: isDark,
-                );
+      onTap: url != null
+          ? () async {
+              final uri = Uri.tryParse(url);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              } else {
+                Clipboard.setData(ClipboardData(text: url));
+                if (mounted) {
+                  ThemedSnackbar.show(
+                    context,
+                    message: L10n.of(context, 'copied'),
+                    color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                    icon: Icons.check_circle_outline,
+                    isDarkMode: isDark,
+                  );
+                }
               }
             }
           : null,
@@ -1080,7 +1085,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 16, color: accClr),
+            iconWidget,
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -1107,8 +1112,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 ],
               ),
             ),
-            if (copyValue != null)
-              Icon(Icons.copy_rounded, size: 14, color: secClr),
+            if (url != null)
+              Icon(Icons.open_in_new_rounded, size: 14, color: secClr),
           ],
         ),
       ),

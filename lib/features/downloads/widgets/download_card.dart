@@ -7,7 +7,6 @@ import '../../../../core/utils/localization.dart';
 import '../../../../core/utils/haptic_helper.dart';
 import '../../../../shared/widgets/themed_snackbar.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../models/download_task.dart';
 import '../provider/download_provider.dart';
 import 'status_chip.dart';
@@ -22,8 +21,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<DownloadProvider>(context);
-    final settings = Provider.of<SettingsProvider>(context);
+    final provider = context.read<DownloadProvider>();
+    final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
 
     // Determine status colors
@@ -379,139 +378,11 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                   ],
                 ),
                 SizedBox(height: compact ? 10 : 14),
-                // Segmented Progress Bar for Chunks
-                Builder(
-                  builder: (context) {
-                    final showSplitBar =
-                        (task.status == DownloadStatus.downloading ||
-                            task.status == DownloadStatus.paused) &&
-                        task.chunks.isNotEmpty &&
-                        task.chunks.length > 1;
-
-                    if (showSplitBar) {
-                      return Row(
-                        children: List.generate(task.chunks.length, (index) {
-                          final chunkProgress = task.chunks[index].clamp(0.0, 1.0);
-                          return Expanded(
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                left: index == 0 ? 0.0 : 2.0,
-                                right: index == task.chunks.length - 1
-                                    ? 0.0
-                                    : 2.0,
-                              ),
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    height: compact ? 4 : 6,
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppTheme.glassBorder
-                                          : AppTheme.lightGlassBorder,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                  if (chunkProgress > 0)
-                                    AnimatedFractionallySizedBox(
-                                      widthFactor: chunkProgress,
-                                      duration: const Duration(
-                                        milliseconds: 300,
-                                      ),
-                                      curve: Curves.easeOutCubic,
-                                      child: Container(
-                                        height: compact ? 4 : 6,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                          boxShadow:
-                                              task.status ==
-                                                      DownloadStatus
-                                                          .downloading &&
-                                                  isDark &&
-                                                  !settings.classicUi
-                                              ? [
-                                                  BoxShadow(
-                                                    color: statusColor
-                                                        .withValues(alpha: 0.4),
-                                                    blurRadius: 4.0,
-                                                    spreadRadius: 0.5,
-                                                  ),
-                                                ]
-                                              : null,
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              statusColor,
-                                              statusColor.withValues(
-                                                alpha: 0.7,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      );
-                    }
-
-                    // Otherwise, render the standard continuous progress bar
-                    return TweenAnimationBuilder<double>(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                      tween: Tween<double>(begin: 0.0, end: task.progress),
-                      builder: (context, val, child) {
-                        return Stack(
-                          children: [
-                            Container(
-                              height: compact ? 4 : 6,
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppTheme.glassBorder
-                                    : AppTheme.lightGlassBorder,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            if (val > 0)
-                              FractionallySizedBox(
-                                widthFactor: val.clamp(0.0, 1.0),
-                                child: Container(
-                                  height: compact ? 4 : 6,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(8),
-                                    boxShadow:
-                                        task.status ==
-                                                DownloadStatus.downloading &&
-                                            isDark &&
-                                            !settings.classicUi
-                                        ? [
-                                            BoxShadow(
-                                              color: statusColor.withValues(
-                                                alpha: 0.5,
-                                              ),
-                                              blurRadius: 6.0,
-                                              spreadRadius: 0.5,
-                                            ),
-                                          ]
-                                        : null,
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        statusColor,
-                                        statusColor.withValues(alpha: 0.7),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        );
-                      },
-                    );
-                  },
+                _ProgressBar(
+                  task: task,
+                  compact: compact,
+                  isDark: isDark,
+                  statusColor: statusColor,
                 ),
                 SizedBox(height: compact ? 8 : 10),
                 // Footer metadata
@@ -742,16 +613,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       },
       child: Padding(
         padding: EdgeInsets.only(bottom: compact ? 8.0 : 12.0),
-        child: settings.classicUi
-            ? cardBody
-            : ClipRRect(
-                borderRadius: BorderRadius.circular(compact ? 16 : 20),
-                child: DmxBackdropFilter(
-                  sigmaX: 10,
-                  sigmaY: 10,
-                  child: cardBody,
-                ),
-              ),
+        child: RepaintBoundary(
+          child: cardBody,
+        ),
       ),
     );
   }
@@ -907,5 +771,96 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       }
       return null;
     });
+  }
+}
+
+class _ProgressBar extends StatelessWidget {
+  final DownloadTask task;
+  final bool compact;
+  final bool isDark;
+  final Color statusColor;
+
+  const _ProgressBar({
+    required this.task,
+    required this.compact,
+    required this.isDark,
+    required this.statusColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final showSplitBar =
+        (task.status == DownloadStatus.downloading ||
+            task.status == DownloadStatus.paused) &&
+        task.chunks.isNotEmpty &&
+        task.chunks.length > 1;
+
+    if (showSplitBar) {
+      return Row(
+        children: List.generate(task.chunks.length, (index) {
+          final chunkProgress = task.chunks[index].clamp(0.0, 1.0);
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: index == 0 ? 0.0 : 2.0,
+                right: index == task.chunks.length - 1 ? 0.0 : 2.0,
+              ),
+              child: Stack(
+                children: [
+                  Container(
+                    height: compact ? 4 : 6,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  if (chunkProgress > 0)
+                    AnimatedFractionallySizedBox(
+                      widthFactor: chunkProgress,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      child: Container(
+                        height: compact ? 4 : 6,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          color: statusColor.withValues(alpha: 0.85),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }),
+      );
+    }
+
+    return Stack(
+      children: [
+        Container(
+          height: compact ? 4 : 6,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isDark
+                ? AppTheme.glassBorder
+                : AppTheme.lightGlassBorder,
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        if (task.progress > 0)
+          FractionallySizedBox(
+            widthFactor: task.progress.clamp(0.0, 1.0),
+            child: Container(
+              height: compact ? 4 : 6,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: statusColor.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

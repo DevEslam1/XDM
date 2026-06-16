@@ -70,7 +70,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
+    final isDark = context.read<SettingsProvider>().isDarkMode;
 
     Color color;
     String label;
@@ -144,7 +144,36 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
     if (isPulseActive) {
       return AnimatedBuilder(
         animation: _pulseAnimation!,
-        builder: (context, child) => chipContent,
+        builder: (context, child) {
+          final pulse = _pulseAnimation!.value;
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: color.withValues(alpha: 0.45 * pulse),
+                width: 0.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.08 * pulse),
+                  blurRadius: 6.0,
+                  spreadRadius: 0.5,
+                ),
+              ],
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+            ),
+          );
+        },
       );
     }
 

@@ -1568,7 +1568,7 @@ class DownloadProvider extends ChangeNotifier {
 
   void _startSchedulingTimer() {
     _schedulingTimer?.cancel();
-    _schedulingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _schedulingTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _checkScheduledDownloads();
     });
   }
@@ -1645,7 +1645,7 @@ class DownloadProvider extends ChangeNotifier {
   void _startWidgetTimer() {
     _widgetTimer?.cancel();
     if (downloadingTasksCount > 0 || seedingTasksCount > 0) {
-      _widgetTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      _widgetTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
         _updateTelemetryWidget();
         BackgroundService.sendHeartbeat();
         _updateSeedingSpeeds();

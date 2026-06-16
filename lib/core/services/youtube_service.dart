@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:logging/logging.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
@@ -299,7 +301,7 @@ class YoutubeService {
     if (playlistId == null) return null;
 
     try {
-      final playlist = await _yt.playlists.get(playlistId);
+      final playlist = await _yt.playlists.get(playlistId).timeout(const Duration(seconds: 30));
       return {
         'id': playlist.id.value,
         'title': playlist.title,
@@ -307,7 +309,8 @@ class YoutubeService {
         'videoCount': playlist.videoCount ?? 0,
         'thumbnailUrl': playlist.thumbnails.highResUrl,
       };
-    } catch (_) {
+    } catch (e) {
+      Logger.root.warning('YoutubeService.getPlaylistInfo: $e');
       return null;
     }
   }
@@ -320,7 +323,8 @@ class YoutubeService {
 
     try {
       final videos = <Map<String, dynamic>>[];
-      await for (final video in _yt.playlists.getVideos(playlistId)) {
+      final stream = _yt.playlists.getVideos(playlistId);
+      await for (final video in stream.timeout(const Duration(seconds: 60))) {
         videos.add({
           'id': video.id.value,
           'title': video.title,
@@ -331,7 +335,11 @@ class YoutubeService {
         });
       }
       return videos;
-    } catch (_) {
+    } on TimeoutException {
+      Logger.root.warning('YoutubeService.getPlaylistVideos: timed out after 60s');
+      return [];
+    } catch (e) {
+      Logger.root.warning('YoutubeService.getPlaylistVideos: $e');
       return [];
     }
   }

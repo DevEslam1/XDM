@@ -164,7 +164,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     return Scaffold(
       backgroundColor: isDark ? AppTheme.background : AppTheme.lightBackground,
       extendBody: true,
-      body: screenType != ScreenType.phone
+      body: screenType == ScreenType.desktop
           ? Row(
               children: [
                 _buildNavigationRail(settings, downloadProvider, isDark, isRtl, currentIndex),
@@ -174,71 +174,170 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
             )
           : bodyContent,
       bottomNavigationBar: screenType == ScreenType.phone
-          ? AnimatedSlide(
-              offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.0),
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              child: ClipRRect(
-                borderRadius: settings.classicUi
-                    ? BorderRadius.zero
-                    : const BorderRadius.vertical(top: Radius.circular(24)),
-                child: DmxBackdropFilter(
-                  sigmaX: 15,
-                  sigmaY: 15,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: settings.classicUi
-                          ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                          : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
-                      borderRadius: settings.classicUi
-                          ? BorderRadius.zero
-                          : const BorderRadius.vertical(top: Radius.circular(24)),
-                      border: Border(
-                        top: BorderSide(
-                          color: settings.classicUi
-                              ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                              : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
-                          width: settings.classicUi ? 1.0 : 0.6,
-                        ),
+          ? _buildPhoneBottomNavigationBar(
+              context, settings, downloadProvider, isDark, isRtl, currentIndex)
+          : screenType == ScreenType.tablet
+              ? _buildTabletFloatingBottomNavigationBar(
+                  context, settings, downloadProvider, isDark, isRtl, currentIndex)
+              : null,
+    );
+  }
+
+  Widget _buildPhoneBottomNavigationBar(
+    BuildContext context,
+    SettingsProvider settings,
+    DownloadProvider downloadProvider,
+    bool isDark,
+    bool isRtl,
+    int currentIndex,
+  ) {
+    return AnimatedSlide(
+      offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: ClipRRect(
+        borderRadius: settings.classicUi
+            ? BorderRadius.zero
+            : const BorderRadius.vertical(top: Radius.circular(24)),
+        child: DmxBackdropFilter(
+          sigmaX: 15,
+          sigmaY: 15,
+          child: Container(
+            decoration: BoxDecoration(
+              color: settings.classicUi
+                  ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                  : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+              borderRadius: settings.classicUi
+                  ? BorderRadius.zero
+                  : const BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border(
+                top: BorderSide(
+                  color: settings.classicUi
+                      ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                      : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                  width: settings.classicUi ? 1.0 : 0.6,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              child: Directionality(
+                textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+                child: Container(
+                  height: 68,
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(
+                        index: 0,
+                        icon: Icons.file_download_outlined,
+                        activeIcon: Icons.file_download,
+                        label: L10n.of(context, 'title_transmissions'),
                       ),
-                    ),
-                    child: SafeArea(
-                      child: Directionality(
-                        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                        child: Container(
-                          height: 68,
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _buildNavItem(
-                                index: 0,
-                                icon: Icons.file_download_outlined,
-                                activeIcon: Icons.file_download,
-                                label: L10n.of(context, 'title_transmissions'),
-                              ),
-                              _buildNavItem(
-                                index: 1,
-                                icon: Icons.language_outlined,
-                                activeIcon: Icons.language,
-                                label: L10n.of(context, 'title_browser'),
-                              ),
-                              _buildNavItem(
-                                index: 2,
-                                icon: Icons.settings_outlined,
-                                activeIcon: Icons.settings_rounded,
-                                label: L10n.of(context, 'title_config'),
-                              ),
-                            ],
-                          ),
-                        ),
+                      _buildNavItem(
+                        index: 1,
+                        icon: Icons.language_outlined,
+                        activeIcon: Icons.language,
+                        label: L10n.of(context, 'title_browser'),
                       ),
-                    ),
+                      _buildNavItem(
+                        index: 2,
+                        icon: Icons.settings_outlined,
+                        activeIcon: Icons.settings_rounded,
+                        label: L10n.of(context, 'title_config'),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            )
-          : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabletFloatingBottomNavigationBar(
+    BuildContext context,
+    SettingsProvider settings,
+    DownloadProvider downloadProvider,
+    bool isDark,
+    bool isRtl,
+    int currentIndex,
+  ) {
+    return AnimatedSlide(
+      offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.8),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOutCubic,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 24, left: 32, right: 32),
+          alignment: Alignment.bottomCenter,
+          height: 70,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 460),
+            decoration: settings.classicUi
+                ? BoxDecoration(
+                    color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                      width: 1.0,
+                    ),
+                  )
+                : BoxDecoration(
+                    color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                      width: 0.8,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.15),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: DmxBackdropFilter(
+                sigmaX: 15,
+                sigmaY: 15,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(
+                        index: 0,
+                        icon: Icons.file_download_outlined,
+                        activeIcon: Icons.file_download,
+                        label: L10n.of(context, 'title_transmissions'),
+                      ),
+                      _buildNavItem(
+                        index: 1,
+                        icon: Icons.language_outlined,
+                        activeIcon: Icons.language,
+                        label: L10n.of(context, 'title_browser'),
+                      ),
+                      _buildNavItem(
+                        index: 2,
+                        icon: Icons.settings_outlined,
+                        activeIcon: Icons.settings_rounded,
+                        label: L10n.of(context, 'title_config'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 

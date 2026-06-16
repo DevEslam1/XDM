@@ -80,11 +80,23 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       final results = await Future.wait([infoFuture, videosFuture]);
 
       if (!mounted) return;
+      final info = results[0] as Map<String, dynamic>?;
+      final videos = (results[1] as List<Map<String, dynamic>>?) ?? [];
+
       setState(() {
-        _playlistInfo = results[0] as Map<String, dynamic>?;
-        _videos = (results[1] as List<Map<String, dynamic>>?) ?? [];
+        _playlistInfo = info;
+        _videos = videos;
         _isLoading = false;
-        if (_videos.isEmpty) {
+        if (videos.isEmpty && info != null) {
+          final count = info['videoCount'] as int? ?? 0;
+          if (count > 0) {
+            _errorMessage =
+                'Could not load video list for this playlist ($count videos). '
+                'Try again or use the browser to add videos individually.';
+          } else {
+            _errorMessage = 'No videos found in this playlist.';
+          }
+        } else if (videos.isEmpty) {
           _errorMessage = 'No videos found in this playlist.';
         }
       });
@@ -92,7 +104,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to load playlist: $e';
+        _errorMessage = 'Failed to load playlist. Check the URL and try again.';
       });
     }
   }
@@ -118,6 +130,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final savePath = settings.customDownloadPath ?? '';
 
     int completed = 0;
+    int failed = 0;
 
     for (final video in selectedVideos) {
       if (!mounted) break;
@@ -141,9 +154,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
             savePath: savePath,
             downloadPageUrl: widget.playlistUrl,
           );
+        } else {
+          failed++;
         }
       } catch (_) {
-        // Skip failed individual video — continue with the rest
+        failed++;
       }
 
       completed++;
@@ -153,6 +168,15 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     }
 
     if (mounted) {
+      if (failed > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$failed video(s) failed (stream not available).'),
+            backgroundColor: Colors.orange.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
       Navigator.pop(
         context,
         PlaylistDownloadResult(
