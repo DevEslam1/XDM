@@ -93,12 +93,12 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
       }
 
       final jsonStr = const JsonEncoder.withIndent('  ').convert(exportData);
-      await Share.share(
-        jsonStr,
+      await SharePlus.instance.share(ShareParams(
+        text: jsonStr,
         subject: _selectedTab == 0
             ? 'XDM Surfing History'
             : 'XDM Download History',
-      );
+      ));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

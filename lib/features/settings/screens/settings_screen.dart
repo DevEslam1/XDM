@@ -264,7 +264,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     if (password == null) return;
 
     final jsonStr = provider.exportBackupJson(password: password);
-    await Share.share(jsonStr, subject: 'XDM Backup Signal Logs');
+    await SharePlus.instance.share(ShareParams(text: jsonStr, subject: 'XDM Backup Signal Logs'));
   }
 
   void _importBackup(BuildContext context, SettingsProvider settings) async {

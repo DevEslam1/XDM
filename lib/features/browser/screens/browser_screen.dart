@@ -816,7 +816,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       case 'share':
         final url = _urlController.text.trim();
         if (url.isNotEmpty) {
-          await Share.share(url, subject: activeTab.title);
+          await SharePlus.instance.share(ShareParams(text: url, subject: activeTab.title));
         }
         break;
       case 'desktop':
