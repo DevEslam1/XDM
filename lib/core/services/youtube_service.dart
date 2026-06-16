@@ -290,6 +290,29 @@ class YoutubeService {
       });
     }
 
+    // Combined streams (video-only + best audio-only) for higher qualities
+    if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
+      final sortedAudio = manifest.audioOnly.toList()
+        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+      final bestAudio = sortedAudio.first;
+      for (final stream in manifest.videoOnly) {
+        final qLabel = _formatQuality(stream.videoQuality);
+        list.add({
+          'src': stream.url.toString(),
+          'audioSrc': bestAudio.url.toString(),
+          'label': 'Video: $qLabel + Audio (Best)',
+          'size': stream.size.totalBytes + bestAudio.size.totalBytes,
+          'ext': stream.container.name,
+          'title': title,
+          'quality': qLabel,
+          'type': 'combined',
+          'videoSize': stream.size.totalBytes,
+          'audioSize': bestAudio.size.totalBytes,
+          'audioExt': bestAudio.container.name,
+        });
+      }
+    }
+
     return list;
   }
 
@@ -416,42 +439,96 @@ class YoutubeService {
     }
 
     // For muxed streams, find the requested quality or best available
-    if (manifest.muxed.isEmpty) return null;
-
-    final targetQualities = switch (qualityPreset) {
-      '360p' => ['360p', '480p', '240p', '720p'],
-      '480p' => ['480p', '360p', '720p', '240p'],
-      '720p' => ['720p', '480p', '1080p', '360p'],
-      _ => <String>[], // best_muxed — use the highest available
-    };
-
     MuxedStreamInfo? chosen;
-    if (targetQualities.isNotEmpty) {
-      for (final target in targetQualities) {
-        for (final stream in manifest.muxed) {
-          if (_formatQuality(stream.videoQuality) == target) {
-            chosen = stream;
-            break;
+
+    if (manifest.muxed.isNotEmpty) {
+      final targetQualities = switch (qualityPreset) {
+        '360p' => ['360p', '480p', '240p', '720p'],
+        '480p' => ['480p', '360p', '720p', '240p'],
+        '720p' => ['720p', '480p', '1080p', '360p'],
+        _ => <String>[], // best_muxed — use the highest available
+      };
+
+      if (targetQualities.isNotEmpty) {
+        for (final target in targetQualities) {
+          for (final stream in manifest.muxed) {
+            if (_formatQuality(stream.videoQuality) == target) {
+              chosen = stream;
+              break;
+            }
           }
+          if (chosen != null) break;
         }
-        if (chosen != null) break;
+      }
+
+      chosen ??= (manifest.muxed.toList()
+            ..sort((a, b) => b.videoQuality.index.compareTo(a.videoQuality.index)))
+          .first;
+    }
+
+    // If muxed found, return it
+    if (chosen != null) {
+      final qLabel = _formatQuality(chosen.videoQuality);
+      return {
+        'src': chosen.url.toString(),
+        'label': 'Video: $qLabel (Muxed)',
+        'size': chosen.size.totalBytes,
+        'ext': chosen.container.name,
+        'title': title,
+        'type': 'muxed',
+        'quality': qLabel,
+      };
+    }
+
+    // Fallback: combine video-only + audio-only for the requested quality
+    if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
+      final targetQualities = switch (qualityPreset) {
+        '360p' => ['360p', '480p', '240p', '720p'],
+        '480p' => ['480p', '360p', '720p', '240p'],
+        '720p' => ['720p', '480p', '1080p', '360p'],
+        _ => <String>[],
+      };
+
+      VideoOnlyStreamInfo? chosenVideo;
+      if (targetQualities.isNotEmpty) {
+        for (final target in targetQualities) {
+          for (final stream in manifest.videoOnly) {
+            if (_formatQuality(stream.videoQuality) == target) {
+              chosenVideo = stream;
+              break;
+            }
+          }
+          if (chosenVideo != null) break;
+        }
+      } else {
+        // best_muxed — use highest video-only
+        final sorted = manifest.videoOnly.toList()
+          ..sort((a, b) => b.videoQuality.index.compareTo(a.videoQuality.index));
+        chosenVideo = sorted.first;
+      }
+
+      if (chosenVideo != null) {
+        final sortedAudio = manifest.audioOnly.toList()
+          ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+        final bestAudio = sortedAudio.first;
+        final qLabel = _formatQuality(chosenVideo.videoQuality);
+        return {
+          'src': chosenVideo.url.toString(),
+          'audioSrc': bestAudio.url.toString(),
+          'label': 'Video: $qLabel + Audio (Best)',
+          'size': chosenVideo.size.totalBytes + bestAudio.size.totalBytes,
+          'videoSize': chosenVideo.size.totalBytes,
+          'audioSize': bestAudio.size.totalBytes,
+          'ext': chosenVideo.container.name,
+          'audioExt': bestAudio.container.name,
+          'title': title,
+          'type': 'combined',
+          'quality': qLabel,
+        };
       }
     }
 
-    chosen ??= (manifest.muxed.toList()
-          ..sort((a, b) => b.videoQuality.index.compareTo(a.videoQuality.index)))
-        .first;
-
-    final qLabel = _formatQuality(chosen.videoQuality);
-    return {
-      'src': chosen.url.toString(),
-      'label': 'Video: $qLabel (Muxed)',
-      'size': chosen.size.totalBytes,
-      'ext': chosen.container.name,
-      'title': title,
-      'type': 'muxed',
-      'quality': qLabel,
-    };
+    return null;
   }
 
   // ──────────────────── Closed Captions ─────────────────────────────

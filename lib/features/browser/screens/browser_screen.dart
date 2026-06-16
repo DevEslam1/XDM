@@ -96,6 +96,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final ScrollController _dashboardScrollController = ScrollController();
   static const String _snifferPrefKey = 'browserSnifferEnabled';
   bool _isSnifferEnabled = true;
+  bool _lastZoomEnabled = false; // Cached to avoid redundant enableZoom calls
 
   static const String _longPressChannel = 'XDM_LongPress';
   static const String _kLongPressScript = '''
@@ -223,8 +224,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         if (loadedTabs.isNotEmpty) {
           if (mounted) {
             setState(() {
-              _tabs.clear();
-              _tabs.addAll(loadedTabs);
+              _tabs
+                ..clear()
+                ..addAll(loadedTabs);
               _currentTabIndex = savedTabIndex.clamp(0, _tabs.length - 1);
               final activeTab = _tabs[_currentTabIndex];
               _urlController.text = activeTab.isHome ? '' : activeTab.url;
@@ -236,6 +238,17 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       } catch (e) {
         debugPrint('Error restoring tabs: $e');
       }
+    }
+
+    // Fallback: create a new blank tab
+    if (mounted) {
+      final fallback = _createNewTab();
+      setState(() {
+        _tabs
+          ..clear()
+          ..add(fallback);
+        _currentTabIndex = 0;
+      });
     }
   }
 
@@ -267,10 +280,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _dashboardScrollController.addListener(_onDashboardScroll);
 
     // Create the first tab
-    final initialTab = _createNewTab();
-    _tabs.add(initialTab);
-
-    // Restore tabs from previous session
+    // Restore tabs from previous session; _restoreTabs() creates tabs as needed
     _restoreTabs();
 
     // Auto update adblock filters on browser launch
@@ -365,7 +375,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
-            _saveTabs();
           },
           onPageFinished: (url) {
             if (mounted) {
@@ -374,18 +383,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _detectedDownloadUrls.remove(tab.id);
               });
 
-              if (!tab.isIncognito &&
-                  !settings.incognitoEnabled &&
-                  settings.saveBrowserHistory) {
-                _recordHistory(url);
-              }
-
               tab.controller.getTitle().then((t) {
                 if (t != null && t.isNotEmpty && mounted) {
                   setState(() {
                     tab.title = t;
                   });
-                  _saveTabs();
 
                   if (!tab.isIncognito &&
                       !settings.incognitoEnabled &&
@@ -423,11 +425,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   .catchError((_) {});
             }
 
-            _injectLongPressScriptToTab(tab);
-            _injectAdBlocker(tab);
-            _injectCustomJsCss(tab);
             _updateNavState();
-            _saveTabs();
 
             // Trigger background DOM media scanner
             Future.delayed(const Duration(milliseconds: 1000), () {
@@ -455,12 +453,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   }
                 });
 
-                // Clear cached download/playlist tags on dynamic navigation & trigger scan
+                // Clear cached download/playlist tags on dynamic navigation
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedPlaylistUrls.remove(tab.id);
                 _ytDetectionFailed.remove(tab.url);
-                _scanPageMedia(tab);
-                _saveTabs();
 
                 // Fetch new page title after a short delay for SPA rendering
                 Future.delayed(const Duration(milliseconds: 1000), () {
@@ -470,22 +466,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         setState(() {
                           tab.title = t;
                         });
-                        _saveTabs();
-
-                        if (!tab.isIncognito &&
-                            !settings.incognitoEnabled &&
-                            settings.saveBrowserHistory) {
-                          _recordHistory(cleanUrl, title: t);
-                        }
                       }
                     });
                   }
                 });
-              }
-              if (!tab.isIncognito &&
-                  !settings.incognitoEnabled &&
-                  settings.saveBrowserHistory) {
-                _recordHistory(change.url!);
               }
             }
           },
@@ -2247,7 +2231,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _detectedPlaylistUrls.containsKey(activeTab.id));
 
     // Reactively ensure zoom configuration matches settings changes
-    activeTab.controller.enableZoom(settings.pinchToZoom);
+    if (settings.pinchToZoom != _lastZoomEnabled) {
+      _lastZoomEnabled = settings.pinchToZoom;
+      activeTab.controller.enableZoom(settings.pinchToZoom);
+    }
 
     return PopScope(
       canPop: downloadProvider.activeTabIndex != 1,

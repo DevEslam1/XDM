@@ -860,7 +860,17 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
     if (YoutubeService.isYoutubeVideoUrl(url)) {
       if (!mounted) return;
       final stream = await YoutubeQualitySheet.show(context, url);
-      if (stream != null && mounted) {
+      if (!mounted) return;
+      if (stream == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      if (stream['type'] == 'combined') {
+        // Handled directly inside the sheet; close add screen
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      if (mounted) {
         final title = stream['title'] as String? ?? 'YouTube Video';
         final ext = stream['ext'] as String? ?? 'mp4';
         setState(() {

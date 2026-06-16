@@ -141,19 +141,52 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       try {
         final streamInfo = await YoutubeService.getStreamForVideo(videoId, _qualityPreset);
         if (streamInfo != null && mounted) {
-          final ext = streamInfo['ext'] as String? ?? 'mp4';
-          final fileName = '$videoTitle.$ext';
-          final size = streamInfo['size'] as int? ?? 0;
-          final streamUrl = streamInfo['src'] as String;
+          final type = streamInfo['type'] as String? ?? 'muxed';
 
-          await provider.addDownload(
-            name: fileName,
-            url: streamUrl,
-            size: size,
-            category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
-            savePath: savePath,
-            downloadPageUrl: widget.playlistUrl,
-          );
+          if (type == 'combined') {
+            // Combined: create separate video + audio downloads
+            final qLabel = streamInfo['quality'] as String? ?? 'HD';
+            final ext = streamInfo['ext'] as String? ?? 'mp4';
+            final audioExt = streamInfo['audioExt'] as String? ?? 'm4a';
+            final videoUrl = streamInfo['src'] as String;
+            final audioUrl = streamInfo['audioSrc'] as String;
+            final videoSize = streamInfo['videoSize'] as int? ?? 0;
+            final audioSize = streamInfo['audioSize'] as int? ?? 0;
+
+            final videoName = '$videoTitle [$qLabel video].$ext';
+            await provider.addDownload(
+              name: videoName,
+              url: videoUrl,
+              size: videoSize,
+              category: 'Video',
+              savePath: savePath,
+              downloadPageUrl: widget.playlistUrl,
+            );
+
+            final audioName = '$videoTitle [$qLabel audio].$audioExt';
+            await provider.addDownload(
+              name: audioName,
+              url: audioUrl,
+              size: audioSize,
+              category: 'Audio',
+              savePath: savePath,
+              downloadPageUrl: widget.playlistUrl,
+            );
+          } else {
+            final ext = streamInfo['ext'] as String? ?? 'mp4';
+            final fileName = '$videoTitle.$ext';
+            final size = streamInfo['size'] as int? ?? 0;
+            final streamUrl = streamInfo['src'] as String;
+
+            await provider.addDownload(
+              name: fileName,
+              url: streamUrl,
+              size: size,
+              category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
+              savePath: savePath,
+              downloadPageUrl: widget.playlistUrl,
+            );
+          }
         } else {
           failed++;
         }

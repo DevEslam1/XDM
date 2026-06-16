@@ -7,10 +7,12 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 
 /// A bottom sheet that fetches available YouTube streams for a single video
 /// and lets the user pick one. Returns the selected stream map via Navigator.pop.
+/// For 'combined' type streams, downloads are created directly from the sheet.
 class YoutubeQualitySheet extends StatefulWidget {
   final String videoUrl;
   const YoutubeQualitySheet({super.key, required this.videoUrl});
@@ -65,6 +67,12 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     }
   }
 
+  /// Extracts numeric height from a quality label like "720p" or "1080p".
+  int _parseQuality(String q) {
+    final match = RegExp(r'(\d+)').firstMatch(q);
+    return match != null ? int.parse(match.group(1)!) : 0;
+  }
+
   IconData _iconForType(String type) {
     switch (type) {
       case 'muxed':
@@ -73,6 +81,8 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
         return Icons.audiotrack_outlined;
       case 'video_only':
         return Icons.videocam_outlined;
+      case 'combined':
+        return Icons.hd_outlined;
       default:
         return Icons.play_circle_outline;
     }
@@ -86,6 +96,8 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
         return isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
       case 'video_only':
         return isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+      case 'combined':
+        return isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
       default:
         return isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     }
@@ -103,6 +115,12 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     final muxed = _streams.where((s) => s['type'] == 'muxed').toList();
     final audio = _streams.where((s) => s['type'] == 'audio').toList();
     final videoOnly = _streams.where((s) => s['type'] == 'video_only').toList();
+    final combined = _streams.where((s) => s['type'] == 'combined').toList()
+      ..sort((a, b) {
+        final aQuality = _parseQuality(a['quality'] as String? ?? '');
+        final bQuality = _parseQuality(b['quality'] as String? ?? '');
+        return bQuality.compareTo(aQuality); // descending
+      });
 
     final videoTitle = _streams.isNotEmpty ? (_streams.first['title'] as String? ?? 'YouTube Video') : 'YouTube Video';
 
@@ -247,6 +265,13 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                         controller: scrollController,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
+                          if (combined.isNotEmpty) ...[
+                            _sectionHeader(context, 'VIDEO + AUDIO (BEST QUALITY)', Icons.hd_outlined,
+                                isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber, isDark,
+                                trailing: _recommendBadge(isDark)),
+                            ...combined.map((s) => _streamTile(context, s, isDark, settings)),
+                            const SizedBox(height: 12),
+                          ],
                           if (muxed.isNotEmpty) ...[
                             _sectionHeader(context, 'VIDEO + AUDIO (MUXED)', Icons.ondemand_video_outlined, accent, isDark),
                             ...muxed.map((s) => _streamTile(context, s, isDark, settings)),
@@ -276,7 +301,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     );
   }
 
-  Widget _sectionHeader(BuildContext context, String title, IconData icon, Color color, bool isDark) {
+  Widget _sectionHeader(BuildContext context, String title, IconData icon, Color color, bool isDark, {Widget? trailing}) {
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
       child: Row(
@@ -292,9 +317,86 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
               fontSize: 10,
             ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing,
+          ],
         ],
       ),
     );
+  }
+
+  Widget _recommendBadge(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber).withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber).withValues(alpha: 0.5),
+          width: 0.6,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star, size: 9, color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber),
+          const SizedBox(width: 3),
+          Text(
+            'RECOMMENDED',
+            style: TextStyle(
+              color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleCombinedDownload(BuildContext context, Map<String, dynamic> stream, bool isDark, SettingsProvider settings) async {
+    final provider = Provider.of<DownloadProvider>(context, listen: false);
+    final title = stream['title'] as String? ?? 'YouTube Video';
+    final qLabel = stream['quality'] as String? ?? 'HD';
+    final ext = stream['ext'] as String? ?? 'mp4';
+    final audioExt = stream['audioExt'] as String? ?? 'm4a';
+    final videoUrl = stream['src'] as String;
+    final audioUrl = stream['audioSrc'] as String;
+    final videoSize = stream['videoSize'] as int? ?? 0;
+    final audioSize = stream['audioSize'] as int? ?? 0;
+    final savePath = settings.customDownloadPath ?? '';
+
+    // Create video download task
+    final videoName = '$title [$qLabel video].$ext';
+    await provider.addDownload(
+      name: videoName,
+      url: videoUrl,
+      size: videoSize,
+      category: 'Video',
+      savePath: savePath,
+    );
+
+    // Create audio download task
+    final audioName = '$title [$qLabel audio].$audioExt';
+    await provider.addDownload(
+      name: audioName,
+      url: audioUrl,
+      size: audioSize,
+      category: 'Audio',
+      savePath: savePath,
+    );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Downloading $qLabel video + audio'),
+        backgroundColor: Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    Navigator.pop(context, null);
   }
 
   Widget _streamTile(BuildContext context, Map<String, dynamic> stream, bool isDark, SettingsProvider settings) {
@@ -339,7 +441,11 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
             trailing: Icon(Icons.download_rounded, color: color, size: 20),
             onTap: () {
               runHaptic(settings);
-              Navigator.pop(context, stream);
+              if (type == 'combined') {
+                _handleCombinedDownload(context, stream, isDark, settings);
+              } else {
+                Navigator.pop(context, stream);
+              }
             },
           ),
         ),
