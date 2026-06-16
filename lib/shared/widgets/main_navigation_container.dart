@@ -9,7 +9,7 @@ import '../../core/utils/responsive.dart';
 import '../../features/add_download/screens/add_screen.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/home/screens/home_screen.dart';
-import '../../features/onboarding/screens/biometric_lock_screen.dart';
+
 import '../../features/settings/provider/settings_provider.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/downloads/provider/download_provider.dart';
@@ -26,8 +26,7 @@ class MainNavigationContainer extends StatefulWidget {
 }
 
 class _MainNavigationContainerState extends State<MainNavigationContainer> with WidgetsBindingObserver {
-  bool _isLocked = false;
-  bool _isLockScreenOpen = false;
+
   String? _lastClipboardUrl;
 
   final List<Widget> _screens = [
@@ -53,58 +52,12 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    if (state == AppLifecycleState.paused) {
-      if (settings.biometricLock) {
-        _isLocked = true;
-      }
-    } else if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.resumed) {
       _checkClipboard();
-      if (settings.biometricLock && _isLocked && !_isLockScreenOpen && mounted) {
-        _showLockScreen();
-      }
     }
   }
 
-  Future<void> _showLockScreen() async {
-    if (!mounted) return;
-    setState(() {
-      _isLockScreenOpen = true;
-    });
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
 
-    final result = await Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => BiometricLockScreen(
-          isDark: isDark,
-          isRtl: isRtl,
-        ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        barrierDismissible: false,
-      ),
-    );
-
-    // Always reset the "lock screen is open" flag, regardless of how the
-    // route was dismissed (success, back gesture, route replacement).
-    // Otherwise future lifecycle events won't re-prompt.
-    if (!mounted) return;
-    setState(() {
-      _isLockScreenOpen = false;
-    });
-
-    if (result == true) {
-      setState(() {
-        _isLocked = false;
-      });
-    }
-    // If result is not true, _isLocked stays true and the next
-    // lifecycle-resume will re-prompt the lock screen.
-  }
 
   void _onUrlReceived(String url) {
     // The share-intent callback fires on isolate-level events that can land

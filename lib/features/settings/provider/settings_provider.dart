@@ -17,7 +17,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _showOnboardingKey = 'showOnboarding';
   static const _classicUiKey = 'classicUi';
 
-  static const _biometricLockKey = 'biometricLock';
+
   static const _enableProxyKey = 'enableProxy';
   static const _proxyAddressKey = 'proxyAddress';
   static const _bypassSSLKey = 'bypassSSL_v2'; // v2: default true
@@ -78,7 +78,7 @@ class SettingsProvider extends ChangeNotifier {
   bool get classicUi => batterySaverMode ? true : _classicUi;
   bool batterySaverMode = false;
 
-  bool biometricLock = false;
+
   bool enableProxy = false;
   String proxyAddress = '';
   bool bypassSSL = true;
@@ -130,7 +130,7 @@ class SettingsProvider extends ChangeNotifier {
     _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
     batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
 
-    biometricLock = _prefs.getBool(_biometricLockKey) ?? biometricLock;
+
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
     proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
     // Bypass SSL enabled by default for broader compatibility
@@ -235,11 +235,7 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setBiometricLock(bool value) async {
-    biometricLock = value;
-    await _prefs.setBool(_biometricLockKey, value);
-    notifyListeners();
-  }
+
 
   Future<void> setEnableProxy(bool value) async {
     enableProxy = value;
@@ -465,7 +461,7 @@ class SettingsProvider extends ChangeNotifier {
     showOnboarding = true;
     _classicUi = false;
     batterySaverMode = false;
-    biometricLock = false;
+
     enableProxy = false;
     proxyAddress = '';
     bypassSSL = true;

@@ -126,8 +126,7 @@ class L10n {
       'settings_classic_ui': 'CLASSIC UI MODE',
       'settings_classic_ui_sub':
           'Switch to a flat native UI design styling',
-      'settings_biometric': 'BIOMETRIC APP LOCK',
-      'settings_biometric_sub': 'Verify identity before opening app',
+
       'settings_cleanup': 'AUTO-CLEANUP LOGS',
       'settings_cleanup_sub': 'Purge completed task histories',
       'settings_subfolders': 'CATEGORIZED DIRECTORIES',
@@ -276,8 +275,7 @@ class L10n {
       'settings_classic_ui': 'المظهر الكلاسيكي',
       'settings_classic_ui_sub':
           'التبديل إلى نمط واجهة مستخدم مسطح وبسيط',
-      'settings_biometric': 'قفل التطبيق البصمي',
-      'settings_biometric_sub': 'التحقق من الهوية قبل فتح التطبيق',
+
       'settings_cleanup': 'التنظيف التلقائي للسجلات',
       'settings_cleanup_sub': 'حذف تاريخ المهام المكتملة',
       'settings_subfolders': 'مجلدات التصنيفات الفرعية',

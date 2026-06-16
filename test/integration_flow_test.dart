@@ -7,16 +7,16 @@ import 'package:dmx/core/services/permission_service.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
-import 'package:dmx/features/onboarding/screens/biometric_lock_screen.dart';
-import 'package:flutter/material.dart';
+
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
-import 'package:provider/provider.dart';
 
-bool mockAuthResult = false;
+
+
 late String uniqueHivePath;
 
 class MockConnectivityPlatform extends ConnectivityPlatform {
@@ -152,26 +152,7 @@ void main() {
     Hive.init(uniqueHivePath);
     ConnectivityPlatform.instance = MockConnectivityPlatform();
 
-    const MethodChannel localAuthChannel = MethodChannel('plugins.flutter.io/local_auth');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      localAuthChannel,
-      (MethodCall methodCall) async {
-        if (methodCall.method == 'canCheckBiometrics') {
-          return true;
-        }
-        if (methodCall.method == 'isDeviceSupported') {
-          return true;
-        }
-        if (methodCall.method == 'authenticate') {
-          return mockAuthResult;
-        }
-        if (methodCall.method == 'getAvailableBiometrics') {
-          return <String>['fingerprint'];
-        }
-        return null;
-      },
-    );
+
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -225,65 +206,5 @@ void main() {
     expect(provider.tasks.first.status, anyOf(DownloadStatus.downloading, DownloadStatus.queued));
   });
 
-  testWidgets('BiometricLockScreen authentication flow', (WidgetTester tester) async {
-    mockAuthResult = true;
-    final (database, settings) = (await tester.runAsync(() => _setupServices()))!;
 
-    await tester.pumpWidget(ChangeNotifierProvider<SettingsProvider>.value(
-      value: settings,
-      child: MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) {
-              return ElevatedButton(
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const BiometricLockScreen(isDark: true, isRtl: false),
-                    ),
-                  );
-                  expect(result, isTrue);
-                },
-                child: const Text('Go'),
-              );
-            },
-          ),
-        ),
-      ),
-    ));
-
-    await tester.tap(find.text('Go'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(find.byType(BiometricLockScreen), findsNothing);
-  });
-
-  testWidgets('BiometricLockScreen auth failure shows retry screen', (WidgetTester tester) async {
-    mockAuthResult = false;
-    final (database, settings) = (await tester.runAsync(() => _setupServices()))!;
-
-    await tester.pumpWidget(ChangeNotifierProvider<SettingsProvider>.value(
-      value: settings,
-      child: const MaterialApp(
-        home: BiometricLockScreen(isDark: true, isRtl: false),
-      ),
-    ));
-    
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
-    expect(find.byType(BiometricLockScreen), findsOneWidget);
-    expect(find.textContaining('FAILED'), findsOneWidget);
-    
-    mockAuthResult = true;
-    await tester.tap(find.text('RETRY VERIFICATION'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 500));
-    
-    expect(find.byType(BiometricLockScreen), findsNothing);
-  });
 }
