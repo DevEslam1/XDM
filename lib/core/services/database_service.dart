@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../../features/downloads/models/download_task.dart';
@@ -19,11 +20,18 @@ class DatabaseService {
   }
 
   List<DownloadTask> loadTasks() {
-    return _downloadsBox.values
-        .whereType<Map>()
-        .map((value) => DownloadTask.fromMap(Map<String, dynamic>.from(value)))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final tasks = <DownloadTask>[];
+    for (final value in _downloadsBox.values) {
+      if (value is Map) {
+        try {
+          tasks.add(DownloadTask.fromMap(Map<String, dynamic>.from(value)));
+        } catch (e) {
+          // Log parsing error without crashing load
+          debugPrint('Error parsing DownloadTask from database: $e');
+        }
+      }
+    }
+    return tasks..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   Future<void> saveTask(DownloadTask task) {
@@ -47,11 +55,17 @@ class DatabaseService {
   }
 
   List<Bookmark> loadBookmarks() {
-    return _bookmarksBox.values
-        .whereType<Map>()
-        .map((value) => Bookmark.fromMap(Map<String, dynamic>.from(value)))
-        .toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final bookmarks = <Bookmark>[];
+    for (final value in _bookmarksBox.values) {
+      if (value is Map) {
+        try {
+          bookmarks.add(Bookmark.fromMap(Map<String, dynamic>.from(value)));
+        } catch (e) {
+          debugPrint('Error parsing Bookmark from database: $e');
+        }
+      }
+    }
+    return bookmarks..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   Future<void> saveBookmark(Bookmark bookmark) {
@@ -69,11 +83,15 @@ class DatabaseService {
   List<Map<String, dynamic>> loadBrowserHistory({int max = 200}) {
     final list = <Map<String, dynamic>>[];
     for (final key in _browserHistoryBox.keys) {
-      final val = _browserHistoryBox.get(key);
-      if (val is Map) {
-        final map = Map<String, dynamic>.from(val);
-        map['id'] = key.toString();
-        list.add(map);
+      try {
+        final val = _browserHistoryBox.get(key);
+        if (val is Map) {
+          final map = Map<String, dynamic>.from(val);
+          map['id'] = key.toString();
+          list.add(map);
+        }
+      } catch (e) {
+        debugPrint('Error loading browser history entry for key $key: $e');
       }
     }
     list.sort((a, b) {

@@ -688,6 +688,8 @@ class DownloadProvider extends ChangeNotifier {
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
     _pendingProgressUpdates.remove(id);
+    _retryTimers[id]?.cancel();
+    _retryTimers.remove(id);
 
     if (task.status == DownloadStatus.downloading) {
       final torrentId = _torrentIds[id];
@@ -859,6 +861,8 @@ class DownloadProvider extends ChangeNotifier {
     _lastDbSaveTimes.remove(id);
     _pendingProgressUpdates.remove(id);
     _retryCounts.remove(id);
+    _retryTimers[id]?.cancel();
+    _retryTimers.remove(id);
     _tasks.removeWhere((task) => task.id == id);
 
     final torrentId = _torrentIds[id];
@@ -1404,8 +1408,7 @@ class DownloadProvider extends ChangeNotifier {
                 current.url,
               );
               if (newUrl != null) {
-                await updateTaskUrl(current.id, newUrl);
-                _pumpQueue();
+                await updateTaskUrlAndResume(current.id, newUrl);
                 return;
               }
             } catch (e) {
@@ -1485,7 +1488,11 @@ class DownloadProvider extends ChangeNotifier {
     if (index == -1) return;
 
     _tasks[index] = updated;
-    await _databaseService.saveTask(updated);
+    try {
+      await _databaseService.saveTask(updated);
+    } catch (e) {
+      debugPrint('Error saving task to database: $e');
+    }
     _updateActualTorrentUploadLimit();
     notifyListeners();
   }

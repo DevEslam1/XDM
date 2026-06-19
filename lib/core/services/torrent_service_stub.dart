@@ -6,6 +6,7 @@ class TorrentService {
   static bool get isInitialized => false;
 
   static Future<void> init() async {}
+  static Future<void> dispose() async {}
 
   static int addMagnet(String magnetUri, String savePath) => -1;
   static int addTorrentFile(String filePath, String savePath) => -1;

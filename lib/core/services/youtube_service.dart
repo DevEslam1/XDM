@@ -702,10 +702,12 @@ class _InnerTubeFallback {
       'https://www.youtube.com/youtubei/v1/browse?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 
   static final _log = Logger('YoutubeService._InnerTubeFallback');
-  static final HttpClient _client = HttpClient();
+  static HttpClient? __client;
+  static HttpClient get _client => __client ??= HttpClient();
 
   static void close() {
-    _client.close(force: true);
+    __client?.close(force: true);
+    __client = null;
   }
 
   static Map<String, dynamic> _clientContext() => {

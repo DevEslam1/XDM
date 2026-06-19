@@ -2805,24 +2805,25 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     GestureDetector(
                       onTap: () => _focusNode.unfocus(),
                       behavior: HitTestBehavior.translucent,
-                      child: Builder(
-                        builder: (context) {
-                          if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) {
-                            return const SizedBox.shrink();
-                          }
-                          final tab = _tabs[_currentTabIndex];
-                          if (tab.isHome) {
-                            return Container(
-                              key: ValueKey('home_${tab.id}'),
-                              child: _buildHomeDashboard(context, settings),
-                            );
-                          } else {
-                            return Container(
-                              key: ValueKey('web_${tab.id}'),
-                              child: WebViewWidget(controller: tab.controller),
-                            );
-                          }
-                        },
+                      child: IndexedStack(
+                        index: _currentTabIndex >= 0 && _currentTabIndex < _tabs.length
+                            ? _currentTabIndex
+                            : 0,
+                        children: _tabs.isEmpty
+                            ? [const SizedBox.shrink()]
+                            : _tabs.map((tab) {
+                                if (tab.isHome) {
+                                  return Container(
+                                    key: ValueKey('home_${tab.id}'),
+                                    child: _buildHomeDashboard(context, settings),
+                                  );
+                                } else {
+                                  return Container(
+                                    key: ValueKey('web_${tab.id}'),
+                                    child: WebViewWidget(controller: tab.controller),
+                                  );
+                                }
+                              }).toList(),
                       ),
                     ),
 

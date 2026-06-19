@@ -69,7 +69,7 @@ class TorrentService {
 
   static void pauseTorrent(int id) {
     _startTrackingUpdates();
-    if (id >= 0 && _activeTorrentIds.contains(id)) {
+    if (id >= 0) {
       try {
         LibtorrentFlutter.instance.pauseTorrent(id);
       } catch (e) {
@@ -80,7 +80,7 @@ class TorrentService {
 
   static void resumeTorrent(int id) {
     _startTrackingUpdates();
-    if (id >= 0 && _activeTorrentIds.contains(id)) {
+    if (id >= 0) {
       try {
         LibtorrentFlutter.instance.resumeTorrent(id);
       } catch (e) {
@@ -91,7 +91,7 @@ class TorrentService {
 
   static void setFilePriorities(int id, List<int> priorities) {
     _startTrackingUpdates();
-    if (id >= 0 && _activeTorrentIds.contains(id)) {
+    if (id >= 0) {
       try {
         LibtorrentFlutter.instance.setFilePriorities(id, priorities);
       } catch (e) {
@@ -102,7 +102,7 @@ class TorrentService {
 
   static List<TorrentFileItem> getFiles(int id) {
     _startTrackingUpdates();
-    if (id >= 0 && _activeTorrentIds.contains(id)) {
+    if (id >= 0) {
       try {
         final files = LibtorrentFlutter.instance.getFiles(id);
         return files.map((f) => TorrentFileItem(
