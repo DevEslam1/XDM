@@ -10,7 +10,7 @@ class GeometricGridBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.read<SettingsProvider>();
+    final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final bgColor = isDark ? AppTheme.background : AppTheme.lightBackground;
 

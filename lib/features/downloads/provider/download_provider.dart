@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import '../../../core/services/torrent_service.dart';
+import '../../../core/services/youtube_service.dart';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -77,8 +78,34 @@ class DownloadProvider extends ChangeNotifier {
   bool _hasResolvedInitialConnectivity = false;
   Timer? _schedulingTimer;
   Timer? _widgetTimer;
-  Timer? _retryTimer;
+  final Map<String, Timer> _retryTimers = {};
+  final Map<String, Future<void>> _activeFutures = {};
   bool _queueProcessing = false;
+
+  bool _batchMode = false;
+  bool _needsNotify = false;
+
+  @override
+  void notifyListeners() {
+    if (_batchMode) {
+      _needsNotify = true;
+    } else {
+      super.notifyListeners();
+    }
+  }
+
+  void _startBatch() {
+    _batchMode = true;
+    _needsNotify = false;
+  }
+
+  void _endBatch() {
+    _batchMode = false;
+    if (_needsNotify) {
+      _needsNotify = false;
+      super.notifyListeners();
+    }
+  }
   SortOption _sortOption = SortOption.dateAdded;
   bool _sortAscending = false;
 
@@ -187,7 +214,7 @@ class DownloadProvider extends ChangeNotifier {
           if (cleanupDays > 0 &&
               (task.status == DownloadStatus.completed ||
                   task.status == DownloadStatus.failed)) {
-            final difference = now.difference(task.createdAt).inDays;
+            final difference = now.difference(task.completedAt ?? task.createdAt).inDays;
             if (difference >= cleanupDays) {
               toDelete.add(task);
               return false;
@@ -657,6 +684,10 @@ class DownloadProvider extends ChangeNotifier {
     await _flushPendingProgress(id);
 
     _retryCounts.remove(id);
+    _speedHistories.remove(id);
+    _lastProgressUpdateTimes.remove(id);
+    _lastDbSaveTimes.remove(id);
+    _pendingProgressUpdates.remove(id);
 
     if (task.status == DownloadStatus.downloading) {
       final torrentId = _torrentIds[id];
@@ -664,6 +695,7 @@ class DownloadProvider extends ChangeNotifier {
         TorrentService.pauseTorrent(torrentId);
       }
       _cancelTokens[id]?.cancel('paused');
+      _cancelTokens.remove(id);
     }
     await _setTask(
       task.copyWith(
@@ -713,25 +745,35 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<void> pauseAllTasks() async {
-    final active = _tasks
-        .where((task) =>
-            task.status == DownloadStatus.downloading ||
-            task.status == DownloadStatus.queued)
-        .toList();
-    for (final task in active) {
-      await pauseTask(task.id);
+    _startBatch();
+    try {
+      final active = _tasks
+          .where((task) =>
+              task.status == DownloadStatus.downloading ||
+              task.status == DownloadStatus.queued)
+          .toList();
+      for (final task in active) {
+        await pauseTask(task.id);
+      }
+      _pumpQueue();
+    } finally {
+      _endBatch();
     }
-    _pumpQueue();
   }
 
   Future<void> resumeAllTasks() async {
-    final resumable = _tasks
-        .where((task) =>
-            task.status == DownloadStatus.paused ||
-            task.status == DownloadStatus.failed)
-        .toList();
-    for (final task in resumable) {
-      await resumeTask(task.id);
+    _startBatch();
+    try {
+      final resumable = _tasks
+          .where((task) =>
+              task.status == DownloadStatus.paused ||
+              task.status == DownloadStatus.failed)
+          .toList();
+      for (final task in resumable) {
+        await resumeTask(task.id);
+      }
+    } finally {
+      _endBatch();
     }
   }
 
@@ -752,8 +794,13 @@ class DownloadProvider extends ChangeNotifier {
     await _flushPendingProgress(id);
 
     _retryCounts.remove(id);
+    _speedHistories.remove(id);
+    _lastProgressUpdateTimes.remove(id);
+    _lastDbSaveTimes.remove(id);
+    _pendingProgressUpdates.remove(id);
 
     _cancelTokens[id]?.cancel('cancelled');
+    _cancelTokens.remove(id);
 
     final torrentId = _torrentIds[id];
     if (torrentId != null) {
@@ -1151,7 +1198,7 @@ class DownloadProvider extends ChangeNotifier {
         task.fileName == fileNameFromUrl(task.url) ||
         task.fileName.startsWith('download_');
 
-    _downloadEngine
+    final downloadFuture = _downloadEngine
         .download(
           url: task.url,
           tempFilePath: task.tempFilePath,
@@ -1210,13 +1257,13 @@ class DownloadProvider extends ChangeNotifier {
                 : current.fileName;
 
             final newLocalPath = newFileName != current.fileName
-                ? p.join(p.dirname(current.localFilePath), newFileName)
+                ? p.join(p.dirname(current.localFilePath), safeFileName(newFileName))
                 : current.localFilePath;
 
             final newTempPath = newFileName != current.fileName
                 ? p.join(
                     p.dirname(current.tempFilePath),
-                    '$newFileName.dmxpart',
+                    '${safeFileName(newFileName)}.dmxpart',
                   )
                 : current.tempFilePath;
 
@@ -1282,7 +1329,9 @@ class DownloadProvider extends ChangeNotifier {
             if (now - lastDbSave >= 2000) {
               _lastDbSaveTimes[task.id] = now;
               _pendingProgressUpdates.remove(task.id);
-              _databaseService.saveTask(updatedTask);
+              _databaseService.saveTask(updatedTask).catchError((e) {
+                debugPrint('Failed to save task progress to database: $e');
+              });
             } else {
               _pendingProgressUpdates.add(task.id);
             }
@@ -1321,6 +1370,7 @@ class DownloadProvider extends ChangeNotifier {
             _notificationService.showDownloadComplete(
               notificationId: notificationId,
               title: task.fileName,
+              playSound: _settingsProvider.soundNotification,
             );
           }
         })
@@ -1340,6 +1390,27 @@ class DownloadProvider extends ChangeNotifier {
             }
             _notificationService.cancelNotification(notificationId);
             return;
+          }
+
+          // Check if YouTube link expired (403 Forbidden)
+          if (error is DioException &&
+              (error.response?.statusCode == 403 || error.message?.contains('403') == true) &&
+              current.downloadPageUrl != null &&
+              YoutubeService.extractVideoId(current.downloadPageUrl!) != null) {
+            debugPrint('Detected YouTube 403 error. Attempting to refresh stream URL...');
+            try {
+              final newUrl = await YoutubeService.refreshStreamUrl(
+                current.downloadPageUrl!,
+                current.url,
+              );
+              if (newUrl != null) {
+                await updateTaskUrl(current.id, newUrl);
+                _pumpQueue();
+                return;
+              }
+            } catch (e) {
+              debugPrint('Failed to refresh YouTube stream URL: $e');
+            }
           }
 
           final isRetryable = _isRetryableError(error);
@@ -1364,8 +1435,9 @@ class DownloadProvider extends ChangeNotifier {
               ),
             );
 
-            _retryTimer?.cancel();
-            _retryTimer = Timer(Duration(seconds: delaySeconds), () {
+            _retryTimers[task.id]?.cancel();
+            _retryTimers[task.id] = Timer(Duration(seconds: delaySeconds), () {
+              _retryTimers.remove(task.id);
               final checkedTask = _findTask(task.id);
               if (checkedTask != null &&
                   checkedTask.status == DownloadStatus.queued) {
@@ -1389,11 +1461,13 @@ class DownloadProvider extends ChangeNotifier {
               notificationId: notificationId,
               title: task.fileName,
               error: _errorMessage(error),
+              playSound: _settingsProvider.soundNotification,
             );
           }
         })
         .whenComplete(() {
           _cancelTokens.remove(task.id);
+          _activeFutures.remove(task.id);
           _pumpQueue();
           if (downloadingTasksCount == 0) {
             BackgroundService.stop();
@@ -1403,6 +1477,7 @@ class DownloadProvider extends ChangeNotifier {
           }
           _updateTelemetryWidget();
         });
+    _activeFutures[task.id] = downloadFuture;
   }
 
   Future<void> _setTask(DownloadTask updated) async {
@@ -1561,6 +1636,7 @@ class DownloadProvider extends ChangeNotifier {
           TorrentService.pauseTorrent(torrentId);
         }
         _cancelTokens[task.id]?.cancel('wifi_only_pause');
+        _cancelTokens.remove(task.id);
       }
       await _setTask(
         task.copyWith(
@@ -1690,14 +1766,14 @@ class DownloadProvider extends ChangeNotifier {
     var task = _tasks[taskIndex];
     if (task.threadCount == threadCount) return;
 
+    var activeIdx = taskIndex;
     final wasDownloading = task.status == DownloadStatus.downloading;
     if (wasDownloading) {
       await pauseTask(taskId);
       // Reload task state as it might have updated during pause
-      final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
-      if (updatedIdx != -1) {
-        task = _tasks[updatedIdx];
-      }
+      activeIdx = _tasks.indexWhere((t) => t.id == taskId);
+      if (activeIdx == -1) return;
+      task = _tasks[activeIdx];
     }
 
     if (task.downloadedBytes > 0) {
@@ -1726,7 +1802,7 @@ class DownloadProvider extends ChangeNotifier {
       );
     }
 
-    _tasks[taskIndex] = task;
+    _tasks[activeIdx] = task;
     await _databaseService.saveTask(task);
     notifyListeners();
     _updateTelemetryWidget();
@@ -1920,6 +1996,13 @@ class DownloadProvider extends ChangeNotifier {
     // Cancel active download if running
     _cancelTokens[id]?.cancel('restart');
     _cancelTokens.remove(id);
+
+    final activeFuture = _activeFutures[id];
+    if (activeFuture != null) {
+      try {
+        await activeFuture;
+      } catch (_) {}
+    }
 
     final torrentId = _torrentIds[id];
     if (torrentId != null) {
@@ -2153,7 +2236,10 @@ class DownloadProvider extends ChangeNotifier {
     _torrentUpdatesSubscription?.cancel();
     _connectivitySubscription?.cancel();
     _schedulingTimer?.cancel();
-    _retryTimer?.cancel();
+    for (final timer in _retryTimers.values) {
+      timer.cancel();
+    }
+    _retryTimers.clear();
     _widgetTimer?.cancel();
     for (final token in _cancelTokens.values) {
       token.cancel('provider disposed');

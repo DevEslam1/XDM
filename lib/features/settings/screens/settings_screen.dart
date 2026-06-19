@@ -346,18 +346,15 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.read<SettingsProvider>();
+    final settings = context.watch<SettingsProvider>();
     final isRtl = L10n.isRtl(context);
 
-    return Selector<SettingsProvider, ({int isDarkInt, bool classicUi})>(
-      selector: (_, s) => (isDarkInt: s.isDarkMode ? 1 : 0, classicUi: s.classicUi),
-      builder: (context, sel, _) {
-        final isDark = sel.isDarkInt == 1;
-        final classicUi = sel.classicUi;
-        final dividerColor = isDark
-            ? AppTheme.glassBorder
-            : AppTheme.lightGlassBorder;
-        final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final isDark = settings.isDarkMode;
+    final classicUi = settings.classicUi;
+    final dividerColor = isDark
+        ? AppTheme.glassBorder
+        : AppTheme.lightGlassBorder;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
     return GeometricGridBackground(
       child: Scaffold(
@@ -1200,8 +1197,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           ),
         ),
       ),
-    );
-      },
     );
   }
 

@@ -62,9 +62,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
   static const List<Map<String, String>> _qualityOptions = [
     {'value': 'best_muxed', 'label': 'Best Quality (Muxed)'},
-    {'value': '720p', 'label': '720p HD'},
-    {'value': '480p', 'label': '480p SD'},
-    {'value': '360p', 'label': '360p Low'},
+    {'value': '1080p', 'label': '1080p Full HD (Muxed)'},
+    {'value': '720p', 'label': '720p HD (Muxed)'},
+    {'value': '480p', 'label': '480p SD (Muxed)'},
+    {'value': '360p', 'label': '360p Low (Muxed)'},
     {'value': 'audio_only', 'label': 'Audio Only'},
   ];
 
@@ -597,7 +598,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 ),
                               ],
                             ),
-                            if (_qualityPreset == '720p' || _qualityPreset == '480p')
+                            if (_qualityPreset == '1080p' || _qualityPreset == '720p' || _qualityPreset == '480p')
                               Padding(
                                 padding: const EdgeInsets.only(top: 8, left: 60),
                                 child: Row(
@@ -611,8 +612,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                     Expanded(
                                       child: Text(
                                         L10n.isRtl(context)
-                                            ? 'ملاحظة: الجودات العالية قد يتم تحميلها كملفات فيديو وصوت منفصلة.'
-                                            : 'Note: HD qualities may download as separate video & audio files.',
+                                            ? 'ملاحظة: لضمان وجود الصوت والصورة معاً في ملف واحد، سيتم تحميل أفضل جودة مدمجة متاحة (غالباً 360p).'
+                                            : 'Note: To ensure audio + video together in one file, the best available merged quality will be downloaded (usually 360p).',
                                         style: TextStyle(
                                           color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                                           fontSize: 10,

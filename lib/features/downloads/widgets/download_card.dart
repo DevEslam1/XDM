@@ -25,6 +25,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
 
+    return Selector<DownloadProvider, DownloadTask>(
+      selector: (_, p) => p.taskById(task.id) ?? task,
+      builder: (context, task, child) {
+
     // Determine status colors
     Color statusColor;
     switch (task.status) {
@@ -617,6 +621,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
           child: cardBody,
         ),
       ),
+    );
+      },
     );
   }
 

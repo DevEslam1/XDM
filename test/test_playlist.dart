@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 // Test that the YoutubeService methods work with the fallback
 import 'package:dmx/core/services/youtube_service.dart';
 import 'package:logging/logging.dart';

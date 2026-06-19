@@ -286,8 +286,6 @@ class BrowserDownloadSheet extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             onPressed: () async {
-                              Navigator.pop(context);
-                              
                               final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
                               final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
                               final isRtl = L10n.isRtl(context);
@@ -323,6 +321,7 @@ class BrowserDownloadSheet extends StatelessWidget {
                                     isDarkMode: isDark,
                                   );
                                 }
+                                Navigator.pop(context);
                                 return;
                               }
 
@@ -355,7 +354,7 @@ class BrowserDownloadSheet extends StatelessWidget {
                               } else if (type == 'audio') {
                                 resolvedCategory = 'Audio';
                               } else if (type == 'image') {
-                                resolvedCategory = 'Other';
+                                resolvedCategory = 'Image';
                               } else {
                                 resolvedCategory = categoryFromFileName(finalFileName);
                               }
@@ -402,6 +401,10 @@ class BrowserDownloadSheet extends StatelessWidget {
                                     isDarkMode: isDark,
                                   );
                                 }
+                              }
+
+                              if (context.mounted) {
+                                Navigator.pop(context);
                               }
                             },
                             child: const Text('DOWNLOAD'),

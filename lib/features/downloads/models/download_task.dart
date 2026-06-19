@@ -280,6 +280,10 @@ class DownloadTask {
     );
   }
 
+  // Identity equality based on [id]. This is intentionally limited to ID comparison
+  // to ensure proper identification in lists, sets, and animation transitions.
+  // Note that tasks with the same ID but different states (e.g. progress, status)
+  // will be considered equal under this operator.
   @override
   bool operator ==(Object other) =>
       identical(this, other) || (other is DownloadTask && other.id == id);

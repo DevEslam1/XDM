@@ -5,6 +5,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../downloads/provider/download_provider.dart';
@@ -114,7 +115,6 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     // Group streams by type
     final muxed = _streams.where((s) => s['type'] == 'muxed').toList();
     final audio = _streams.where((s) => s['type'] == 'audio').toList();
-    final videoOnly = _streams.where((s) => s['type'] == 'video_only').toList();
     final combined = _streams.where((s) => s['type'] == 'combined').toList()
       ..sort((a, b) {
         final aQuality = _parseQuality(a['quality'] as String? ?? '');
@@ -283,11 +283,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             ...audio.map((s) => _streamTile(context, s, isDark, settings)),
                             const SizedBox(height: 12),
                           ],
-                          if (videoOnly.isNotEmpty) ...[
-                            _sectionHeader(context, 'VIDEO ONLY (NO AUDIO)', Icons.videocam_outlined,
-                                isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet, isDark),
-                            ...videoOnly.map((s) => _streamTile(context, s, isDark, settings)),
-                          ],
+
                           const SizedBox(height: 24),
                         ],
                       ),
@@ -354,6 +350,76 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
         ],
       ),
     );
+  }
+
+  Future<bool> _showConfirmDialog({
+    required BuildContext context,
+    required String title,
+    required String content,
+    required bool isDark,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+            ),
+          ),
+          title: Text(
+            title,
+            style: TextStyle(
+              color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          content: Text(
+            content,
+            style: TextStyle(
+              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              fontSize: 13,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                L10n.isRtl(context) ? 'إلغاء' : 'Cancel',
+                style: TextStyle(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.1),
+                side: BorderSide(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(
+                L10n.isRtl(context) ? 'متابعة' : 'Proceed',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    return result ?? false;
   }
 
   Future<void> _handleCombinedDownload(BuildContext context, Map<String, dynamic> stream, bool isDark, SettingsProvider settings) async {
@@ -439,10 +505,30 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
               style: TextStyle(color: secClr, fontSize: 10),
             ),
             trailing: Icon(Icons.download_rounded, color: color, size: 20),
-            onTap: () {
+            onTap: () async {
               runHaptic(settings);
               if (type == 'combined') {
+                final confirm = await _showConfirmDialog(
+                  context: context,
+                  title: L10n.isRtl(context) ? 'تنبيه الملفات المنفصلة' : 'Separate Files Warning',
+                  content: L10n.isRtl(context)
+                      ? 'سيقوم هذا الخيار بتحميل ملف الفيديو وملف الصوت بشكل منفصل (الفيديو سيكون بدون صوت). هل تريد المتابعة؟'
+                      : 'This option will download the video and audio as two separate files (the video file will have no sound). Do you want to proceed?',
+                  isDark: isDark,
+                );
+                if (!confirm || !context.mounted) return;
                 _handleCombinedDownload(context, stream, isDark, settings);
+              } else if (type == 'video_only') {
+                final confirm = await _showConfirmDialog(
+                  context: context,
+                  title: L10n.isRtl(context) ? 'تنبيه فيديو بدون صوت' : 'Silent Video Warning',
+                  content: L10n.isRtl(context)
+                      ? 'هذا الملف يحتوي على الفيديو فقط وبدون صوت. هل تريد المتابعة؟'
+                      : 'This file contains only video and has no audio. Do you want to proceed?',
+                  isDark: isDark,
+                );
+                if (!confirm || !context.mounted) return;
+                Navigator.pop(context, stream);
               } else {
                 Navigator.pop(context, stream);
               }

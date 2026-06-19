@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.read<SettingsProvider>();
+    final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;

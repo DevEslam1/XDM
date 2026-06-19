@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes;
+import 'package:logging/logging.dart';
+import 'torrent_models.dart';
 
 class TorrentService {
-  static final Set<int> _activeTorrentIds = {};
+  static final _log = Logger('TorrentService');
+  static Set<int> _activeTorrentIds = {};
   static StreamSubscription? _updatesSub;
+  static Stream<Map<int, TorrentUpdateInfo>>? _torrentUpdatesStream;
 
   static bool get isSupported => true;
   static bool get isInitialized => LibtorrentFlutter.isInitialized;
@@ -16,9 +20,21 @@ class TorrentService {
   static void _startTrackingUpdates() {
     if (_updatesSub != null) return;
     _updatesSub = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
-      _activeTorrentIds.clear();
-      _activeTorrentIds.addAll(torrents.keys);
+      _activeTorrentIds = Set<int>.from(torrents.keys);
     });
+  }
+
+  static Future<void> dispose() async {
+    await _updatesSub?.cancel();
+    _updatesSub = null;
+    _torrentUpdatesStream = null;
+    if (isInitialized) {
+      try {
+        await LibtorrentFlutter.instance.dispose();
+      } catch (e) {
+        _log.warning('Error disposing libtorrent: $e');
+      }
+    }
   }
 
   static int addMagnet(String magnetUri, String savePath) {
@@ -41,10 +57,12 @@ class TorrentService {
 
   static void removeTorrent(int id, {bool deleteFiles = false}) {
     _startTrackingUpdates();
-    if (id >= 0 && _activeTorrentIds.contains(id)) {
+    if (id >= 0) {
       try {
         LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
-      } catch (_) {}
+      } catch (e) {
+        _log.warning('removeTorrent failed for id $id: $e');
+      }
       _activeTorrentIds.remove(id);
     }
   }
@@ -54,7 +72,9 @@ class TorrentService {
     if (id >= 0 && _activeTorrentIds.contains(id)) {
       try {
         LibtorrentFlutter.instance.pauseTorrent(id);
-      } catch (_) {}
+      } catch (e) {
+        _log.warning('pauseTorrent failed for id $id: $e');
+      }
     }
   }
 
@@ -63,7 +83,9 @@ class TorrentService {
     if (id >= 0 && _activeTorrentIds.contains(id)) {
       try {
         LibtorrentFlutter.instance.resumeTorrent(id);
-      } catch (_) {}
+      } catch (e) {
+        _log.warning('resumeTorrent failed for id $id: $e');
+      }
     }
   }
 
@@ -72,7 +94,9 @@ class TorrentService {
     if (id >= 0 && _activeTorrentIds.contains(id)) {
       try {
         LibtorrentFlutter.instance.setFilePriorities(id, priorities);
-      } catch (_) {}
+      } catch (e) {
+        _log.warning('setFilePriorities failed for id $id: $e');
+      }
     }
   }
 
@@ -86,14 +110,16 @@ class TorrentService {
           name: f.name,
           size: f.size,
         )).toList();
-      } catch (_) {}
+      } catch (e) {
+        _log.warning('getFiles failed for id $id: $e');
+      }
     }
     return [];
   }
 
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates {
     _startTrackingUpdates();
-    return LibtorrentFlutter.instance.torrentUpdates.map((map) {
+    return _torrentUpdatesStream ??= LibtorrentFlutter.instance.torrentUpdates.map((map) {
       return map.map((key, value) => MapEntry(key, TorrentUpdateInfo(
         id: value.id,
         name: value.name,
@@ -115,42 +141,9 @@ class TorrentService {
     if (isInitialized) {
       try {
         LibtorrentFlutter.instance.setUploadLimit(bps);
-      } catch (_) {}
+      } catch (e) {
+        _log.warning('setUploadLimit failed: $e');
+      }
     }
   }
-}
-
-class TorrentFileItem {
-  final int index;
-  final String name;
-  final int size;
-  TorrentFileItem({required this.index, required this.name, required this.size});
-}
-
-class TorrentUpdateInfo {
-  final int id;
-  final String name;
-  final double progress;
-  final int downloadRate;
-  final int uploadRate;
-  final int totalDone;
-  final int totalWanted;
-  final bool hasMetadata;
-  final String stateLabel;
-  final int numSeeds;
-  final int numPeers;
-
-  TorrentUpdateInfo({
-    required this.id,
-    required this.name,
-    required this.progress,
-    required this.downloadRate,
-    required this.uploadRate,
-    required this.totalDone,
-    required this.totalWanted,
-    required this.hasMetadata,
-    required this.stateLabel,
-    this.numSeeds = 0,
-    this.numPeers = 0,
-  });
 }

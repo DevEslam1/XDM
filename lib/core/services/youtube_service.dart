@@ -63,43 +63,11 @@ class YoutubeService {
   }
 
   static bool isYoutubeVideoUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final host = uri.host.toLowerCase();
-      final isYoutube = host == 'youtube.com' || host.endsWith('.youtube.com');
-      final isYoutuBe = host == 'youtu.be' || host.endsWith('.youtu.be');
-      if (!isYoutube && !isYoutuBe) return false;
-      if (isYoutuBe) return uri.pathSegments.isNotEmpty;
-      final path = uri.path.toLowerCase();
-      return path.contains('/watch') ||
-          path.contains('/shorts/') ||
-          path.contains('/embed/') ||
-          path.contains('/v/') ||
-          path.contains('/live/');
-    } catch (_) {
-      final lower = url.toLowerCase();
-      return lower.contains('youtube.com/watch') ||
-          lower.contains('youtu.be/') ||
-          lower.contains('youtube.com/shorts/') ||
-          lower.contains('youtube.com/embed/');
-    }
+    return extractVideoId(url) != null;
   }
 
   static bool isPlaylistUrl(String url) {
-    try {
-      final uri = Uri.parse(url);
-      final host = uri.host.toLowerCase();
-      if (host != 'youtube.com' &&
-          !host.endsWith('.youtube.com') &&
-          host != 'youtu.be' &&
-          !host.endsWith('.youtu.be')) {
-        return false;
-      }
-      final listParam = uri.queryParameters['list'];
-      return listParam != null && listParam.isNotEmpty;
-    } catch (_) {
-      return false;
-    }
+    return extractPlaylistId(url) != null;
   }
 
   // ──────────────────────── ID Extraction ────────────────────────────
@@ -173,13 +141,18 @@ class YoutubeService {
   /// is no longer needed to prevent the Dart process from hanging.
   static void close() {
     _yt.close();
+    _InnerTubeFallback.close();
   }
 
   // ────────────────────── Logging / Troubleshooting ─────────────────
 
+  static bool _loggingEnabled = false;
+
   /// Enables verbose logging from YoutubeExplode.
   /// Call this before any other YoutubeService method.
   static void enableLogging() {
+    if (_loggingEnabled) return;
+    _loggingEnabled = true;
     Logger('YoutubeExplode').level = Level.FINER;
     Logger('YoutubeExplode').onRecord.listen((e) {
       // ignore: avoid_print
@@ -193,19 +166,15 @@ class YoutubeService {
     });
   }
 
-  // ──────────────────── Single Video Streams ────────────────────────
+  // ──────────────────── Fallback & Refresh Helpers ──────────────────
 
-  static Future<List<Map<String, dynamic>>> getStreams(String url) async {
-    final videoId = extractVideoId(url);
-    if (videoId == null) return [];
-
+  static Future<({StreamManifest manifest, String title})> _fetchWithFallback(String videoId) async {
     StreamManifest? manifest;
     const timeout = Duration(seconds: 20);
+    Object? lastError;
 
-    // List of clients to try sequentially in case of restrictions/signature issues.
-    // Order matters: start with broadest then narrow down to specific clients.
     final clientsToTry = [
-      null, // Default clients list (library decides)
+      null, // Default clients list
       [YoutubeApiClient.android],
       [YoutubeApiClient.ios],
       [YoutubeApiClient.tv],
@@ -228,36 +197,90 @@ class YoutubeService {
           break; // Found working manifest!
         }
       } catch (e) {
-        // Log locally and continue to next fallback client
+        lastError = e;
         Logger.root.warning(
-          'YoutubeService.getStreams: getManifest failed for client $clients: $e',
+          'YoutubeService._fetchWithFallback: getManifest failed for client $clients: $e',
         );
       }
     }
 
-    // Last resort: require the watch page (slower but more reliable for some videos)
+    // Last resort: require the watch page
     if (manifest == null || manifest.streams.isEmpty) {
       try {
         manifest = await _yt.videos.streamsClient
             .getManifest(videoId, requireWatchPage: true)
             .timeout(const Duration(seconds: 30));
       } catch (e) {
+        lastError = e;
         Logger.root.warning(
-          'YoutubeService.getStreams: requireWatchPage fallback failed: $e',
+          'YoutubeService._fetchWithFallback: requireWatchPage fallback failed: $e',
         );
       }
     }
 
-    if (manifest == null || manifest.streams.isEmpty) return [];
-
-    final list = <Map<String, dynamic>>[];
+    if (manifest == null || manifest.streams.isEmpty) {
+      if (lastError != null) {
+        final errStr = lastError.toString().toLowerCase();
+        if (errStr.contains('age') || errStr.contains('restricted') || errStr.contains('agerecorded') || errStr.contains('signin') || errStr.contains('sign in')) {
+          throw Exception('This video is age-restricted and requires sign-in.');
+        } else if (errStr.contains('private')) {
+          throw Exception('This video is private.');
+        } else if (errStr.contains('geo') || errStr.contains('blocked') || errStr.contains('country')) {
+          throw Exception('This video is not available in your country/region.');
+        } else {
+          throw Exception('Failed to get manifest: $lastError');
+        }
+      }
+      throw Exception('No playable streams found.');
+    }
 
     // Fetch Video Title
     String title = 'YouTube Video';
     try {
-      final video = await _yt.videos.get(videoId);
+      final video = await _yt.videos.get(videoId).timeout(const Duration(seconds: 15));
       title = video.title;
     } catch (_) {}
+
+    return (manifest: manifest, title: title);
+  }
+
+  /// Refreshes an expired stream URL by fetching the latest manifest and matching the itag.
+  static Future<String?> refreshStreamUrl(String downloadPageUrl, String oldStreamUrl) async {
+    final videoId = extractVideoId(downloadPageUrl);
+    if (videoId == null) return null;
+
+    try {
+      final result = await _fetchWithFallback(videoId);
+      final manifest = result.manifest;
+
+      final oldUri = Uri.tryParse(oldStreamUrl);
+      if (oldUri == null) return null;
+
+      final oldItag = oldUri.queryParameters['itag'];
+      if (oldItag != null) {
+        for (final stream in manifest.streams) {
+          final newUri = Uri.tryParse(stream.url.toString());
+          if (newUri != null && newUri.queryParameters['itag'] == oldItag) {
+            return stream.url.toString();
+          }
+        }
+      }
+    } catch (e) {
+      Logger.root.severe('Failed to refresh YouTube stream URL: $e');
+    }
+    return null;
+  }
+
+  // ──────────────────── Single Video Streams ────────────────────────
+
+  static Future<List<Map<String, dynamic>>> getStreams(String url) async {
+    final videoId = extractVideoId(url);
+    if (videoId == null) return [];
+
+    final result = await _fetchWithFallback(videoId);
+    final manifest = result.manifest;
+    final title = result.title;
+    final list = <Map<String, dynamic>>[];
 
     // Muxed streams contain both video and audio
     for (final stream in manifest.muxed) {
@@ -407,61 +430,12 @@ class YoutubeService {
   /// [qualityPreset] can be: 'best_muxed', '720p', '480p', '360p', 'audio_only'.
   static Future<Map<String, dynamic>?> getStreamForVideo(
     String videoId,
-    String qualityPreset,
-  ) async {
-    StreamManifest? manifest;
-    const timeout = Duration(seconds: 20);
-
-    final clientsToTry = [
-      null,
-      [YoutubeApiClient.android],
-      [YoutubeApiClient.ios],
-      [YoutubeApiClient.tv],
-      [YoutubeApiClient.androidVr],
-      [YoutubeApiClient.mweb],
-    ];
-
-    for (final clients in clientsToTry) {
-      try {
-        if (clients == null) {
-          manifest = await _yt.videos.streamsClient
-              .getManifest(videoId)
-              .timeout(timeout);
-        } else {
-          manifest = await _yt.videos.streamsClient
-              .getManifest(videoId, ytClients: clients)
-              .timeout(timeout);
-        }
-        if (manifest.streams.isNotEmpty) {
-          break;
-        }
-      } catch (e) {
-        Logger.root.warning(
-          'YoutubeService.getStreamForVideo: getManifest failed for client $clients: $e',
-        );
-      }
-    }
-
-    // Last resort: require the watch page
-    if (manifest == null || manifest.streams.isEmpty) {
-      try {
-        manifest = await _yt.videos.streamsClient
-            .getManifest(videoId, requireWatchPage: true)
-            .timeout(const Duration(seconds: 30));
-      } catch (e) {
-        Logger.root.warning(
-          'YoutubeService.getStreamForVideo: requireWatchPage fallback failed: $e',
-        );
-      }
-    }
-
-    if (manifest == null || manifest.streams.isEmpty) return null;
-
-    String title = 'YouTube Video';
-    try {
-      final video = await _yt.videos.get(videoId);
-      title = video.title;
-    } catch (_) {}
+    String qualityPreset, {
+    bool forceMuxed = true,
+  }) async {
+    final result = await _fetchWithFallback(videoId);
+    final manifest = result.manifest;
+    final title = result.title;
 
     if (qualityPreset == 'audio_only') {
       if (manifest.audioOnly.isEmpty) return null;
@@ -486,9 +460,10 @@ class YoutubeService {
 
     if (manifest.muxed.isNotEmpty) {
       final targetQualities = switch (qualityPreset) {
-        '360p' => ['360p', '480p', '240p', '720p'],
-        '480p' => ['480p', '360p', '720p', '240p'],
-        '720p' => ['720p', '480p', '1080p', '360p'],
+        '1080p' => ['1080p', '720p', '480p', '360p', '240p'],
+        '720p' => ['720p', '480p', '360p', '240p', '1080p'],
+        '480p' => ['480p', '360p', '240p', '720p', '1080p'],
+        '360p' => ['360p', '240p', '480p', '720p', '1080p'],
         _ => <String>[], // best_muxed — use the highest available
       };
 
@@ -525,12 +500,17 @@ class YoutubeService {
       };
     }
 
+    if (forceMuxed) {
+      return null;
+    }
+
     // Fallback: combine video-only + audio-only for the requested quality
     if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
       final targetQualities = switch (qualityPreset) {
         '360p' => ['360p', '480p', '240p', '720p'],
         '480p' => ['480p', '360p', '720p', '240p'],
         '720p' => ['720p', '480p', '1080p', '360p'],
+        '1080p' => ['1080p', '720p', '1440p', '2160p', '480p', '360p'],
         _ => <String>[],
       };
 
@@ -663,6 +643,7 @@ class YoutubeService {
   /// Fetches the next page of related videos from a previous result list.
   /// [currentList] is the raw map list returned by [getRelatedVideos].
   /// Returns null if there are no more pages.
+  @Deprecated('Not supported by the current map-based API approach.')
   static Future<List<Map<String, dynamic>>?> getRelatedVideosNextPage(
     List<Map<String, dynamic>> currentList,
   ) async {
@@ -721,6 +702,11 @@ class _InnerTubeFallback {
       'https://www.youtube.com/youtubei/v1/browse?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 
   static final _log = Logger('YoutubeService._InnerTubeFallback');
+  static final HttpClient _client = HttpClient();
+
+  static void close() {
+    _client.close(force: true);
+  }
 
   static Map<String, dynamic> _clientContext() => {
     'context': {
@@ -739,38 +725,33 @@ class _InnerTubeFallback {
     String browseId, {
     String? continuationToken,
   }) async {
-    final client = HttpClient();
-    try {
-      final request = await client.postUrl(Uri.parse(_browseUrl));
-      request.headers.set('Content-Type', 'application/json');
-      request.headers.set(
-        'User-Agent',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-            'AppleWebKit/537.36 (KHTML, like Gecko) '
-            'Chrome/131.0.0.0 Safari/537.36',
-      );
+    final request = await _client.postUrl(Uri.parse(_browseUrl));
+    request.headers.set('Content-Type', 'application/json');
+    request.headers.set(
+      'User-Agent',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+          'AppleWebKit/537.36 (KHTML, like Gecko) '
+          'Chrome/131.0.0.0 Safari/537.36',
+    );
 
-      // Inject authenticated cookies if available
-      if (YoutubeService.currentCookies != null) {
-        request.headers.set('cookie', YoutubeService.currentCookies!);
-      }
-
-      final body = <String, dynamic>{..._clientContext()};
-      if (continuationToken != null) {
-        body['continuation'] = continuationToken;
-      } else {
-        body['browseId'] = browseId;
-      }
-
-      request.write(jsonEncode(body));
-      final response = await request.close().timeout(
-        const Duration(seconds: 30),
-      );
-      final raw = await response.transform(utf8.decoder).join();
-      return jsonDecode(raw) as Map<String, dynamic>;
-    } finally {
-      client.close();
+    // Inject authenticated cookies if available
+    if (YoutubeService.currentCookies != null) {
+      request.headers.set('cookie', YoutubeService.currentCookies!);
     }
+
+    final body = <String, dynamic>{..._clientContext()};
+    if (continuationToken != null) {
+      body['continuation'] = continuationToken;
+    } else {
+      body['browseId'] = browseId;
+    }
+
+    request.write(jsonEncode(body));
+    final response = await request.close().timeout(
+      const Duration(seconds: 30),
+    );
+    final raw = await response.transform(utf8.decoder).join();
+    return jsonDecode(raw) as Map<String, dynamic>;
   }
 
   /// Fetches basic metadata and all videos in a single unified flow.
@@ -1182,6 +1163,8 @@ class _InnerTubeFallback {
       return parts[0] * 3600 + parts[1] * 60 + parts[2];
     } else if (parts.length == 2) {
       return parts[0] * 60 + parts[1];
+    } else if (parts.length == 1) {
+      return parts[0];
     }
     return 0;
   }

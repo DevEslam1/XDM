@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -98,14 +99,11 @@ class AdBlocker {
     'snap.licdn.com',
     'static.ads-twitter.com',
     'tracking.facebook.com',
-    'twitter.com/i/adsct',
     'connect.facebook.net',
-    'facebook.com/tr',
   ];
 
   static const List<String> _adUrlPatterns = [
     '/ads/',
-    '/ad/',
     '/adsbygoogle',
     '/banner',
     '/popup',
@@ -113,8 +111,6 @@ class AdBlocker {
     'tracker.php',
     'tracking.php',
     'click.php',
-    'redirect?',
-    'goto?',
   ];
 
   /// Asynchronously loads local hosts from cache file or triggers background download
@@ -261,9 +257,19 @@ class AdBlocker {
 
     final lower = url.toLowerCase();
 
+    // Check specific path-based blocks
+    if (lower.contains('twitter.com/i/adsct') || lower.contains('facebook.com/tr')) {
+      return true;
+    }
+
     // 1. Fast match against common URL patterns
     for (final pattern in _adUrlPatterns) {
       if (lower.contains(pattern)) return true;
+    }
+
+    // Specific check for /ad/ /ads/ to avoid false positives (e.g. /admin/, /advice/)
+    if (RegExp(r'([/.])ads?([/._?=-]|\d)').hasMatch(lower)) {
+      return true;
     }
 
     // 2. Extract host domain
@@ -314,10 +320,14 @@ class AdBlocker {
   }
 
   /// Adblocking and Anti-Adblock bypass JavaScript script to inject into pages
-  static String get adBlockJavaScript => r'''
+  static String get adBlockJavaScript {
+    final domainsJson = jsonEncode(_blockedDomains.toList());
+    return '''
 (function() {
   if (window.__xdmAdBlockerInjected) return;
   window.__xdmAdBlockerInjected = true;
+
+  const blockedDomains = new Set($domainsJson);
 
   // 1. Mock common tracking and advertising variables to bypass anti-adblock detectors
   try {
@@ -356,35 +366,71 @@ class AdBlocker {
   } catch(e) {}
 
   // 3. Synchronous check for blocking script injections instantly
-  const ytPattern = /youtube\.com|youtu\.be|googlevideo\.com|ytimg\.com|ggpht\.com/i;
-  const adPattern = /adservice|doubleclick|googlesyndication|googleadservices|adnxs|adsystem|outbrain|taboola|criteo|pubmatic|rubiconproject|openx|adform|yieldmo|adcolony|admob|airpush|applovin|pagead|analytics|gtag/i;
-  function isAdUrlSync(url) {
+  const ytPattern = /youtube\\.com|youtu\\.be|googlevideo\\.com|ytimg\\.com|ggpht\\.com/i;
+  const adPattern = /([/.])ads?([/._?=-]|\\d)|adsbygoogle|banner|popup|affiliate|tracker\\.php|tracking\\.php|click\\.php/i;
+
+  function shouldBlockDomainSync(url) {
     if (!url) return false;
-    if (ytPattern.test(url)) return false;
-    return adPattern.test(url);
+    let cleanUrl = url.trim().toLowerCase();
+    if (cleanUrl.startsWith('//')) {
+      cleanUrl = 'https:' + cleanUrl;
+    } else if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = 'https://' + cleanUrl;
+    }
+    
+    let host = '';
+    try {
+      const uri = new URL(cleanUrl);
+      host = uri.hostname;
+    } catch (e) {
+      host = cleanUrl.replace(/^https?:\\/\\//, '');
+      const slashIndex = host.indexOf('/');
+      if (slashIndex !== -1) host = host.substring(0, slashIndex);
+      const colonIndex = host.indexOf(':');
+      if (colonIndex !== -1) host = host.substring(0, colonIndex);
+    }
+    
+    if (!host) return false;
+    
+    const parts = host.split('.');
+    while (parts.length >= 2) {
+      const domainToCheck = parts.join('.');
+      if (blockedDomains.has(domainToCheck)) {
+        return true;
+      }
+      parts.shift();
+    }
+    return false;
   }
 
-  // 4. Asynchronous helper to communicate with Dart for full verification
+  function shouldBlockSync(url) {
+    if (!url) return false;
+    if (ytPattern.test(url)) return false;
+    
+    const lower = url.toLowerCase();
+    if (lower.includes('twitter.com/i/adsct') || lower.includes('facebook.com/tr')) {
+      return true;
+    }
+    
+    if (adPattern.test(lower)) return true;
+    return shouldBlockDomainSync(lower);
+  }
+
+  // 4. Asynchronous helper to communicate with Dart for verification
   function checkBlockedAsync(url) {
     return new Promise((resolve) => {
       if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('file:')) {
         resolve(false);
         return;
       }
-      // Always allow YouTube URLs
-      if (ytPattern.test(url)) {
-        resolve(false);
+      // Check locally first to avoid channel round-trip latency
+      if (shouldBlockSync(url)) {
+        resolve(true);
         return;
       }
-      const requestId = Math.random().toString(36).substring(2);
-      window._adBlockPromiseResolvers = window._adBlockPromiseResolvers || {};
-      window._adBlockPromiseResolvers[requestId] = resolve;
-      
-      if (window.AdBlockerChannel) {
-        window.AdBlockerChannel.postMessage(JSON.stringify({ id: requestId, url: url }));
-      } else {
-        resolve(false);
-      }
+
+      // If not blocked locally, resolve false immediately to prevent any latency
+      resolve(false);
     });
   }
 
@@ -438,7 +484,7 @@ class AdBlocker {
         const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
         Object.defineProperty(el, 'src', {
           set: function(val) {
-            if (isAdUrlSync(val)) {
+            if (shouldBlockSync(val)) {
               console.log('[AdBlocker] Blocked script injection synchronously: ' + val);
               val = 'data:text/javascript,console.log("script ad blocked")';
             }
@@ -469,4 +515,5 @@ class AdBlocker {
   } catch(e) {}
 })();
 ''';
+  }
 }

@@ -119,6 +119,16 @@ class NotificationService {
           _downloadChannelName,
           description: _downloadChannelDesc,
           importance: Importance.low,
+          playSound: false,
+        ),
+      );
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'dmx_download_alerts_sound',
+          'Download Alerts (Sound)',
+          description: 'Notifications for completed or failed downloads with sound',
+          importance: Importance.defaultImportance,
+          playSound: true,
         ),
       );
       await androidPlugin.createNotificationChannel(
@@ -127,6 +137,7 @@ class NotificationService {
           'XDM Background Service',
           description: 'Used for XDM background download service',
           importance: Importance.low,
+          playSound: false,
         ),
       );
     }
@@ -184,15 +195,18 @@ class NotificationService {
   Future<void> showDownloadComplete({
     required int notificationId,
     required String title,
+    bool playSound = true,
   }) async {
     if (!_initialized) return;
+    final channelId = playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
+    final channelName = playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
     final androidDetails = AndroidNotificationDetails(
-      _downloadChannelId,
-      _downloadChannelName,
-      channelDescription: _downloadChannelDesc,
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
+      channelId,
+      channelName,
+      importance: playSound ? Importance.defaultImportance : Importance.low,
+      priority: playSound ? Priority.defaultPriority : Priority.low,
       showProgress: false,
+      playSound: playSound,
     );
     final details = NotificationDetails(android: androidDetails);
     await _plugin.show(
@@ -207,15 +221,18 @@ class NotificationService {
     required int notificationId,
     required String title,
     String? error,
+    bool playSound = true,
   }) async {
     if (!_initialized) return;
+    final channelId = playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
+    final channelName = playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
     final androidDetails = AndroidNotificationDetails(
-      _downloadChannelId,
-      _downloadChannelName,
-      channelDescription: _downloadChannelDesc,
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
+      channelId,
+      channelName,
+      importance: playSound ? Importance.defaultImportance : Importance.low,
+      priority: playSound ? Priority.defaultPriority : Priority.low,
       showProgress: false,
+      playSound: playSound,
     );
     final details = NotificationDetails(android: androidDetails);
     await _plugin.show(

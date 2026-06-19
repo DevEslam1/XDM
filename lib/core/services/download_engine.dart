@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -57,6 +58,7 @@ class DownloadEngine {
   // no longer mutates this client; every request builds its own.
   // ignore: unused_field
   final Dio _sharedDio;
+  final List<Dio> _activeDioClients = [];
 
   /// Builds an isolated Dio instance configured with per-call options.
   /// Using a fresh client per request prevents the shared [_dio] instance
@@ -74,6 +76,7 @@ class DownloadEngine {
     bool bypassSSL = false,
   }) {
     final client = Dio();
+    _activeDioClients.add(client);
     if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
       client.options.headers['User-Agent'] = customUserAgent.trim();
     }
@@ -317,6 +320,9 @@ class DownloadEngine {
       debugPrint(
         'DownloadEngine HEAD request failed (this is expected for some servers): $e',
       );
+    } finally {
+      isolatedDio.close();
+      _activeDioClients.remove(isolatedDio);
     }
 
     return DownloadMetadata(
@@ -448,9 +454,12 @@ class DownloadEngine {
         }
       });
 
+      Timer? metadataTimer;
+
       // Handle cancel during metadata loading
       cancelToken.whenCancel.then((_) {
         metadataSub?.cancel();
+        metadataTimer?.cancel();
         TorrentService.pauseTorrent(id);
         if (!metadataCompleter.isCompleted) {
           metadataCompleter.completeError(
@@ -463,7 +472,6 @@ class DownloadEngine {
         }
       });
 
-      Timer? metadataTimer;
       metadataTimer = Timer(const Duration(seconds: 45), () {
         metadataSub?.cancel();
         TorrentService.pauseTorrent(id);
@@ -608,8 +616,9 @@ class DownloadEngine {
       bypassSSL: bypassSSL,
     );
 
-    final isMultiThread =
-        threadCount > 1 && resolvedSupportsResume && resolvedFileSize > 0;
+    try {
+      final isMultiThread =
+          threadCount > 1 && resolvedSupportsResume && resolvedFileSize > 0;
 
     if (!isMultiThread) {
       await _downloadSingleThreaded(
@@ -662,7 +671,7 @@ class DownloadEngine {
       }
 
       final stopwatch = Stopwatch()..start();
-      final speedSamples = <_SpeedSample>[];
+      final speedSamples = Queue<_SpeedSample>();
 
       void reportProgress() {
         final downloadedTotal = chunkProgress.reduce((a, b) => a + b);
@@ -672,7 +681,7 @@ class DownloadEngine {
         // Keep samples from the last 3 seconds (3000 ms)
         while (speedSamples.isNotEmpty &&
             nowMs - speedSamples.first.timestampMs > 3000) {
-          speedSamples.removeAt(0);
+          speedSamples.removeFirst();
         }
 
         var speed = 0.0;
@@ -709,7 +718,15 @@ class DownloadEngine {
         );
       }
 
+      Object? chunkError;
       try {
+        final chunkCancelToken = CancelToken();
+        cancelToken.whenCancel.then((_) {
+          if (!chunkCancelToken.isCancelled) {
+            chunkCancelToken.cancel();
+          }
+        });
+
         for (int i = 0; i < threadCount; i++) {
           final idx = i;
           final start = idx * partSize;
@@ -719,6 +736,7 @@ class DownloadEngine {
           final file = chunkFiles[idx];
 
           futures.add(() async {
+            final chunkStopwatch = Stopwatch()..start();
             final resumeFrom = chunkProgress[idx];
             if (resumeFrom >= chunkSizes[idx]) {
               // Already finished this chunk
@@ -728,79 +746,89 @@ class DownloadEngine {
             final headers = <String, dynamic>{};
             headers['range'] = 'bytes=${start + resumeFrom}-$end';
 
-            final chunkResponse = await isolatedDio.get<ResponseBody>(
-              punyUrl,
-              cancelToken: cancelToken,
-              options: Options(
-                responseType: ResponseType.stream,
-                followRedirects: true,
-                headers: headers,
-                validateStatus: (_) => true,
-              ),
-            );
-
-            if (chunkResponse.statusCode != 206) {
-              throw DioException(
-                requestOptions: RequestOptions(path: punyUrl),
-                type: DioExceptionType.badResponse,
-                response: chunkResponse,
-                message:
-                    'Server returned ${chunkResponse.statusCode} instead of 206 for chunk range request.',
-              );
-            }
-
-            final sink = file.openWrite(
-              mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
-            );
-
             try {
-              final stream = chunkResponse.data?.stream;
-              if (stream == null) {
+              final chunkResponse = await isolatedDio.get<ResponseBody>(
+                punyUrl,
+                cancelToken: chunkCancelToken,
+                options: Options(
+                  responseType: ResponseType.stream,
+                  followRedirects: true,
+                  headers: headers,
+                  validateStatus: (_) => true,
+                ),
+              );
+
+              if (chunkResponse.statusCode != 206) {
                 throw DioException(
                   requestOptions: RequestOptions(path: punyUrl),
                   type: DioExceptionType.badResponse,
-                  message: 'Server returned empty response body.',
+                  response: chunkResponse,
+                  message:
+                      'Server returned ${chunkResponse.statusCode} instead of 206 for chunk range request.',
                 );
               }
-              var chunkDownloadedThisSession = 0;
-              await for (final chunk in stream) {
-                if (cancelToken.isCancelled) {
+
+              final sink = file.openWrite(
+                mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
+              );
+
+              try {
+                final stream = chunkResponse.data?.stream;
+                if (stream == null) {
                   throw DioException(
                     requestOptions: RequestOptions(path: punyUrl),
-                    type: DioExceptionType.cancel,
-                    message: 'Download cancelled.',
+                    type: DioExceptionType.badResponse,
+                    message: 'Server returned empty response body.',
                   );
                 }
-                sink.add(chunk);
-                chunkProgress[idx] += chunk.length;
-                chunkDownloadedThisSession += chunk.length;
-
-                reportProgress();
-
-                final limit = speedLimitBytesPerSecond();
-                if (limit > 0) {
-                  final activeCount = activeDownloadCount().clamp(1, 1000);
-                  final perTaskLimit = limit / activeCount;
-                  final limitPerChunk = perTaskLimit / threadCount;
-                  final expectedElapsedMs =
-                      (chunkDownloadedThisSession / limitPerChunk * 1000).round();
-                  final actualElapsedMs = stopwatch.elapsedMilliseconds;
-                  if (expectedElapsedMs > actualElapsedMs) {
-                    await Future<void>.delayed(
-                      Duration(
-                        milliseconds: expectedElapsedMs - actualElapsedMs,
-                      ),
+                var chunkDownloadedThisSession = 0;
+                await for (final chunk in stream) {
+                  if (cancelToken.isCancelled || chunkCancelToken.isCancelled) {
+                    throw DioException(
+                      requestOptions: RequestOptions(path: punyUrl),
+                      type: DioExceptionType.cancel,
+                      message: 'Download cancelled.',
                     );
                   }
+                  sink.add(chunk);
+                  chunkProgress[idx] += chunk.length;
+                  chunkDownloadedThisSession += chunk.length;
+
+                  reportProgress();
+
+                  final limit = speedLimitBytesPerSecond();
+                  if (limit > 0) {
+                    final activeCount = activeDownloadCount().clamp(1, 1000);
+                    final perTaskLimit = limit / activeCount;
+                    final limitPerChunk = perTaskLimit / threadCount;
+                    final expectedElapsedMs =
+                        (chunkDownloadedThisSession / limitPerChunk * 1000).round();
+                    final actualElapsedMs = chunkStopwatch.elapsedMilliseconds;
+                    if (expectedElapsedMs > actualElapsedMs) {
+                      await Future<void>.delayed(
+                        Duration(
+                          milliseconds: expectedElapsedMs - actualElapsedMs,
+                        ),
+                      );
+                    }
+                  }
                 }
+              } finally {
+                try {
+                  await sink.flush();
+                } catch (_) {}
+                try {
+                  await sink.close();
+                } catch (_) {}
               }
-            } finally {
-              try {
-                await sink.flush();
-              } catch (_) {}
-              try {
-                await sink.close();
-              } catch (_) {}
+            } catch (e) {
+              if (chunkError == null && !cancelToken.isCancelled) {
+                chunkError = e;
+              }
+              if (!chunkCancelToken.isCancelled) {
+                chunkCancelToken.cancel('chunk_error: $e');
+              }
+              rethrow;
             }
           }());
         }
@@ -845,14 +873,16 @@ class DownloadEngine {
           }
         }
       } catch (e) {
-        if (e is DioException && e.type == DioExceptionType.cancel) {
+        if (cancelToken.isCancelled) {
           rethrow;
         }
 
+        final errorToCheck = chunkError ?? e;
+
         // Check if the error indicates range requests are not supported or rejected
         bool isRangeRejection = false;
-        if (e is DioException && e.type == DioExceptionType.badResponse) {
-          final status = e.response?.statusCode;
+        if (errorToCheck is DioException && errorToCheck.type == DioExceptionType.badResponse) {
+          final status = errorToCheck.response?.statusCode;
           if (status == 200 || status == 416) {
             isRangeRejection = true;
           }
@@ -893,6 +923,10 @@ class DownloadEngine {
           isNameAutoGenerated: isNameAutoGenerated,
         );
       }
+    }
+  } finally {
+      isolatedDio.close();
+      _activeDioClients.remove(isolatedDio);
     }
   }
 
@@ -1000,7 +1034,7 @@ class DownloadEngine {
     final stopwatch = Stopwatch()..start();
     var downloadedThisSession = 0;
     var downloadedTotal = actualResumeFrom;
-    final speedSamples = <_SpeedSample>[];
+    final speedSamples = Queue<_SpeedSample>();
 
     try {
       final stream = response.data?.stream;
@@ -1029,7 +1063,7 @@ class DownloadEngine {
         // Keep samples from the last 3 seconds (3000 ms)
         while (speedSamples.isNotEmpty &&
             nowMs - speedSamples.first.timestampMs > 3000) {
-          speedSamples.removeAt(0);
+          speedSamples.removeFirst();
         }
 
         var speed = 0.0;
@@ -1123,6 +1157,12 @@ class DownloadEngine {
 
   void close() {
     _sharedDio.close(force: true);
+    for (final client in List<Dio>.from(_activeDioClients)) {
+      try {
+        client.close(force: true);
+      } catch (_) {}
+    }
+    _activeDioClients.clear();
   }
 }
 

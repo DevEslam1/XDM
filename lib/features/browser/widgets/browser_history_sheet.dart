@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/app_theme.dart';
@@ -38,14 +39,20 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
   List<Map<String, dynamic>> _surfingHistory = [];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     _loadSurfingHistory();
     _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.toLowerCase().trim();
+      if (_debounceTimer?.isActive ?? false) _debounceTimer?.cancel();
+      _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          setState(() {
+            _searchQuery = _searchController.text.toLowerCase().trim();
+          });
+        }
       });
     });
   }
@@ -53,6 +60,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
   @override
   void dispose() {
     _searchController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -142,8 +150,12 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final downloadProvider = context.watch<DownloadProvider>();
-    final downloadTasks = downloadProvider.tasks;
+    
+    // Optimize: rebuild only when task keys or status changes, not on progress ticks
+    context.select<DownloadProvider, String>(
+      (p) => p.tasks.map((t) => '${t.id}_${t.status.name}').join(','),
+    );
+    final downloadTasks = context.read<DownloadProvider>().tasks;
 
     return DraggableScrollableSheet(
       expand: false,

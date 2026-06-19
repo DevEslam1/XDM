@@ -418,8 +418,8 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<bool> testProxyConnection(String host, int port, String username, String password) async {
+    final client = HttpClient();
     try {
-      final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 4);
       client.findProxy = (uri) {
         return "PROXY $host:$port";
@@ -441,11 +441,56 @@ class SettingsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Proxy connection test failed: $e');
       return false;
+    } finally {
+      client.close();
     }
   }
 
   Future<void> resetToDefaults() async {
-    await _prefs.clear();
+    final settingsKeys = [
+      _autoStartKey,
+      _maxDownloadsKey,
+      _speedLimitKey,
+      _enableGlowKey,
+      _gridOpacityKey,
+      _soundNotificationKey,
+      _vibrationKey,
+      _wifiOnlyKey,
+      _languageCodeKey,
+      _isDarkModeKey,
+      _themeModeKey,
+      _showOnboardingKey,
+      _classicUiKey,
+      _enableProxyKey,
+      _proxyAddressKey,
+      _bypassSSLKey,
+      _reduceVisualsKey,
+      _customUserAgentKey,
+      _cleanupDaysKey,
+      _categoryFoldersKey,
+      _globalTorrentSeedingKey,
+      _globalTorrentSeedingLimitedKey,
+      _globalTorrentSeedingLimitKbpsKey,
+      _defaultThreadCountKey,
+      _customDownloadPathKey,
+      _incognitoEnabledKey,
+      _desktopModeKey,
+      _adBlockerEnabledKey,
+      _pinchToZoomKey,
+      _batterySaverModeKey,
+      _saveBrowserHistoryKey,
+      _notificationsEnabledKey,
+      _proxyHostKey,
+      _proxyPortKey,
+      _proxyUsernameKey,
+      _proxyPasswordKey,
+      _autoRetryEnabledKey,
+      _maxRetriesKey,
+      _retryDelaySecondsKey,
+    ];
+    for (final key in settingsKeys) {
+      await _prefs.remove(key);
+    }
     autoStart = true;
     customDownloadPath = null;
     _maxDownloads = 3;

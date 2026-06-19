@@ -204,6 +204,14 @@ void main() {
 
     await provider.resumeTask(taskId);
     expect(provider.tasks.first.status, anyOf(DownloadStatus.downloading, DownloadStatus.queued));
+
+    for (int i = 0; i < 50; i++) {
+      if (provider.tasks.first.status == DownloadStatus.completed) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 5));
+    }
+    expect(provider.tasks.first.status, DownloadStatus.completed);
   });
 
 

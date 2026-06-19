@@ -20,6 +20,9 @@ class BrowserDetector {
     '.mov': DetectedMediaKind.video,
     '.webm': DetectedMediaKind.video,
     '.flv': DetectedMediaKind.video,
+    '.ts': DetectedMediaKind.video,
+    '.m3u8': DetectedMediaKind.video,
+    '.mpd': DetectedMediaKind.video,
     '.mp3': DetectedMediaKind.audio,
     '.wav': DetectedMediaKind.audio,
     '.flac': DetectedMediaKind.audio,
@@ -41,16 +44,23 @@ class BrowserDetector {
     '.pptx': DetectedMediaKind.document,
     '.ppt': DetectedMediaKind.document,
     '.txt': DetectedMediaKind.document,
+    '.epub': DetectedMediaKind.document,
+    '.csv': DetectedMediaKind.document,
     '.zip': DetectedMediaKind.archive,
     '.rar': DetectedMediaKind.archive,
     '.7z': DetectedMediaKind.archive,
     '.tar': DetectedMediaKind.archive,
     '.gz': DetectedMediaKind.archive,
     '.iso': DetectedMediaKind.archive,
+    '.xz': DetectedMediaKind.archive,
+    '.bz2': DetectedMediaKind.archive,
     '.apk': DetectedMediaKind.executable,
     '.exe': DetectedMediaKind.executable,
     '.dmg': DetectedMediaKind.executable,
     '.pkg': DetectedMediaKind.executable,
+    '.deb': DetectedMediaKind.executable,
+    '.rpm': DetectedMediaKind.executable,
+    '.msi': DetectedMediaKind.executable,
     '.torrent': DetectedMediaKind.torrent,
   };
 
@@ -60,21 +70,26 @@ class BrowserDetector {
       return DetectedMedia(kind: DetectedMediaKind.magnet, url: url);
     }
     
-    final cleanUrl = lower.split('?').first.split('#').first;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
     
+    final path = uri.path.toLowerCase();
+    final cleanPath = path.split('?').first.split('#').first.trim();
+    final trimmedPath = cleanPath.endsWith('/')
+        ? cleanPath.substring(0, cleanPath.length - 1)
+        : cleanPath;
+
     // Ignore common web page/resource extensions
     final webExtensions = [
       '.html', '.htm', '.php', '.jsp', '.asp', '.aspx', '.xhtml', 
       '.js', '.css'
     ];
-    if (webExtensions.any((ext) => cleanUrl.endsWith(ext))) {
+    if (webExtensions.any((ext) => trimmedPath.endsWith(ext))) {
       return null;
     }
 
     for (final entry in _extensionMap.entries) {
-      if (cleanUrl.endsWith(entry.key) ||
-          lower.contains('${entry.key}?') ||
-          lower.contains('${entry.key}&')) {
+      if (trimmedPath.endsWith(entry.key)) {
         return DetectedMedia(
           kind: entry.value,
           url: url,
