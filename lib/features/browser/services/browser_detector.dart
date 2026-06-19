@@ -64,6 +64,43 @@ class BrowserDetector {
     '.torrent': DetectedMediaKind.torrent,
   };
 
+  /// Content-type patterns that indicate downloadable media
+  static const Map<String, DetectedMediaKind> _contentTypeMap = {
+    'video/': DetectedMediaKind.video,
+    'audio/': DetectedMediaKind.audio,
+    'image/': DetectedMediaKind.image,
+    'application/pdf': DetectedMediaKind.document,
+    'application/zip': DetectedMediaKind.archive,
+    'application/x-rar': DetectedMediaKind.archive,
+    'application/x-7z': DetectedMediaKind.archive,
+    'application/x-bittorrent': DetectedMediaKind.torrent,
+    'application/octet-stream': DetectedMediaKind.unknown,
+  };
+
+  /// Detect media kind from a Content-Type header value.
+  static DetectedMediaKind? detectFromContentType(String contentType) {
+    final lower = contentType.toLowerCase().trim();
+    for (final entry in _contentTypeMap.entries) {
+      if (lower.startsWith(entry.key)) return entry.value;
+    }
+    return null;
+  }
+
+  // CDN URL patterns that often serve media without file extensions
+  static const List<String> _cdnMediaPatterns = [
+    'googlevideo.com',
+    'fbcdn.net',
+    'cdninstagram.com',
+    'twimg.com',
+    'akamaized.net',
+  ];
+
+  // Check if URL matches a known CDN media pattern
+  static bool isCdnMediaUrl(String url) {
+    final lower = url.toLowerCase();
+    return _cdnMediaPatterns.any((pattern) => lower.contains(pattern));
+  }
+
   static DetectedMedia? detect(String url) {
     final lower = url.toLowerCase();
     if (lower.startsWith('magnet:')) {

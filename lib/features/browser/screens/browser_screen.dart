@@ -462,6 +462,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _detectedPlaylistUrls.remove(tab.id);
                 _ytDetectionFailed.remove(tab.url);
 
+                // Re-scan media for SPA pages (YouTube, etc.)
+                _mediaScanTimers[tab.id]?.cancel();
+                _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 2000), () {
+                  _scanPageMedia(tab);
+                });
+
                 // Fetch new page title after a short delay for SPA rendering
                 Future.delayed(const Duration(milliseconds: 1000), () {
                   if (mounted) {
@@ -1136,6 +1142,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   Future<void> _scanPageMedia(BrowserTab tab) async {
     if (!mounted || !_tabs.contains(tab) || tab.isHome) return;
 
+    // Clean up stale media sources from previous URLs on this tab
+    final staleKeys = _detectedMediaSources.keys
+        .where((key) => key != tab.url && !_tabs.any((t) => t.url == key))
+        .toList();
+    for (final key in staleKeys) {
+      _detectedMediaSources.remove(key);
+    }
+
     // YouTube Playlist detection — do this first before single video
     if (YoutubeService.isPlaylistUrl(tab.url)) {
       try {
@@ -1204,6 +1218,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 sources.push({ src: s.src, label: label });
               }
             }
+            
+            // Scan for poster images
+            var poster = v.getAttribute('poster');
+            if (poster && poster.trim() !== '') {
+              sources.push({ src: poster, label: 'Video Poster Image' });
+            }
           }
           var audios = document.getElementsByTagName('audio');
           for (var i = 0; i < audios.length; i++) {
@@ -1212,6 +1232,27 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               sources.push({ src: a.src, label: 'Audio Stream' });
             }
           }
+          
+          // Scan for lazy-loaded video sources
+          var lazyVideos = document.querySelectorAll('[data-src],[data-video-src]');
+          for (var i = 0; i < lazyVideos.length; i++) {
+            var src = lazyVideos[i].getAttribute('data-src') || lazyVideos[i].getAttribute('data-video-src');
+            if (src && src.trim() !== '' && !src.startsWith('blob:') && (src.includes('.mp4') || src.includes('.webm') || src.includes('.m3u8'))) {
+              sources.push({ src: src, label: 'Lazy-Loaded Video' });
+            }
+          }
+          
+          // Scan for iframe embedded videos
+          var iframes = document.getElementsByTagName('iframe');
+          for (var i = 0; i < iframes.length; i++) {
+            var src = iframes[i].src;
+            if (src && src.trim() !== '') {
+              if (src.includes('youtube.com/embed/') || src.includes('player.vimeo.com/video/') || src.includes('.mp4') || src.includes('.m3u8')) {
+                sources.push({ src: src, label: 'Embedded Video' });
+              }
+            }
+          }
+          
           return JSON.stringify(sources);
         })();
       ''');

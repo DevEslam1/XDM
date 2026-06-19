@@ -67,7 +67,7 @@ class YoutubeService {
   }
 
   static bool isPlaylistUrl(String url) {
-    return extractPlaylistId(url) != null;
+    return extractPlaylistId(url) != null && extractVideoId(url) == null;
   }
 
   // ──────────────────────── ID Extraction ────────────────────────────
@@ -120,6 +120,10 @@ class YoutubeService {
     }
   }
 
+  /// Constructs a YouTube watch URL from a video ID.
+  static String videoUrl(String videoId) =>
+      'https://www.youtube.com/watch?v=$videoId';
+
   // ───────────────────────── Quality Helpers ─────────────────────────
 
   static String _formatQuality(VideoQuality q) {
@@ -169,6 +173,26 @@ class YoutubeService {
   // ──────────────────── Fallback & Refresh Helpers ──────────────────
 
   static Future<({StreamManifest manifest, String title})> _fetchWithFallback(String videoId) async {
+    // Retry up to 2 times on transient failures
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await _fetchWithFallbackInternal(videoId);
+      } catch (e) {
+        if (attempt == 1) rethrow;
+        final errStr = e.toString().toLowerCase();
+        // Only retry on transient errors
+        if (errStr.contains('timeout') || errStr.contains('connection') ||
+            errStr.contains('socket') || errStr.contains('reset')) {
+          await Future.delayed(const Duration(seconds: 2));
+          continue;
+        }
+        rethrow;
+      }
+    }
+    throw Exception('Failed after retries');
+  }
+
+  static Future<({StreamManifest manifest, String title})> _fetchWithFallbackInternal(String videoId) async {
     StreamManifest? manifest;
     const timeout = Duration(seconds: 20);
     Object? lastError;
@@ -257,6 +281,7 @@ class YoutubeService {
       if (oldUri == null) return null;
 
       final oldItag = oldUri.queryParameters['itag'];
+      Logger.root.info('Refreshing stream URL for video $videoId, itag=$oldItag');
       if (oldItag != null) {
         for (final stream in manifest.streams) {
           final newUri = Uri.tryParse(stream.url.toString());
@@ -714,7 +739,7 @@ class _InnerTubeFallback {
     'context': {
       'client': {
         'clientName': 'WEB',
-        'clientVersion': '2.20241126.01.00',
+        'clientVersion': '2.20260601.01.00',
         'browserName': 'Chrome',
         'browserVersion': '131.0.0.0',
         'clientFormFactor': 'UNKNOWN_FORM_FACTOR',

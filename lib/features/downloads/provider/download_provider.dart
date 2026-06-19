@@ -1396,12 +1396,14 @@ class DownloadProvider extends ChangeNotifier {
             return;
           }
 
-          // Check if YouTube link expired (403 Forbidden)
+          // Check if YouTube link expired (403 Forbidden or 410 Gone)
           if (error is DioException &&
-              (error.response?.statusCode == 403 || error.message?.contains('403') == true) &&
+              (error.response?.statusCode == 403 || error.response?.statusCode == 410 ||
+               error.message?.contains('403') == true || error.message?.contains('410') == true) &&
               current.downloadPageUrl != null &&
               YoutubeService.extractVideoId(current.downloadPageUrl!) != null) {
-            debugPrint('Detected YouTube 403 error. Attempting to refresh stream URL...');
+            debugPrint('Detected YouTube ${error.response?.statusCode ?? 403} error. Attempting to refresh stream URL...');
+            bool refreshed = false;
             try {
               final newUrl = await YoutubeService.refreshStreamUrl(
                 current.downloadPageUrl!,
@@ -1409,10 +1411,36 @@ class DownloadProvider extends ChangeNotifier {
               );
               if (newUrl != null) {
                 await updateTaskUrlAndResume(current.id, newUrl);
+                refreshed = true;
                 return;
               }
             } catch (e) {
               debugPrint('Failed to refresh YouTube stream URL: $e');
+            }
+
+            if (!refreshed) {
+              // If refresh failed, still try auto-retry since the URL might work after a brief delay
+              final currentRetry = _retryCounts[task.id] ?? 0;
+              if (_settingsProvider.autoRetryEnabled && currentRetry < _settingsProvider.maxRetries) {
+                _retryCounts[task.id] = currentRetry + 1;
+                final delaySeconds = _settingsProvider.retryDelaySeconds;
+                await _setTask(
+                  current.copyWith(
+                    status: DownloadStatus.queued,
+                    speed: 0,
+                    errorMessage: 'YouTube stream expired. Retrying in $delaySeconds seconds...',
+                  ),
+                );
+                _retryTimers[task.id]?.cancel();
+                _retryTimers[task.id] = Timer(Duration(seconds: delaySeconds), () {
+                  _retryTimers.remove(task.id);
+                  final checkedTask = _findTask(task.id);
+                  if (checkedTask != null && checkedTask.status == DownloadStatus.queued) {
+                    _pumpQueue();
+                  }
+                });
+                return;
+              }
             }
           }
 
@@ -1989,10 +2017,25 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   Future<void> updateTaskUrlAndResume(String id, String newUrl) async {
-    await updateTaskUrl(id, newUrl);
     final task = _findTask(id);
-    if (task != null && task.status != DownloadStatus.downloading) {
-      await resumeTask(id);
+    if (task == null) return;
+    
+    // Check if the stream format (itag) changed
+    final oldUri = Uri.tryParse(task.url);
+    final newUri = Uri.tryParse(newUrl);
+    final oldItag = oldUri?.queryParameters['itag'];
+    final newItag = newUri?.queryParameters['itag'];
+    final itagChanged = oldItag != null && newItag != null && oldItag != newItag;
+    
+    if (itagChanged) {
+      // Different format — start over to avoid corrupted file
+      await startOverTask(id, newUrl);
+    } else {
+      await updateTaskUrl(id, newUrl);
+      final updated = _findTask(id);
+      if (updated != null && updated.status != DownloadStatus.downloading) {
+        await resumeTask(id);
+      }
     }
   }
 

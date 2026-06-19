@@ -442,6 +442,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
       size: videoSize,
       category: 'Video',
       savePath: savePath,
+      downloadPageUrl: widget.videoUrl,
     );
 
     // Create audio download task
@@ -452,6 +453,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
       size: audioSize,
       category: 'Audio',
       savePath: savePath,
+      downloadPageUrl: widget.videoUrl,
     );
 
     if (!context.mounted) return;

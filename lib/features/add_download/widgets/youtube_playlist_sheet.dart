@@ -165,7 +165,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
               size: videoSize,
               category: 'Video',
               savePath: savePath,
-              downloadPageUrl: widget.playlistUrl,
+              downloadPageUrl: YoutubeService.videoUrl(videoId),
             );
 
             final audioName = '$videoTitle [$qLabel audio].$audioExt';
@@ -175,7 +175,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
               size: audioSize,
               category: 'Audio',
               savePath: savePath,
-              downloadPageUrl: widget.playlistUrl,
+              downloadPageUrl: YoutubeService.videoUrl(videoId),
             );
           } else {
             final ext = streamInfo['ext'] as String? ?? 'mp4';
@@ -189,7 +189,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
               size: size,
               category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
               savePath: savePath,
-              downloadPageUrl: widget.playlistUrl,
+              downloadPageUrl: YoutubeService.videoUrl(videoId),
             );
           }
           enqueuedVideos.add(video);
@@ -347,6 +347,28 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 _errorMessage!,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: secClr, fontSize: 12),
+                              ),
+                              const SizedBox(height: 20),
+                              TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    _isLoading = true;
+                                    _errorMessage = null;
+                                    _videos = [];
+                                    _playlistInfo = null;
+                                  });
+                                  _fetchPlaylist();
+                                },
+                                icon: Icon(Icons.refresh_rounded, size: 16, color: accent),
+                                label: Text(
+                                  'RETRY',
+                                  style: TextStyle(
+                                    color: accent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
