@@ -65,6 +65,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
   @override
   void dispose() {
     _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 
@@ -144,6 +145,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
     if (isPulseActive) {
       return AnimatedBuilder(
         animation: _pulseAnimation!,
+        child: chipContent,
         builder: (context, child) {
           final pulse = _pulseAnimation!.value;
           return Container(
@@ -163,15 +165,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: color,
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
-            ),
+            child: child,
           );
         },
       );

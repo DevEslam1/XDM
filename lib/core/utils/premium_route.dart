@@ -10,6 +10,8 @@ class PremiumPageRoute<T> extends PageRouteBuilder<T> {
       : super(
           pageBuilder: (context, animation, secondaryAnimation) => child,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            if (MediaQuery.of(context).disableAnimations) return child;
+
             final curve = Curves.easeOutCubic;
 
             final begin = type == PageTransitionType.slideUp

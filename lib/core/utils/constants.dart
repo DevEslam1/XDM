@@ -1,4 +1,7 @@
-const List<int> kAvailableThreadOptions = [1, 2, 4, 5, 8, 16];
+/// Available thread count options for multi-part downloads.
+/// Each value splits the file into N simultaneous range requests.
+/// Higher values improve speed on fast connections but increase server load.
+const List<int> kAvailableThreadOptions = [1, 2, 4, 6, 8, 16];
 
 const String kAppVersion = '2.0.0';
 const String kDeveloperName = 'Eslam Mahmoud';

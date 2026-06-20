@@ -107,10 +107,14 @@ class DatabaseService {
     return list;
   }
 
+  int _historySequenceCounter = 0;
+
   Future<String> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return '';
-    final id = '${DateTime.now().millisecondsSinceEpoch}_$url';
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final seq = _historySequenceCounter++;
+    final id = '${ts}_${seq}_$url';
     await _browserHistoryBox.put(id, {
       'url': url,
       'title': entry['title'] as String? ?? url,

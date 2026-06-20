@@ -46,7 +46,11 @@ EdgeInsets screenPadding(BuildContext context) {
   return EdgeInsets.symmetric(horizontal: h, vertical: v);
 }
 
-double gridChildAspectRatio(BuildContext context, {int columns = 2}) {
+const double kGridTileHeight = 140.0;
+const double kGridTileGap = 24.0;
+
+double gridChildAspectRatio(BuildContext context, {int columns = 2, double horizontalPadding = 32.0}) {
   final w = MediaQuery.of(context).size.width;
-  return (w / columns - 24) / 140;
+  final availableWidth = w - horizontalPadding * 2;
+  return (availableWidth / columns - kGridTileGap) / kGridTileHeight;
 }

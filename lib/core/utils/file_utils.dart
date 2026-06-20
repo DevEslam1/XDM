@@ -30,6 +30,7 @@ const List<String> documentExtensions = [
 const List<String> archiveExtensions = ['zip', 'rar', '7z', 'tar', 'gz', 'iso'];
 
 String formatBytes(num bytes) {
+  if (bytes < 0) bytes = 0;
   const kb = 1024;
   const mb = 1024 * 1024;
   const gb = 1024 * 1024 * 1024;
@@ -56,10 +57,19 @@ String categoryFromFileName(String fileName) {
   return 'Other';
 }
 
+const _windowsReserved = {
+  'CON', 'PRN', 'AUX', 'NUL',
+  'COM1','COM2','COM3','COM4','COM5','COM6','COM7','COM8','COM9',
+  'LPT1','LPT2','LPT3','LPT4','LPT5','LPT6','LPT7','LPT8','LPT9',
+};
+
 String safeFileName(String value) {
-  final sanitized = value
+  var sanitized = value
       .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
       .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp(r'^\.+|\.+$'), '')
       .trim();
-  return sanitized.isEmpty ? 'download.bin' : sanitized;
+  if (sanitized.isEmpty) return 'download.bin';
+  if (_windowsReserved.contains(sanitized.toUpperCase())) sanitized = '_$sanitized';
+  return sanitized;
 }

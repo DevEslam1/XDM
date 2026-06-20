@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -583,7 +584,7 @@ class _DownloadTaskList extends StatelessWidget {
               prev[i].downloadedBytes != next[i].downloadedBytes ||
               prev[i].speed != next[i].speed ||
               prev[i].eta != next[i].eta ||
-              prev[i].chunks != next[i].chunks) {
+              !listEquals(prev[i].chunks, next[i].chunks)) {
             return true;
           }
         }

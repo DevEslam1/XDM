@@ -1129,7 +1129,9 @@ class DownloadProvider extends ChangeNotifier {
   Future<void> _startTask(DownloadTask task) async {
     if (_cancelTokens.containsKey(task.id)) return;
 
-    BackgroundService.start();
+    if (downloadingTasksCount == 0) {
+      BackgroundService.start();
+    }
     _updateBackgroundNotification();
     _startWidgetTimer();
     _updateTelemetryWidget();

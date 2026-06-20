@@ -28,6 +28,7 @@ class TorrentService {
     await _updatesSub?.cancel();
     _updatesSub = null;
     _torrentUpdatesStream = null;
+    _activeTorrentIds.clear();
     if (isInitialized) {
       try {
         await LibtorrentFlutter.instance.dispose();

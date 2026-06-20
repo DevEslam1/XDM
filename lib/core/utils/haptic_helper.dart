@@ -26,12 +26,14 @@ mixin HapticHelper {
 
   void errorPulse(SettingsProvider settings) {
     if (settings.vibration) {
-      HapticFeedback.mediumImpact().then((_) {
-        Future.delayed(const Duration(milliseconds: 100), () {
-          HapticFeedback.mediumImpact();
-        });
-      });
+      _runErrorPulse();
     }
+  }
+
+  Future<void> _runErrorPulse() async {
+    await HapticFeedback.mediumImpact();
+    await Future.delayed(const Duration(milliseconds: 100));
+    await HapticFeedback.mediumImpact();
   }
 }
 

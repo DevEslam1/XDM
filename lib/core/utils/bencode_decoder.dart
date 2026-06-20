@@ -41,7 +41,22 @@ class BencodeDecoder {
     }
     final numStr = utf8.decode(_data.sublist(start, _offset));
     _offset++; // skip 'e'
-    return int.parse(numStr);
+
+    if (numStr.isEmpty) throw const FormatException('Empty bencode integer');
+    if (numStr == '-0') throw const FormatException('Negative zero is invalid bencode');
+    if (numStr.length > 1 && numStr.startsWith('0')) {
+      throw const FormatException('Leading zero in bencode integer');
+    }
+    if (numStr.length > 1 && numStr.startsWith('-0')) {
+      throw const FormatException('Leading zero after minus in bencode integer');
+    }
+
+    final big = BigInt.tryParse(numStr);
+    if (big == null) throw FormatException('Invalid bencode integer: $numStr');
+    if (big > BigInt.from(0x7FFFFFFFFFFFFFFF) || big < BigInt.from(-0x7FFFFFFFFFFFFFFF)) {
+      throw FormatException('Bencode integer out of Dart int range: $numStr');
+    }
+    return big.toInt();
   }
 
   Uint8List _decodeBytes() {
@@ -119,7 +134,7 @@ class BencodeDecoder {
         return obj; // keep as bytes if not valid utf8
       }
     } else if (obj is List) {
-      return obj.map((e) => toNormalTypes(e, key)).toList();
+      return obj.map((e) => toNormalTypes(e, null)).toList();
     } else if (obj is Map) {
       return obj.map((k, v) {
         final keyStr = k is Uint8List ? utf8.decode(k, allowMalformed: true) : k.toString();

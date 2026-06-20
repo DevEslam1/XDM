@@ -32,6 +32,11 @@ class BackgroundService {
     );
   }
 
+  /// How long without an [updateNotification] event before the service
+  /// auto-stops itself. If no download progress is received within this
+  /// window the service is considered stale and killed to save battery.
+  static const _heartbeatTimeout = Duration(seconds: 15);
+
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {
     if (service is AndroidServiceInstance) {
@@ -39,7 +44,7 @@ class BackgroundService {
 
       void resetHeartbeat() {
         heartbeatTimer?.cancel();
-        heartbeatTimer = Timer(const Duration(seconds: 15), () {
+        heartbeatTimer = Timer(_heartbeatTimeout, () {
           service.stopSelf();
         });
       }

@@ -76,7 +76,6 @@ class DownloadEngine {
     bool bypassSSL = false,
   }) {
     final client = Dio();
-    _activeDioClients.add(client);
     if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
       client.options.headers['User-Agent'] = customUserAgent.trim();
     }
@@ -121,6 +120,7 @@ class DownloadEngine {
         return httpClient;
       };
     }
+    _activeDioClients.add(client);
     return client;
   }
 
@@ -457,8 +457,9 @@ class DownloadEngine {
       Timer? metadataTimer;
 
       // Handle cancel during metadata loading
-      cancelToken.whenCancel.then((_) {
-        metadataSub?.cancel();
+      cancelToken.whenCancel.then((_) async {
+        if (metadataCompleter.isCompleted) return;
+        await metadataSub?.cancel();
         metadataTimer?.cancel();
         TorrentService.pauseTorrent(id);
         if (!metadataCompleter.isCompleted) {
@@ -473,6 +474,7 @@ class DownloadEngine {
       });
 
       metadataTimer = Timer(const Duration(seconds: 45), () {
+        if (metadataCompleter.isCompleted) return;
         metadataSub?.cancel();
         TorrentService.pauseTorrent(id);
         if (!metadataCompleter.isCompleted) {
@@ -835,6 +837,20 @@ class DownloadEngine {
 
         // Wait for all threads to complete
         await Future.wait(futures);
+
+        // Verify each chunk's size before merging
+        for (int i = 0; i < threadCount; i++) {
+          final partFile = chunkFiles[i];
+          final expectedSize = chunkSizes[i];
+          if (expectedSize > 0) {
+            final actualSize = await partFile.exists() ? await partFile.length() : 0;
+            if (actualSize != expectedSize) {
+              throw Exception(
+                'Chunk $i integrity check failed: expected $expectedSize bytes, got $actualSize bytes.',
+              );
+            }
+          }
+        }
 
         // Merge chunk files into localFilePath
         final localFile = File(currentLocalFilePath);

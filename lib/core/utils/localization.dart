@@ -42,7 +42,7 @@ class L10n {
       'settings_default_threads_sub':
           'Default connection threads count for new downloads',
       'settings_about': 'ABOUT XDM',
-      'settings_firmware': 'FIRMWARE v2.0.0',
+      'settings_firmware': 'FIRMWARE',
       'settings_about_desc':
           'High-efficiency parallel multithreaded download processor.',
       'add_download': 'ADD NEW DOWNLOAD',
@@ -192,7 +192,7 @@ class L10n {
       'settings_default_threads_sub':
           'عدد خيوط الأجزاء الافتراضية للتنزيلات الجديدة',
       'settings_about': 'حول XDM',
-      'settings_firmware': 'البرنامج الثابت v2.0.0',
+      'settings_firmware': 'البرنامج الثابت',
       'settings_about_desc':
           'معالج تنزيل متوازي متعدد الخيوط عالي الكفاءة.',
       'add_download': 'إضافة تنزيل جديد',
@@ -306,10 +306,10 @@ class L10n {
     },
   };
 
-  static String of(BuildContext context, String key) {
+  static String of(BuildContext context, String key, {bool listen = false}) {
     final lang = Provider.of<SettingsProvider>(
       context,
-      listen: false,
+      listen: listen,
     ).languageCode;
     return _translations[lang]?[key] ?? key;
   }
@@ -318,8 +318,8 @@ class L10n {
     return _translations[lang]?[key] ?? key;
   }
 
-  static bool isRtl(BuildContext context) {
-    return Provider.of<SettingsProvider>(context, listen: false).languageCode ==
+  static bool isRtl(BuildContext context, {bool listen = false}) {
+    return Provider.of<SettingsProvider>(context, listen: listen).languageCode ==
         'ar';
   }
 
@@ -370,7 +370,15 @@ class L10n {
     BuildContext context,
     DownloadStatus status,
   ) {
-    if (!isRtl(context)) return status.name;
+    if (!isRtl(context)) {
+      switch (status) {
+        case DownloadStatus.downloading: return 'Downloading';
+        case DownloadStatus.completed: return 'Completed';
+        case DownloadStatus.paused: return 'Paused';
+        case DownloadStatus.queued: return 'Queued';
+        case DownloadStatus.failed: return 'Failed';
+      }
+    }
     switch (status) {
       case DownloadStatus.downloading:
         return 'جاري التحميل';

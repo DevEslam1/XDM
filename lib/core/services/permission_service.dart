@@ -17,8 +17,21 @@ class PermissionService {
       if (sdkMatch != null) {
         return int.parse(sdkMatch.group(1)!);
       }
+      // OEM builds may omit "API"/"SDK"; try bare numbers >= 21
+      final numMatch = RegExp(r'(\d{2,3})').allMatches(version);
+      for (final m in numMatch) {
+        final val = int.tryParse(m.group(1)!);
+        if (val != null && val >= 21) return val;
+      }
     } catch (_) {}
-    return 0; // Unknown or not Android
+    return 0;
+  }
+
+  Future<bool> _isStorageGranted() async {
+    if (kIsWeb || !Platform.isAndroid) return true;
+    final sdk = _androidSdkLevel();
+    if (sdk >= 30) return true;
+    return await Permission.storage.isGranted;
   }
 
   Future<String> defaultDownloadDirectory() async {
@@ -45,9 +58,8 @@ class PermissionService {
       // most users won't grant. Use path_provider scoped storage APIs directly.
       if (sdk >= 30) {
         try {
-          final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
-          if (extDirs != null && extDirs.isNotEmpty) {
-            final dir = extDirs.first;
+          final dir = await getDownloadsDirectory();
+          if (dir != null) {
             final pth = p.join(dir.path, 'XDM');
             final xdmDir = Directory(pth);
             if (!await xdmDir.exists()) {
@@ -67,8 +79,8 @@ class PermissionService {
             return pth;
           }
         } catch (_) {}
-      } else {
-        // API 29 and below: the hardcoded public path is still accessible
+      } else if (await _isStorageGranted()) {
+        // API 29 and below with storage granted: the hardcoded public path is accessible
         const publicPath = '/storage/emulated/0/Download/XDM';
         try {
           final dir = Directory(publicPath);
@@ -77,29 +89,33 @@ class PermissionService {
           }
           return publicPath;
         } catch (e) {
-          try {
-            final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
-            if (extDirs != null && extDirs.isNotEmpty) {
-              final dir = extDirs.first;
-              if (!await dir.exists()) {
-                await dir.create(recursive: true);
-              }
-              return dir.path;
-            }
-          } catch (_) {}
-          try {
-            final extDir = await getExternalStorageDirectory();
-            if (extDir != null) {
-              final pth = p.join(extDir.path, 'Download');
-              final dir = Directory(pth);
-              if (!await dir.exists()) {
-                await dir.create(recursive: true);
-              }
-              return pth;
-            }
-          } catch (_) {}
+          debugPrint('Failed to create public download path: $e');
         }
       }
+
+      // Fallback for API 29- or when above paths fail: try app-specific directories
+      try {
+        final dir = await getDownloadsDirectory();
+        if (dir != null) {
+          final pth = p.join(dir.path, 'XDM');
+          final xdmDir = Directory(pth);
+          if (!await xdmDir.exists()) {
+            await xdmDir.create(recursive: true);
+          }
+          return pth;
+        }
+      } catch (_) {}
+      try {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          final pth = p.join(extDir.path, 'Download');
+          final dir = Directory(pth);
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          return pth;
+        }
+      } catch (_) {}
     }
 
     final docs = await getApplicationDocumentsDirectory();
@@ -111,33 +127,21 @@ class PermissionService {
     return pth;
   }
 
-  /// On modern Android (10+) with scoped storage, explicit storage permission
-  /// is not needed when writing to app-specific directories returned by
-  /// path_provider. For older Android versions we rely on the manifest
-  /// WRITE_EXTERNAL_STORAGE permission which is auto-granted at install time
-  /// for targetSdk < 30.
-  /// We also check dynamic permissions for older Android SDK versions (API < 33).
   Future<bool> ensureStorageAccess() async {
     if (kIsWeb) return true;
     if (!Platform.isAndroid) return true;
 
     final sdk = _androidSdkLevel();
     if (sdk > 0 && sdk < 33) {
-      // Android 12 or older: request storage permission
       final status = await Permission.storage.status;
       if (!status.isGranted) {
         final requestStatus = await Permission.storage.request();
         if (!requestStatus.isGranted) {
-          // If we fail on API 29-32, maybe we can still write to app-specific directories
-          // so we don't return false immediately unless it's Android 9 or below.
-          if (sdk < 29) {
-            return false;
-          }
+          if (sdk < 29) return false;
         }
       }
     }
 
-    // Ensure the download directory exists.
     try {
       final path = await defaultDownloadDirectory();
       final dir = Directory(path);
@@ -147,7 +151,16 @@ class PermissionService {
       return true;
     } catch (e) {
       debugPrint('ensureStorageAccess: failed to create download directory: $e');
-      // If public Downloads failed, try to fallback to app-specific external files
+      try {
+        final dir = await getDownloadsDirectory();
+        if (dir != null) {
+          final xdmDir = Directory(p.join(dir.path, 'XDM'));
+          if (!await xdmDir.exists()) {
+            await xdmDir.create(recursive: true);
+          }
+          return true;
+        }
+      } catch (_) {}
       try {
         final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
         if (extDirs != null && extDirs.isNotEmpty) {

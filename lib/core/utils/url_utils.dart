@@ -106,11 +106,12 @@ String? fileNameFromContentDisposition(Headers headers) {
   }
 
   final quotedMatch = RegExp(
-    'filename="?([^";]+)"?',
+    'filename="([^"]+)"|filename=([^";\\s]+)',
     caseSensitive: false,
   ).firstMatch(value);
   if (quotedMatch != null) {
-    return safeFileName(quotedMatch.group(1)!);
+    final name = quotedMatch.group(1) ?? quotedMatch.group(2);
+    if (name != null) return safeFileName(name.trim());
   }
 
   return null;
@@ -187,6 +188,7 @@ String _punycodeEncode(String input) {
     }
 
     delta += (m - n) * (h + 1);
+    if (delta < 0) throw FormatException('Punycode delta overflow');
     n = m;
 
     for (final char in runes) {
@@ -195,7 +197,12 @@ String _punycodeEncode(String input) {
       } else if (char == n) {
         int q = delta;
         int k = base;
+        int safety = 0;
         while (true) {
+          safety++;
+          if (safety > 10000) {
+            throw FormatException('Punycode encode infinite loop guard triggered');
+          }
           final t = k <= bias
               ? tmin
               : k >= bias + tmax

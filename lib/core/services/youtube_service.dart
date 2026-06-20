@@ -41,7 +41,12 @@ class YoutubeService {
   /// Call this immediately after the user navigates to youtube.com
   /// and the page finishes loading.
   ///
-  /// To extract cookies from the WebView, inject JavaScript:
+  /// Note: document.cookie only returns non-HttpOnly cookies. For full
+  /// authentication (including SSID, SID, HSID), use the WebView's
+  /// CookieManager to extract cookies from the jar and pass them to
+  /// [signIn]() directly.
+  ///
+  /// To extract cookies from the WebView:
   /// ```dart
   /// final cookies = await controller.runJavaScriptReturningResult(
   ///   'document.cookie',
@@ -51,6 +56,13 @@ class YoutubeService {
   static void signInFromBrowser(String rawDocumentCookie) {
     if (rawDocumentCookie.trim().isEmpty) return;
     signIn(rawDocumentCookie.trim());
+  }
+
+  /// Signs in using cookies from a proper cookie list (e.g. from CookieManager).
+  /// Use this instead of [signInFromBrowser] when you need HttpOnly cookies.
+  static void signInFromCookieManager(List<Cookie> cookies) {
+    final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+    if (cookieStr.isNotEmpty) signIn(cookieStr);
   }
 
   /// Returns the current YouTube auth cookie for display/debug, or null.
@@ -128,14 +140,15 @@ class YoutubeService {
 
   static String _formatQuality(VideoQuality q) {
     final name = q.name.toLowerCase();
-    if (name.contains('144') || name.contains('low144')) return '144p';
-    if (name.contains('240') || name.contains('low240')) return '240p';
-    if (name.contains('360') || name.contains('medium360')) return '360p';
-    if (name.contains('480') || name.contains('medium480')) return '480p';
-    if (name.contains('720') || name.contains('high720')) return '720p';
-    if (name.contains('1080') || name.contains('high1080')) return '1080p';
-    if (name.contains('1440') || name.contains('high1440')) return '1440p';
-    if (name.contains('2160') || name.contains('high2160')) return '4K';
+    if (name.contains('2160') || name == 'high2160') return '4K';
+    if (name.contains('1440') || name == 'high1440') return '1440p';
+    if (name.contains('1080') || name == 'high1080') return '1080p';
+    if (name.contains('720') || name == 'high720') return '720p';
+    if (name.contains('480') || name == 'medium480') return '480p';
+    if (name.contains('360') || name == 'medium360') return '360p';
+    if (name.contains('240') || name == 'low240') return '240p';
+    if (name == 'low144') return '144p';
+    if (name.contains('144')) return '144p';
     return q.name;
   }
 
@@ -716,6 +729,17 @@ class _AuthenticatedHttpClient extends YoutubeHttpClient {
   };
 }
 
+// TODO: if playlist fetching breaks, update this key from youtube.com page
+// source (search for "innertubeApiKey" in page source or DevTools network tab).
+const _innerTubeApiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+String? _innerTubeApiKeyOverride;
+
+/// Override the default InnerTube API key. Call this to hot-patch if
+/// YouTube rotates the key without a full app release.
+void updateInnerTubeApiKey(String key) {
+  _innerTubeApiKeyOverride = key;
+}
+
 /// Direct InnerTube API fallback for when youtube_explode_dart's parsing
 /// is broken due to YouTube HTML/API changes.
 ///
@@ -723,8 +747,10 @@ class _AuthenticatedHttpClient extends YoutubeHttpClient {
 /// `playlistVideoRenderer` for video items, which breaks the library.
 /// This fallback parses both formats.
 class _InnerTubeFallback {
-  static const _browseUrl =
-      'https://www.youtube.com/youtubei/v1/browse?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+  static String get _browseUrl {
+    final key = _innerTubeApiKeyOverride ?? _innerTubeApiKey;
+    return 'https://www.youtube.com/youtubei/v1/browse?key=$key';
+  }
 
   static final _log = Logger('YoutubeService._InnerTubeFallback');
   static HttpClient? __client;

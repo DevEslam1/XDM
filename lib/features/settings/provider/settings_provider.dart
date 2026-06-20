@@ -71,10 +71,11 @@ class SettingsProvider extends ChangeNotifier {
   }
   set isDarkMode(bool value) {
     _isDarkMode = value;
+    _prefs.setBool(_isDarkModeKey, value);
   }
   String themeMode = 'system';
   bool showOnboarding = true;
-  bool _classicUi = false;
+  bool _classicUi = true;
   bool get classicUi => batterySaverMode ? true : _classicUi;
   bool batterySaverMode = false;
 
@@ -504,7 +505,7 @@ class SettingsProvider extends ChangeNotifier {
     themeMode = 'system';
     isDarkMode = true;
     showOnboarding = true;
-    _classicUi = false;
+    _classicUi = true;
     batterySaverMode = false;
 
     enableProxy = false;

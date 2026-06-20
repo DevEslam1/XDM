@@ -10,9 +10,11 @@ Future<void> openFile(BuildContext context, String path, SettingsProvider settin
   try {
     final result = await OpenFilex.open(path);
     if (result.type != ResultType.done && context.mounted) {
+      final prefix = L10n.isRtl(context) ? 'تعذر فتح الملف' : 'Could not open file';
+      final separator = L10n.isRtl(context) ? ':\u200F' : ': ';
       ThemedSnackbar.show(
         context,
-        message: '${L10n.isRtl(context) ? 'تعذر فتح الملف' : 'Could not open file'}: ${result.message}',
+        message: '$prefix$separator${result.message}',
         color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
         icon: Icons.error_outline,
         isDarkMode: isDark,
@@ -20,9 +22,11 @@ Future<void> openFile(BuildContext context, String path, SettingsProvider settin
     }
   } catch (e) {
     if (context.mounted) {
+      final prefix = L10n.isRtl(context) ? 'خطأ في فتح الملف' : 'Error opening file';
+      final separator = L10n.isRtl(context) ? ':\u200F' : ': ';
       ThemedSnackbar.show(
         context,
-        message: '${L10n.isRtl(context) ? 'خطأ في فتح الملف' : 'Error opening file'}: $e',
+        message: '$prefix$separator$e',
         color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
         icon: Icons.error_outline,
         isDarkMode: isDark,

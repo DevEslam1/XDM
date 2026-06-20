@@ -754,7 +754,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         value: settings.vibration,
                         onChanged: (val) {
                           settings.setVibration(val);
-                          HapticFeedback.lightImpact();
+                          if (val) HapticFeedback.lightImpact();
                         },
                       ),
                     ],
@@ -1239,7 +1239,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               ),
               const SizedBox(height: 4),
               Text(
-                L10n.of(context, 'settings_firmware'),
+                '${L10n.of(context, 'settings_firmware')} v$kAppVersion',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: mutedClr,
                   fontWeight: FontWeight.bold,
