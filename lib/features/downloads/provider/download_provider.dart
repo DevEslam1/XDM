@@ -172,6 +172,41 @@ class DownloadProvider extends ChangeNotifier
   // Load / initialization
   // ---------------------------------------------------------------------------
 
+  Future<int?> _actualPartialBytes(DownloadTask task) async {
+    if (task.tempFilePath.trim().isEmpty) return null;
+
+    if (task.threadCount > 1) {
+      var total = 0;
+      var foundChunk = false;
+      for (var i = 0; i < task.threadCount; i++) {
+        final chunk = File('${task.tempFilePath}.part$i');
+        if (await chunk.exists()) {
+          foundChunk = true;
+          total += await chunk.length();
+        }
+      }
+      if (foundChunk) return total;
+    }
+
+    final partial = File(task.tempFilePath);
+    return await partial.exists() ? partial.length() : null;
+  }
+
+  Future<DownloadTask> _reconcilePartialProgress(DownloadTask task) async {
+    if (task.status == DownloadStatus.completed) return task;
+
+    final actualBytes = await _actualPartialBytes(task);
+    if (actualBytes == null || actualBytes == task.downloadedBytes) return task;
+
+    final bytes = task.fileSize > 0
+        ? actualBytes.clamp(0, task.fileSize)
+        : actualBytes;
+    return task.copyWith(
+      downloadedBytes: bytes,
+      chunks: _buildChunks(task.threadCount, task.fileSize, bytes),
+    );
+  }
+
   /// [pauseOrphanDownloads] should be true only on initial app startup, when
   /// in-flight downloads (from a previous run) cannot be resumed safely.
   /// On user-triggered reload, we must preserve currently active downloads.
@@ -219,9 +254,19 @@ class DownloadProvider extends ChangeNotifier
         })
         .toList();
 
+    final reconciled = <DownloadTask>[];
+    for (final task in loaded) {
+      try {
+        reconciled.add(await _reconcilePartialProgress(task));
+      } catch (e) {
+        debugPrint('Failed to reconcile partial file for ${task.id}: $e');
+        reconciled.add(task);
+      }
+    }
+
     _tasks
       ..clear()
-      ..addAll(loaded);
+      ..addAll(reconciled);
 
     for (final task in toDelete) {
       await _databaseService.deleteTask(task.id);

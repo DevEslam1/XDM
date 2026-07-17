@@ -73,6 +73,9 @@ class DownloadEngine {
     bool bypassSSL = false,
   }) {
     final client = Dio();
+    client.options.connectTimeout = const Duration(seconds: 15);
+    client.options.sendTimeout = const Duration(seconds: 30);
+    client.options.receiveTimeout = const Duration(seconds: 30);
     if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
       client.options.headers['User-Agent'] = customUserAgent.trim();
     }
