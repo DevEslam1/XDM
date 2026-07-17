@@ -442,6 +442,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
       savePath: savePath,
       downloadPageUrl: widget.videoUrl,
       mergedAudioUrl: audioUrl,
+      audioSize: audioSize,
     );
 
     if (!context.mounted) return;

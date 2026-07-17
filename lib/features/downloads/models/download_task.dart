@@ -35,6 +35,8 @@ class DownloadTask {
   final List<Map<String, dynamic>>? torrentFiles;
   final String? downloadPageUrl;
   final String? mergedAudioUrl;
+  final int audioSize;
+  final double audioProgress;
 
   DownloadTask({
     required this.id,
@@ -64,6 +66,8 @@ class DownloadTask {
     this.torrentFiles,
     this.downloadPageUrl,
     this.mergedAudioUrl,
+    this.audioSize = 0,
+    this.audioProgress = 0.0,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -117,6 +121,10 @@ class DownloadTask {
 
   String get downloadedSizeFormatted => formatBytes(downloadedBytes);
 
+  String get audioSizeFormatted => audioSize > 0 ? formatBytes(audioSize) : 'Unknown';
+
+  String get audioProgressPercentString => '${(audioProgress * 100).toStringAsFixed(1)}%';
+
   DownloadTask copyWith({
     String? fileName,
     String? url,
@@ -148,6 +156,8 @@ class DownloadTask {
     String? downloadPageUrl,
     bool clearDownloadPageUrl = false,
     String? mergedAudioUrl,
+    int? audioSize,
+    double? audioProgress,
   }) {
     return DownloadTask(
       id: id,
@@ -177,6 +187,8 @@ class DownloadTask {
       torrentFiles: torrentFiles ?? this.torrentFiles,
       downloadPageUrl: clearDownloadPageUrl ? null : downloadPageUrl ?? this.downloadPageUrl,
       mergedAudioUrl: mergedAudioUrl ?? this.mergedAudioUrl,
+      audioSize: audioSize ?? this.audioSize,
+      audioProgress: audioProgress ?? this.audioProgress,
     );
   }
 
@@ -209,6 +221,8 @@ class DownloadTask {
       'torrentFiles': torrentFiles,
       'downloadPageUrl': downloadPageUrl,
       'mergedAudioUrl': mergedAudioUrl,
+      'audioSize': audioSize,
+      'audioProgress': audioProgress,
     };
   }
 
@@ -272,6 +286,8 @@ class DownloadTask {
           : null,
       downloadPageUrl: map['downloadPageUrl'] as String?,
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
+      audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
+      audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
     );
   }
 

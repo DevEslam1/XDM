@@ -840,6 +840,79 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
               value: _translateErrorMessage(context, task.errorMessage!),
               settings: settings,
             ),
+          if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) ...[
+            _buildMetaRow(
+              context,
+              label: L10n.isRtl(context) ? 'رابط الصوت' : 'AUDIO URL',
+              value: task.mergedAudioUrl!,
+              isUrl: true,
+              settings: settings,
+              onCopyPressed: () {
+                Clipboard.setData(ClipboardData(text: task.mergedAudioUrl!));
+                ThemedSnackbar.show(
+                  context,
+                  message: L10n.isRtl(context)
+                      ? 'تم نسخ رابط الصوت'
+                      : 'Audio URL copied to clipboard',
+                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  icon: Icons.check_circle_outline,
+                  isDarkMode: isDark,
+                );
+              },
+            ),
+            if (task.audioSize > 0)
+              _buildMetaRow(
+                context,
+                label: L10n.isRtl(context) ? 'حجم الصوت' : 'AUDIO SIZE',
+                value: task.audioSizeFormatted,
+                settings: settings,
+              ),
+            if (task.mergedAudioUrl != null &&
+                task.status == DownloadStatus.downloading &&
+                task.audioProgress > 0.0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          L10n.isRtl(context) ? 'تنزيل الصوت' : 'AUDIO DOWNLOAD',
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: secClr,
+                            fontSize: 10,
+                            letterSpacing: 1.0,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          task.audioProgressPercentString,
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: task.audioProgress,
+                        minHeight: 4,
+                        backgroundColor: AppTheme.border.withValues(alpha: 0.3),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
           _buildMetaRow(
             context,
             label: L10n.of(context, 'details_established'),

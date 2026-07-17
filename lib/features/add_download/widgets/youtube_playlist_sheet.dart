@@ -163,6 +163,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
               savePath: savePath,
               downloadPageUrl: YoutubeService.videoUrl(videoId),
               mergedAudioUrl: audioUrl,
+              audioSize: audioSize,
             );
           } else {
             final ext = streamInfo['ext'] as String? ?? 'mp4';

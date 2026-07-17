@@ -344,6 +344,7 @@ class DownloadProvider extends ChangeNotifier
     List<Map<String, dynamic>>? torrentFiles,
     String? downloadPageUrl,
     String? mergedAudioUrl,
+    int audioSize = 0,
   }) async {
     _lastError = null;
     final urls = url
@@ -387,6 +388,7 @@ class DownloadProvider extends ChangeNotifier
             scheduledAt: scheduledAt,
             downloadPageUrl: downloadPageUrl,
             mergedAudioUrl: mergedAudioUrl,
+            audioSize: audioSize,
           );
           addedCount++;
         }
@@ -412,6 +414,7 @@ class DownloadProvider extends ChangeNotifier
           torrentFiles: torrentFiles,
           downloadPageUrl: downloadPageUrl,
           mergedAudioUrl: mergedAudioUrl,
+          audioSize: audioSize,
         );
       }
     } catch (e) {
@@ -431,6 +434,7 @@ class DownloadProvider extends ChangeNotifier
     List<Map<String, dynamic>>? torrentFiles,
     String? downloadPageUrl,
     String? mergedAudioUrl,
+    int audioSize = 0,
   }) async {
     final exists = _tasks.any(
       (t) =>
@@ -528,6 +532,7 @@ class DownloadProvider extends ChangeNotifier
       torrentFiles: torrentFiles,
       downloadPageUrl: downloadPageUrl,
       mergedAudioUrl: mergedAudioUrl,
+      audioSize: audioSize,
     );
 
     _tasks.insert(0, task);
@@ -966,6 +971,7 @@ class DownloadProvider extends ChangeNotifier
         clearError: true,
         clearCompletedAt: true,
         torrentFiles: resetTorrentFiles ?? task.torrentFiles,
+        audioProgress: 0.0,
       ),
     );
 
@@ -1131,10 +1137,19 @@ class DownloadProvider extends ChangeNotifier
                 url: task.mergedAudioUrl!,
                 tempFilePath: audioTempPath,
                 localFilePath: audioTempPath,
-                knownFileSize: 0,
+                knownFileSize: current.audioSize,
                 supportsResume: true,
                 cancelToken: audioCancelToken,
-                onProgress: (p) {},
+                onProgress: (progress) {
+                  final t = _findTask(task.id);
+                  if (t == null || t.status != DownloadStatus.downloading) return;
+                  final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
+                  final p = size > 0 ? (progress.downloadedBytes / size).clamp(0.0, 1.0) : 0.0;
+                  final index = _tasks.indexWhere((x) => x.id == task.id);
+                  if (index != -1) {
+                    _tasks[index] = _tasks[index].copyWith(audioProgress: p);
+                  }
+                },
                 speedLimitBytesPerSecond: () => 0,
                 activeDownloadCount: () => downloadingTasksCount,
                 threadCount: 1,
