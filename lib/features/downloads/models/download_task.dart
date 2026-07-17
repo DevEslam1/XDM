@@ -3,6 +3,8 @@ import '../../../core/utils/url_utils.dart';
 
 enum DownloadStatus { queued, downloading, paused, completed, failed }
 
+enum SortOption { dateAdded, fileSize, fileName, status }
+
 class DownloadTask {
   final String id;
   final String fileName;
