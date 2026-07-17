@@ -266,19 +266,19 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
                           if (combined.isNotEmpty) ...[
-                            _sectionHeader(context, 'VIDEO + AUDIO (BEST QUALITY)', Icons.hd_outlined,
-                                isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber, isDark,
+                            _sectionHeader(context, 'VIDEO', Icons.video_file_outlined,
+                                isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue, isDark,
                                 trailing: _recommendBadge(isDark)),
                             ...combined.map((s) => _streamTile(context, s, isDark, settings)),
                             const SizedBox(height: 12),
                           ],
-                          if (muxed.isNotEmpty) ...[
+                          if (combined.isEmpty && muxed.isNotEmpty) ...[
                             _sectionHeader(context, 'VIDEO + AUDIO (MUXED)', Icons.ondemand_video_outlined, accent, isDark),
                             ...muxed.map((s) => _streamTile(context, s, isDark, settings)),
                             const SizedBox(height: 12),
                           ],
                           if (audio.isNotEmpty) ...[
-                            _sectionHeader(context, 'AUDIO ONLY', Icons.audiotrack_outlined,
+                            _sectionHeader(context, 'AUDIO', Icons.audiotrack_outlined,
                                 isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, isDark),
                             ...audio.map((s) => _streamTile(context, s, isDark, settings)),
                             const SizedBox(height: 12),
@@ -427,33 +427,21 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     final title = stream['title'] as String? ?? 'YouTube Video';
     final qLabel = stream['quality'] as String? ?? 'HD';
     final ext = stream['ext'] as String? ?? 'mp4';
-    final audioExt = stream['audioExt'] as String? ?? 'm4a';
     final videoUrl = stream['src'] as String;
     final audioUrl = stream['audioSrc'] as String;
     final videoSize = stream['videoSize'] as int? ?? 0;
     final audioSize = stream['audioSize'] as int? ?? 0;
     final savePath = settings.customDownloadPath ?? '';
 
-    // Create video download task
-    final videoName = '$title [$qLabel video].$ext';
+    final videoName = '$title [$qLabel].$ext';
     await provider.addDownload(
       name: videoName,
       url: videoUrl,
-      size: videoSize,
+      size: videoSize + audioSize, // Show total size
       category: 'Video',
       savePath: savePath,
       downloadPageUrl: widget.videoUrl,
-    );
-
-    // Create audio download task
-    final audioName = '$title [$qLabel audio].$audioExt';
-    await provider.addDownload(
-      name: audioName,
-      url: audioUrl,
-      size: audioSize,
-      category: 'Audio',
-      savePath: savePath,
-      downloadPageUrl: widget.videoUrl,
+      mergedAudioUrl: audioUrl,
     );
 
     if (!context.mounted) return;
@@ -510,15 +498,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
             onTap: () async {
               runHaptic(settings);
               if (type == 'combined') {
-                final confirm = await _showConfirmDialog(
-                  context: context,
-                  title: L10n.isRtl(context) ? 'تنبيه الملفات المنفصلة' : 'Separate Files Warning',
-                  content: L10n.isRtl(context)
-                      ? 'سيقوم هذا الخيار بتحميل ملف الفيديو وملف الصوت بشكل منفصل (الفيديو سيكون بدون صوت). هل تريد المتابعة؟'
-                      : 'This option will download the video and audio as two separate files (the video file will have no sound). Do you want to proceed?',
-                  isDark: isDark,
-                );
-                if (!confirm || !context.mounted) return;
+                // Now handled automatically by DownloadProvider with FFmpeg merging
                 _handleCombinedDownload(context, stream, isDark, settings);
               } else if (type == 'video_only') {
                 final confirm = await _showConfirmDialog(

@@ -80,8 +80,8 @@ class DownloadEngine {
       client.options.headers['User-Agent'] = customUserAgent.trim();
     }
 
-    final adapter = client.httpClientAdapter;
-    if (adapter is IOHttpClientAdapter) {
+    if (client.httpClientAdapter is IOHttpClientAdapter) {
+      final adapter = client.httpClientAdapter as IOHttpClientAdapter;
       final String host =
           (enableProxy && proxyHost != null && proxyHost.trim().isNotEmpty)
           ? proxyHost.trim()
@@ -298,9 +298,7 @@ class DownloadEngine {
       supportsResume = acceptRanges == 'bytes';
     } catch (e) {
       // Some servers block HEAD; GET will still attempt the download.
-      debugPrint(
-        'DownloadEngine HEAD request failed (this is expected for some servers): $e',
-      );
+      debugPrint('HEAD request failed for $punyUrl: $e');
     } finally {
       isolatedDio.close();
       _activeDioClients.remove(isolatedDio);

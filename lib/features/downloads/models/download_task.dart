@@ -34,6 +34,7 @@ class DownloadTask {
   final int seedingLimitKbps;
   final List<Map<String, dynamic>>? torrentFiles;
   final String? downloadPageUrl;
+  final String? mergedAudioUrl;
 
   DownloadTask({
     required this.id,
@@ -62,6 +63,7 @@ class DownloadTask {
     this.seedingLimitKbps = 500,
     this.torrentFiles,
     this.downloadPageUrl,
+    this.mergedAudioUrl,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -145,6 +147,7 @@ class DownloadTask {
     List<Map<String, dynamic>>? torrentFiles,
     String? downloadPageUrl,
     bool clearDownloadPageUrl = false,
+    String? mergedAudioUrl,
   }) {
     return DownloadTask(
       id: id,
@@ -173,6 +176,7 @@ class DownloadTask {
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
       torrentFiles: torrentFiles ?? this.torrentFiles,
       downloadPageUrl: clearDownloadPageUrl ? null : downloadPageUrl ?? this.downloadPageUrl,
+      mergedAudioUrl: mergedAudioUrl ?? this.mergedAudioUrl,
     );
   }
 
@@ -204,6 +208,7 @@ class DownloadTask {
       'seedingLimitKbps': seedingLimitKbps,
       'torrentFiles': torrentFiles,
       'downloadPageUrl': downloadPageUrl,
+      'mergedAudioUrl': mergedAudioUrl,
     };
   }
 
@@ -266,6 +271,7 @@ class DownloadTask {
               .toList()
           : null,
       downloadPageUrl: map['downloadPageUrl'] as String?,
+      mergedAudioUrl: map['mergedAudioUrl'] as String?,
     );
   }
 

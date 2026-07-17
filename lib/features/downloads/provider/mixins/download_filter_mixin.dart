@@ -206,6 +206,7 @@ mixin DownloadFilterMixin {
     if (category != null) {
       _categoryFilters.add(category);
     }
+    _filteredTasksDirty = true;
     notifyListeners();
   }
 

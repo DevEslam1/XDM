@@ -28,6 +28,7 @@ class MainNavigationContainer extends StatefulWidget {
 class _MainNavigationContainerState extends State<MainNavigationContainer> with WidgetsBindingObserver {
 
   String? _lastClipboardUrl;
+  DateTime _lastClipboardCheckTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -74,6 +75,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
   }
 
   Future<void> _checkClipboard() async {
+    final now = DateTime.now();
+    if (now.difference(_lastClipboardCheckTime).inSeconds < 5) return;
+    _lastClipboardCheckTime = now;
+
     final url = await ClipboardService().checkClipboardForUrl();
     if (url != null && mounted && url != _lastClipboardUrl) {
       _lastClipboardUrl = url;

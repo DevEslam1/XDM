@@ -827,7 +827,7 @@ class _DonutChartPanel extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: categoryCards.take(3).map((card) {
+              children: categoryCards.map((card) {
                 final sizeMb = sizes[card['name']] ?? 0.0;
                 final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
                 final sizeText = sizeMb >= 1024 ? '${(sizeMb / 1024).toStringAsFixed(1)}G' : '${sizeMb.toStringAsFixed(0)}M';

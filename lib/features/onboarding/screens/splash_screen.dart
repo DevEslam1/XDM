@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
@@ -28,6 +29,7 @@ class _SplashScreenState extends State<SplashScreen>
   final List<String> _bootLogs = [];
   int _logIndex = 0;
   Timer? _logTimer;
+  String _appVersion = 'v2.0.0';
 
 
   final List<String> _rawLogs = [
@@ -48,6 +50,8 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(seconds: 2),
     )..repeat();
 
+    _loadAppVersion();
+
     if (Platform.environment.containsKey('FLUTTER_TEST')) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -57,6 +61,17 @@ class _SplashScreenState extends State<SplashScreen>
     } else {
       _printNextLog();
     }
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v${info.version}';
+        });
+      }
+    } catch (_) {}
   }
 
   void _printNextLog() {
@@ -190,7 +205,7 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'FIRMWARE REVISION v2.0.0',
+                    'FIRMWARE REVISION $_appVersion',
                     style: TextStyle(
                       color: isDark
                           ? AppTheme.textMuted

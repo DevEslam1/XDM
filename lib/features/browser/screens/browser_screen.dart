@@ -651,6 +651,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   void dispose() {
     for (final tab in _tabs) {
       try {
+        tab.controller.clearCache();
+        tab.controller.clearLocalStorage();
         tab.controller.loadRequest(Uri.parse('about:blank'));
       } catch (_) {}
     }
@@ -708,6 +710,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   void _updateNavState() async {
     if (_tabs.isEmpty) return;
+    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
     final canBack = await activeTab.controller.canGoBack();
     final canForward = await activeTab.controller.canGoForward();

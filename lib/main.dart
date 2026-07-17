@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,42 +27,46 @@ Future<void> main() async {
     return true;
   };
 
-  try {
-    await AdBlocker.initialize();
-    if (TorrentService.isSupported) {
-      await TorrentService.init();
-    }
-    await Hive.initFlutter();
+  runZonedGuarded(() async {
+    try {
+      await AdBlocker.initialize();
+      if (TorrentService.isSupported) {
+        await TorrentService.init();
+      }
+      await Hive.initFlutter();
 
-    final databaseService = DatabaseService();
-    await databaseService.init();
+      final databaseService = DatabaseService();
+      await databaseService.init();
 
-    final settingsProvider = SettingsProvider();
-    await settingsProvider.load();
+      final settingsProvider = SettingsProvider();
+      await settingsProvider.load();
 
-    final notificationService = NotificationService();
-    await notificationService.init();
+      final notificationService = NotificationService();
+      await notificationService.init();
 
-    await BackgroundService.initialize();
+      await BackgroundService.initialize();
 
-    final downloadProvider = DownloadProvider(
-      databaseService: databaseService,
-      settingsProvider: settingsProvider,
-      notificationService: notificationService,
-    );
-    await downloadProvider.load();
-
-    runApp(
-      DmxApp(
+      final downloadProvider = DownloadProvider(
         databaseService: databaseService,
         settingsProvider: settingsProvider,
-        downloadProvider: downloadProvider,
-      ),
-    );
-  } catch (e, stack) {
-    debugPrint('Initialization error: $e\n$stack');
-    runApp(ErrorApp(error: e.toString()));
-  }
+        notificationService: notificationService,
+      );
+      await downloadProvider.load();
+
+      runApp(
+        DmxApp(
+          databaseService: databaseService,
+          settingsProvider: settingsProvider,
+          downloadProvider: downloadProvider,
+        ),
+      );
+    } catch (e, stack) {
+      debugPrint('Initialization error: $e\n$stack');
+      runApp(ErrorApp(error: e.toString()));
+    }
+  }, (error, stack) {
+    debugPrint('Uncaught zone error: $error\n$stack');
+  });
 }
 
 class ErrorApp extends StatelessWidget {

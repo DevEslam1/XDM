@@ -57,15 +57,12 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   bool _isDownloading = false;
   bool _isCancelled = false;
   String? _errorMessage;
-  String _qualityPreset = '720p';
+  String _qualityPreset = 'best_combined';
   int _downloadProgress = 0;
 
   static const List<Map<String, String>> _qualityOptions = [
-    {'value': 'best_muxed', 'label': 'Best Quality (Muxed)'},
-    {'value': '1080p', 'label': '1080p Full HD (Muxed)'},
-    {'value': '720p', 'label': '720p HD (Muxed)'},
-    {'value': '480p', 'label': '480p SD (Muxed)'},
-    {'value': '360p', 'label': '360p Low (Muxed)'},
+    {'value': 'best_combined', 'label': 'Best Quality (Auto Merge)'},
+    {'value': 'best_muxed', 'label': 'Best Compatible (.mp4)'},
     {'value': 'audio_only', 'label': 'Audio Only'},
   ];
 
@@ -149,33 +146,23 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
           final type = streamInfo['type'] as String? ?? 'muxed';
 
           if (type == 'combined') {
-            // Combined: create separate video + audio downloads
+            // Combined: enqueue a single download with mergedAudioUrl
             final qLabel = streamInfo['quality'] as String? ?? 'HD';
             final ext = streamInfo['ext'] as String? ?? 'mp4';
-            final audioExt = streamInfo['audioExt'] as String? ?? 'm4a';
             final videoUrl = streamInfo['src'] as String;
             final audioUrl = streamInfo['audioSrc'] as String;
             final videoSize = streamInfo['videoSize'] as int? ?? 0;
             final audioSize = streamInfo['audioSize'] as int? ?? 0;
 
-            final videoName = '$videoTitle [$qLabel video].$ext';
+            final videoName = '$videoTitle [$qLabel].$ext';
             await provider.addDownload(
               name: videoName,
               url: videoUrl,
-              size: videoSize,
+              size: videoSize + audioSize,
               category: 'Video',
               savePath: savePath,
               downloadPageUrl: YoutubeService.videoUrl(videoId),
-            );
-
-            final audioName = '$videoTitle [$qLabel audio].$audioExt';
-            await provider.addDownload(
-              name: audioName,
-              url: audioUrl,
-              size: audioSize,
-              category: 'Audio',
-              savePath: savePath,
-              downloadPageUrl: YoutubeService.videoUrl(videoId),
+              mergedAudioUrl: audioUrl,
             );
           } else {
             final ext = streamInfo['ext'] as String? ?? 'mp4';
@@ -196,7 +183,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         } else {
           failed++;
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('Failed to get stream for video $videoId: $e');
         failed++;
       }
 
@@ -620,7 +608,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 ),
                               ],
                             ),
-                            if (_qualityPreset == '1080p' || _qualityPreset == '720p' || _qualityPreset == '480p')
+                            if (_qualityPreset == 'best_muxed' || _qualityPreset == 'best_combined')
                               Padding(
                                 padding: const EdgeInsets.only(top: 8, left: 60),
                                 child: Row(
@@ -633,9 +621,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
-                                        L10n.isRtl(context)
-                                            ? 'ملاحظة: لضمان وجود الصوت والصورة معاً في ملف واحد، سيتم تحميل أفضل جودة مدمجة متاحة (غالباً 360p).'
-                                            : 'Note: To ensure audio + video together in one file, the best available merged quality will be downloaded (usually 360p).',
+                                        _qualityPreset == 'best_combined'
+                                            ? (L10n.isRtl(context) ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.' : 'Note: Best video and audio will be auto-merged.')
+                                            : (L10n.isRtl(context) ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).' : 'Note: Best merged quality will be downloaded (usually 360p).'),
                                         style: TextStyle(
                                           color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                                           fontSize: 10,
