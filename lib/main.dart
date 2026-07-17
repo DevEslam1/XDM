@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -14,37 +15,90 @@ import 'features/onboarding/screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AdBlocker.initialize();
-  if (TorrentService.isSupported) {
-    await TorrentService.init();
-  }
-  await Hive.initFlutter();
 
-  final databaseService = DatabaseService();
-  await databaseService.init();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exception}');
+  };
 
-  final settingsProvider = SettingsProvider();
-  await settingsProvider.load();
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Platform error: $error\n$stack');
+    return true;
+  };
 
-  final notificationService = NotificationService();
-  await notificationService.init();
+  try {
+    await AdBlocker.initialize();
+    if (TorrentService.isSupported) {
+      await TorrentService.init();
+    }
+    await Hive.initFlutter();
 
-  await BackgroundService.initialize();
+    final databaseService = DatabaseService();
+    await databaseService.init();
 
-  final downloadProvider = DownloadProvider(
-    databaseService: databaseService,
-    settingsProvider: settingsProvider,
-    notificationService: notificationService,
-  );
-  await downloadProvider.load();
+    final settingsProvider = SettingsProvider();
+    await settingsProvider.load();
 
-  runApp(
-    DmxApp(
+    final notificationService = NotificationService();
+    await notificationService.init();
+
+    await BackgroundService.initialize();
+
+    final downloadProvider = DownloadProvider(
       databaseService: databaseService,
       settingsProvider: settingsProvider,
-      downloadProvider: downloadProvider,
-    ),
-  );
+      notificationService: notificationService,
+    );
+    await downloadProvider.load();
+
+    runApp(
+      DmxApp(
+        databaseService: databaseService,
+        settingsProvider: settingsProvider,
+        downloadProvider: downloadProvider,
+      ),
+    );
+  } catch (e, stack) {
+    debugPrint('Initialization error: $e\n$stack');
+    runApp(ErrorApp(error: e.toString()));
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  final String error;
+  const ErrorApp({super.key, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'XDM Error',
+      theme: AppTheme.darkTheme,
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.redAccent, size: 64),
+                const SizedBox(height: 16),
+                const Text(
+                  'Initialization Failed',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error,
+                  style: const TextStyle(color: Colors.redAccent),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class DmxApp extends StatelessWidget {

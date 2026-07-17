@@ -1,4 +1,5 @@
 import '../../../core/utils/file_utils.dart';
+import '../../../core/utils/url_utils.dart';
 
 enum DownloadStatus { queued, downloading, paused, completed, failed }
 
@@ -7,17 +8,17 @@ class DownloadTask {
   final String fileName;
   final String url;
   final int fileSize;
-  int downloadedBytes;
-  double speed;
-  int? eta;
+  final int downloadedBytes;
+  final double speed;
+  final int? eta;
   final String category;
-  DownloadStatus status;
+  final DownloadStatus status;
   final String savePath;
   final String localFilePath;
   final String tempFilePath;
   final String? errorMessage;
   final int threadCount;
-  List<double> chunks;
+  final List<double> chunks;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? completedAt;
@@ -61,21 +62,7 @@ class DownloadTask {
     this.downloadPageUrl,
   });
 
-  bool get isTorrent {
-    final urlLower = url.trim().toLowerCase();
-    if (urlLower.startsWith('magnet:')) return true;
-    if (urlLower.startsWith('file://')) {
-      return fileName.trim().toLowerCase().endsWith('.torrent');
-    }
-    try {
-      final uri = Uri.parse(urlLower);
-      final path = uri.path.toLowerCase();
-      if (path.endsWith('.torrent')) return true;
-    } catch (_) {
-      if (urlLower.endsWith('.torrent')) return true;
-    }
-    return fileName.trim().toLowerCase().endsWith('.torrent');
-  }
+  bool get isTorrent => isTorrentUrl(url, fileName: fileName);
 
   double get progress {
     if (fileSize <= 0) return 0.0;
@@ -268,7 +255,7 @@ class DownloadTask {
       scheduledAt: DateTime.tryParse(map['scheduledAt'] as String? ?? ''),
       supportsResume: map['supportsResume'] as bool? ?? false,
       speedLimitKbps: (map['speedLimitKbps'] as num?)?.toInt() ?? 0,
-      seedingEnabled: map['seedingEnabled'] as bool? ?? true,
+      seedingEnabled: map['seedingEnabled'] as bool? ?? false,
       seedingLimited: map['seedingLimited'] as bool? ?? false,
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
       torrentFiles: map['torrentFiles'] is List

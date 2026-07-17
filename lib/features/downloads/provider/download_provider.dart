@@ -68,6 +68,12 @@ class DownloadProvider extends ChangeNotifier {
   final Map<String, int> _lastDbSaveTimes = {};
   final Set<String> _pendingProgressUpdates = {};
   final Map<String, int> _torrentIds = {};
+  final Map<String, int> _notificationIds = {};
+  int _nextNotificationId = 1;
+
+  int _getNotificationId(String taskId) {
+    return _notificationIds.putIfAbsent(taskId, () => _nextNotificationId++);
+  }
   final Map<String, int> _retryCounts = {};
   Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
 
@@ -154,6 +160,7 @@ class DownloadProvider extends ChangeNotifier {
     } else {
       _categoryFilters.add(category);
     }
+    _filteredTasksDirty = true;
     notifyListeners();
   }
 
@@ -340,6 +347,7 @@ class DownloadProvider extends ChangeNotifier {
       if (replace) {
         await _databaseService.clearAllTasks();
         _tasks.clear();
+        _filteredTasksDirty = true;
       }
 
       var hasChanges = false;
@@ -348,6 +356,7 @@ class DownloadProvider extends ChangeNotifier {
         final task = DownloadTask.fromMap(map);
         if (!_tasks.any((t) => t.id == task.id)) {
           _tasks.add(task);
+          _filteredTasksDirty = true;
           await _databaseService.saveTask(task);
           hasChanges = true;
         }
@@ -367,16 +376,24 @@ class DownloadProvider extends ChangeNotifier {
   void setSearchQuery(String query) {
     if (_searchQuery == query) return;
     _searchQuery = query;
+    _filteredTasksDirty = true;
     notifyListeners();
   }
 
   void setStatusFilter(String filter) {
     if (_statusFilter == filter) return;
     _statusFilter = filter;
+    _filteredTasksDirty = true;
     notifyListeners();
   }
 
+  List<DownloadTask>? _cachedFilteredTasks;
+  bool _filteredTasksDirty = true;
+
   List<DownloadTask> get filteredTasks {
+    if (!_filteredTasksDirty && _cachedFilteredTasks != null) {
+      return _cachedFilteredTasks!.map((t) => _findTask(t.id) ?? t).toList();
+    }
     final list = _tasks.where((task) {
       final queryLower = _searchQuery.toLowerCase();
       final matchesSearch =
@@ -424,17 +441,21 @@ class DownloadProvider extends ChangeNotifier {
       return _sortAscending ? comparison : -comparison;
     });
 
+    _cachedFilteredTasks = list;
+    _filteredTasksDirty = false;
     return list;
   }
 
   void setSortOption(SortOption option) {
     if (_sortOption == option) return;
     _sortOption = option;
+    _filteredTasksDirty = true;
     notifyListeners();
   }
 
   void toggleSortDirection() {
     _sortAscending = !_sortAscending;
+    _filteredTasksDirty = true;
     notifyListeners();
   }
 
@@ -581,6 +602,11 @@ class DownloadProvider extends ChangeNotifier {
     List<Map<String, dynamic>>? torrentFiles,
     String? downloadPageUrl,
   }) async {
+    final exists = _tasks.any((t) => t.url == url && t.status != DownloadStatus.failed && t.status != DownloadStatus.completed);
+    if (exists) {
+      throw Exception('This URL is already active in the download queue.');
+    }
+
     final defaultDirectory =
         _settingsProvider.customDownloadPath?.isNotEmpty == true
         ? _settingsProvider.customDownloadPath!
@@ -668,6 +694,7 @@ class DownloadProvider extends ChangeNotifier {
     );
 
     _tasks.insert(0, task);
+    _filteredTasksDirty = true;
     await _databaseService.saveTask(task);
     notifyListeners();
     _updateTelemetryWidget();
@@ -863,7 +890,9 @@ class DownloadProvider extends ChangeNotifier {
     _retryCounts.remove(id);
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
+    _activeFutures.remove(id);
     _tasks.removeWhere((task) => task.id == id);
+    _filteredTasksDirty = true;
 
     final torrentId = _torrentIds[id];
     if (torrentId != null) {
@@ -904,7 +933,7 @@ class DownloadProvider extends ChangeNotifier {
       }
     }
     await _databaseService.deleteTask(id);
-    _notificationService.cancelNotification(id.hashCode.abs());
+    _notificationService.cancelNotification(_getNotificationId(id));
     _updateActualTorrentUploadLimit();
     notifyListeners();
     _pumpQueue();
@@ -1197,7 +1226,7 @@ class DownloadProvider extends ChangeNotifier {
       ),
     );
 
-    final notificationId = task.id.hashCode.abs();
+    final notificationId = _getNotificationId(task.id);
     final isAutoName =
         task.fileName == 'torrent_download.zip' ||
         task.fileName.isEmpty ||
@@ -1517,7 +1546,16 @@ class DownloadProvider extends ChangeNotifier {
     final index = _tasks.indexWhere((task) => task.id == updated.id);
     if (index == -1) return;
 
+    final oldTask = _tasks[index];
     _tasks[index] = updated;
+
+    if (oldTask.status != updated.status ||
+        oldTask.category != updated.category ||
+        oldTask.fileName != updated.fileName ||
+        oldTask.fileSize != updated.fileSize) {
+      _filteredTasksDirty = true;
+    }
+
     try {
       await _databaseService.saveTask(updated);
     } catch (e) {
@@ -1711,9 +1749,10 @@ class DownloadProvider extends ChangeNotifier {
     });
   }
 
-  void _checkScheduledDownloads() {
+  Future<void> _checkScheduledDownloads() async {
     final now = DateTime.now();
     var hasChanges = false;
+    final saves = <Future<void>>[];
     for (var i = 0; i < _tasks.length; i++) {
       final task = _tasks[i];
       if (task.status == DownloadStatus.paused &&
@@ -1725,8 +1764,15 @@ class DownloadProvider extends ChangeNotifier {
           clearCompletedAt: true,
           clearScheduledAt: true,
         );
-        _databaseService.saveTask(_tasks[i]);
+        saves.add(_databaseService.saveTask(_tasks[i]));
         hasChanges = true;
+      }
+    }
+    if (saves.isNotEmpty) {
+      try {
+        await Future.wait(saves);
+      } catch (e) {
+        debugPrint('Failed to save scheduled tasks: $e');
       }
     }
     if (hasChanges) {

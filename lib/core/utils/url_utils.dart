@@ -30,6 +30,23 @@ bool isTorrentFileUrl(String value) {
   return clean.startsWith('file://') || clean.endsWith('.torrent') || clean.contains('.torrent?');
 }
 
+bool isTorrentUrl(String url, {String? fileName}) {
+  final urlLower = url.trim().toLowerCase();
+  if (urlLower.startsWith('magnet:')) return true;
+  if (isTorrentFileUrl(urlLower)) return true;
+  
+  if (fileName != null && fileName.trim().toLowerCase().endsWith('.torrent')) {
+    return true;
+  }
+  
+  try {
+    final uri = Uri.parse(urlLower);
+    if (uri.path.toLowerCase().endsWith('.torrent')) return true;
+  } catch (_) {}
+  
+  return false;
+}
+
 bool isValidTransmissionUrl(String value) {
   return isHttpUrl(value) || isMagnetUrl(value) || isTorrentFileUrl(value);
 }

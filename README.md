@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/Flutter-3.12+-02569B?logo=flutter&logoColor=white&style=for-the-badge" alt="Flutter" />
   <img src="https://img.shields.io/badge/Dart-3.0+-0175C2?logo=dart&logoColor=white&style=for-the-badge" alt="Dart" />
   <img src="https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Windows-000000?style=for-the-badge" alt="Platforms" />
-  <img src="https://img.shields.io/badge/Version-1.1.0-blue?style=for-the-badge" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-2.0.0-blue?style=for-the-badge" alt="Version" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 

@@ -20,7 +20,7 @@ class SettingsProvider extends ChangeNotifier {
 
   static const _enableProxyKey = 'enableProxy';
   static const _proxyAddressKey = 'proxyAddress';
-  static const _bypassSSLKey = 'bypassSSL_v2'; // v2: default true
+  static const _bypassSSLKey = 'bypassSSL_v2'; // v2: default false
   static const _reduceVisualsKey = 'reduceVisuals';
   static const _customUserAgentKey = 'customUserAgent';
   static const _cleanupDaysKey = 'cleanupDays';
@@ -82,7 +82,7 @@ class SettingsProvider extends ChangeNotifier {
 
   bool enableProxy = false;
   String proxyAddress = '';
-  bool bypassSSL = true;
+  bool bypassSSL = false;
   bool reduceVisuals = false;
   String customUserAgent = '';
   int cleanupDays = 0;
@@ -126,7 +126,7 @@ class SettingsProvider extends ChangeNotifier {
     wifiOnly = _prefs.getBool(_wifiOnlyKey) ?? wifiOnly;
     languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
     themeMode = _prefs.getString(_themeModeKey) ?? 'system';
-    isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
+    _isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
     showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
     _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;
     batterySaverMode = _prefs.getBool(_batterySaverModeKey) ?? batterySaverMode;
