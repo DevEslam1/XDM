@@ -159,6 +159,22 @@ void main() {
       const MethodChannel('com.example.dmx/widget'),
       (methodCall) async => null,
     );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+      (methodCall) async {
+        switch (methodCall.method) {
+          case 'read':
+            return null;
+          case 'write':
+          case 'delete':
+          case 'containsKey':
+          case 'readAll':
+          default:
+            return null;
+        }
+      },
+    );
   });
 
   tearDown(() async {

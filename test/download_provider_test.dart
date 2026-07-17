@@ -123,6 +123,22 @@ void main() {
       const MethodChannel('com.example.dmx/widget'),
       (methodCall) async => null,
     );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+      (methodCall) async {
+        switch (methodCall.method) {
+          case 'read':
+            return null;
+          case 'write':
+          case 'delete':
+          case 'containsKey':
+          case 'readAll':
+          default:
+            return null;
+        }
+      },
+    );
   });
 
   tearDown(() async {
@@ -159,6 +175,8 @@ void main() {
       downloadEngine: FakeDownloadEngine(),
       permissionService: FakePermissionService(),
     );
+    // Disable auto-resume so the test verifies orphan-pausing behavior
+    settings.autoStart = false;
     await provider.load();
 
     expect(provider.tasks.single.status, DownloadStatus.paused);
@@ -205,6 +223,7 @@ void main() {
       downloadEngine: FakeDownloadEngine(),
       permissionService: FakePermissionService(),
     );
+    settings.autoStart = false;
     await provider.load();
 
     await provider.addDownload(
@@ -293,6 +312,8 @@ void main() {
       downloadEngine: FakeDownloadEngine(),
       permissionService: FakePermissionService(),
     );
+    // Disable auto-resume to verify pause-orphan behavior in isolation
+    settings.autoStart = false;
     await provider.load();
     expect(provider.tasks.single.status, DownloadStatus.paused);
 
@@ -311,6 +332,7 @@ void main() {
       downloadEngine: FakeDownloadEngine(),
       permissionService: FakePermissionService(),
     );
+    settings.autoStart = false;
     await second.load();
     // No active stream from outside; the cancelTokens map is empty. So
     // the "in-flight" condition can't be triggered from outside. The
@@ -346,6 +368,7 @@ void main() {
       downloadEngine: FakeDownloadEngine(),
       permissionService: FakePermissionService(),
     );
+    settings.autoStart = false;
     await provider.load();
 
     await provider.retryTask('retry_target');

@@ -136,9 +136,7 @@ class SettingsProvider extends ChangeNotifier {
 
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
     proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
-    // Bypass SSL enabled by default for broader compatibility
-    final stored = _prefs.getBool(_bypassSSLKey);
-    bypassSSL = stored ?? bypassSSL;
+    bypassSSL = _prefs.getBool(_bypassSSLKey) ?? bypassSSL;
     reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
     customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
@@ -524,7 +522,7 @@ class SettingsProvider extends ChangeNotifier {
 
     enableProxy = false;
     proxyAddress = '';
-    bypassSSL = true;
+    bypassSSL = false;
     reduceVisuals = false;
     customUserAgent = '';
     cleanupDays = 0;

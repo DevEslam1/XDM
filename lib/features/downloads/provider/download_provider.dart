@@ -237,6 +237,40 @@ class DownloadProvider extends ChangeNotifier
     _checkScheduledDownloads();
     _startWidgetTimer();
     notifyListeners();
+
+    // Auto-resume if enabled — unpause orphaned downloads (excluding
+    // scheduled or Wi-Fi-waiting tasks) and pump the queue so queued
+    // downloads start immediately.
+    if (_settingsProvider.autoStart) {
+      final autoResumeTasks = _tasks
+          .where((t) =>
+              t.status == DownloadStatus.paused &&
+              (t.scheduledAt == null ||
+                  t.scheduledAt!.isBefore(DateTime.now())))
+          .map((t) {
+        _cancelTokens.remove(t.id);
+        return t.copyWith(
+          status: DownloadStatus.queued,
+          speed: 0,
+          clearEta: true,
+          clearError: true,
+        );
+      }).toList();
+      for (final task in autoResumeTasks) {
+        final idx = _tasks.indexWhere((t) => t.id == task.id);
+        if (idx != -1) {
+          _tasks[idx] = task;
+          await _databaseService.saveTask(task);
+        }
+      }
+      if (autoResumeTasks.isNotEmpty) {
+        notifyListeners();
+      }
+    }
+
+    // Always pump the queue so queued-downloads (including newly
+    // auto-resumed ones) start without requiring user interaction.
+    pumpQueue();
     _updateTelemetryWidget();
   }
 
@@ -1735,6 +1769,7 @@ class DownloadProvider extends ChangeNotifier
       token.cancel('provider disposed');
     }
     _cancelTokens.clear();
+    _downloadEngine.close();
     super.dispose();
   }
 }

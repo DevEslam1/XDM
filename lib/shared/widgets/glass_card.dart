@@ -39,19 +39,13 @@ class GlassCard extends StatelessWidget {
       );
     }
 
-    final baseDeco = AppTheme.glassDecoration(
-      borderRadius: borderRadius,
-      isDark: isDarkMode,
-    );
-
     return Container(
       padding: padding,
-      decoration: BoxDecoration(
-        color: baseDeco.color,
-        border: border ?? baseDeco.border,
-        borderRadius: baseDeco.borderRadius,
-        boxShadow: baseDeco.boxShadow,
-        gradient: baseDeco.gradient,
+      decoration: AppTheme.glassDecoration(
+        borderRadius: borderRadius,
+        isDark: isDarkMode,
+      ).copyWith(
+        border: border,
       ),
       child: child,
     );

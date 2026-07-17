@@ -54,9 +54,6 @@ class DownloadProgress {
 class DownloadEngine {
   DownloadEngine({Dio? dio}) : _sharedDio = dio ?? Dio();
 
-  // Kept around for tests/extensions that may need it, but the engine
-  // no longer mutates this client; every request builds its own.
-  // ignore: unused_field
   final Dio _sharedDio;
   final List<Dio> _activeDioClients = [];
 
@@ -637,7 +634,15 @@ class DownloadEngine {
       // Initialize chunk progress from existing files and validate chunk file size
       for (int i = 0; i < threadCount; i++) {
         if (await chunkFiles[i].exists()) {
-          final fileLen = await chunkFiles[i].length();
+          final int fileLen;
+          try {
+            fileLen = await chunkFiles[i].length();
+          } catch (e) {
+            debugPrint('Failed to read chunk file size for part $i: $e');
+            await chunkFiles[i].delete();
+            chunkProgress[i] = 0;
+            continue;
+          }
           if (fileLen > chunkSizes[i]) {
             await chunkFiles[i].delete();
             chunkProgress[i] = 0;
@@ -799,10 +804,14 @@ class DownloadEngine {
               } finally {
                 try {
                   await sink.flush();
-                } catch (_) {}
+                } catch (e) {
+                  debugPrint('Chunk sink flush failed: $e');
+                }
                 try {
                   await sink.close();
-                } catch (_) {}
+                } catch (e) {
+                  debugPrint('Chunk sink close failed: $e');
+                }
               }
             } catch (e) {
               if (chunkError == null && !cancelToken.isCancelled) {
@@ -852,14 +861,18 @@ class DownloadEngine {
               await partFile.delete();
             }
           }
-        } finally {
-          try {
-            await outputSink.flush();
-          } catch (_) {}
-          try {
-            await outputSink.close();
-          } catch (_) {}
-        }
+            } finally {
+              try {
+                await outputSink.flush();
+              } catch (e) {
+                debugPrint('Merge output sink flush failed: $e');
+              }
+              try {
+                await outputSink.close();
+              } catch (e) {
+                debugPrint('Merge output sink close failed: $e');
+              }
+            }
 
         if (totalSize > 0) {
           final actualSize = await localFile.length();
@@ -901,7 +914,9 @@ class DownloadEngine {
           if (await partFile.exists()) {
             try {
               await partFile.delete();
-            } catch (_) {}
+            } catch (e) {
+              debugPrint('Failed to delete part file $i: $e');
+            }
           }
         }
         // Fallback to single-threaded stream download
@@ -1110,10 +1125,14 @@ class DownloadEngine {
     } finally {
       try {
         await sink.flush();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Single-thread sink flush failed: $e');
+      }
       try {
         await sink.close();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Single-thread sink close failed: $e');
+      }
     }
 
     if (totalSize > 0) {
@@ -1136,7 +1155,8 @@ class DownloadEngine {
     }
     try {
       await tempFile.rename(finalLocalFilePath);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('File rename failed (cross-device?), using copy fallback: $e');
       // Fallback for cross-device/cross-filesystem move
       await tempFile.copy(finalLocalFilePath);
       final copiedLen = await File(finalLocalFilePath).length();
