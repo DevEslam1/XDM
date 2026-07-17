@@ -484,6 +484,7 @@ class DownloadEngine {
 
       final downloadCompleter = Completer<void>();
       StreamSubscription? downloadSub;
+      int lastTorrentReportTime = 0;
 
       downloadSub = TorrentService.torrentUpdates.listen((torrents) {
         final torrent = torrents[id];
@@ -496,8 +497,23 @@ class DownloadEngine {
             ? torrent.totalWanted
             : (knownFileSize > 0 ? knownFileSize : 0);
         final downloadedBytes = torrent.totalDone;
-        final speed = torrent.downloadRate.toDouble();
+        final isCheckingOrMetadata =
+            stateLabel.contains('checking') ||
+            stateLabel.contains('metadata') ||
+            stateLabel.contains('allocating');
 
+        final isFullyDownloaded = totalSize > 0 && downloadedBytes >= totalSize;
+        final isCompleted = isFullyDownloaded &&
+            ((progress >= 1.0 && !isCheckingOrMetadata) ||
+                stateLabel == 'seeding' ||
+                stateLabel == 'completed' ||
+                stateLabel == 'finished');
+
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        if (!isCompleted && nowMs - lastTorrentReportTime < 500) return;
+        lastTorrentReportTime = nowMs;
+
+        final speed = torrent.downloadRate.toDouble();
         final remaining = totalSize - downloadedBytes;
         final eta = speed > 0 && remaining > 0
             ? (remaining / speed).round()
@@ -536,21 +552,7 @@ class DownloadEngine {
           ),
         );
 
-        // Finish if progress is complete or it's seeding/completed.
-        // We ignore progress >= 1.0 if the torrent is in a checking, allocating, or metadata fetching state,
-        // or if the files have not actually been fully downloaded on disk.
-        final isCheckingOrMetadata =
-            stateLabel.contains('checking') ||
-            stateLabel.contains('metadata') ||
-            stateLabel.contains('allocating');
-
-        final isFullyDownloaded = totalSize > 0 && downloadedBytes >= totalSize;
-
-        if (isFullyDownloaded &&
-            ((progress >= 1.0 && !isCheckingOrMetadata) ||
-                stateLabel == 'seeding' ||
-                stateLabel == 'completed' ||
-                stateLabel == 'finished')) {
+        if (isCompleted) {
           downloadSub?.cancel();
           if (!downloadCompleter.isCompleted) {
             downloadCompleter.complete();
@@ -648,6 +650,7 @@ class DownloadEngine {
       final stopwatch = Stopwatch()..start();
       final speedSamples = Queue<_SpeedSample>();
 
+      int lastReportTime = 0;
       void reportProgress() {
         final downloadedTotal = chunkProgress.reduce((a, b) => a + b);
         final nowMs = stopwatch.elapsedMilliseconds;
@@ -675,22 +678,27 @@ class DownloadEngine {
             ? (remaining / speed).round()
             : null;
 
-        // Construct actual chunk percentages
-        final chunksList = List<double>.generate(threadCount, (idx) {
-          return chunkSizes[idx] > 0
-              ? (chunkProgress[idx] / chunkSizes[idx]).clamp(0.0, 1.0)
-              : 1.0;
-        });
+        final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
+        if (nowMs - lastReportTime >= 100 || isCompleted) {
+          lastReportTime = nowMs;
+          
+          // Construct actual chunk percentages only when emitting
+          final chunksList = List<double>.generate(threadCount, (idx) {
+            return chunkSizes[idx] > 0
+                ? (chunkProgress[idx] / chunkSizes[idx]).clamp(0.0, 1.0)
+                : 1.0;
+          });
 
-        onProgress(
-          DownloadProgress(
-            downloadedBytes: downloadedTotal,
-            fileSize: totalSize,
-            speed: speed,
-            eta: eta,
-            chunks: chunksList,
-          ),
-        );
+          onProgress(
+            DownloadProgress(
+              downloadedBytes: downloadedTotal,
+              fileSize: totalSize,
+              speed: speed,
+              eta: eta,
+              chunks: chunksList,
+            ),
+          );
+        }
       }
 
       Object? chunkError;
@@ -1024,6 +1032,7 @@ class DownloadEngine {
     var downloadedThisSession = 0;
     var downloadedTotal = actualResumeFrom;
     final speedSamples = Queue<_SpeedSample>();
+    int lastReportTime = 0;
 
     try {
       final stream = response.data?.stream;
@@ -1069,16 +1078,20 @@ class DownloadEngine {
             ? (remaining / speed).round()
             : null;
 
-        onProgress(
-          DownloadProgress(
-            downloadedBytes: downloadedTotal,
-            fileSize: totalSize,
-            speed: speed,
-            eta: eta,
-            supportsResume: serverSupportsResume,
-            fileName: finalUrlName,
-          ),
-        );
+        final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
+        if (nowMs - lastReportTime >= 100 || isCompleted) {
+          lastReportTime = nowMs;
+          onProgress(
+            DownloadProgress(
+              downloadedBytes: downloadedTotal,
+              fileSize: totalSize,
+              speed: speed,
+              eta: eta,
+              supportsResume: serverSupportsResume,
+              fileName: finalUrlName,
+            ),
+          );
+        }
 
         final limit = speedLimitBytesPerSecond();
         if (limit > 0) {

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SettingsProvider extends ChangeNotifier {
   static const _autoStartKey = 'autoStart';
@@ -46,6 +47,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _retryDelaySecondsKey = 'retryDelaySeconds';
 
   late final SharedPreferences _prefs;
+  final _secureStorage = const FlutterSecureStorage();
 
   bool autoStart = true;
   String? customDownloadPath;
@@ -156,7 +158,15 @@ class SettingsProvider extends ChangeNotifier {
     proxyHost = _prefs.getString(_proxyHostKey) ?? '';
     proxyPort = _prefs.getInt(_proxyPortKey) ?? 8080;
     proxyUsername = _prefs.getString(_proxyUsernameKey) ?? '';
-    proxyPassword = _prefs.getString(_proxyPasswordKey) ?? '';
+    
+    proxyPassword = await _secureStorage.read(key: _proxyPasswordKey) ?? '';
+    final legacyPassword = _prefs.getString(_proxyPasswordKey);
+    if (legacyPassword != null && legacyPassword.isNotEmpty && proxyPassword.isEmpty) {
+      proxyPassword = legacyPassword;
+      await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
+      await _prefs.remove(_proxyPasswordKey);
+    }
+
     autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
     maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
     retryDelaySeconds = _prefs.getInt(_retryDelaySecondsKey) ?? retryDelaySeconds;
@@ -414,7 +424,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> setProxyPassword(String value) async {
     proxyPassword = value;
-    await _prefs.setString(_proxyPasswordKey, value);
+    await _secureStorage.write(key: _proxyPasswordKey, value: value);
     notifyListeners();
   }
 
@@ -490,7 +500,11 @@ class SettingsProvider extends ChangeNotifier {
       _retryDelaySecondsKey,
     ];
     for (final key in settingsKeys) {
-      await _prefs.remove(key);
+      if (key == _proxyPasswordKey) {
+        await _secureStorage.delete(key: key);
+      } else {
+        await _prefs.remove(key);
+      }
     }
     autoStart = true;
     customDownloadPath = null;

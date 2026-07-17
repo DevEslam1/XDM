@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+
+import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
@@ -267,26 +269,56 @@ class DownloadProvider extends ChangeNotifier {
   }
 
   String _encryptBackup(String jsonStr, String password) {
-    final dataBytes = utf8.encode(jsonStr);
     final keyBytes = sha256.convert(utf8.encode(password)).bytes;
-    final cipherBytes = _xorCipher(dataBytes, keyBytes);
-    final magic = utf8.encode('XDMCRYPT');
-    final finalBytes = [...magic, ...cipherBytes];
+    final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
+    final iv = encrypt_lib.IV.fromSecureRandom(16);
+
+    final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(key));
+    final encrypted = encrypter.encrypt(jsonStr, iv: iv);
+
+    final magic = utf8.encode('XDMCRYPT2');
+    final finalBytes = [...magic, ...iv.bytes, ...encrypted.bytes];
     return base64Encode(finalBytes);
   }
 
   String? _decryptBackup(String encryptedBase64, String password) {
     try {
       final bytes = base64Decode(encryptedBase64);
-      final magic = utf8.encode('XDMCRYPT');
-      if (bytes.length < magic.length) return null;
+      final legacyMagic = utf8.encode('XDMCRYPT');
+      
+      bool isLegacy = bytes.length >= legacyMagic.length;
+      if (isLegacy) {
+        for (int i = 0; i < legacyMagic.length; i++) {
+          if (bytes[i] != legacyMagic[i]) {
+            isLegacy = false;
+            break;
+          }
+        }
+      }
+
+      if (isLegacy) {
+        final cipherBytes = bytes.sublist(legacyMagic.length);
+        final keyBytes = sha256.convert(utf8.encode(password)).bytes;
+        final dataBytes = _xorCipher(cipherBytes, keyBytes);
+        return utf8.decode(dataBytes);
+      }
+
+      final magic = utf8.encode('XDMCRYPT2');
+      if (bytes.length < magic.length + 16) return null;
       for (int i = 0; i < magic.length; i++) {
         if (bytes[i] != magic[i]) return null;
       }
-      final cipherBytes = bytes.sublist(magic.length);
+
+      final ivBytes = bytes.sublist(magic.length, magic.length + 16);
+      final cipherBytes = bytes.sublist(magic.length + 16);
+
       final keyBytes = sha256.convert(utf8.encode(password)).bytes;
-      final dataBytes = _xorCipher(cipherBytes, keyBytes);
-      return utf8.decode(dataBytes);
+      final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
+      final iv = encrypt_lib.IV(Uint8List.fromList(ivBytes));
+
+      final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(key));
+      final encrypted = encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
+      return encrypter.decrypt(encrypted, iv: iv);
     } catch (e) {
       return null;
     }
@@ -781,9 +813,7 @@ class DownloadProvider extends ChangeNotifier {
               task.status == DownloadStatus.downloading ||
               task.status == DownloadStatus.queued)
           .toList();
-      for (final task in active) {
-        await pauseTask(task.id);
-      }
+      await Future.wait(active.map((task) => pauseTask(task.id)));
       _pumpQueue();
     } finally {
       _endBatch();
@@ -798,9 +828,7 @@ class DownloadProvider extends ChangeNotifier {
               task.status == DownloadStatus.paused ||
               task.status == DownloadStatus.failed)
           .toList();
-      for (final task in resumable) {
-        await resumeTask(task.id);
-      }
+      await Future.wait(resumable.map((task) => resumeTask(task.id)));
     } finally {
       _endBatch();
     }
