@@ -328,6 +328,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
       // Map to MB/s
       return FlSpot(i.toDouble(), speedHistory[i] / (1024 * 1024));
     });
+    if (spots.length == 1) {
+      spots.add(FlSpot(1.0, spots[0].y));
+    }
 
     return GlassCard(
       borderRadius: 20,
@@ -376,7 +379,7 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                   borderData: FlBorderData(show: false),
                   lineTouchData: const LineTouchData(enabled: false),
                   minX: 0,
-                  maxX: spots.length.toDouble() - 1,
+                  maxX: spots.length > 1 ? spots.length.toDouble() - 1 : 1.0,
                   lineBarsData: [
                     LineChartBarData(
                       spots: spots,
