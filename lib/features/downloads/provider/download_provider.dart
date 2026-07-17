@@ -81,6 +81,7 @@ class DownloadProvider extends ChangeNotifier
   int _getNotificationId(String taskId) {
     return _notificationIds.putIfAbsent(taskId, () => _nextNotificationId++);
   }
+
   final Map<String, int> _retryCounts = {};
   Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
 
@@ -157,11 +158,14 @@ class DownloadProvider extends ChangeNotifier
 
   void setActiveTabIndex(int index) {
     // Delegates to the mixin, providing the ad-blocker callback.
-    setMixinActiveTabIndex(index, onBrowserTab: () {
-      if (_settingsProvider.adBlockerEnabled) {
-        AdBlocker.autoUpdateHosts();
-      }
-    });
+    setMixinActiveTabIndex(
+      index,
+      onBrowserTab: () {
+        if (_settingsProvider.adBlockerEnabled) {
+          AdBlocker.autoUpdateHosts();
+        }
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -203,7 +207,9 @@ class DownloadProvider extends ChangeNotifier
           if (cleanupDays > 0 &&
               (task.status == DownloadStatus.completed ||
                   task.status == DownloadStatus.failed)) {
-            final difference = now.difference(task.completedAt ?? task.createdAt).inDays;
+            final difference = now
+                .difference(task.completedAt ?? task.createdAt)
+                .inDays;
             if (difference >= cleanupDays) {
               toDelete.add(task);
               return false;
@@ -243,19 +249,22 @@ class DownloadProvider extends ChangeNotifier
     // downloads start immediately.
     if (_settingsProvider.autoStart) {
       final autoResumeTasks = _tasks
-          .where((t) =>
-              t.status == DownloadStatus.paused &&
-              (t.scheduledAt == null ||
-                  t.scheduledAt!.isBefore(DateTime.now())))
+          .where(
+            (t) =>
+                t.status == DownloadStatus.paused &&
+                (t.scheduledAt == null ||
+                    t.scheduledAt!.isBefore(DateTime.now())),
+          )
           .map((t) {
-        _cancelTokens.remove(t.id);
-        return t.copyWith(
-          status: DownloadStatus.queued,
-          speed: 0,
-          clearEta: true,
-          clearError: true,
-        );
-      }).toList();
+            _cancelTokens.remove(t.id);
+            return t.copyWith(
+              status: DownloadStatus.queued,
+              speed: 0,
+              clearEta: true,
+              clearError: true,
+            );
+          })
+          .toList();
       for (final task in autoResumeTasks) {
         final idx = _tasks.indexWhere((t) => t.id == task.id);
         if (idx != -1) {
@@ -373,7 +382,12 @@ class DownloadProvider extends ChangeNotifier
     List<Map<String, dynamic>>? torrentFiles,
     String? downloadPageUrl,
   }) async {
-    final exists = _tasks.any((t) => t.url == url && t.status != DownloadStatus.failed && t.status != DownloadStatus.completed);
+    final exists = _tasks.any(
+      (t) =>
+          t.url == url &&
+          t.status != DownloadStatus.failed &&
+          t.status != DownloadStatus.completed,
+    );
     if (exists) {
       throw Exception('This URL is already active in the download queue.');
     }
@@ -548,9 +562,11 @@ class DownloadProvider extends ChangeNotifier
     startBatch();
     try {
       final active = _tasks
-          .where((task) =>
-              task.status == DownloadStatus.downloading ||
-              task.status == DownloadStatus.queued)
+          .where(
+            (task) =>
+                task.status == DownloadStatus.downloading ||
+                task.status == DownloadStatus.queued,
+          )
           .toList();
       await Future.wait(active.map((task) => pauseTask(task.id)));
       pumpQueue();
@@ -563,9 +579,11 @@ class DownloadProvider extends ChangeNotifier
     startBatch();
     try {
       final resumable = _tasks
-          .where((task) =>
-              task.status == DownloadStatus.paused ||
-              task.status == DownloadStatus.failed)
+          .where(
+            (task) =>
+                task.status == DownloadStatus.paused ||
+                task.status == DownloadStatus.failed,
+          )
           .toList();
       await Future.wait(resumable.map((task) => resumeTask(task.id)));
     } finally {
@@ -594,6 +612,8 @@ class DownloadProvider extends ChangeNotifier
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
     _pendingProgressUpdates.remove(id);
+    _retryTimers[id]?.cancel();
+    _retryTimers.remove(id);
 
     _cancelTokens[id]?.cancel('cancelled');
     _cancelTokens.remove(id);
@@ -951,7 +971,10 @@ class DownloadProvider extends ChangeNotifier
                 : current.fileName;
 
             final newLocalPath = newFileName != current.fileName
-                ? p.join(p.dirname(current.localFilePath), safeFileName(newFileName))
+                ? p.join(
+                    p.dirname(current.localFilePath),
+                    safeFileName(newFileName),
+                  )
                 : current.localFilePath;
 
             final newTempPath = newFileName != current.fileName
@@ -1078,11 +1101,15 @@ class DownloadProvider extends ChangeNotifier
 
           // Check if YouTube link expired (403 Forbidden or 410 Gone)
           if (error is DioException &&
-              (error.response?.statusCode == 403 || error.response?.statusCode == 410 ||
-               error.message?.contains('403') == true || error.message?.contains('410') == true) &&
+              (error.response?.statusCode == 403 ||
+                  error.response?.statusCode == 410 ||
+                  error.message?.contains('403') == true ||
+                  error.message?.contains('410') == true) &&
               current.downloadPageUrl != null &&
               YoutubeService.extractVideoId(current.downloadPageUrl!) != null) {
-            debugPrint('Detected YouTube ${error.response?.statusCode ?? 403} error. Attempting to refresh stream URL...');
+            debugPrint(
+              'Detected YouTube ${error.response?.statusCode ?? 403} error. Attempting to refresh stream URL...',
+            );
             bool refreshed = false;
             try {
               final newUrl = await YoutubeService.refreshStreamUrl(
@@ -1100,24 +1127,30 @@ class DownloadProvider extends ChangeNotifier
 
             if (!refreshed) {
               final currentRetry = _retryCounts[task.id] ?? 0;
-              if (_settingsProvider.autoRetryEnabled && currentRetry < _settingsProvider.maxRetries) {
+              if (_settingsProvider.autoRetryEnabled &&
+                  currentRetry < _settingsProvider.maxRetries) {
                 _retryCounts[task.id] = currentRetry + 1;
                 final delaySeconds = _settingsProvider.retryDelaySeconds;
                 await _setTask(
                   current.copyWith(
                     status: DownloadStatus.queued,
                     speed: 0,
-                    errorMessage: 'YouTube stream expired. Retrying in $delaySeconds seconds...',
+                    errorMessage:
+                        'YouTube stream expired. Retrying in $delaySeconds seconds...',
                   ),
                 );
                 _retryTimers[task.id]?.cancel();
-                _retryTimers[task.id] = Timer(Duration(seconds: delaySeconds), () {
-                  _retryTimers.remove(task.id);
-                  final checkedTask = _findTask(task.id);
-                  if (checkedTask != null && checkedTask.status == DownloadStatus.queued) {
-                    pumpQueue();
-                  }
-                });
+                _retryTimers[task.id] = Timer(
+                  Duration(seconds: delaySeconds),
+                  () {
+                    _retryTimers.remove(task.id);
+                    final checkedTask = _findTask(task.id);
+                    if (checkedTask != null &&
+                        checkedTask.status == DownloadStatus.queued) {
+                      pumpQueue();
+                    }
+                  },
+                );
                 return;
               }
             }
@@ -1254,14 +1287,20 @@ class DownloadProvider extends ChangeNotifier
       if (error.response?.statusCode != null) {
         final code = error.response!.statusCode;
         return switch (code) {
-          403 => '403 Forbidden: Access denied. The download link may have expired or permission is required.',
-          401 => '401 Unauthorized: Authentication is required to access this file.',
+          403 =>
+            '403 Forbidden: Access denied. The download link may have expired or permission is required.',
+          401 =>
+            '401 Unauthorized: Authentication is required to access this file.',
           404 => '404 Not Found: The file was not found on the server.',
-          410 => '410 Gone: The file has been permanently removed from the server.',
-          416 => '416 Range Not Satisfiable: The server returned an invalid byte range error.',
+          410 =>
+            '410 Gone: The file has been permanently removed from the server.',
+          416 =>
+            '416 Range Not Satisfiable: The server returned an invalid byte range error.',
           500 => '500 Internal Server Error: Server-side issue occurred.',
-          503 => '503 Service Unavailable: The server is temporarily down or overloaded.',
-          _ => 'HTTP Error $code: ${error.message ?? "Server returned invalid response."}',
+          503 =>
+            '503 Service Unavailable: The server is temporarily down or overloaded.',
+          _ =>
+            'HTTP Error $code: ${error.message ?? "Server returned invalid response."}',
         };
       }
       return error.message ?? error.type.name;
@@ -1325,8 +1364,7 @@ class DownloadProvider extends ChangeNotifier
 
     final hasWifi =
         _currentConnectivity.contains(ConnectivityResult.wifi) ||
-        _currentConnectivity.contains(ConnectivityResult.ethernet) ||
-        _currentConnectivity.contains(ConnectivityResult.vpn);
+        _currentConnectivity.contains(ConnectivityResult.ethernet);
 
     if (!hasWifi) {
       await _pauseForWifiOnly();
@@ -1534,13 +1572,11 @@ class DownloadProvider extends ChangeNotifier
     // Propagate priority changes to the live torrent engine.
     final torrentId = _torrentIds[taskId];
     if (torrentId != null) {
-      final priorities = files
-          .map((f) {
-            final selected = f['selected'] as bool? ?? true;
-            if (!selected) return 0;
-            return f['priority'] as int? ?? 4;
-          })
-          .toList();
+      final priorities = files.map((f) {
+        final selected = f['selected'] as bool? ?? true;
+        if (!selected) return 0;
+        return f['priority'] as int? ?? 4;
+      }).toList();
       TorrentService.setFilePriorities(torrentId, priorities);
     }
 
@@ -1681,14 +1717,15 @@ class DownloadProvider extends ChangeNotifier
   Future<void> updateTaskUrlAndResume(String id, String newUrl) async {
     final task = _findTask(id);
     if (task == null) return;
-    
+
     // Check if the stream format (itag) changed
     final oldUri = Uri.tryParse(task.url);
     final newUri = Uri.tryParse(newUrl);
     final oldItag = oldUri?.queryParameters['itag'];
     final newItag = newUri?.queryParameters['itag'];
-    final itagChanged = oldItag != null && newItag != null && oldItag != newItag;
-    
+    final itagChanged =
+        oldItag != null && newItag != null && oldItag != newItag;
+
     if (itagChanged) {
       await startOverTask(id, newUrl);
     } else {

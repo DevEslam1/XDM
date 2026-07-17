@@ -45,17 +45,23 @@ mixin DownloadBackupMixin {
     final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(key));
     final encrypted = encrypter.encrypt(jsonStr, iv: iv);
 
-    final magic = utf8.encode('XDMCRYPT2');
-    final finalBytes = [...magic, ...iv.bytes, ...encrypted.bytes];
+    final magic = utf8.encode('XDMCRYPT3');
+    final payload = [...magic, ...iv.bytes, ...encrypted.bytes];
+    final mac = Hmac(sha256, keyBytes).convert(payload).bytes;
+    final finalBytes = [...payload, ...mac];
     return base64Encode(finalBytes);
   }
 
   String? decryptBackup(String encryptedBase64, String password) {
     try {
       final bytes = base64Decode(encryptedBase64);
+      final authenticatedMagic = utf8.encode('XDMCRYPT3');
+      final isAuthenticated =
+          bytes.length >= authenticatedMagic.length &&
+          _hasMagic(bytes, authenticatedMagic);
       final legacyMagic = utf8.encode('XDMCRYPT');
 
-      bool isLegacy = bytes.length >= legacyMagic.length;
+      bool isLegacy = !isAuthenticated && bytes.length >= legacyMagic.length;
       if (isLegacy) {
         for (int i = 0; i < legacyMagic.length; i++) {
           if (bytes[i] != legacyMagic[i]) {
@@ -73,25 +79,51 @@ mixin DownloadBackupMixin {
       }
 
       final magic = utf8.encode('XDMCRYPT2');
-      if (bytes.length < magic.length + 16) return null;
-      for (int i = 0; i < magic.length; i++) {
-        if (bytes[i] != magic[i]) return null;
+      if (!isAuthenticated && bytes.length < magic.length + 16) return null;
+      if (!isAuthenticated && !_hasMagic(bytes, magic)) return null;
+
+      final payload = isAuthenticated
+          ? bytes.sublist(0, bytes.length - 32)
+          : bytes;
+      if (isAuthenticated) {
+        if (bytes.length < authenticatedMagic.length + 16 + 32) return null;
+        final keyBytes = sha256.convert(utf8.encode(password)).bytes;
+        final expectedMac = Hmac(sha256, keyBytes).convert(payload).bytes;
+        final actualMac = bytes.sublist(bytes.length - 32);
+        if (!_constantTimeEquals(expectedMac, actualMac)) return null;
       }
 
-      final ivBytes = bytes.sublist(magic.length, magic.length + 16);
-      final cipherBytes = bytes.sublist(magic.length + 16);
+      final header = isAuthenticated ? authenticatedMagic : magic;
+      final ivBytes = payload.sublist(header.length, header.length + 16);
+      final cipherBytes = payload.sublist(header.length + 16);
 
       final keyBytes = sha256.convert(utf8.encode(password)).bytes;
       final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
       final iv = encrypt_lib.IV(Uint8List.fromList(ivBytes));
 
       final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(key));
-      final encrypted =
-          encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
+      final encrypted = encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
       return encrypter.decrypt(encrypted, iv: iv);
     } catch (e) {
       return null;
     }
+  }
+
+  bool _hasMagic(List<int> bytes, List<int> magic) {
+    if (bytes.length < magic.length) return false;
+    for (var i = 0; i < magic.length; i++) {
+      if (bytes[i] != magic[i]) return false;
+    }
+    return true;
+  }
+
+  bool _constantTimeEquals(List<int> left, List<int> right) {
+    if (left.length != right.length) return false;
+    var difference = 0;
+    for (var i = 0; i < left.length; i++) {
+      difference |= left[i] ^ right[i];
+    }
+    return difference == 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -157,8 +189,7 @@ mixin DownloadBackupMixin {
 
       var hasChanges = false;
       for (final item in list) {
-        final Map<String, dynamic> map =
-            Map<String, dynamic>.from(item as Map);
+        final Map<String, dynamic> map = Map<String, dynamic>.from(item as Map);
         final task = DownloadTask.fromMap(map);
         if (!providerTasks.any((t) => t.id == task.id)) {
           providerTasks.add(task);
