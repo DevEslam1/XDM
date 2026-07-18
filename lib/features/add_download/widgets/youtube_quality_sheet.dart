@@ -579,7 +579,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
               runHaptic(settings);
               if (type == 'combined') {
                 // Now handled automatically by DownloadProvider with FFmpeg merging
-                _handleCombinedDownload(context, stream, isDark, settings);
+                await _handleCombinedDownload(context, stream, isDark, settings);
               } else if (type == 'video_only') {
                 final confirm = await _showConfirmDialog(
                   context: context,

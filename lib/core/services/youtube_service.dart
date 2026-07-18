@@ -185,7 +185,9 @@ class YoutubeService {
 
   // ──────────────────── Fallback & Refresh Helpers ──────────────────
 
-  static Future<({StreamManifest manifest, String title})> _fetchWithFallback(String videoId) async {
+  static Future<({StreamManifest manifest, String title})> _fetchWithFallback(
+    String videoId,
+  ) async {
     // Retry up to 2 times on transient failures
     for (int attempt = 0; attempt < 2; attempt++) {
       try {
@@ -194,8 +196,10 @@ class YoutubeService {
         if (attempt == 1) rethrow;
         final errStr = e.toString().toLowerCase();
         // Only retry on transient errors
-        if (errStr.contains('timeout') || errStr.contains('connection') ||
-            errStr.contains('socket') || errStr.contains('reset')) {
+        if (errStr.contains('timeout') ||
+            errStr.contains('connection') ||
+            errStr.contains('socket') ||
+            errStr.contains('reset')) {
           await Future.delayed(const Duration(seconds: 2));
           continue;
         }
@@ -205,7 +209,8 @@ class YoutubeService {
     throw Exception('Failed after retries');
   }
 
-  static Future<({StreamManifest manifest, String title})> _fetchWithFallbackInternal(String videoId) async {
+  static Future<({StreamManifest manifest, String title})>
+  _fetchWithFallbackInternal(String videoId) async {
     StreamManifest? manifest;
     const timeout = Duration(seconds: 20);
     Object? lastError;
@@ -258,12 +263,20 @@ class YoutubeService {
     if (manifest == null || manifest.streams.isEmpty) {
       if (lastError != null) {
         final errStr = lastError.toString().toLowerCase();
-        if (errStr.contains('age') || errStr.contains('restricted') || errStr.contains('agerecorded') || errStr.contains('signin') || errStr.contains('sign in')) {
+        if (errStr.contains('age') ||
+            errStr.contains('restricted') ||
+            errStr.contains('agerecorded') ||
+            errStr.contains('signin') ||
+            errStr.contains('sign in')) {
           throw Exception('This video is age-restricted and requires sign-in.');
         } else if (errStr.contains('private')) {
           throw Exception('This video is private.');
-        } else if (errStr.contains('geo') || errStr.contains('blocked') || errStr.contains('country')) {
-          throw Exception('This video is not available in your country/region.');
+        } else if (errStr.contains('geo') ||
+            errStr.contains('blocked') ||
+            errStr.contains('country')) {
+          throw Exception(
+            'This video is not available in your country/region.',
+          );
         } else {
           throw Exception('Failed to get manifest: $lastError');
         }
@@ -274,7 +287,9 @@ class YoutubeService {
     // Fetch Video Title
     String title = 'YouTube Video';
     try {
-      final video = await _yt.videos.get(videoId).timeout(const Duration(seconds: 15));
+      final video = await _yt.videos
+          .get(videoId)
+          .timeout(const Duration(seconds: 15));
       title = video.title;
     } catch (_) {}
 
@@ -282,7 +297,10 @@ class YoutubeService {
   }
 
   /// Refreshes an expired stream URL by fetching the latest manifest and matching the itag.
-  static Future<String?> refreshStreamUrl(String downloadPageUrl, String oldStreamUrl) async {
+  static Future<String?> refreshStreamUrl(
+    String downloadPageUrl,
+    String oldStreamUrl,
+  ) async {
     final videoId = extractVideoId(downloadPageUrl);
     if (videoId == null) return null;
 
@@ -294,7 +312,9 @@ class YoutubeService {
       if (oldUri == null) return null;
 
       final oldItag = oldUri.queryParameters['itag'];
-      Logger.root.info('Refreshing stream URL for video $videoId, itag=$oldItag');
+      Logger.root.info(
+        'Refreshing stream URL for video $videoId, itag=$oldItag',
+      );
       if (oldItag != null) {
         for (final stream in manifest.streams) {
           final newUri = Uri.tryParse(stream.url.toString());
@@ -407,7 +427,9 @@ class YoutubeService {
         return details;
       }
     } catch (e) {
-      Logger.root.warning('YoutubeService.getPlaylistDetails fallback failed: $e');
+      Logger.root.warning(
+        'YoutubeService.getPlaylistDetails fallback failed: $e',
+      );
     }
 
     // Library fallback (last resort backup)
@@ -419,7 +441,9 @@ class YoutubeService {
         final videos = <Map<String, dynamic>>[];
         try {
           final stream = _yt.playlists.getVideos(playlistId);
-          await for (final video in stream.timeout(const Duration(seconds: 15))) {
+          await for (final video in stream.timeout(
+            const Duration(seconds: 15),
+          )) {
             videos.add({
               'id': video.id.value,
               'title': video.title,
@@ -443,7 +467,9 @@ class YoutubeService {
         };
       }
     } catch (e) {
-      Logger.root.warning('YoutubeService.getPlaylistDetails library failed: $e');
+      Logger.root.warning(
+        'YoutubeService.getPlaylistDetails library failed: $e',
+      );
     }
 
     return null;
@@ -733,7 +759,6 @@ class _AuthenticatedHttpClient extends YoutubeHttpClient {
   };
 }
 
-// TODO: if playlist fetching breaks, update this key from youtube.com page
 // source (search for "innertubeApiKey" in page source or DevTools network tab).
 const _innerTubeApiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 String? _innerTubeApiKeyOverride;
@@ -804,9 +829,7 @@ class _InnerTubeFallback {
     }
 
     request.write(jsonEncode(body));
-    final response = await request.close().timeout(
-      const Duration(seconds: 30),
-    );
+    final response = await request.close().timeout(const Duration(seconds: 30));
     final raw = await response.transform(utf8.decoder).join();
     return jsonDecode(raw) as Map<String, dynamic>;
   }
@@ -963,17 +986,15 @@ class _InnerTubeFallback {
           continuationToken: continuationToken,
         );
       } catch (e) {
-        _log.warning('InnerTube fallback browse continuation failed at page $pageNum: $e');
+        _log.warning(
+          'InnerTube fallback browse continuation failed at page $pageNum: $e',
+        );
         break;
       }
     }
 
-    return {
-      'info': info,
-      'videos': allVideos,
-    };
+    return {'info': info, 'videos': allVideos};
   }
-
 
   // ──────────────── Parsing helpers ──────────────────
 

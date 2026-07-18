@@ -58,6 +58,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
   List<Map<String, dynamic>> _torrentFiles = [];
   String _lastCheckedUrl = '';
   Timer? _ytDebounceTimer;
+  String? _resolvedYoutubePageUrl; // Original YT page URL preserved for stream refresh
 
   final List<String> _categories = [
     'Auto',
@@ -874,6 +875,7 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         final title = stream['title'] as String? ?? 'YouTube Video';
         final ext = stream['ext'] as String? ?? 'mp4';
         setState(() {
+          _resolvedYoutubePageUrl = url; // Save original YT page URL for expiry refresh
           _urlController.text = stream['src'] as String;
           _resolvedFileName = '$title.$ext';
           _nameController.text = _resolvedFileName;
@@ -1039,7 +1041,8 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
         name: enteredName, url: _urlController.text.trim(), size: finalSize,
         category: _selectedCategory == 'Auto' ? '' : _selectedCategory, savePath: _pathController.text.trim(),
         threadCount: _selectedThreads, scheduledAt: _isScheduled ? _scheduledDateTime : null,
-        torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null, downloadPageUrl: widget.downloadPageUrl,
+        torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
+        downloadPageUrl: _resolvedYoutubePageUrl ?? widget.downloadPageUrl,
       );
       if (!mounted) return; setState(() => _isSubmitting = false);
       if (!context.mounted) return;
