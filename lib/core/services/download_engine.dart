@@ -63,6 +63,7 @@ class DownloadEngine {
   /// one in-flight download to silently pick up another download's
   /// proxy/UA/SSL settings).
   Dio _buildIsolatedClient({
+    String? url,
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
@@ -79,8 +80,17 @@ class DownloadEngine {
     if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
       client.options.headers['User-Agent'] = customUserAgent.trim();
     } else {
-      client.options.headers['User-Agent'] =
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+      String userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+      if (url != null && url.contains('.googlevideo.com/')) {
+        if (url.contains('c=ANDROID')) {
+          userAgent = 'com.google.android.youtube/17.31.35 (Linux; U; Android 11)';
+        } else if (url.contains('c=IOS')) {
+          userAgent = 'com.google.ios.youtube/19.29.1 (iPhone; CPU iPhone OS 15_0 like Mac OS X)';
+        } else if (url.contains('c=TVHTML5')) {
+          userAgent = 'Mozilla/5.0 (ChromiumStyleTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36';
+        }
+      }
+      client.options.headers['User-Agent'] = userAgent;
     }
 
     if (client.httpClientAdapter is IOHttpClientAdapter) {
@@ -272,6 +282,7 @@ class DownloadEngine {
     // Use a per-call Dio so concurrent downloads don't share UA/proxy/SSL
     // state via the engine's long-lived client.
     final isolatedDio = _buildIsolatedClient(
+      url: punyUrl,
       customUserAgent: customUserAgent,
       enableProxy: enableProxy,
       proxyAddress: proxyAddress,
@@ -578,6 +589,7 @@ class DownloadEngine {
     // Use a per-call Dio so concurrent downloads don't share UA/proxy/SSL
     // state via the engine's long-lived client.
     final isolatedDio = _buildIsolatedClient(
+      url: punyUrl,
       customUserAgent: customUserAgent,
       enableProxy: enableProxy,
       proxyAddress: proxyAddress,

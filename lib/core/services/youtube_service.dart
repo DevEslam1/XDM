@@ -34,6 +34,15 @@ class YoutubeService {
     _yt = _createYt();
   }
 
+  /// Recreates the [YoutubeExplode] instance, busting any internal manifest
+  /// cache. Call this before refreshing an expired stream URL so that the
+  /// library fetches a fresh manifest from YouTube instead of returning a
+  /// cached (and still-expired) response.
+  static void resetClient() {
+    _yt.close();
+    _yt = _createYt();
+  }
+
   /// Whether the service currently has authentication cookies set.
   static bool get isSignedIn => _cookies != null;
 
@@ -78,7 +87,16 @@ class YoutubeService {
     return extractVideoId(url) != null;
   }
 
+  /// Returns true when the URL contains a YouTube playlist ID (`list=` param).
+  /// This includes mixed watch+list URLs like `watch?v=xxx&list=PLyyy` that
+  /// are commonly encountered when browsing within a playlist.
   static bool isPlaylistUrl(String url) {
+    return extractPlaylistId(url) != null;
+  }
+
+  /// Returns true when the URL is a playlist-only page (no individual video
+  /// selected), e.g. `youtube.com/playlist?list=PLxxx`.
+  static bool isPurePlaylistUrl(String url) {
     return extractPlaylistId(url) != null && extractVideoId(url) == null;
   }
 
@@ -321,22 +339,48 @@ class YoutubeService {
       Logger.root.info(
         'Refreshing stream URL for video $videoId, itag=$oldItag',
       );
+
+      String? candidate;
       if (oldItag != null) {
         for (final stream in manifest.streams) {
           final newUri = Uri.tryParse(stream.url.toString());
           if (newUri != null && newUri.queryParameters['itag'] == oldItag) {
-            return stream.url.toString();
+            candidate = stream.url.toString();
+            break;
           }
         }
       }
 
       // Fallback: itag not found or absent. Return a fresh URL from the
       // same stream type so the download never stalls on an expired URL.
-      return _firstUrlByType(manifest, oldStreamUrl);
+      candidate ??= _firstUrlByType(manifest, oldStreamUrl);
+
+      // Guard: if the library returned the exact same URL, the manifest is
+      // stale / cached. Treat this as a failed refresh so the caller can
+      // escalate to getFreshStreams (which recreates the client).
+      if (candidate != null && _urlsAreEquivalent(candidate, oldStreamUrl)) {
+        Logger.root.warning(
+          'refreshStreamUrl: new URL is identical to old URL — manifest is stale. Returning null.',
+        );
+        return null;
+      }
+
+      return candidate;
     } catch (e) {
       Logger.root.severe('Failed to refresh YouTube stream URL: $e');
     }
     return null;
+  }
+
+  /// Returns true when two YouTube stream URLs are equivalent (same `expire`
+  /// and `sig` parameters), meaning they will produce the same result.
+  static bool _urlsAreEquivalent(String a, String b) {
+    final ua = Uri.tryParse(a);
+    final ub = Uri.tryParse(b);
+    if (ua == null || ub == null) return a == b;
+    // Compare the parts that actually determine freshness.
+    return ua.queryParameters['expire'] == ub.queryParameters['expire'] &&
+        ua.queryParameters['sig'] == ub.queryParameters['sig'];
   }
 
   /// Fetches completely fresh stream URLs for a YouTube video, bypassing any

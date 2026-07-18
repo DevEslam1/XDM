@@ -778,9 +778,12 @@ class _DonutChartPanel extends StatelessWidget {
             );
           }).toList();
 
+    final isTabletDevice = isTablet(context);
+    final containerHeight = isTabletDevice ? 120.0 : 145.0;
+
     final chartBody = Container(
       width: double.infinity,
-      height: 120,
+      height: containerHeight,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: settings.classicUi
           ? BoxDecoration(
@@ -824,40 +827,101 @@ class _DonutChartPanel extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: categoryCards.map((card) {
-                final sizeMb = sizes[card['name']] ?? 0.0;
-                final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
-                final sizeText = sizeMb >= 1024 ? '${(sizeMb / 1024).toStringAsFixed(1)}G' : '${sizeMb.toStringAsFixed(0)}M';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Row(
+            child: isTabletDevice
+                ? Row(
                     children: [
-                      Container(width: 8, height: 8, decoration: BoxDecoration(color: card['color'] as Color, borderRadius: BorderRadius.circular(2))),
-                      const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          isRtl ? _translateCat(card['name'] as String) : card['name'] as String,
-                          style: TextStyle(color: textClr, fontSize: 10, fontWeight: FontWeight.bold),
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: categoryCards.take(3).map((card) {
+                            return _buildLegendItem(card, sizes, totalSizeMb, textClr, isDark, isRtl);
+                          }).toList(),
                         ),
                       ),
-                      Text('${percentage.toStringAsFixed(0)}%', style: TextStyle(color: card['color'] as Color, fontSize: 9, fontFamily: 'monospace', fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 4),
-                      Text(sizeText, style: TextStyle(color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted, fontSize: 9, fontFamily: 'monospace', fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: categoryCards.skip(3).map((card) {
+                            return _buildLegendItem(card, sizes, totalSizeMb, textClr, isDark, isRtl);
+                          }).toList(),
+                        ),
+                      ),
                     ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: categoryCards.map((card) {
+                      return _buildLegendItem(card, sizes, totalSizeMb, textClr, isDark, isRtl);
+                    }).toList(),
                   ),
-                );
-              }).toList(),
-            ),
           ),
         ],
       ),
     );
 
     return chartBody;
+  }
+
+  Widget _buildLegendItem(
+    Map<String, dynamic> card,
+    Map<String, double> sizes,
+    double totalSizeMb,
+    Color textClr,
+    bool isDark,
+    bool isRtl,
+  ) {
+    final name = card['name'] as String;
+    final sizeMb = sizes[name] ?? 0.0;
+    final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
+    final sizeText = sizeMb >= 1024 ? '${(sizeMb / 1024).toStringAsFixed(1)}G' : '${sizeMb.toStringAsFixed(0)}M';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.5),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: card['color'] as Color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isRtl ? _translateCat(name) : name,
+              style: TextStyle(color: textClr, fontSize: 10, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            '${percentage.toStringAsFixed(0)}%',
+            style: TextStyle(
+              color: card['color'] as Color,
+              fontSize: 9,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            sizeText,
+            style: TextStyle(
+              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+              fontSize: 9,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _translateCat(String name) {

@@ -2611,54 +2611,81 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                         : 'Download Video'),
                               onPressed: () async {
                                 triggerHaptic(settings);
-                                if (YoutubeService.isPlaylistUrl(
-                                  activeTab.url,
-                                )) {
-                                  final result =
-                                      await YoutubePlaylistSheet.show(
-                                        context,
-                                        activeTab.url,
-                                      );
-                                  if (result != null && context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          isRtl
-                                              ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
-                                              : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
+                                final tabUrl = activeTab.url;
+                                final isPlaylist = YoutubeService.isPlaylistUrl(tabUrl);
+                                final isVideo = YoutubeService.isYoutubeVideoUrl(tabUrl);
+                                final isMixed = isPlaylist && isVideo;
+
+                                if (isMixed) {
+                                  // Mixed URL: ask user whether to download single video or full playlist
+                                  final choice = await showDialog<String>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      title: Text(isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
+                                          style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+                                      content: Text(isRtl ? 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.' : 'This link contains both a single video and a playlist.',
+                                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13)),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, 'video'),
+                                          child: Text(isRtl ? 'فيديو واحد فقط' : 'Single Video',
+                                              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
                                         ),
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, 'playlist'),
+                                          child: Text(isRtl ? 'قائمة التشغيل كاملة' : 'Entire Playlist',
+                                              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (!context.mounted) return;
+                                  if (choice == 'playlist') {
+                                    final result = await YoutubePlaylistSheet.show(context, tabUrl);
+                                    if (result != null && context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                        content: Text(isRtl
+                                            ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
+                                            : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"'),
                                         duration: const Duration(seconds: 3),
-                                      ),
-                                    );
-                                  }
-                                } else {
-                                  final detectedSources =
-                                      _detectedMediaSources[activeTab.url] ??
-                                      [];
-                                  if (detectedSources.length > 1) {
-                                    _showDetectedMediaSheet(
-                                      context,
-                                      activeTab.url,
-                                    );
-                                  } else {
-                                    final stream =
-                                        await YoutubeQualitySheet.show(
-                                          context,
-                                          activeTab.url,
-                                        );
-                                    if (stream != null && context.mounted) {
-                                      if (stream['type'] == 'combined') return;
-                                      final title =
-                                          stream['title'] as String? ??
-                                          'YouTube Video';
-                                      final ext =
-                                          stream['ext'] as String? ?? 'mp4';
-                                      _startDirectDownload(
-                                        stream['src'] as String,
-                                        suggestedName: '$title.$ext',
-                                        type: 'video',
-                                      );
+                                      ));
                                     }
+                                    return;
+                                  } else if (choice != 'video') {
+                                    return; // dismissed
+                                  }
+                                  // choice == 'video': fall through to single-video download
+                                } else if (isPlaylist) {
+                                  // Pure playlist URL
+                                  final result = await YoutubePlaylistSheet.show(context, tabUrl);
+                                  if (result != null && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text(isRtl
+                                          ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
+                                          : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"'),
+                                      duration: const Duration(seconds: 3),
+                                    ));
+                                  }
+                                  return;
+                                }
+
+                                // Single-video download
+                                final detectedSources = _detectedMediaSources[tabUrl] ?? [];
+                                if (detectedSources.length > 1) {
+                                  _showDetectedMediaSheet(context, tabUrl);
+                                } else {
+                                  final stream = await YoutubeQualitySheet.show(context, tabUrl);
+                                  if (stream != null && context.mounted) {
+                                    if (stream['type'] == 'combined') return;
+                                    final title = stream['title'] as String? ?? 'YouTube Video';
+                                    final ext = stream['ext'] as String? ?? 'mp4';
+                                    _startDirectDownload(
+                                      stream['src'] as String,
+                                      suggestedName: '$title.$ext',
+                                      type: 'video',
+                                    );
                                   }
                                 }
                               },

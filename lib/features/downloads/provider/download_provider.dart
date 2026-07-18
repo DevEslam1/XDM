@@ -1321,9 +1321,23 @@ class DownloadProvider extends ChangeNotifier
             );
           }
         })
-        .catchError((Object error) async {
+        .catchError((Object error, StackTrace stackTrace) async {
           // Unwrap to the first real error (avoids ParallelWaitError wrapper from Future.wait)
           final realError = firstError ?? error;
+          
+          debugPrint('================= DOWNLOAD ERROR =================');
+          debugPrint('Task ID: ${task.id}');
+          debugPrint('URL: ${task.url}');
+          debugPrint('Error: $realError');
+          if (realError is DioException) {
+            debugPrint('DioException Type: ${realError.type}');
+            debugPrint('DioException Message: ${realError.message}');
+            debugPrint('DioException Response: ${realError.response?.data}');
+            debugPrint('DioException Status: ${realError.response?.statusCode}');
+          }
+          debugPrint('Stacktrace: $stackTrace');
+          debugPrint('==================================================');
+          
           await _flushPendingProgress(task.id);
           final current = _findTask(task.id);
           if (current == null) return;
@@ -1357,90 +1371,108 @@ class DownloadProvider extends ChangeNotifier
             debugPrint(
               'Detected YouTube ${realError.response?.statusCode ?? 403} error. Attempting to refresh stream URL...',
             );
-            
+
             final currentRetry = _retryCounts[task.id] ?? 0;
             final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
             if (currentRetry >= maxRetries && maxRetries > 0) {
-               debugPrint('Max retries reached for YouTube 403 error. Failing task.');
-               // Let it fall through to the normal error handler which will fail the task
+              debugPrint('Max retries reached for YouTube 403 error. Failing task.');
+              // Let it fall through to the normal error handler which will fail the task
             } else {
               _retryCounts[task.id] = currentRetry + 1;
               bool refreshed = false;
-            try {
-              final newUrl = await YoutubeService.refreshStreamUrl(
-                current.downloadPageUrl!,
-                current.url,
-              );
-              String? newAudioUrl;
-              if (current.mergedAudioUrl != null) {
-                newAudioUrl = await YoutubeService.refreshStreamUrl(
-                  current.downloadPageUrl!,
-                  current.mergedAudioUrl!,
-                );
-              }
-              if (newUrl != null || newAudioUrl != null) {
-                // Add a small delay to prevent rapid tight loops
-                await Future.delayed(const Duration(seconds: 2));
-                await updateTaskUrlAndResume(
-                  current.id,
-                  newUrl ?? current.url,
-                  newAudioUrl: newAudioUrl,
-                );
-                refreshed = true;
-                return;
-              }
-            } catch (e) {
-              debugPrint('Failed to refresh YouTube stream URL: $e');
-            }
 
-            if (!refreshed) {
-              // Last resort: fetch a completely fresh stream instead of
-              // retrying the same expired URL.
-              debugPrint('YouTube refresh failed. Trying fresh stream fetch...');
+              // Bust the youtube_explode_dart manifest cache so we always get
+              // a genuinely fresh URL from YouTube, not a cached expired one.
+              YoutubeService.resetClient();
+
               try {
-                final fresh = await YoutubeService.getFreshStreams(
+                final newUrl = await YoutubeService.refreshStreamUrl(
                   current.downloadPageUrl!,
+                  current.url,
                 );
-                if (fresh != null && fresh['url'] != null) {
-                  await Future.delayed(const Duration(seconds: 2));
-                  await updateTaskUrlAndResume(
-                    current.id,
-                    fresh['url']!,
-                    newAudioUrl: fresh['audioUrl'],
+                String? newAudioUrl;
+                if (current.mergedAudioUrl != null) {
+                  newAudioUrl = await YoutubeService.refreshStreamUrl(
+                    current.downloadPageUrl!,
+                    current.mergedAudioUrl!,
                   );
+                }
+                // Only count as refreshed when we have a new *video* URL.
+                // If only newAudioUrl was returned and newUrl is null, resuming
+                // with `newUrl ?? current.url` would reuse the expired video URL
+                // and immediately 403 again.
+                if (newUrl != null) {
+                  debugPrint('[DMX] YouTube URL refreshed successfully.');
+                  // Use startOverTask instead of updateTaskUrlAndResume:
+                  // updateTaskUrl makes a HEAD request to resolve metadata, but
+                  // YouTube CDN returns 403 to HEAD too, so supportsResume comes
+                  // back false and the download tries a range-resume which also
+                  // 403s. startOverTask clears partial files and starts fresh.
+                  await Future.delayed(const Duration(seconds: 2));
+                  await startOverTask(
+                    current.id,
+                    newUrl,
+                    newAudioUrl: newAudioUrl,
+                  );
+                  refreshed = true;
                   return;
                 }
               } catch (e) {
-                debugPrint('Fresh YouTube stream fetch also failed: $e');
+                debugPrint('Failed to refresh YouTube stream URL: $e');
               }
 
-              // We already incremented the retry count above, so we just use the current value
-              if (_settingsProvider.autoRetryEnabled &&
-                  currentRetry < maxRetries) {
-                final delaySeconds = _settingsProvider.retryDelaySeconds;
-                await _setTask(
-                  current.copyWith(
-                    status: DownloadStatus.queued,
-                    speed: 0,
-                    errorMessage:
-                        'YouTube stream expired. Retrying in $delaySeconds seconds...',
-                  ),
-                );
-                _retryTimers[task.id]?.cancel();
-                _retryTimers[task.id] = Timer(
-                  Duration(seconds: delaySeconds),
-                  () {
-                    _retryTimers.remove(task.id);
-                    final checkedTask = _findTask(task.id);
-                    if (checkedTask != null &&
-                        checkedTask.status == DownloadStatus.queued) {
-                      pumpQueue();
-                    }
-                  },
-                );
-                return;
+              if (!refreshed) {
+                // Last resort: recreate the client and fetch completely fresh
+                // stream URLs from scratch, bypassing any URL matching.
+                debugPrint('YouTube refresh failed. Trying fresh stream fetch...');
+                YoutubeService.resetClient();
+                try {
+                  final fresh = await YoutubeService.getFreshStreams(
+                    current.downloadPageUrl!,
+                  );
+                  if (fresh != null && fresh['url'] != null) {
+                    debugPrint('[DMX] YouTube fresh stream fetch succeeded.');
+                    await Future.delayed(const Duration(seconds: 2));
+                    // Same reason as above: startOverTask avoids the HEAD→403
+                    // chain that updateTaskUrlAndResume would trigger.
+                    await startOverTask(
+                      current.id,
+                      fresh['url']!,
+                      newAudioUrl: fresh['audioUrl'],
+                    );
+                    return;
+                  }
+                } catch (e) {
+                  debugPrint('Fresh YouTube stream fetch also failed: $e');
+                }
+
+                // Both refresh strategies failed — schedule a retry if allowed.
+                if (_settingsProvider.autoRetryEnabled &&
+                    currentRetry < maxRetries) {
+                  final delaySeconds = _settingsProvider.retryDelaySeconds;
+                  await _setTask(
+                    current.copyWith(
+                      status: DownloadStatus.queued,
+                      speed: 0,
+                      errorMessage:
+                          'YouTube stream expired. Retrying in $delaySeconds seconds...',
+                    ),
+                  );
+                  _retryTimers[task.id]?.cancel();
+                  _retryTimers[task.id] = Timer(
+                    Duration(seconds: delaySeconds),
+                    () {
+                      _retryTimers.remove(task.id);
+                      final checkedTask = _findTask(task.id);
+                      if (checkedTask != null &&
+                          checkedTask.status == DownloadStatus.queued) {
+                        pumpQueue();
+                      }
+                    },
+                  );
+                  return;
+                }
               }
-            }
             }
           }
 
@@ -1583,24 +1615,24 @@ class DownloadProvider extends ChangeNotifier
         final code = error.response!.statusCode;
         return switch (code) {
           403 =>
-            '403 Forbidden: Access denied. The download link may have expired or permission is required.',
+            '403 Forbidden: Access denied. (Raw: ${error.message})',
           401 =>
-            '401 Unauthorized: Authentication is required to access this file.',
-          404 => '404 Not Found: The file was not found on the server.',
+            '401 Unauthorized: Authentication is required. (Raw: ${error.message})',
+          404 => '404 Not Found: The file was not found. (Raw: ${error.message})',
           410 =>
-            '410 Gone: The file has been permanently removed from the server.',
+            '410 Gone: The file has been permanently removed. (Raw: ${error.message})',
           416 =>
-            '416 Range Not Satisfiable: The server returned an invalid byte range error.',
-          500 => '500 Internal Server Error: Server-side issue occurred.',
+            '416 Range Not Satisfiable: Invalid byte range. (Raw: ${error.message})',
+          500 => '500 Internal Server Error. (Raw: ${error.message})',
           503 =>
-            '503 Service Unavailable: The server is temporarily down or overloaded.',
+            '503 Service Unavailable: Server is overloaded. (Raw: ${error.message})',
           _ =>
             'HTTP Error $code: ${error.message ?? "Server returned invalid response."}',
         };
       }
-      return error.message ?? error.type.name;
+      return 'Dio Error: ${error.message ?? error.type.name}';
     }
-    return error.toString();
+    return 'Error: ${error.toString()}';
   }
 
   bool _isRetryableError(Object error) {

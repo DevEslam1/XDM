@@ -848,14 +848,60 @@ class _AddScreenState extends State<AddScreen> with HapticHelper {
     }
 
     if (YoutubeService.isPlaylistUrl(url)) {
-      if (!mounted) return;
-      final result = await YoutubePlaylistSheet.show(context, url);
-      if (result != null && mounted) {
-        final isDark = context.read<SettingsProvider>().isDarkMode;
-        ThemedSnackbar.show(context, message: L10n.isRtl(context) ? 'تم إضافة ${result.selectedVideos.length} فيديو' : '${result.selectedVideos.length} videos enqueued', color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, icon: Icons.playlist_add_check, isDarkMode: isDark);
-        if (mounted) Navigator.pop(context);
+      // Check if it's a mixed URL (has both v= and list=) and ask the user.
+      final isMixed = YoutubeService.isYoutubeVideoUrl(url);
+      if (isMixed && mounted) {
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (ctx) {
+            final isDark = context.read<SettingsProvider>().isDarkMode;
+            final isRtl = L10n.isRtl(context);
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
+              content: Text(isRtl ? 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.' : 'This link contains both a single video and a playlist.',
+                  style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'video'),
+                  child: Text(isRtl ? 'فيديو واحد فقط' : 'Single Video',
+                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'playlist'),
+                  child: Text(isRtl ? 'قائمة التشغيل كاملة' : 'Entire Playlist',
+                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+        if (!mounted) return;
+        if (choice == 'video') {
+          // Fall through to single-video handling below
+        } else if (choice == 'playlist') {
+          final result = await YoutubePlaylistSheet.show(context, url);
+          if (result != null && mounted) {
+            final isDark = context.read<SettingsProvider>().isDarkMode;
+            ThemedSnackbar.show(context, message: L10n.isRtl(context) ? 'تم إضافة ${result.selectedVideos.length} فيديو' : '${result.selectedVideos.length} videos enqueued', color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, icon: Icons.playlist_add_check, isDarkMode: isDark);
+            if (mounted) Navigator.pop(context);
+          }
+          return;
+        } else {
+          return; // dismissed
+        }
+      } else if (!isMixed && mounted) {
+        // Pure playlist URL — go straight to the playlist sheet
+        final result = await YoutubePlaylistSheet.show(context, url);
+        if (result != null && mounted) {
+          final isDark = context.read<SettingsProvider>().isDarkMode;
+          ThemedSnackbar.show(context, message: L10n.isRtl(context) ? 'تم إضافة ${result.selectedVideos.length} فيديو' : '${result.selectedVideos.length} videos enqueued', color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, icon: Icons.playlist_add_check, isDarkMode: isDark);
+          if (mounted) Navigator.pop(context);
+        }
+        return;
       }
-      return;
     }
 
     if (YoutubeService.isYoutubeVideoUrl(url)) {
