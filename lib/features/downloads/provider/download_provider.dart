@@ -1357,7 +1357,15 @@ class DownloadProvider extends ChangeNotifier
             debugPrint(
               'Detected YouTube ${realError.response?.statusCode ?? 403} error. Attempting to refresh stream URL...',
             );
-            bool refreshed = false;
+            
+            final currentRetry = _retryCounts[task.id] ?? 0;
+            final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
+            if (currentRetry >= maxRetries && maxRetries > 0) {
+               debugPrint('Max retries reached for YouTube 403 error. Failing task.');
+               // Let it fall through to the normal error handler which will fail the task
+            } else {
+              _retryCounts[task.id] = currentRetry + 1;
+              bool refreshed = false;
             try {
               final newUrl = await YoutubeService.refreshStreamUrl(
                 current.downloadPageUrl!,
@@ -1371,6 +1379,8 @@ class DownloadProvider extends ChangeNotifier
                 );
               }
               if (newUrl != null || newAudioUrl != null) {
+                // Add a small delay to prevent rapid tight loops
+                await Future.delayed(const Duration(seconds: 2));
                 await updateTaskUrlAndResume(
                   current.id,
                   newUrl ?? current.url,
@@ -1392,6 +1402,7 @@ class DownloadProvider extends ChangeNotifier
                   current.downloadPageUrl!,
                 );
                 if (fresh != null && fresh['url'] != null) {
+                  await Future.delayed(const Duration(seconds: 2));
                   await updateTaskUrlAndResume(
                     current.id,
                     fresh['url']!,
@@ -1403,10 +1414,9 @@ class DownloadProvider extends ChangeNotifier
                 debugPrint('Fresh YouTube stream fetch also failed: $e');
               }
 
-              final currentRetry = _retryCounts[task.id] ?? 0;
+              // We already incremented the retry count above, so we just use the current value
               if (_settingsProvider.autoRetryEnabled &&
-                  currentRetry < _settingsProvider.maxRetries) {
-                _retryCounts[task.id] = currentRetry + 1;
+                  currentRetry < maxRetries) {
                 final delaySeconds = _settingsProvider.retryDelaySeconds;
                 await _setTask(
                   current.copyWith(
@@ -1430,6 +1440,7 @@ class DownloadProvider extends ChangeNotifier
                 );
                 return;
               }
+            }
             }
           }
 
