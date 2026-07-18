@@ -727,7 +727,7 @@ class DownloadEngine {
               }
 
               final headers = <String, dynamic>{};
-              headers['range'] = 'bytes=${start + resumeFrom}-$end';
+              headers['Range'] = 'bytes=${start + resumeFrom}-$end';
 
               try {
                 final chunkResponse = await isolatedDio.get<ResponseBody>(
@@ -980,7 +980,7 @@ class DownloadEngine {
 
     final headers = <String, dynamic>{};
     if (resumeFrom > 0) {
-      headers['range'] = 'bytes=$resumeFrom-';
+      headers['Range'] = 'bytes=$resumeFrom-';
     }
 
     var response = await isolatedDio.get<ResponseBody>(

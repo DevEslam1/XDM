@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Theme Colors (Dark Mode)
@@ -157,52 +156,52 @@ class AppTheme {
         ),
       ),
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.spaceGrotesk(
+        displayLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.bold,
         ),
-        displayMedium: GoogleFonts.spaceGrotesk(
+        displayMedium: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.bold,
         ),
-        displaySmall: GoogleFonts.spaceGrotesk(
+        displaySmall: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.bold,
         ),
-        headlineLarge: GoogleFonts.spaceGrotesk(
+        headlineLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.bold,
           letterSpacing: -0.5,
         ),
-        headlineMedium: GoogleFonts.spaceGrotesk(
+        headlineMedium: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.w600,
         ),
-        headlineSmall: GoogleFonts.spaceGrotesk(
+        headlineSmall: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.w600,
         ),
-        titleLarge: GoogleFonts.spaceGrotesk(
+        titleLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.w600,
         ),
-        titleMedium: GoogleFonts.spaceGrotesk(
+        titleMedium: TextStyle(fontFamily: 'Space Grotesk', 
           color: textPrimary,
           fontWeight: FontWeight.w500,
         ),
-        titleSmall: GoogleFonts.spaceGrotesk(
+        titleSmall: TextStyle(fontFamily: 'Space Grotesk', 
           color: textSecondary,
           fontWeight: FontWeight.w500,
         ),
-        bodyLarge: GoogleFonts.inter(color: textPrimary),
-        bodyMedium: GoogleFonts.inter(color: textSecondary),
-        bodySmall: GoogleFonts.inter(color: textMuted),
-        labelLarge: GoogleFonts.spaceGrotesk(
+        bodyLarge: TextStyle(fontFamily: 'Inter', color: textPrimary),
+        bodyMedium: TextStyle(fontFamily: 'Inter', color: textSecondary),
+        bodySmall: TextStyle(fontFamily: 'Inter', color: textMuted),
+        labelLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: neonBlue,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
         ),
-        labelMedium: GoogleFonts.inter(
+        labelMedium: TextStyle(fontFamily: 'Inter', 
           color: textSecondary,
           fontWeight: FontWeight.w500,
         ),
@@ -287,52 +286,52 @@ class AppTheme {
         ),
       ),
       textTheme: TextTheme(
-        displayLarge: GoogleFonts.spaceGrotesk(
+        displayLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.bold,
         ),
-        displayMedium: GoogleFonts.spaceGrotesk(
+        displayMedium: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.bold,
         ),
-        displaySmall: GoogleFonts.spaceGrotesk(
+        displaySmall: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.bold,
         ),
-        headlineLarge: GoogleFonts.spaceGrotesk(
+        headlineLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.bold,
           letterSpacing: -0.5,
         ),
-        headlineMedium: GoogleFonts.spaceGrotesk(
+        headlineMedium: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.w600,
         ),
-        headlineSmall: GoogleFonts.spaceGrotesk(
+        headlineSmall: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.w600,
         ),
-        titleLarge: GoogleFonts.spaceGrotesk(
+        titleLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.w600,
         ),
-        titleMedium: GoogleFonts.spaceGrotesk(
+        titleMedium: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextPrimary,
           fontWeight: FontWeight.w500,
         ),
-        titleSmall: GoogleFonts.spaceGrotesk(
+        titleSmall: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightTextSecondary,
           fontWeight: FontWeight.w500,
         ),
-        bodyLarge: GoogleFonts.inter(color: lightTextPrimary),
-        bodyMedium: GoogleFonts.inter(color: lightTextSecondary),
-        bodySmall: GoogleFonts.inter(color: lightTextMuted),
-        labelLarge: GoogleFonts.spaceGrotesk(
+        bodyLarge: TextStyle(fontFamily: 'Inter', color: lightTextPrimary),
+        bodyMedium: TextStyle(fontFamily: 'Inter', color: lightTextSecondary),
+        bodySmall: TextStyle(fontFamily: 'Inter', color: lightTextMuted),
+        labelLarge: TextStyle(fontFamily: 'Space Grotesk', 
           color: lightNeonBlue,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.5,
         ),
-        labelMedium: GoogleFonts.inter(
+        labelMedium: TextStyle(fontFamily: 'Inter', 
           color: lightTextSecondary,
           fontWeight: FontWeight.w500,
         ),
