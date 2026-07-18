@@ -297,6 +297,12 @@ class YoutubeService {
   }
 
   /// Refreshes an expired stream URL by fetching the latest manifest and matching the itag.
+  /// Refreshes an expired stream URL by fetching the latest manifest.
+  ///
+  /// First tries to match by `itag` query parameter. If that fails, falls
+  /// back to returning a fresh URL from a stream of the same type as
+  /// [oldStreamUrl] (muxed / video‑only / audio‑only). This avoids retrying
+  /// the same expired URL when the itag is absent from the URL format.
   static Future<String?> refreshStreamUrl(
     String downloadPageUrl,
     String oldStreamUrl,
@@ -323,8 +329,88 @@ class YoutubeService {
           }
         }
       }
+
+      // Fallback: itag not found or absent. Return a fresh URL from the
+      // same stream type so the download never stalls on an expired URL.
+      return _firstUrlByType(manifest, oldStreamUrl);
     } catch (e) {
       Logger.root.severe('Failed to refresh YouTube stream URL: $e');
+    }
+    return null;
+  }
+
+  /// Fetches completely fresh stream URLs for a YouTube video, bypassing any
+  /// attempt to match the old URL. Used as a last‑resort fallback when
+  /// [refreshStreamUrl] fails so the download gets a working URL from scratch.
+  ///
+  /// Returns a map with `'url'` and optionally `'audioUrl'`, or `null` if no
+  /// streams are available.
+  static Future<Map<String, String?>?> getFreshStreams(
+    String downloadPageUrl,
+  ) async {
+    final videoId = extractVideoId(downloadPageUrl);
+    if (videoId == null) return null;
+
+    try {
+      final result = await _fetchWithFallback(videoId);
+      final manifest = result.manifest;
+
+      // Prefer muxed (simplest — single URL)
+      if (manifest.muxed.isNotEmpty) {
+        return {'url': manifest.muxed.first.url.toString(), 'audioUrl': null};
+      }
+
+      // Combined: best video-only + best audio
+      if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
+        final sorted = manifest.audioOnly.toList()
+          ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+        return {
+          'url': manifest.videoOnly.first.url.toString(),
+          'audioUrl': sorted.first.url.toString(),
+        };
+      }
+
+      // Video-only (no audio available — rare)
+      if (manifest.videoOnly.isNotEmpty) {
+        return {'url': manifest.videoOnly.first.url.toString(), 'audioUrl': null};
+      }
+
+      // Audio-only
+      if (manifest.audioOnly.isNotEmpty) {
+        return {'url': manifest.audioOnly.first.url.toString(), 'audioUrl': null};
+      }
+    } catch (e) {
+      Logger.root.severe('Failed to get fresh YouTube streams: $e');
+    }
+    return null;
+  }
+
+  /// Returns the first URL from the manifest whose stream type matches the
+  /// nature of [oldStreamUrl] (muxed / video‑only / audio‑only).
+  static String? _firstUrlByType(
+    StreamManifest manifest,
+    String oldStreamUrl,
+  ) {
+    final lower = oldStreamUrl.toLowerCase();
+
+    // Heuristic: audio-only stream URLs often contain "mime=audio".
+    final isAudio =
+        lower.contains('mime%3Daudio') || lower.contains('mime=audio');
+    if (isAudio) {
+      for (final s in manifest.audioOnly) {
+        return s.url.toString();
+      }
+    }
+
+    // Return muxed first (preferred), then video-only.
+    for (final s in manifest.muxed) {
+      return s.url.toString();
+    }
+    for (final s in manifest.videoOnly) {
+      return s.url.toString();
+    }
+    for (final s in manifest.audioOnly) {
+      return s.url.toString();
     }
     return null;
   }
