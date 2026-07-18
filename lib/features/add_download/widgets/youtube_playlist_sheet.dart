@@ -131,22 +131,34 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
     int completed = 0;
     int failed = 0;
+    int consecutiveErrors = 0;
     final enqueuedVideos = <Map<String, dynamic>>[];
 
-    for (final video in selectedVideos) {
+    for (int i = 0; i < selectedVideos.length; i++) {
       if (!mounted) break;
       if (_isCancelled) break;
 
+      final video = selectedVideos[i];
       final videoId = video['id'] as String;
       final videoTitle = video['title'] as String? ?? 'YouTube Video';
 
+      // Add delay between requests to avoid YouTube rate limiting
+      if (i > 0) {
+        await Future.delayed(const Duration(milliseconds: 1500));
+        if (!mounted) break;
+        if (_isCancelled) break;
+      }
+
       try {
-        final streamInfo = await YoutubeService.getStreamForVideo(videoId, _qualityPreset);
+        final streamInfo = await YoutubeService.getStreamForVideo(
+          videoId,
+          _qualityPreset,
+        );
         if (streamInfo != null && mounted) {
+          consecutiveErrors = 0;
           final type = streamInfo['type'] as String? ?? 'muxed';
 
           if (type == 'combined') {
-            // Combined: enqueue a single download with mergedAudioUrl
             final qLabel = streamInfo['quality'] as String? ?? 'HD';
             final ext = streamInfo['ext'] as String? ?? 'mp4';
             final videoUrl = streamInfo['src'] as String;
@@ -183,10 +195,29 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
           enqueuedVideos.add(video);
         } else {
           failed++;
+          consecutiveErrors++;
         }
       } catch (e) {
         debugPrint('Failed to get stream for video $videoId: $e');
         failed++;
+        consecutiveErrors++;
+      }
+
+      // If too many consecutive failures, abort early (likely rate-limited)
+      if (consecutiveErrors >= 5) {
+        debugPrint('Too many consecutive failures. Aborting playlist download.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Too many failures. Aborting after ${completed + 1} videos.',
+              ),
+              backgroundColor: Colors.red.shade800,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        break;
       }
 
       completed++;
@@ -197,9 +228,13 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
     if (mounted) {
       if (failed > 0) {
+        final remaining = selectedVideos.length - completed;
+        final msg = remaining > 0
+            ? '$failed video(s) failed ($remaining skipped).'
+            : '$failed video(s) failed (stream not available).';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$failed video(s) failed (stream not available).'),
+            content: Text(msg),
             backgroundColor: Colors.orange.shade800,
             behavior: SnackBarBehavior.floating,
           ),
