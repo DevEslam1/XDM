@@ -2647,6 +2647,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                           activeTab.url,
                                         );
                                     if (stream != null && context.mounted) {
+                                      if (stream['type'] == 'combined') return;
                                       final title =
                                           stream['title'] as String? ??
                                           'YouTube Video';
@@ -3025,6 +3026,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               activeTab.url,
             );
             if (stream != null && context.mounted) {
+              if (stream['type'] == 'combined') return;
               final title = stream['title'] as String? ?? 'YouTube Video';
               final ext = stream['ext'] as String? ?? 'mp4';
               _startDirectDownload(

@@ -98,6 +98,11 @@ class FakeDownloadEngine extends DownloadEngine {
         speed: 1000,
         eta: 0,
       ));
+      try {
+        final f = File(tempFilePath);
+        f.createSync(recursive: true);
+        f.writeAsBytesSync(List.filled(10, 0));
+      } catch (_) {}
       if (!completer.isCompleted) {
         completer.complete();
       }
@@ -230,5 +235,42 @@ void main() {
     expect(provider.tasks.first.status, DownloadStatus.completed);
   });
 
+  test('DownloadProvider YouTube merge flow', () async {
+    final (database, settings) = await _setupServices();
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    await provider.addDownload(
+      name: 'youtube_video.mp4',
+      url: 'https://example.com/video',
+      size: 100,
+      category: 'Video',
+      savePath: 'build/test_downloads',
+      mergedAudioUrl: 'https://example.com/audio',
+      audioSize: 50,
+    );
+
+    expect(provider.tasks.length, 1);
+
+    // Wait for the video download phase, then audio phase, then merge phase
+    for (int i = 0; i < 100; i++) {
+      if (provider.tasks.first.status == DownloadStatus.failed ||
+          provider.tasks.first.status == DownloadStatus.completed) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 10));
+    }
+
+    // In a test environment without real ffmpeg binary, the merge phase will throw an exception
+    // (FFmpeg merge failed).
+    // The provider should catch this and transition the task to failed.
+    expect(provider.tasks.first.status, DownloadStatus.failed);
+    expect(provider.tasks.first.errorMessage, contains('FFmpeg merge failed'));
+  });
 
 }

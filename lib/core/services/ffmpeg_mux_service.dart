@@ -16,14 +16,37 @@ class FFmpegMuxService {
     try {
       _log.info('Starting merge:\nVideo: $videoPath\nAudio: $audioPath\nOutput: $outputPath');
 
-      // Check if input files exist
-      if (!File(videoPath).existsSync()) {
+      // Check if input files exist and log their sizes
+      final videoFile = File(videoPath);
+      if (!await videoFile.exists()) {
         _log.severe('Video file does not exist: $videoPath');
         return false;
       }
-      if (!File(audioPath).existsSync()) {
+      final videoSize = await videoFile.length();
+      _log.info('Video file size: $videoSize bytes');
+
+      final audioFile = File(audioPath);
+      if (!await audioFile.exists()) {
         _log.severe('Audio file does not exist: $audioPath');
         return false;
+      }
+      final audioSize = await audioFile.length();
+      _log.info('Audio file size: $audioSize bytes');
+
+      if (videoSize == 0) {
+        _log.severe('Video file is empty: $videoPath');
+        return false;
+      }
+      if (audioSize == 0) {
+        _log.severe('Audio file is empty: $audioPath');
+        return false;
+      }
+
+      // Ensure output directory exists
+      final outputDir = File(outputPath).parent;
+      if (!await outputDir.exists()) {
+        await outputDir.create(recursive: true);
+        _log.info('Created output directory: ${outputDir.path}');
       }
 
       // Prepare command:
@@ -33,23 +56,37 @@ class FFmpegMuxService {
       // -map 1:a:0 : Use first audio stream from second input
       // -shortest : Finish encoding when the shortest input stream ends
       // -y : Overwrite output file if it exists
-      final command =
-          '-i "$videoPath" -i "$audioPath" -c copy -map 0:v:0 -map 1:a:0 -shortest -y "$outputPath"';
+      final arguments = [
+        '-i', videoPath,
+        '-i', audioPath,
+        '-c', 'copy',
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-shortest',
+        '-y',
+        outputPath
+      ];
 
-      final session = await FFmpegKit.execute(command);
+      _log.info('FFmpeg arguments: $arguments');
+      final session = await FFmpegKit.executeWithArguments(arguments);
       final returnCode = await session.getReturnCode();
 
       if (ReturnCode.isSuccess(returnCode)) {
-        _log.info('Merge successful: $outputPath');
-        
+        final outputFile = File(outputPath);
+        if (await outputFile.exists()) {
+          final outputSize = await outputFile.length();
+          _log.info('Merge successful: $outputPath ($outputSize bytes)');
+        } else {
+          _log.warning('Merge reported success but output file not found: $outputPath');
+        }
         return true;
       } else {
         final logs = await session.getLogsAsString();
-        _log.severe('Merge failed with return code $returnCode.\nLogs: $logs');
+        _log.severe('Merge failed with return code $returnCode.\nLogs:\n$logs');
         return false;
       }
-    } catch (e) {
-      _log.severe('Exception during FFmpeg merge: $e');
+    } catch (e, stackTrace) {
+      _log.severe('Exception during FFmpeg merge: $e\n$stackTrace');
       return false;
     }
   }

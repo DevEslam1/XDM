@@ -465,7 +465,7 @@ class YoutubeService {
   }
 
   /// Fetches the best stream URL for a given video ID and quality preference.
-  /// [qualityPreset] can be: 'best_muxed', '720p', '480p', '360p', 'audio_only'.
+  /// [qualityPreset] can be: 'best_combined', 'best_muxed', '720p', '480p', '360p', 'audio_only'.
   static Future<Map<String, dynamic>?> getStreamForVideo(
     String videoId,
     String qualityPreset, {
@@ -493,10 +493,14 @@ class YoutubeService {
       };
     }
 
+    if (qualityPreset == 'best_combined') {
+      forceMuxed = false;
+    }
+
     // For muxed streams, find the requested quality or best available
     MuxedStreamInfo? chosen;
 
-    if (manifest.muxed.isNotEmpty) {
+    if (qualityPreset != 'best_combined' && manifest.muxed.isNotEmpty) {
       final targetQualities = switch (qualityPreset) {
         '1080p' => ['1080p', '720p', '480p', '360p', '240p'],
         '720p' => ['720p', '480p', '360p', '240p', '1080p'],

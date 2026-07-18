@@ -1176,21 +1176,23 @@ class DownloadEngine {
         : localFilePath;
 
     await File(finalLocalFilePath).parent.create(recursive: true);
-    if (await File(finalLocalFilePath).exists()) {
-      await File(finalLocalFilePath).delete();
-    }
-    try {
-      await tempFile.rename(finalLocalFilePath);
-    } catch (e) {
-      debugPrint('File rename failed (cross-device?), using copy fallback: $e');
-      // Fallback for cross-device/cross-filesystem move
-      await tempFile.copy(finalLocalFilePath);
-      final copiedLen = await File(finalLocalFilePath).length();
-      final origLen = await tempFile.length();
-      if (copiedLen == origLen) {
-        await tempFile.delete();
-      } else {
-        throw Exception('File copy failed on fallback rename.');
+    if (finalLocalFilePath != tempFile.path) {
+      if (await File(finalLocalFilePath).exists()) {
+        await File(finalLocalFilePath).delete();
+      }
+      try {
+        await tempFile.rename(finalLocalFilePath);
+      } catch (e) {
+        debugPrint('File rename failed (cross-device?), using copy fallback: $e');
+        // Fallback for cross-device/cross-filesystem move
+        await tempFile.copy(finalLocalFilePath);
+        final copiedLen = await File(finalLocalFilePath).length();
+        final origLen = await tempFile.length();
+        if (copiedLen == origLen) {
+          await tempFile.delete();
+        } else {
+          throw Exception('File copy failed on fallback rename.');
+        }
       }
     }
   }

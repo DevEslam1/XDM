@@ -37,6 +37,7 @@ class DownloadTask {
   final String? mergedAudioUrl;
   final int audioSize;
   final double audioProgress;
+  final bool pausedByUser;
 
   DownloadTask({
     required this.id,
@@ -68,6 +69,7 @@ class DownloadTask {
     this.mergedAudioUrl,
     this.audioSize = 0,
     this.audioProgress = 0.0,
+    this.pausedByUser = false,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -158,6 +160,7 @@ class DownloadTask {
     String? mergedAudioUrl,
     int? audioSize,
     double? audioProgress,
+    bool? pausedByUser,
   }) {
     return DownloadTask(
       id: id,
@@ -189,6 +192,7 @@ class DownloadTask {
       mergedAudioUrl: mergedAudioUrl ?? this.mergedAudioUrl,
       audioSize: audioSize ?? this.audioSize,
       audioProgress: audioProgress ?? this.audioProgress,
+      pausedByUser: pausedByUser ?? this.pausedByUser,
     );
   }
 
@@ -223,6 +227,7 @@ class DownloadTask {
       'mergedAudioUrl': mergedAudioUrl,
       'audioSize': audioSize,
       'audioProgress': audioProgress,
+      'pausedByUser': pausedByUser,
     };
   }
 
@@ -288,6 +293,7 @@ class DownloadTask {
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
+      pausedByUser: map['pausedByUser'] as bool? ?? false,
     );
   }
 

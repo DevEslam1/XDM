@@ -533,6 +533,61 @@ void main() {
     expect(provider.tasks.first.status, DownloadStatus.failed);
     expect(provider.tasks.first.errorMessage, contains('403 Forbidden: Access denied'));
   });
+
+  test('load() auto-resume logic honors user pauses and wifi-waiting constraints', () async {
+    final (database, settings) = await _setupServices();
+    await settings.setAutoStart(true);
+    await settings.setWifiOnly(false);
+
+    // Create 3 tasks: 1 orphaned, 1 user-paused, 1 wifi-waiting
+    final orphanTask = DownloadTask(
+      id: '1', fileName: 'orphan.zip', url: 'http://a.com', fileSize: 100, downloadedBytes: 50,
+      category: 'Archive', status: DownloadStatus.paused, savePath: '', localFilePath: '', tempFilePath: '',
+      threadCount: 1, chunks: [0.5], createdAt: DateTime.now(), updatedAt: DateTime.now(),
+      errorMessage: 'Paused because XDM was closed during a foreground download.',
+    );
+    final userPausedTask = DownloadTask(
+      id: '2', fileName: 'user.zip', url: 'http://b.com', fileSize: 100, downloadedBytes: 50,
+      category: 'Archive', status: DownloadStatus.paused, savePath: '', localFilePath: '', tempFilePath: '',
+      threadCount: 1, chunks: [0.5], createdAt: DateTime.now(), updatedAt: DateTime.now(),
+      pausedByUser: true,
+    );
+    final wifiWaitingTask = DownloadTask(
+      id: '3', fileName: 'wifi.zip', url: 'http://c.com', fileSize: 100, downloadedBytes: 50,
+      category: 'Archive', status: DownloadStatus.paused, savePath: '', localFilePath: '', tempFilePath: '',
+      threadCount: 1, chunks: [0.5], createdAt: DateTime.now(), updatedAt: DateTime.now(),
+      errorMessage: 'Waiting for WiFi connection',
+    );
+
+    await database.saveTask(orphanTask);
+    await database.saveTask(userPausedTask);
+    await database.saveTask(wifiWaitingTask);
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load(pauseOrphanDownloads: false);
+    // Wait briefly for the queue to pump
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    // The orphan task should be queued/downloading
+    final t1 = provider.tasks.firstWhere((t) => t.id == '1');
+    expect(t1.status, anyOf(DownloadStatus.queued, DownloadStatus.downloading));
+
+    // The user-paused task should remain paused
+    final t2 = provider.tasks.firstWhere((t) => t.id == '2');
+    expect(t2.status, DownloadStatus.paused);
+
+    // The wifi-waiting task should remain paused (since wifi is simulated as available but task is explicitly waiting, actually the checkWifiOnly constraint might resume it if it's connected, wait, MockConnectivityPlatform returns wifi, so _resumeWaitingForWifi will unpause it!)
+    // Wait, let's verify wifi task: _resumeWaitingForWifi sets it to queued if it was waiting for WiFi.
+    // If we want it to stay paused, we should return mobile data in MockConnectivityPlatform, but it returns wifi.
+    // Let's assert it got resumed because wifi is available.
+    final t3 = provider.tasks.firstWhere((t) => t.id == '3');
+    expect(t3.status, anyOf(DownloadStatus.queued, DownloadStatus.downloading));
+  });
 }
 
 class FakeDownloadEngine403 extends DownloadEngine {

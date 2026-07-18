@@ -41,6 +41,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
   List<Map<String, dynamic>> _streams = [];
   bool _isLoading = true;
   String? _errorMessage;
+  int _selectedTabIndex = 0;
 
   @override
   void initState() {
@@ -113,9 +114,9 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     // Group streams by type
-    final muxed = _streams.where((s) => s['type'] == 'muxed').toList();
-    final audio = _streams.where((s) => s['type'] == 'audio').toList();
-    final combined = _streams.where((s) => s['type'] == 'combined').toList()
+    final muxed = _streams.where((s) => s['type'] == 'muxed' && s['ext'] == 'mp4').toList();
+    final audio = _streams.where((s) => s['type'] == 'audio' && s['ext'] != 'webm').toList();
+    final combined = _streams.where((s) => s['type'] == 'combined' && s['ext'] == 'mp4').toList()
       ..sort((a, b) {
         final aQuality = _parseQuality(a['quality'] as String? ?? '');
         final bQuality = _parseQuality(b['quality'] as String? ?? '');
@@ -204,6 +205,68 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
 
                   const SizedBox(height: 8),
 
+                  // Tabs
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTabIndex = 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedTabIndex == 0 ? accent.withValues(alpha: 0.15) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedTabIndex == 0 ? accent : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'VIDEO',
+                                style: TextStyle(
+                                  color: _selectedTabIndex == 0 ? accent : secClr,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedTabIndex = 1),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedTabIndex == 1 ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.15) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedTabIndex == 1 ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen) : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'AUDIO',
+                                style: TextStyle(
+                                  color: _selectedTabIndex == 1 ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen) : secClr,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
                   // Content
                   if (_isLoading)
                     const Expanded(
@@ -265,25 +328,41 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                         controller: scrollController,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
-                          if (combined.isNotEmpty) ...[
-                            _sectionHeader(context, 'VIDEO', Icons.video_file_outlined,
-                                isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue, isDark,
-                                trailing: _recommendBadge(isDark)),
-                            ...combined.map((s) => _streamTile(context, s, isDark, settings)),
-                            const SizedBox(height: 12),
+                          if (_selectedTabIndex == 0) ...[
+                            if (combined.isNotEmpty) ...[
+                              _sectionHeader(context, 'VIDEO', Icons.video_file_outlined,
+                                  isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue, isDark,
+                                  trailing: _recommendBadge(isDark)),
+                              ...combined.map((s) => _streamTile(context, s, isDark, settings)),
+                              const SizedBox(height: 12),
+                            ],
+                            if (combined.isEmpty && muxed.isNotEmpty) ...[
+                              _sectionHeader(context, 'VIDEO + AUDIO (MUXED)', Icons.ondemand_video_outlined, accent, isDark),
+                              ...muxed.map((s) => _streamTile(context, s, isDark, settings)),
+                              const SizedBox(height: 12),
+                            ],
+                            if (combined.isEmpty && muxed.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Center(
+                                  child: Text('No MP4 video streams found.', style: TextStyle(color: secClr, fontSize: 12)),
+                                ),
+                              ),
+                          ] else ...[
+                            if (audio.isNotEmpty) ...[
+                              _sectionHeader(context, 'AUDIO', Icons.audiotrack_outlined,
+                                  isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, isDark),
+                              ...audio.map((s) => _streamTile(context, s, isDark, settings)),
+                              const SizedBox(height: 12),
+                            ],
+                            if (audio.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Center(
+                                  child: Text('No audio streams found.', style: TextStyle(color: secClr, fontSize: 12)),
+                                ),
+                              ),
                           ],
-                          if (combined.isEmpty && muxed.isNotEmpty) ...[
-                            _sectionHeader(context, 'VIDEO + AUDIO (MUXED)', Icons.ondemand_video_outlined, accent, isDark),
-                            ...muxed.map((s) => _streamTile(context, s, isDark, settings)),
-                            const SizedBox(height: 12),
-                          ],
-                          if (audio.isNotEmpty) ...[
-                            _sectionHeader(context, 'AUDIO', Icons.audiotrack_outlined,
-                                isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, isDark),
-                            ...audio.map((s) => _streamTile(context, s, isDark, settings)),
-                            const SizedBox(height: 12),
-                          ],
-
                           const SizedBox(height: 24),
                         ],
                       ),
