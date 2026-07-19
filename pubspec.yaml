@@ -46,6 +46,11 @@ dependencies:
   sqlite3_flutter_libs: ^0.6.0+eol
   webview_cookie_manager: ^2.0.6
 
+dependency_overrides:
+  webview_cookie_manager:
+    path: packages/webview_cookie_manager
+
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

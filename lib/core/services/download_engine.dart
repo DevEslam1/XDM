@@ -288,7 +288,10 @@ class DownloadEngine {
         ? safeFileName(requestedFileName!.trim())
         : fileNameFromUrl(punyUrl);
     var fileSize = 0;
-    var supportsResume = false;
+    final isYoutube = punyUrl.contains('youtube.com') ||
+        punyUrl.contains('youtu.be') ||
+        punyUrl.contains('.googlevideo.com');
+    var supportsResume = isYoutube;
 
     // Use a per-call Dio so concurrent downloads don't share UA/proxy/SSL
     // state via the engine's long-lived client.
@@ -322,7 +325,11 @@ class DownloadEngine {
       final acceptRanges = response.headers
           .value('accept-ranges')
           ?.toLowerCase();
-      supportsResume = acceptRanges == 'bytes';
+      if (acceptRanges != null) {
+        supportsResume = acceptRanges == 'bytes';
+      } else {
+        supportsResume = isYoutube || response.statusCode == 206;
+      }
     } catch (e) {
       // Some servers block HEAD; GET will still attempt the download.
       debugPrint('HEAD request failed for $punyUrl: $e');
@@ -601,7 +608,17 @@ class DownloadEngine {
       return;
     }
 
-    final punyUrl = convertIdnToPunycode(url);
+    var finalUrl = url;
+    try {
+      final uri = Uri.parse(url);
+      if (uri.queryParameters.containsKey('range')) {
+        final newParams = Map<String, String>.from(uri.queryParameters)
+          ..remove('range');
+        finalUrl = uri.replace(queryParameters: newParams).toString();
+      }
+    } catch (_) {}
+
+    final punyUrl = convertIdnToPunycode(finalUrl);
 
     // Use a per-call Dio so concurrent downloads don't share UA/proxy/SSL
     // state via the engine's long-lived client.
@@ -622,6 +639,10 @@ class DownloadEngine {
     try {
       final isMultiThread =
           threadCount > 1 && resolvedSupportsResume && resolvedFileSize > 0;
+
+      debugPrint('[DMX] Starting download. Multi-thread: $isMultiThread. '
+          'Thread count: $threadCount, supportsResume: $resolvedSupportsResume, '
+          'fileSize: $resolvedFileSize');
 
       if (!isMultiThread) {
         await _downloadSingleThreaded(
@@ -1242,12 +1263,14 @@ class DownloadEngine {
         : int.tryParse(totalText);
 
     if (start != expectedStart ||
-        end != expectedEnd ||
-        (expectedTotal > 0 && total != null && total != expectedTotal)) {
+        (expectedTotal > 0 && total != null && total < expectedStart)) {
       throw DioException(
         requestOptions: RequestOptions(),
         type: DioExceptionType.badResponse,
-        message: 'Invalid Content-Range response: $value',
+        message: 'Invalid Content-Range response: $value. '
+            'Expected start: $expectedStart, got start: $start. '
+            'Got end: $end, expected end: $expectedEnd. '
+            'Got total: $total, expected total: $expectedTotal.',
       );
     }
   }
