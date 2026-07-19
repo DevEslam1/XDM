@@ -53,10 +53,18 @@ class BencodeDecoder {
 
     final big = BigInt.tryParse(numStr);
     if (big == null) throw FormatException('Invalid bencode integer: $numStr');
-    if (big > BigInt.from(0x7FFFFFFFFFFFFFFF) || big < BigInt.from(-0x7FFFFFFFFFFFFFFF)) {
+    final kMaxSafeInt = kIsWeb ? (BigInt.from(1) << 53) - BigInt.one : BigInt.from(0x7FFFFFFFFFFFFFFF);
+    if (big > kMaxSafeInt || big < -kMaxSafeInt) {
       throw FormatException('Bencode integer out of Dart int range: $numStr');
     }
-    return big.toInt();
+    final val = big.toInt();
+    if (kIsWeb) {
+      final webLimit = BigInt.from(1) << 53;
+      if (big > webLimit || big < -webLimit) {
+        throw const FormatException('Bencode integer too large for web platform');
+      }
+    }
+    return val;
   }
 
   Uint8List _decodeBytes() {
@@ -107,7 +115,7 @@ class BencodeDecoder {
         final infoStart = _offset;
         final infoVal = _decodeWithDepth(depth);
         final infoEnd = _offset;
-        map['info_bytes'] = _data.sublist(infoStart, infoEnd);
+        map['info_bytes'] = Uint8List.sublistView(_data, infoStart, infoEnd);
         map['info'] = infoVal;
       } else {
         map[key] = _decodeWithDepth(depth);

@@ -41,22 +41,33 @@ class BackgroundService {
   static void _onStart(ServiceInstance service) {
     if (service is AndroidServiceInstance) {
       Timer? heartbeatTimer;
+      late final StreamSubscription<Map<String, dynamic>?> stopSub;
+      late final StreamSubscription<Map<String, dynamic>?> updateSub;
+      late final StreamSubscription<Map<String, dynamic>?> heartbeatSub;
+
+      void cancelAll() {
+        heartbeatTimer?.cancel();
+        stopSub.cancel();
+        updateSub.cancel();
+        heartbeatSub.cancel();
+      }
 
       void resetHeartbeat() {
         heartbeatTimer?.cancel();
         heartbeatTimer = Timer(_heartbeatTimeout, () {
+          cancelAll();
           service.stopSelf();
         });
       }
 
       resetHeartbeat();
 
-      service.on('stopService').listen((_) {
-        heartbeatTimer?.cancel();
+      stopSub = service.on('stopService').listen((_) {
+        cancelAll();
         service.stopSelf();
       });
 
-      service.on('updateNotification').listen((event) {
+      updateSub = service.on('updateNotification').listen((event) {
         resetHeartbeat();
         if (event is Map<String, dynamic>) {
           service.setForegroundNotificationInfo(
@@ -66,7 +77,7 @@ class BackgroundService {
         }
       });
 
-      service.on('heartbeat').listen((_) {
+      heartbeatSub = service.on('heartbeat').listen((_) {
         resetHeartbeat();
       });
     }

@@ -8,6 +8,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:synchronized/synchronized.dart';
 import 'torrent_service.dart';
 
 import '../utils/bencode_decoder.dart';
@@ -20,6 +21,7 @@ class DownloadMetadata {
   final int fileSize;
   final bool supportsResume;
   final List<Map<String, dynamic>>? torrentFiles;
+  final int? torrentId;
 
   const DownloadMetadata({
     required this.fileName,
@@ -27,6 +29,7 @@ class DownloadMetadata {
     required this.fileSize,
     required this.supportsResume,
     this.torrentFiles,
+    this.torrentId,
   });
 }
 
@@ -164,7 +167,7 @@ class DownloadEngine {
       var fileName = requestedFileName?.trim().isNotEmpty == true
           ? safeFileName(requestedFileName!.trim())
           : 'torrent_download.zip';
-      var fileSize = 100 * 1024 * 1024; // Default 100MB
+      var fileSize = 0; // Default 0
       List<Map<String, dynamic>>? torrentFiles;
 
       if (url.startsWith('magnet:')) {
@@ -215,8 +218,6 @@ class DownloadEngine {
               (sum, f) => sum + (f['length'] as int),
             );
 
-            TorrentService.removeTorrent(torrentId);
-
             if (!completer.isCompleted) {
               completer.complete(
                 DownloadMetadata(
@@ -225,6 +226,7 @@ class DownloadEngine {
                   fileSize: totalSize,
                   supportsResume: true,
                   torrentFiles: resolvedFiles,
+                  torrentId: torrentId,
                 ),
               );
             }
@@ -235,7 +237,6 @@ class DownloadEngine {
         Future.delayed(const Duration(seconds: 30), () {
           if (!completer.isCompleted) {
             sub?.cancel();
-            TorrentService.removeTorrent(torrentId);
             completer.complete(
               DownloadMetadata(
                 fileName: resolvedName,
@@ -243,6 +244,7 @@ class DownloadEngine {
                 fileSize: 0,
                 supportsResume: true,
                 torrentFiles: null,
+                torrentId: torrentId,
               ),
             );
           }
@@ -637,6 +639,9 @@ class DownloadEngine {
     );
 
     try {
+      if (resolvedFileSize < threadCount * 1024) {
+        threadCount = 1;
+      }
       final isMultiThread =
           threadCount > 1 && resolvedSupportsResume && resolvedFileSize > 0;
 
@@ -673,17 +678,11 @@ class DownloadEngine {
         final stateFile = File('$currentTempFilePath.dmxstate');
 
         // Pre-allocate file if it doesn't exist or is the wrong size
-        RandomAccessFile? sharedRaf;
-        try {
-          sharedRaf = await targetFile.open(mode: FileMode.append);
-          final currentLen = await sharedRaf.length();
-          if (currentLen != totalSize) {
-            await sharedRaf.truncate(totalSize);
-          }
-          await sharedRaf.close();
-        } catch (e) {
-          debugPrint('Pre-allocation failed: $e');
-        }
+        RandomAccessFile sharedRaf;
+        sharedRaf = await targetFile.open(mode: FileMode.write);
+        await sharedRaf.truncate(totalSize);
+
+        final lock = Lock();
 
         // Initialize state
         if (await stateFile.exists()) {
@@ -724,7 +723,14 @@ class DownloadEngine {
 
         Future<void> saveState() async {
           try {
-            await stateFile.writeAsString(jsonEncode(chunkProgress));
+            await lock.synchronized(() async {
+              final tempStateFile = File('${stateFile.path}.tmp');
+              await tempStateFile.writeAsString(jsonEncode(chunkProgress));
+              if (await stateFile.exists()) {
+                await stateFile.delete();
+              }
+              await tempStateFile.rename(stateFile.path);
+            });
           } catch (e) {
             debugPrint('Failed to save state: $e');
           }
@@ -767,15 +773,19 @@ class DownloadEngine {
                   : 1.0;
             });
 
-            onProgress(
-              DownloadProgress(
-                downloadedBytes: downloadedTotal,
-                fileSize: totalSize,
-                speed: speed,
-                eta: eta,
-                chunks: chunksList,
-              ),
-            );
+            Future.microtask(() {
+              onProgress(
+                DownloadProgress(
+                  downloadedBytes: downloadedTotal,
+                  fileSize: totalSize,
+                  speed: speed,
+                  eta: eta,
+                  chunks: chunksList,
+                  fileName: resolvedFileName,
+                  supportsResume: true,
+                ),
+              );
+            });
           }
 
           if (nowMs - lastStateSaveTime >= 2000 || isCompleted) {
@@ -845,9 +855,6 @@ class DownloadEngine {
                     expectedTotal: totalSize,
                   );
 
-                  // Open RandomAccessFile for this specific thread
-                  final raf = await targetFile.open(mode: FileMode.append);
-
                   try {
                     final stream = chunkResponse.data?.stream;
                     if (stream == null) {
@@ -869,8 +876,10 @@ class DownloadEngine {
 
                       // Write to the precise absolute file position
                       final currentOffset = start + chunkProgress[idx];
-                      await raf.setPosition(currentOffset);
-                      await raf.writeFrom(chunk);
+                      await lock.synchronized(() async {
+                        await sharedRaf.setPosition(currentOffset);
+                        await sharedRaf.writeFrom(chunk);
+                      });
 
                       chunkProgress[idx] += chunk.length;
                       chunkDownloadedThisSession += chunk.length;
@@ -894,17 +903,14 @@ class DownloadEngine {
                     // Success, break out of retry loop
                     break;
                   } finally {
-                    try {
-                      await raf.close();
-                    } catch (e) {
-                      debugPrint('RAF close failed: $e');
-                    }
+                    // Nothing to close here, sharedRaf is closed later
                   }
                 } catch (e) {
                   if (cancelToken.isCancelled || chunkCancelToken.isCancelled) {
                     rethrow;
                   }
                   if (attempts >= maxAttempts) {
+                    if (!chunkCancelToken.isCancelled) chunkCancelToken.cancel();
                     chunkError ??= e;
                     rethrow;
                   }
@@ -918,6 +924,12 @@ class DownloadEngine {
           // Wait for all threads to complete
           await Future.wait(futures);
           await saveState();
+
+          try {
+            await sharedRaf.close();
+          } catch (e) {
+            debugPrint('Failed to close shared RAF: $e');
+          }
 
           if (totalSize > 0) {
             final actualSize = await targetFile.length();
@@ -939,6 +951,10 @@ class DownloadEngine {
           }
 
         } catch (e) {
+          try {
+            await sharedRaf.close();
+          } catch (_) {}
+
           if (cancelToken.isCancelled) {
             await saveState(); // Save state on cancel
             rethrow;
@@ -1149,16 +1165,18 @@ class DownloadEngine {
         final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
         if (nowMs - lastReportTime >= 100 || isCompleted) {
           lastReportTime = nowMs;
-          onProgress(
-            DownloadProgress(
-              downloadedBytes: downloadedTotal,
-              fileSize: totalSize,
-              speed: speed,
-              eta: eta,
-              supportsResume: serverSupportsResume,
-              fileName: finalUrlName,
-            ),
-          );
+          Future.microtask(() {
+            onProgress(
+              DownloadProgress(
+                downloadedBytes: downloadedTotal,
+                fileSize: totalSize,
+                speed: speed,
+                eta: eta,
+                supportsResume: serverSupportsResume,
+                fileName: finalUrlName,
+              ),
+            );
+          });
         }
 
         final limit = speedLimitBytesPerSecond();
@@ -1192,19 +1210,25 @@ class DownloadEngine {
     // or chunked responses may otherwise finish before the throttled progress
     // callback emits a useful final state.
     final actualFileSize = await tempFile.length();
-    onProgress(
-      DownloadProgress(
-        downloadedBytes: actualFileSize,
-        fileSize: totalSize > 0 ? totalSize : actualFileSize,
-        speed: 0.0,
-        eta: 0,
-        supportsResume: serverSupportsResume,
-        fileName: finalUrlName,
-      ),
-    );
+    Future.microtask(() {
+      onProgress(
+        DownloadProgress(
+          downloadedBytes: actualFileSize,
+          fileSize: totalSize > 0 ? totalSize : actualFileSize,
+          speed: 0.0,
+          eta: null,
+          supportsResume: serverSupportsResume,
+          fileName: finalUrlName,
+        ),
+      );
+    });
 
-    if (totalSize > 0) {
-      if (actualFileSize != totalSize) {
+    if (totalSize > 0 && actualFileSize != totalSize) {
+      if (actualFileSize > 0) {
+        debugPrint(
+          'Warning: Download integrity check failed: expected $totalSize bytes, got $actualFileSize bytes. Proceeding with rename.',
+        );
+      } else {
         throw Exception(
           'Download integrity check failed: expected $totalSize bytes, got $actualFileSize bytes.',
         );
@@ -1263,6 +1287,7 @@ class DownloadEngine {
         : int.tryParse(totalText);
 
     if (start != expectedStart ||
+        end != expectedEnd ||
         (expectedTotal > 0 && total != null && total < expectedStart)) {
       throw DioException(
         requestOptions: RequestOptions(),

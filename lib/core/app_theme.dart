@@ -93,6 +93,7 @@ class AppTheme {
 
   static ThemeData get darkTheme {
     return ThemeData(
+      useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: background,
       primaryColor: neonBlue,
@@ -217,12 +218,12 @@ class AppTheme {
           statusBarBrightness: Brightness.dark,
         ),
       ),
-      useMaterial3: true,
     );
   }
 
   static ThemeData get lightTheme {
     return ThemeData(
+      useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: lightBackground,
       primaryColor: lightNeonBlue,
@@ -347,7 +348,6 @@ class AppTheme {
           statusBarBrightness: Brightness.light,
         ),
       ),
-      useMaterial3: true,
     );
   }
 }

@@ -10,6 +10,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 
 /// A bottom sheet that fetches available YouTube streams for a single video
 /// and lets the user pick one. Returns the selected stream map via Navigator.pop.
@@ -526,12 +527,12 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     );
 
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Downloading $qLabel video + audio'),
-        backgroundColor: Colors.green.shade700,
-        behavior: SnackBarBehavior.floating,
-      ),
+    ThemedSnackbar.show(
+      context,
+      message: 'Downloading $qLabel video + audio',
+      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+      icon: Icons.check_circle_outline,
+      isDarkMode: settings.isDarkMode,
     );
     Navigator.pop(context, null);
   }

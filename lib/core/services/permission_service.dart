@@ -1,35 +1,62 @@
 import 'dart:io';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class PermissionService {
-  int _androidSdkLevel() {
+  static int? _cachedSdkLevel;
+
+  Future<int> _androidSdkLevel() async {
+    if (_cachedSdkLevel != null) return _cachedSdkLevel!;
+    if (kIsWeb) return 0;
+    if (!Platform.isAndroid) return 0;
     try {
-      final version = Platform.operatingSystemVersion;
-      final apiMatch = RegExp(r'API\s+(\d+)').firstMatch(version);
-      if (apiMatch != null) {
-        return int.parse(apiMatch.group(1)!);
-      }
-      final sdkMatch = RegExp(r'SDK\s+(\d+)').firstMatch(version);
-      if (sdkMatch != null) {
-        return int.parse(sdkMatch.group(1)!);
-      }
-      // OEM builds may omit "API"/"SDK"; try bare numbers >= 21
-      final numMatch = RegExp(r'(\d{2,3})').allMatches(version);
-      for (final m in numMatch) {
-        final val = int.tryParse(m.group(1)!);
-        if (val != null && val >= 21) return val;
-      }
-    } catch (_) {}
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      _cachedSdkLevel = androidInfo.version.sdkInt;
+      return _cachedSdkLevel!;
+    } catch (_) {
+      try {
+        final version = Platform.operatingSystemVersion;
+        final apiMatch = RegExp(r'API\s+(\d+)').firstMatch(version);
+        if (apiMatch != null) {
+          return int.parse(apiMatch.group(1)!);
+        }
+        final sdkMatch = RegExp(r'SDK\s+(\d+)').firstMatch(version);
+        if (sdkMatch != null) {
+          return int.parse(sdkMatch.group(1)!);
+        }
+        final match = RegExp(r'\b(\d+)\b').firstMatch(version);
+        if (match != null) {
+          final val = int.tryParse(match.group(1)!);
+          if (val != null) {
+            if (val >= 21 && val <= 35) return val;
+            return switch (val) {
+              14 => 34,
+              13 => 33,
+              12 => 31,
+              11 => 30,
+              10 => 29,
+              9 => 28,
+              8 => 26,
+              7 => 24,
+              6 => 23,
+              5 => 21,
+              _ => 0,
+            };
+          }
+        }
+      } catch (_) {}
+    }
     return 0;
   }
 
   Future<bool> _isStorageGranted() async {
     if (kIsWeb || !Platform.isAndroid) return true;
-    final sdk = _androidSdkLevel();
+    final sdk = await _androidSdkLevel();
     if (sdk >= 30) return true;
     return await Permission.storage.isGranted;
   }
@@ -69,7 +96,7 @@ class PermissionService {
     // - API 30+ (Android 11+): use scoped storage APIs only (hardcoded paths don't work)
     // - API 29 and below: try shared Downloads folder first, fall back to scoped storage
     if (!kIsWeb && Platform.isAndroid) {
-      final sdk = _androidSdkLevel();
+      final sdk = await _androidSdkLevel();
 
       // On API 30+, skip hardcoded path — it requires MANAGE_EXTERNAL_STORAGE which
       // most users won't grant. Use path_provider scoped storage APIs directly.
@@ -148,13 +175,24 @@ class PermissionService {
     if (kIsWeb) return true;
     if (!Platform.isAndroid) return true;
 
-    final sdk = _androidSdkLevel();
-    if (sdk > 0 && sdk < 33) {
+    final sdk = await _androidSdkLevel();
+    if (sdk >= 33) {
+      await [
+        Permission.photos,
+        Permission.videos,
+        Permission.audio,
+      ].request();
+    } else if (sdk >= 29) {
+      final status = await Permission.storage.status;
+      if (!status.isGranted) {
+        await Permission.storage.request();
+      }
+    } else {
       final status = await Permission.storage.status;
       if (!status.isGranted) {
         final requestStatus = await Permission.storage.request();
         if (!requestStatus.isGranted) {
-          if (sdk < 29) return false;
+          return false;
         }
       }
     }

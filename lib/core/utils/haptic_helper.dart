@@ -42,4 +42,3 @@ void runHaptic(SettingsProvider settings) {
     HapticFeedback.lightImpact();
   }
 }
-

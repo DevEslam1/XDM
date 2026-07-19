@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -182,16 +183,20 @@ class DownloadProvider extends ChangeNotifier
     if (task.tempFilePath.trim().isEmpty) return null;
 
     if (task.threadCount > 1) {
-      var total = 0;
-      var foundChunk = false;
-      for (var i = 0; i < task.threadCount; i++) {
-        final chunk = File('${task.tempFilePath}.part$i');
-        if (await chunk.exists()) {
-          foundChunk = true;
-          total += await chunk.length();
+      final stateFile = File('${task.tempFilePath}.dmxstate');
+      if (await stateFile.exists()) {
+        try {
+          final content = await stateFile.readAsString();
+          final stateList = jsonDecode(content) as List;
+          var total = 0;
+          for (final chunk in stateList) {
+            total += chunk as int;
+          }
+          return total;
+        } catch (e) {
+          debugPrint('Failed to parse .dmxstate: $e');
         }
       }
-      if (foundChunk) return total;
     }
 
     final partial = File(task.tempFilePath);
@@ -377,6 +382,7 @@ class DownloadProvider extends ChangeNotifier
     String? mergedAudioUrl,
     int audioSize = 0,
     String? youtubeQualityPreset,
+    int? torrentId,
   }) async {
     _lastError = null;
     final urls = url
@@ -422,6 +428,7 @@ class DownloadProvider extends ChangeNotifier
             mergedAudioUrl: mergedAudioUrl,
             audioSize: audioSize,
             youtubeQualityPreset: youtubeQualityPreset,
+            torrentId: torrentId,
           );
           addedCount++;
         }
@@ -449,6 +456,7 @@ class DownloadProvider extends ChangeNotifier
           mergedAudioUrl: mergedAudioUrl,
           audioSize: audioSize,
           youtubeQualityPreset: youtubeQualityPreset,
+          torrentId: torrentId,
         );
       }
     } catch (e) {
@@ -470,6 +478,7 @@ class DownloadProvider extends ChangeNotifier
     String? mergedAudioUrl,
     int audioSize = 0,
     String? youtubeQualityPreset,
+    int? torrentId,
   }) async {
     final exists = _tasks.any(
       (t) =>
@@ -572,6 +581,9 @@ class DownloadProvider extends ChangeNotifier
     );
 
     _tasks.insert(0, task);
+    if (torrentId != null) {
+      _torrentIds[task.id] = torrentId;
+    }
     filteredTasksDirty = true;
     await _databaseService.saveTask(task);
     notifyListeners();
@@ -779,11 +791,19 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
+    final activeFuture = _activeFutures[id];
     try {
       _cancelTokens[id]?.cancel('deleted');
     } catch (e) {
       // Ignore
     }
+
+    if (activeFuture != null) {
+      try {
+        await activeFuture;
+      } catch (_) {}
+    }
+
     _cancelTokens.remove(id);
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
@@ -858,6 +878,10 @@ class DownloadProvider extends ChangeNotifier
         if (await partFile.exists()) {
           await partFile.delete();
         }
+      }
+      final stateFile = File('${task.tempFilePath}.dmxstate');
+      if (await stateFile.exists()) {
+        await stateFile.delete();
       }
     } catch (e) {
       debugPrint('Failed to clean up part files for ${task.id}: $e');
@@ -1222,11 +1246,13 @@ class DownloadProvider extends ChangeNotifier
                 notifyListeners();
 
                 if (_settingsProvider.notificationsEnabled) {
+                  final progressPercent = task.fileSize > 0
+                      ? ((progress.downloadedBytes / task.fileSize) * 100).round().clamp(0, 100)
+                      : 0;
                   _notificationService.showDownloadProgress(
                     notificationId: notificationId,
                     title: '${task.fileName} (Audio)',
-                    progress: progress.downloadedBytes,
-                    maxProgress: task.fileSize,
+                    progressPercent: progressPercent,
                     speed: updated.speedFormatted,
                     eta: updated.etaFormatted,
                     languageCode: _settingsProvider.languageCode,
@@ -1350,11 +1376,13 @@ class DownloadProvider extends ChangeNotifier
             notifyListeners();
 
             if (_settingsProvider.notificationsEnabled) {
+              final progressPercent = resolvedTotalSize > 0
+                  ? ((currentDownloadedBytes / resolvedTotalSize) * 100).round().clamp(0, 100)
+                  : 0;
               _notificationService.showDownloadProgress(
                 notificationId: notificationId,
                 title: task.fileName,
-                progress: currentDownloadedBytes,
-                maxProgress: resolvedTotalSize,
+                progressPercent: progressPercent,
                 speed: updatedTask.speedFormatted,
                 eta: updatedTask.etaFormatted,
                 languageCode: _settingsProvider.languageCode,
@@ -2186,6 +2214,9 @@ class DownloadProvider extends ChangeNotifier
       );
 
       _tasks[index] = updatedTask;
+      if (metadata.torrentId != null) {
+        _torrentIds[updatedTask.id] = metadata.torrentId!;
+      }
       await _databaseService.saveTask(updatedTask);
       notifyListeners();
 

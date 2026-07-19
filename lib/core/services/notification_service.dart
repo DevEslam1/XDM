@@ -54,12 +54,11 @@ class NotificationService {
   Future<void> init() async {
     if (!isSupported) return;
 
-    // Clean up any previous ReceivePort/subscription to prevent leaks on re-init
+    IsolateNameServer.removePortNameMapping('dmx_notification_port');
     _receivePortSub?.cancel();
     _receivePortSub = null;
     _receivePort?.close();
     _receivePort = null;
-    IsolateNameServer.removePortNameMapping('dmx_notification_port');
 
     if (_actionStreamController.isClosed) {
       _actionStreamController = StreamController<Map<String, String>>.broadcast();
@@ -150,8 +149,7 @@ class NotificationService {
   Future<void> showDownloadProgress({
     required int notificationId,
     required String title,
-    required int progress,
-    required int maxProgress,
+    required int progressPercent,
     required String speed,
     required String eta,
     required String languageCode,
@@ -166,9 +164,7 @@ class NotificationService {
       priority: Priority.low,
       showProgress: true,
       maxProgress: 100,
-      progress: maxProgress > 0
-          ? ((progress / maxProgress) * 100).round().clamp(0, 100)
-          : 0,
+      progress: progressPercent.clamp(0, 100),
       onlyAlertOnce: true,
       ongoing: true,
       autoCancel: false,

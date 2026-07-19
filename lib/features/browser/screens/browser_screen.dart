@@ -847,7 +847,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   ? 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
                   : (t.isIncognito
                         ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-                        : null),
+                        : (settings.customUserAgent.isNotEmpty ? settings.customUserAgent : null)),
             );
             if (!t.isHome) {
               await t.controller.reload();
@@ -1643,7 +1643,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         rawHtml = result;
         if (rawHtml.startsWith('"') && rawHtml.endsWith('"')) {
           try {
-            rawHtml = jsonDecode(rawHtml);
+            rawHtml = jsonDecode(rawHtml) as String;
           } catch (_) {
             if (rawHtml.length > 2) {
               rawHtml = rawHtml.substring(1, rawHtml.length - 1);
@@ -2739,13 +2739,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                 // Single-video download
                                 final stream = await YoutubeQualitySheet.show(context, tabUrl);
                                 if (stream != null && context.mounted) {
-                                  if (stream['type'] == 'combined') return;
                                   final title = stream['title'] as String? ?? 'YouTube Video';
                                   final ext = stream['ext'] as String? ?? 'mp4';
                                   _startDirectDownload(
                                     stream['src'] as String,
                                     suggestedName: '$title.$ext',
                                     type: 'video',
+                                    audioUrl: stream['audioSrc'] as String?,
+                                    videoSize: stream['videoSize'] as int?,
+                                    audioSize: stream['audioSize'] as int?,
                                   );
                                 }
                               },
@@ -3113,13 +3115,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               activeTab.url,
             );
             if (stream != null && context.mounted) {
-              if (stream['type'] == 'combined') return;
               final title = stream['title'] as String? ?? 'YouTube Video';
               final ext = stream['ext'] as String? ?? 'mp4';
               _startDirectDownload(
                 stream['src'] as String,
                 suggestedName: '$title.$ext',
                 type: 'video',
+                audioUrl: stream['audioSrc'] as String?,
+                videoSize: stream['videoSize'] as int?,
+                audioSize: stream['audioSize'] as int?,
               );
             }
           }
@@ -3201,6 +3205,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     String? suggestedName,
     String? type,
     String? downloadPageUrl,
+    String? audioUrl,
+    int? videoSize,
+    int? audioSize,
   }) async {
     final downloadProvider = Provider.of<DownloadProvider>(
       context,
@@ -3298,10 +3305,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       await downloadProvider.addDownload(
         name: finalFileName,
         url: url,
-        size: 0,
+        size: videoSize ?? 0,
         category: resolvedCategory,
         savePath: '', // Falls back to default directory
         downloadPageUrl: resolvedOriginUrl,
+        mergedAudioUrl: audioUrl,
+        audioSize: audioSize ?? 0,
       );
 
       if (mounted) {

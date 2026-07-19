@@ -29,6 +29,7 @@ class ShareService {
     if (!_initialMediaConsumed) {
       _initialMediaConsumed = true;
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+        if (!_initialized) return;
         for (final file in value) {
           final trimmed = file.path.trim();
           if (isHttpUrl(trimmed) && trimmed != _lastReceivedUrl) {

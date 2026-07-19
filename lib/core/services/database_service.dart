@@ -15,6 +15,7 @@ class DatabaseService {
   static const String browserHistoryBoxName = 'browser_history';
 
   Future<void> init() async {
+    await Hive.initFlutter();
     _db = AppDatabase();
     await _migrateFromHive();
   }
@@ -26,69 +27,111 @@ class DatabaseService {
         final box = await Hive.openBox<dynamic>(downloadsBoxName);
         if (box.isNotEmpty) {
           final tasks = <DownloadTasksCompanion>[];
+          final failedItems = <dynamic>[];
           for (final value in box.values) {
             if (value is Map) {
               try {
                 final task = DownloadTask.fromMap(Map<String, dynamic>.from(value));
                 tasks.add(_taskToCompanion(task));
-              } catch (_) {}
+              } catch (e) {
+                failedItems.add(value);
+              }
+            } else {
+              failedItems.add(value);
             }
           }
           if (tasks.isNotEmpty) {
-            await _db.batch((batch) => batch.insertAll(
-                _db.downloadTasks, tasks,
-                mode: drift.InsertMode.insertOrReplace));
+            try {
+              await _db.batch((batch) => batch.insertAll(
+                  _db.downloadTasks, tasks,
+                  mode: drift.InsertMode.insertOrReplace));
+            } catch (e) {
+              failedItems.addAll(box.values);
+            }
           }
+          if (failedItems.isNotEmpty) {
+            debugPrint('Migration of $downloadsBoxName had ${failedItems.length} failures.');
+          }
+          await box.deleteFromDisk();
+        } else {
+          await box.deleteFromDisk();
         }
-        await box.deleteFromDisk();
       }
 
       if (await Hive.boxExists(bookmarksBoxName)) {
         final box = await Hive.openBox<dynamic>(bookmarksBoxName);
         if (box.isNotEmpty) {
           final bms = <BookmarksCompanion>[];
+          final failedItems = <dynamic>[];
           for (final value in box.values) {
             if (value is Map) {
               try {
                 final bm = Bookmark.fromMap(Map<String, dynamic>.from(value));
                 bms.add(_bookmarkToCompanion(bm));
-              } catch (_) {}
+              } catch (e) {
+                failedItems.add(value);
+              }
+            } else {
+              failedItems.add(value);
             }
           }
           if (bms.isNotEmpty) {
-            await _db.batch((batch) => batch.insertAll(
-                _db.bookmarks, bms,
-                mode: drift.InsertMode.insertOrReplace));
+            try {
+              await _db.batch((batch) => batch.insertAll(
+                  _db.bookmarks, bms,
+                  mode: drift.InsertMode.insertOrReplace));
+            } catch (e) {
+              failedItems.addAll(box.values);
+            }
           }
+          if (failedItems.isNotEmpty) {
+            debugPrint('Migration of $bookmarksBoxName had ${failedItems.length} failures.');
+          }
+          await box.deleteFromDisk();
+        } else {
+          await box.deleteFromDisk();
         }
-        await box.deleteFromDisk();
       }
 
       if (await Hive.boxExists(browserHistoryBoxName)) {
         final box = await Hive.openBox<dynamic>(browserHistoryBoxName);
         if (box.isNotEmpty) {
           final hist = <BrowserHistoryCompanion>[];
+          final failedItems = <dynamic>[];
           for (final key in box.keys) {
             final val = box.get(key);
             if (val is Map) {
               try {
                 hist.add(BrowserHistoryCompanion.insert(
-                  id: key.toString(),
+                  id: 'hive_${key.toString()}',
                   url: val['url'] as String? ?? '',
                   title: val['title'] as String? ?? val['url'] as String? ?? '',
                   visitedAt: val['visitedAt'] as String? ??
                       DateTime.now().toIso8601String(),
                 ));
-              } catch (_) {}
+              } catch (e) {
+                failedItems.add(val);
+              }
+            } else {
+              failedItems.add(val);
             }
           }
           if (hist.isNotEmpty) {
-            await _db.batch((batch) => batch.insertAll(
-                _db.browserHistory, hist,
-                mode: drift.InsertMode.insertOrReplace));
+            try {
+              await _db.batch((batch) => batch.insertAll(
+                  _db.browserHistory, hist,
+                  mode: drift.InsertMode.insertOrReplace));
+            } catch (e) {
+              failedItems.addAll(box.values);
+            }
           }
+          if (failedItems.isNotEmpty) {
+            debugPrint('Migration of $browserHistoryBoxName had ${failedItems.length} failures.');
+          }
+          await box.deleteFromDisk();
+        } else {
+          await box.deleteFromDisk();
         }
-        await box.deleteFromDisk();
       }
     } catch (e) {
       debugPrint('Hive to Drift migration error: $e');
@@ -132,39 +175,62 @@ class DatabaseService {
   }
 
   DownloadTask _rowToTask(DbDownloadTask row) {
-    return DownloadTask.fromMap({
-      'id': row.id,
-      'fileName': row.fileName,
-      'url': row.url,
-      'fileSize': row.fileSize,
-      'downloadedBytes': row.downloadedBytes,
-      'speed': row.speed,
-      'eta': row.eta,
-      'category': row.category,
-      'status': row.status,
-      'savePath': row.savePath,
-      'localFilePath': row.localFilePath,
-      'tempFilePath': row.tempFilePath,
-      'errorMessage': row.errorMessage,
-      'threadCount': row.threadCount,
-      'chunks': row.chunks,
-      'createdAt': row.createdAt,
-      'updatedAt': row.updatedAt,
-      'completedAt': row.completedAt,
-      'scheduledAt': row.scheduledAt,
-      'supportsResume': row.supportsResume,
-      'speedLimitKbps': row.speedLimitKbps,
-      'seedingEnabled': row.seedingEnabled,
-      'seedingLimited': row.seedingLimited,
-      'seedingLimitKbps': row.seedingLimitKbps,
-      'torrentFiles': row.torrentFiles,
-      'downloadPageUrl': row.downloadPageUrl,
-      'mergedAudioUrl': row.mergedAudioUrl,
-      'audioSize': row.audioSize,
-      'audioProgress': row.audioProgress,
-      'pausedByUser': row.pausedByUser,
-      'youtubeQualityPreset': row.youtubeQualityPreset,
-    });
+    DateTime parseDate(String dateStr) {
+      try {
+        return DateTime.parse(dateStr);
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+
+    DateTime? parseNullableDate(String? dateStr) {
+      if (dateStr == null) return null;
+      try {
+        return DateTime.parse(dateStr);
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+
+    final statusName = row.status;
+    final status = DownloadStatus.values.firstWhere(
+      (value) => value.name == statusName,
+      orElse: () => DownloadStatus.paused,
+    );
+
+    return DownloadTask(
+      id: row.id,
+      fileName: row.fileName,
+      url: row.url,
+      fileSize: row.fileSize,
+      downloadedBytes: row.downloadedBytes,
+      speed: row.speed,
+      eta: row.eta,
+      category: row.category,
+      status: status,
+      savePath: row.savePath,
+      localFilePath: row.localFilePath,
+      tempFilePath: row.tempFilePath,
+      errorMessage: row.errorMessage,
+      threadCount: row.threadCount,
+      chunks: row.chunks,
+      createdAt: parseDate(row.createdAt),
+      updatedAt: parseDate(row.updatedAt),
+      completedAt: parseNullableDate(row.completedAt),
+      scheduledAt: parseNullableDate(row.scheduledAt),
+      supportsResume: row.supportsResume,
+      speedLimitKbps: row.speedLimitKbps,
+      seedingEnabled: row.seedingEnabled,
+      seedingLimited: row.seedingLimited,
+      seedingLimitKbps: row.seedingLimitKbps,
+      torrentFiles: row.torrentFiles,
+      downloadPageUrl: row.downloadPageUrl,
+      mergedAudioUrl: row.mergedAudioUrl,
+      audioSize: row.audioSize,
+      audioProgress: row.audioProgress,
+      pausedByUser: row.pausedByUser,
+      youtubeQualityPreset: row.youtubeQualityPreset,
+    );
   }
 
   Future<List<DownloadTask>> loadTasks() async {
@@ -251,14 +317,13 @@ class DatabaseService {
         .toList();
   }
 
-  int _historySequenceCounter = 0;
-
   Future<String> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return '';
-    final ts = DateTime.now().millisecondsSinceEpoch;
-    final seq = _historySequenceCounter++;
-    final id = '${ts}_${seq}_$url';
+    final now = DateTime.now();
+    final ts = now.millisecondsSinceEpoch;
+    final us = now.microsecond;
+    final id = '${ts}_${us}_${url.hashCode}';
 
     await _db.into(_db.browserHistory).insert(
         BrowserHistoryCompanion.insert(

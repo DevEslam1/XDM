@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:disk_space/disk_space.dart';
 
 import 'package:path/path.dart' as p;
 
@@ -52,6 +54,36 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _extController = TextEditingController();
   final TextEditingController _pathController = TextEditingController();
+  double _freeDiskSpaceMB = 0.0;
+  double _totalDiskSpaceMB = 0.0;
+
+  Future<void> _updateDiskSpace() async {
+    try {
+      double? freeMB;
+      double? totalMB;
+      if (!kIsWeb && Platform.isAndroid) {
+        final path = _pathController.text.trim();
+        if (path.isNotEmpty && await Directory(path).exists()) {
+          freeMB = await DiskSpace.getFreeDiskSpaceForPath(path);
+        }
+      }
+      freeMB ??= await DiskSpace.getFreeDiskSpace;
+      totalMB ??= await DiskSpace.getTotalDiskSpace;
+
+      if (freeMB != null && totalMB != null && mounted) {
+        setState(() {
+          _freeDiskSpaceMB = freeMB!;
+          _totalDiskSpaceMB = totalMB!;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error getting disk space: $e');
+    }
+  }
+
+  String _formatMB(double mb) {
+    return formatBytes((mb * 1024 * 1024).round());
+  }
 
   String _selectedCategory = 'Auto';
   int _selectedThreads = 5;
@@ -72,6 +104,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   bool _isResolvingLink = false;
   String _resolvedFileName = '';
   int _resolvedFileSize = 0;
+  int? _resolvedTorrentId;
   String _resolvedCategory = 'Auto';
 
   List<Map<String, dynamic>> _torrentFiles = [];
@@ -100,8 +133,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _wifiOnly = settings.wifiOnly;
     _useProxy = settings.enableProxy;
 
-    _loadDefaultPath();
+    _loadDefaultPath().then((_) {
+      _updateDiskSpace();
+    });
     _urlController.addListener(_onUrlChanged);
+    _pathController.addListener(_updateDiskSpace);
 
     if (widget.prefilledUrl != null) {
       _urlController.text = widget.prefilledUrl!;
@@ -174,6 +210,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         setState(() {
           _isMetadataResolved = false;
           _resolvedFileName = '';
+          _resolvedTorrentId = null;
           _nameController.clear();
           _extController.clear();
         });
@@ -196,6 +233,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   void dispose() {
     _ytDebounceTimer?.cancel();
     _urlController.removeListener(_onUrlChanged);
+    _pathController.removeListener(_updateDiskSpace);
     _urlController.dispose();
     _referrerController.dispose();
     _nameController.dispose();
@@ -374,6 +412,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     setState(() {
       _isResolvingLink = true;
       _isMetadataResolved = false;
+      _resolvedTorrentId = null;
       _torrentFiles = [];
     });
 
@@ -431,6 +470,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       setState(() {
         _resolvedFileName = meta.fileName;
         _resolvedFileSize = meta.fileSize;
+        _resolvedTorrentId = meta.torrentId;
         _resolvedCategory = meta.category;
         _torrentFiles = meta.torrentFiles ?? [];
         _isMetadataResolved = true;
@@ -680,6 +720,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           widget.downloadPageUrl ??
                           _referrerController.text.trim(),
                       youtubeQualityPreset: _resolvedYoutubeQualityPreset,
+                      torrentId: _resolvedTorrentId,
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;
@@ -740,6 +781,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             widget.downloadPageUrl ??
             _referrerController.text.trim(),
         youtubeQualityPreset: _resolvedYoutubeQualityPreset,
+        torrentId: _resolvedTorrentId,
       );
       if (!mounted) return;
       if (!context.mounted) return;
@@ -824,7 +866,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'Download file!',
+                        L10n.of(context, 'download_file_title'),
                         style: TextStyle(
                           color: textClr,
                           fontSize: 16,
@@ -842,7 +884,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       const SizedBox(width: 16),
                       IconButton(
                         icon: Icon(Icons.language, color: secClr, size: 20),
-                        onPressed: () {},
+                        onPressed: () {
+                          final settings = context.read<SettingsProvider>();
+                          final nextLang = settings.languageCode == 'en' ? 'ar' : 'en';
+                          settings.setLanguageCode(nextLang);
+                        },
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                       ),
@@ -854,7 +900,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   Row(
                     children: [
                       Text(
-                        'Link:',
+                        L10n.of(context, 'link_label'),
                         style: TextStyle(
                           color: secClr,
                           fontSize: 12,
@@ -872,12 +918,21 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   // Download link field
                   _buildTextField(
                     controller: _urlController,
-                    hint: 'Download link',
+                    hint: L10n.of(context, 'add_download_url'),
                     isDark: isDark,
                     inputBgColor: inputBgColor,
                     inputBorderColor: inputBorderColor,
                     textClr: textClr,
                     secClr: secClr,
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) {
+                        return L10n.of(context, 'url_empty_error');
+                      }
+                      if (!isValidTransmissionUrl(val.trim())) {
+                        return L10n.of(context, 'url_invalid_error');
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
 
@@ -896,7 +951,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
                   // Save as
                   Text(
-                    'Save as:',
+                    L10n.of(context, 'save_as_label'),
                     style: TextStyle(
                       color: secClr,
                       fontSize: 12,
@@ -939,13 +994,13 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   Row(
                     children: [
                       Text(
-                        'Size: ',
+                        L10n.of(context, 'size_label'),
                         style: TextStyle(color: secClr, fontSize: 12),
                       ),
                       Text(
                         _resolvedFileSize > 0
                             ? formatBytes(_resolvedFileSize)
-                            : "Unknown",
+                            : L10n.of(context, 'unknown_label'),
                         style: TextStyle(
                           color: textClr,
                           fontSize: 12,
@@ -959,23 +1014,23 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     text: TextSpan(
                       style: TextStyle(fontSize: 12, color: secClr),
                       children: [
-                        const TextSpan(text: 'Storage: '),
+                        TextSpan(text: L10n.of(context, 'storage_label')),
                         TextSpan(
-                          text: '65.75GB',
+                          text: _formatMB(_freeDiskSpaceMB),
                           style: TextStyle(
                             color: orangeClr,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const TextSpan(text: '/225.76GB, '),
+                        TextSpan(text: ' / ${_formatMB(_totalDiskSpaceMB)}, '),
                         TextSpan(
-                          text: '29.1%',
+                          text: '${(_totalDiskSpaceMB > 0 ? (_freeDiskSpaceMB / _totalDiskSpaceMB) * 100 : 0.0).toStringAsFixed(1)}%',
                           style: TextStyle(
                             color: orangeClr,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const TextSpan(text: ' free'),
+                        TextSpan(text: ' ${L10n.of(context, 'free_label')}'),
                       ],
                     ),
                   ),
@@ -998,7 +1053,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                         const SizedBox(width: 12),
                         Expanded(
                           child: GestureDetector(
-                            onTap: () async {},
+                            onTap: () async {
+                              final String? selectedPath =
+                                  await FilePicker.getDirectoryPath();
+                              if (selectedPath != null && mounted) {
+                                setState(() {
+                                  _pathController.text = selectedPath;
+                                });
+                              }
+                            },
                             child: Text(
                               _pathController.text,
                               style: TextStyle(color: textClr, fontSize: 12),
@@ -1024,25 +1087,25 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     runSpacing: 12,
                     children: [
                       _buildCheckbox(
-                        'Wifi only',
+                        L10n.of(context, 'wifi_only_label'),
                         _wifiOnly,
                         (v) => setState(() => _wifiOnly = v!),
                         orangeClr,
                       ),
                       _buildCheckbox(
-                        'Retry',
+                        L10n.of(context, 'retry_label'),
                         _retry,
                         (v) => setState(() => _retry = v!),
                         textClr,
                       ),
                       _buildCheckbox(
-                        'Use proxy',
+                        L10n.of(context, 'use_proxy_label'),
                         _useProxy,
                         (v) => setState(() => _useProxy = v!),
                         textClr,
                       ),
                       _buildCheckbox(
-                        'Hidden file',
+                        L10n.of(context, 'hidden_file_label'),
                         _hiddenFile,
                         (v) => setState(() => _hiddenFile = v!),
                         textClr,
@@ -1051,14 +1114,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   ),
                   const SizedBox(height: 12),
                   _buildCheckbox(
-                    'Use advance download method',
+                    L10n.of(context, 'use_advance_download_label'),
                     _useAdvanceDownloadMethod,
                     (v) => setState(() => _useAdvanceDownloadMethod = v!),
                     textClr,
                   ),
                   const SizedBox(height: 12),
                   _buildCheckbox(
-                    'Advance option',
+                    L10n.of(context, 'advance_option_label'),
                     _advanceOption,
                     (v) => setState(() => _advanceOption = v!),
                     blueClr,
@@ -1070,7 +1133,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       children: [
                         Expanded(
                           child: Text(
-                            'Category: ',
+                            L10n.of(context, 'category_label'),
                             style: TextStyle(color: secClr, fontSize: 12),
                           ),
                         ),
@@ -1101,7 +1164,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       children: [
                         Expanded(
                           child: Text(
-                            'Threads: ',
+                            L10n.of(context, 'threads_label'),
                             style: TextStyle(color: secClr, fontSize: 12),
                           ),
                         ),
@@ -1139,7 +1202,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: Text(
-                          'CANCEL',
+                          L10n.of(context, 'cancel_btn_uppercase'),
                           style: TextStyle(
                             color: secClr,
                             fontWeight: FontWeight.bold,
@@ -1161,7 +1224,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                         TextButton(
                           onPressed: _resolveLinkMetadata,
                           child: Text(
-                            'CONNECT',
+                            L10n.of(context, 'connect_btn'),
                             style: TextStyle(
                               color: blueClr,
                               fontWeight: FontWeight.bold,
@@ -1176,7 +1239,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                             _handleDuplicateOrSubmit();
                           }
                         },
-                        text: 'ADD',
+                        text: L10n.of(context, 'add_btn'),
                         icon: Icons.add_circle_outline,
                         color: greenClr,
                         glowColor: greenClr,
@@ -1202,6 +1265,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     required Color inputBorderColor,
     required Color textClr,
     required Color secClr,
+    String? Function(String?)? validator,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -1214,6 +1278,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         style: TextStyle(color: textClr, fontSize: 13),
         maxLines: null,
         minLines: 1,
+        validator: validator,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
@@ -1223,6 +1288,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
+          errorStyle: const TextStyle(fontSize: 10, height: 0.8),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 12,

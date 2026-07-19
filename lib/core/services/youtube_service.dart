@@ -7,14 +7,44 @@ import 'package:logging/logging.dart';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
+import 'package:http/http.dart' as http;
+
 class YoutubeService {
-  static YoutubeExplode _yt = _createYt();
+  static String? _apiKey;
+  static String? _cachedPlaylistId;
+  static Map<String, dynamic>? _cachedPlaylistDetails;
+  static DateTime? _cacheTimestamp;
+
+  YoutubeService({String? apiKey}) {
+    if (apiKey != null) {
+      _apiKey = apiKey;
+    }
+  }
+
+  static String? get effectiveApiKey {
+    if (_innerTubeApiKeyOverride != null && _innerTubeApiKeyOverride!.isNotEmpty) {
+      return _innerTubeApiKeyOverride;
+    }
+    if (_apiKey != null && _apiKey!.isNotEmpty) {
+      return _apiKey;
+    }
+    const envKey = String.fromEnvironment('YOUTUBE_API_KEY');
+    if (envKey.isNotEmpty) return envKey;
+    try {
+      final sysEnvKey = Platform.environment['YOUTUBE_API_KEY'];
+      if (sysEnvKey != null && sysEnvKey.isNotEmpty) return sysEnvKey;
+    } catch (_) {}
+    return null;
+  }
+
+  static YoutubeExplode _yt = YoutubeExplode();
 
   static String? _cookies;
 
   static YoutubeExplode _createYt() {
     if (_cookies == null) return YoutubeExplode();
-    final client = _AuthenticatedHttpClient(_cookies!);
+    final cookieClient = _CookieClient(_cookies!);
+    final client = YoutubeHttpClient(cookieClient);
     return YoutubeExplode(httpClient: client);
   }
 
@@ -103,7 +133,9 @@ class YoutubeService {
     try {
       final uri = Uri.parse(url);
       if (uri.host == 'youtu.be' || uri.host.endsWith('.youtu.be')) {
-        return uri.pathSegments.first;
+        if (uri.pathSegments.isNotEmpty) {
+          return uri.pathSegments.first;
+        }
       }
       if (uri.path.contains('shorts')) {
         final parts = uri.pathSegments;
@@ -124,18 +156,19 @@ class YoutubeService {
               : afterPrefix;
         }
       }
-      return uri.queryParameters['v'];
-    } catch (_) {
-      // Fallback regex matching in case queries are structured differently
-      final regex = RegExp(
-        r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})',
-      );
-      final match = regex.firstMatch(url);
-      if (match != null && match.groupCount >= 1) {
-        return match.group(1);
-      }
-      return null;
+      final v = uri.queryParameters['v'];
+      if (v != null) return v;
+    } catch (_) {}
+
+    // Fallback regex matching in case queries are structured differently
+    final regex = RegExp(
+      r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})',
+    );
+    final match = regex.firstMatch(url);
+    if (match != null && match.groupCount >= 1) {
+      return match.group(1);
     }
+    return null;
   }
 
   static String? extractPlaylistId(String url) {
@@ -227,15 +260,15 @@ class YoutubeService {
   static Future<({StreamManifest manifest, String title})>
   _fetchWithFallbackInternal(String videoId) async {
     StreamManifest? manifest;
-    const timeout = Duration(seconds: 20);
+    const timeout = Duration(seconds: 8);
     Object? lastError;
 
     final clientsToTry = [
-      null, // Default clients list
+      null, // default
       [YoutubeApiClient.android],
       [YoutubeApiClient.ios],
+      [YoutubeApiClient.safari],
       [YoutubeApiClient.tv],
-      [YoutubeApiClient.androidVr],
       [YoutubeApiClient.mweb],
     ];
 
@@ -386,9 +419,18 @@ class YoutubeService {
     final ua = Uri.tryParse(a);
     final ub = Uri.tryParse(b);
     if (ua == null || ub == null) return a == b;
+    
+    final expireA = ua.queryParameters['expire'];
+    final expireB = ub.queryParameters['expire'];
+    final sigA = ua.queryParameters['sig'];
+    final sigB = ub.queryParameters['sig'];
+    
+    if (expireA == null || expireB == null || sigA == null || sigB == null) {
+      return a == b;
+    }
+    
     // Compare the parts that actually determine freshness.
-    return ua.queryParameters['expire'] == ub.queryParameters['expire'] &&
-        ua.queryParameters['sig'] == ub.queryParameters['sig'];
+    return expireA == expireB && sigA == sigB;
   }
 
   /// Fetches completely fresh stream URLs for a YouTube video, bypassing any
@@ -550,10 +592,21 @@ class YoutubeService {
     final playlistId = extractPlaylistId(url);
     if (playlistId == null) return null;
 
+    final now = DateTime.now();
+    if (_cachedPlaylistId == playlistId &&
+        _cachedPlaylistDetails != null &&
+        _cacheTimestamp != null &&
+        now.difference(_cacheTimestamp!) < const Duration(seconds: 60)) {
+      return _cachedPlaylistDetails;
+    }
+
     // Try InnerTube fallback first (more reliable, faster, and consolidated)
     try {
       final details = await _InnerTubeFallback.getPlaylistDetails(playlistId);
       if (details != null && (details['videos'] as List).isNotEmpty) {
+        _cachedPlaylistId = playlistId;
+        _cachedPlaylistDetails = details;
+        _cacheTimestamp = now;
         return details;
       }
     } catch (e) {
@@ -585,7 +638,7 @@ class YoutubeService {
           }
         } catch (_) {}
 
-        return {
+        final details = {
           'info': {
             'id': playlist.id.value,
             'title': playlist.title,
@@ -595,6 +648,11 @@ class YoutubeService {
           },
           'videos': videos,
         };
+        
+        _cachedPlaylistId = playlistId;
+        _cachedPlaylistDetails = details;
+        _cacheTimestamp = now;
+        return details;
       }
     } catch (e) {
       Logger.root.warning(
@@ -656,7 +714,9 @@ class YoutubeService {
     // For muxed streams, find the requested quality or best available
     MuxedStreamInfo? chosen;
 
-    if (qualityPreset != 'best_combined' && manifest.muxed.isNotEmpty) {
+    if (manifest.muxed.isNotEmpty && 
+        (qualityPreset == 'best_combined' || qualityPreset == 'best_muxed' || 
+         ['1080p', '720p', '480p', '360p'].contains(qualityPreset))) {
       final targetQualities = switch (qualityPreset) {
         '1080p' => ['1080p', '720p', '480p', '360p', '240p'],
         '720p' => ['720p', '480p', '360p', '240p', '1080p'],
@@ -877,20 +937,26 @@ class YoutubeService {
 }
 
 /// Internal HTTP client that injects custom cookies for authenticated requests.
-class _AuthenticatedHttpClient extends YoutubeHttpClient {
-  final String _cookieString;
+class _CookieClient extends http.BaseClient {
+  final String _cookie;
+  final http.Client _inner = http.Client();
 
-  _AuthenticatedHttpClient(this._cookieString) : super();
+  _CookieClient(this._cookie);
 
   @override
-  Map<String, String> get headers => {
-    ...super.headers,
-    'cookie': _cookieString,
-  };
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers['cookie'] = _cookie;
+    debugPrint('[YoutubeService] Outgoing request to ${request.url} with headers: ${request.headers}');
+    return _inner.send(request);
+  }
+
+  @override
+  void close() {
+    _inner.close();
+    super.close();
+  }
 }
 
-// source (search for "innertubeApiKey" in page source or DevTools network tab).
-const _innerTubeApiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 String? _innerTubeApiKeyOverride;
 
 /// Override the default InnerTube API key. Call this to hot-patch if
@@ -906,25 +972,33 @@ void updateInnerTubeApiKey(String key) {
 /// `playlistVideoRenderer` for video items, which breaks the library.
 /// This fallback parses both formats.
 class _InnerTubeFallback {
-  static String get _browseUrl {
-    final key = _innerTubeApiKeyOverride ?? _innerTubeApiKey;
+  static String? get _browseUrl {
+    final key = YoutubeService.effectiveApiKey;
+    if (key == null || key.isEmpty) return null;
     return 'https://www.youtube.com/youtubei/v1/browse?key=$key';
   }
 
   static final _log = Logger('YoutubeService._InnerTubeFallback');
   static HttpClient? __client;
-  static HttpClient get _client => __client ??= HttpClient();
+  static bool __closed = false;
+  static HttpClient get _client {
+    if (__client == null || __closed) {
+      __client = HttpClient();
+      __closed = false;
+    }
+    return __client!;
+  }
 
   static void close() {
     __client?.close(force: true);
-    __client = null;
+    __closed = true;
   }
 
   static Map<String, dynamic> _clientContext() => {
     'context': {
       'client': {
         'clientName': 'WEB',
-        'clientVersion': '2.20260601.01.00',
+        'clientVersion': '2.20240327.01.00',
         'browserName': 'Chrome',
         'browserVersion': '131.0.0.0',
         'clientFormFactor': 'UNKNOWN_FORM_FACTOR',
@@ -937,7 +1011,11 @@ class _InnerTubeFallback {
     String browseId, {
     String? continuationToken,
   }) async {
-    final request = await _client.postUrl(Uri.parse(_browseUrl));
+    final url = _browseUrl;
+    if (url == null) {
+      throw Exception('InnerTube API key not configured.');
+    }
+    final request = await _client.postUrl(Uri.parse(url));
     request.headers.set('Content-Type', 'application/json');
     request.headers.set(
       'User-Agent',
@@ -968,6 +1046,11 @@ class _InnerTubeFallback {
   static Future<Map<String, dynamic>?> getPlaylistDetails(
     String playlistId,
   ) async {
+    final key = YoutubeService.effectiveApiKey;
+    if (key == null || key.isEmpty) {
+      _log.warning('No InnerTube API key provided, skipping fallback.');
+      return null;
+    }
     // First request
     Map<String, dynamic> data;
     try {

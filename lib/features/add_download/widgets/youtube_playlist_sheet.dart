@@ -10,6 +10,7 @@ import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 
 /// Result returned when the user confirms playlist download.
 class PlaylistDownloadResult {
@@ -83,7 +84,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
       if (!mounted) return;
       final info = details?['info'] as Map<String, dynamic>?;
-      final videos = (details?['videos'] as List<Map<String, dynamic>>?) ?? [];
+      final videos = List<Map<String, dynamic>>.from((details?['videos'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? []);
 
       setState(() {
         _playlistInfo = info;
@@ -133,6 +134,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final provider = Provider.of<DownloadProvider>(context, listen: false);
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final savePath = settings.customDownloadPath ?? '';
+    final isDark = settings.isDarkMode;
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
 
     int completed = 0;
     int failed = 0;
@@ -179,14 +182,12 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
           'Too many consecutive failures. Aborting playlist download.',
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Too many failures. Aborting after ${completed + 1} videos.',
-              ),
-              backgroundColor: Colors.red.shade800,
-              behavior: SnackBarBehavior.floating,
-            ),
+          ThemedSnackbar.show(
+            context,
+            message: 'Too many failures. Aborting after ${completed + 1} videos.',
+            color: redClr,
+            icon: Icons.error_outline,
+            isDarkMode: settings.isDarkMode,
           );
         }
         break;
@@ -204,12 +205,12 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         final msg = remaining > 0
             ? '$failed video(s) failed ($remaining skipped).'
             : '$failed video(s) failed (stream not available).';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: Colors.orange.shade800,
-            behavior: SnackBarBehavior.floating,
-          ),
+        ThemedSnackbar.show(
+          context,
+          message: msg,
+          color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+          icon: Icons.warning_amber_rounded,
+          isDarkMode: settings.isDarkMode,
         );
       }
       Navigator.pop(
@@ -550,7 +551,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                                 ? Image.network(
                                                     thumbnailUrl,
                                                     fit: BoxFit.cover,
-                                                    errorBuilder: (_, _, _) => Container(
+                                                    errorBuilder: (context, error, stackTrace) => Container(
                                                       color:
                                                           (isDark
                                                                   ? AppTheme
