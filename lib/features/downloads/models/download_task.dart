@@ -38,6 +38,7 @@ class DownloadTask {
   final int audioSize;
   final double audioProgress;
   final bool pausedByUser;
+  final String? youtubeQualityPreset;
 
   DownloadTask({
     required this.id,
@@ -70,6 +71,7 @@ class DownloadTask {
     this.audioSize = 0,
     this.audioProgress = 0.0,
     this.pausedByUser = false,
+    this.youtubeQualityPreset,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -161,6 +163,8 @@ class DownloadTask {
     int? audioSize,
     double? audioProgress,
     bool? pausedByUser,
+    String? youtubeQualityPreset,
+    bool clearYoutubeQualityPreset = false,
   }) {
     return DownloadTask(
       id: id,
@@ -193,6 +197,7 @@ class DownloadTask {
       audioSize: audioSize ?? this.audioSize,
       audioProgress: audioProgress ?? this.audioProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
+      youtubeQualityPreset: clearYoutubeQualityPreset ? null : youtubeQualityPreset ?? this.youtubeQualityPreset,
     );
   }
 
@@ -228,6 +233,7 @@ class DownloadTask {
       'audioSize': audioSize,
       'audioProgress': audioProgress,
       'pausedByUser': pausedByUser,
+      'youtubeQualityPreset': youtubeQualityPreset,
     };
   }
 
@@ -294,6 +300,7 @@ class DownloadTask {
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       pausedByUser: map['pausedByUser'] as bool? ?? false,
+      youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
     );
   }
 

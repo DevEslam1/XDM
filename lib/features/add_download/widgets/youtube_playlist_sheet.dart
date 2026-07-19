@@ -142,63 +142,23 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       final videoId = video['id'] as String;
       final videoTitle = video['title'] as String? ?? 'YouTube Video';
 
-      // Add delay between requests to avoid YouTube rate limiting
-      if (i > 0) {
-        await Future.delayed(const Duration(milliseconds: 1500));
-        if (!mounted) break;
-        if (_isCancelled) break;
-      }
-
       try {
-        final streamInfo = await YoutubeService.getStreamForVideo(
-          videoId,
-          _qualityPreset,
+        final videoUrl = YoutubeService.videoUrl(videoId);
+        final ext = _qualityPreset == 'audio_only' ? 'm4a' : 'mp4';
+        final fileName = '$videoTitle.$ext';
+        
+        await provider.addDownload(
+          name: fileName,
+          url: videoUrl,
+          size: 0,
+          category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
+          savePath: savePath,
+          downloadPageUrl: videoUrl,
+          youtubeQualityPreset: _qualityPreset,
         );
-        if (streamInfo != null && mounted) {
-          consecutiveErrors = 0;
-          final type = streamInfo['type'] as String? ?? 'muxed';
-
-          if (type == 'combined') {
-            final qLabel = streamInfo['quality'] as String? ?? 'HD';
-            final ext = streamInfo['ext'] as String? ?? 'mp4';
-            final videoUrl = streamInfo['src'] as String;
-            final audioUrl = streamInfo['audioSrc'] as String;
-            final videoSize = streamInfo['videoSize'] as int? ?? 0;
-            final audioSize = streamInfo['audioSize'] as int? ?? 0;
-
-            final videoName = '$videoTitle [$qLabel].$ext';
-            await provider.addDownload(
-              name: videoName,
-              url: videoUrl,
-              size: videoSize + audioSize,
-              category: 'Video',
-              savePath: savePath,
-              downloadPageUrl: YoutubeService.videoUrl(videoId),
-              mergedAudioUrl: audioUrl,
-              audioSize: audioSize,
-            );
-          } else {
-            final ext = streamInfo['ext'] as String? ?? 'mp4';
-            final fileName = '$videoTitle.$ext';
-            final size = streamInfo['size'] as int? ?? 0;
-            final streamUrl = streamInfo['src'] as String;
-
-            await provider.addDownload(
-              name: fileName,
-              url: streamUrl,
-              size: size,
-              category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
-              savePath: savePath,
-              downloadPageUrl: YoutubeService.videoUrl(videoId),
-            );
-          }
-          enqueuedVideos.add(video);
-        } else {
-          failed++;
-          consecutiveErrors++;
-        }
+        enqueuedVideos.add(video);
       } catch (e) {
-        debugPrint('Failed to get stream for video $videoId: $e');
+        debugPrint('Failed to enqueue video $videoId: $e');
         failed++;
         consecutiveErrors++;
       }

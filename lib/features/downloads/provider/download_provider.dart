@@ -359,6 +359,7 @@ class DownloadProvider extends ChangeNotifier
     String? downloadPageUrl,
     String? mergedAudioUrl,
     int audioSize = 0,
+    String? youtubeQualityPreset,
   }) async {
     _lastError = null;
     final urls = url
@@ -403,6 +404,7 @@ class DownloadProvider extends ChangeNotifier
             downloadPageUrl: downloadPageUrl,
             mergedAudioUrl: mergedAudioUrl,
             audioSize: audioSize,
+            youtubeQualityPreset: youtubeQualityPreset,
           );
           addedCount++;
         }
@@ -429,6 +431,7 @@ class DownloadProvider extends ChangeNotifier
           downloadPageUrl: downloadPageUrl,
           mergedAudioUrl: mergedAudioUrl,
           audioSize: audioSize,
+          youtubeQualityPreset: youtubeQualityPreset,
         );
       }
     } catch (e) {
@@ -449,6 +452,7 @@ class DownloadProvider extends ChangeNotifier
     String? downloadPageUrl,
     String? mergedAudioUrl,
     int audioSize = 0,
+    String? youtubeQualityPreset,
   }) async {
     final exists = _tasks.any(
       (t) =>
@@ -547,6 +551,7 @@ class DownloadProvider extends ChangeNotifier
       downloadPageUrl: downloadPageUrl,
       mergedAudioUrl: mergedAudioUrl,
       audioSize: audioSize,
+      youtubeQualityPreset: youtubeQualityPreset,
     );
 
     _tasks.insert(0, task);
@@ -936,6 +941,91 @@ class DownloadProvider extends ChangeNotifier
     _updateBackgroundNotification();
     _startWidgetTimer();
     _updateTelemetryWidget();
+
+    // Just-in-time stream resolution for YouTube videos
+    if (task.youtubeQualityPreset != null &&
+        (task.url.contains('youtube.com/') || task.url.contains('youtu.be/'))) {
+      try {
+        final videoId = YoutubeService.extractVideoId(task.url);
+        if (videoId != null) {
+          final streamInfo = await YoutubeService.getStreamForVideo(
+            videoId,
+            task.youtubeQualityPreset!,
+          );
+          if (streamInfo != null) {
+            final type = streamInfo['type'] as String? ?? 'muxed';
+            final ext = streamInfo['ext'] as String? ?? 'mp4';
+            final title = streamInfo['title'] as String? ?? '';
+
+            // Build a proper file name with quality label
+            String resolvedFileName;
+            if (type == 'combined') {
+              final qLabel = streamInfo['quality'] as String? ?? 'HD';
+              resolvedFileName = title.isNotEmpty
+                  ? '$title [$qLabel].$ext'
+                  : task.fileName;
+            } else if (type == 'audio') {
+              resolvedFileName = title.isNotEmpty
+                  ? '$title.$ext'
+                  : task.fileName;
+            } else {
+              final qLabel = streamInfo['quality'] as String? ?? '';
+              resolvedFileName = title.isNotEmpty && qLabel.isNotEmpty
+                  ? '$title [$qLabel].$ext'
+                  : (title.isNotEmpty ? '$title.$ext' : task.fileName);
+            }
+            resolvedFileName = safeFileName(resolvedFileName);
+
+            // Rebuild file paths with the resolved name
+            final resolvedLocalPath = _downloadEngine.buildLocalFilePath(
+              task.savePath,
+              resolvedFileName,
+            );
+            final resolvedTempPath = _downloadEngine.buildTempFilePath(
+              task.savePath,
+              resolvedFileName,
+            );
+
+            if (type == 'combined') {
+              task = task.copyWith(
+                url: streamInfo['src'] as String,
+                mergedAudioUrl: streamInfo['audioSrc'] as String,
+                fileSize: (streamInfo['videoSize'] as int? ?? 0) +
+                    (streamInfo['audioSize'] as int? ?? 0),
+                audioSize: streamInfo['audioSize'] as int? ?? 0,
+                fileName: resolvedFileName,
+                localFilePath: resolvedLocalPath,
+                tempFilePath: resolvedTempPath,
+                clearYoutubeQualityPreset: true,
+              );
+            } else {
+              task = task.copyWith(
+                url: streamInfo['src'] as String,
+                fileSize: streamInfo['size'] as int? ?? 0,
+                fileName: resolvedFileName,
+                localFilePath: resolvedLocalPath,
+                tempFilePath: resolvedTempPath,
+                clearYoutubeQualityPreset: true,
+              );
+            }
+            await _setTask(task);
+          } else {
+            throw Exception('Stream not available');
+          }
+        }
+      } catch (e) {
+        await _setTask(
+          task.copyWith(
+            status: DownloadStatus.failed,
+            errorMessage: 'Failed to resolve YouTube stream: $e',
+            clearYoutubeQualityPreset: true,
+          ),
+        );
+        pumpQueue();
+        _updateTelemetryWidget();
+        return;
+      }
+    }
 
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
