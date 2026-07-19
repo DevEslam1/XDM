@@ -102,7 +102,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             ),
           ];
 
-    final cardBody = Container(
+    final cardBody = RepaintBoundary(
+      child: Container(
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(compact ? 16 : 20),
@@ -542,6 +543,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             ),
           ),
         ),
+      ),
       ),
     );
 

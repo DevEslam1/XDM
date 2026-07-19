@@ -220,8 +220,8 @@ class DownloadProvider extends ChangeNotifier
     final now = DateTime.now();
     final toDelete = <DownloadTask>[];
 
-    final loaded = _databaseService
-        .loadTasks()
+    final dbTasks = await _databaseService.loadTasks();
+    final loaded = dbTasks
         .map((task) {
           // Only mark in-flight downloads as paused on initial load.
           // If a CancelToken exists in the in-memory map, an active download

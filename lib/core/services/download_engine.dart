@@ -244,7 +244,7 @@ class DownloadEngine {
         final file = File(filePath);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
-          final meta = BencodeDecoder.parseTorrentBytes(bytes);
+          final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
           if (meta != null) {
             fileName = meta['name'] ?? fileName;
             fileSize = meta['length'] ?? fileSize;

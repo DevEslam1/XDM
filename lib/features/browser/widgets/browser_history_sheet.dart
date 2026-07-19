@@ -116,13 +116,16 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     }
   }
 
-  void _loadSurfingHistory() {
+  Future<void> _loadSurfingHistory() async {
     try {
       final db = context.read<DatabaseService>();
+      final h = await db.loadBrowserHistory();
+      if (!mounted) return;
       setState(() {
-        _surfingHistory = db.loadBrowserHistory();
+        _surfingHistory = h;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         _surfingHistory = [];
       });

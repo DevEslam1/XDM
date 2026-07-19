@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 
 import 'package:path/path.dart' as p;
@@ -381,7 +382,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final file = File(filePath);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
-          final meta = BencodeDecoder.parseTorrentBytes(bytes);
+          final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
           if (meta != null) {
             setState(() {
               _resolvedFileName = meta['name'] ?? '';

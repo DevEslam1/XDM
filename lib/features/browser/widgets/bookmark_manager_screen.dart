@@ -25,13 +25,16 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
     _load();
   }
 
-  void _load() {
+  Future<void> _load() async {
     try {
       final db = context.read<DatabaseService>();
+      final bms = await db.loadBookmarks();
+      if (!mounted) return;
       setState(() {
-        _bookmarks = db.loadBookmarks();
+        _bookmarks = bms;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         _bookmarks = [];
       });

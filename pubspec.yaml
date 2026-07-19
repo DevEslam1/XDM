@@ -42,6 +42,8 @@ dependencies:
   encrypt: ^5.0.3
   ffmpeg_kit_flutter_new_min: ^3.4.2
   package_info_plus: ^9.0.1
+  drift: ^2.34.2
+  sqlite3_flutter_libs: ^0.6.0+eol
 
 dev_dependencies:
   flutter_test:
@@ -55,6 +57,8 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
   connectivity_plus_platform_interface: ^2.1.0
+  drift_dev: ^2.34.4
+  build_runner: ^2.15.1
 
 flutter_launcher_icons:
   android: "ic_launcher"
