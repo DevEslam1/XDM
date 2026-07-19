@@ -32,7 +32,10 @@ class YoutubePlaylistSheet extends StatefulWidget {
   const YoutubePlaylistSheet({super.key, required this.playlistUrl});
 
   /// Shows the sheet and returns the result, or null if dismissed.
-  static Future<PlaylistDownloadResult?> show(BuildContext context, String playlistUrl) {
+  static Future<PlaylistDownloadResult?> show(
+    BuildContext context,
+    String playlistUrl,
+  ) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     runHaptic(settings);
     return showModalBottomSheet<PlaylistDownloadResult>(
@@ -74,7 +77,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
   Future<void> _fetchPlaylist() async {
     try {
-      final details = await YoutubeService.getPlaylistDetails(widget.playlistUrl);
+      final details = await YoutubeService.getPlaylistDetails(
+        widget.playlistUrl,
+      );
 
       if (!mounted) return;
       final info = details?['info'] as Map<String, dynamic>?;
@@ -145,8 +150,13 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       try {
         final videoUrl = YoutubeService.videoUrl(videoId);
         final ext = _qualityPreset == 'audio_only' ? 'm4a' : 'mp4';
-        final fileName = '$videoTitle.$ext';
-        
+
+        String displayQuality = _qualityPreset;
+        if (_qualityPreset == 'best_combined') displayQuality = 'Best';
+        if (_qualityPreset == 'audio_only') displayQuality = 'Audio';
+
+        final fileName = '$videoTitle [$displayQuality].$ext';
+
         await provider.addDownload(
           name: fileName,
           url: videoUrl,
@@ -165,7 +175,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
       // If too many consecutive failures, abort early (likely rate-limited)
       if (consecutiveErrors >= 5) {
-        debugPrint('Too many consecutive failures. Aborting playlist download.');
+        debugPrint(
+          'Too many consecutive failures. Aborting playlist download.',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -219,11 +231,15 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final glassBorder = isDark
+        ? AppTheme.glassBorder
+        : AppTheme.lightGlassBorder;
 
     return DraggableScrollableSheet(
       expand: false,
@@ -238,11 +254,12 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
             sigmaY: 15,
             child: Container(
               decoration: BoxDecoration(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.95),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                border: Border(
-                  top: BorderSide(color: glassBorder, width: 0.8),
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                    .withValues(alpha: 0.95),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
                 ),
+                border: Border(top: BorderSide(color: glassBorder, width: 0.8)),
               ),
               child: Column(
                 children: [
@@ -261,7 +278,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
                   // Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     child: Row(
                       children: [
                         Container(
@@ -270,7 +290,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             color: Colors.red.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: const Icon(Icons.playlist_play_rounded, color: Colors.red, size: 22),
+                          child: const Icon(
+                            Icons.playlist_play_rounded,
+                            color: Colors.red,
+                            size: 22,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -279,19 +303,23 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             children: [
                               Text(
                                 'YOUTUBE PLAYLIST',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: accent,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                  fontSize: 14,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: accent,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
+                                      fontSize: 14,
+                                    ),
                               ),
                               if (_playlistInfo != null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Text(
                                     _playlistInfo!['title'] as String? ?? '',
-                                    style: TextStyle(color: secClr, fontSize: 11),
+                                    style: TextStyle(
+                                      color: secClr,
+                                      fontSize: 11,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -310,9 +338,18 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            ),
                             SizedBox(height: 16),
-                            Text('Loading playlist...', style: TextStyle(fontSize: 12)),
+                            Text(
+                              'Loading playlist...',
+                              style: TextStyle(fontSize: 12),
+                            ),
                           ],
                         ),
                       ),
@@ -325,7 +362,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.error_outline, color: redClr, size: 40),
+                              Icon(
+                                Icons.error_outline,
+                                color: redClr,
+                                size: 40,
+                              ),
                               const SizedBox(height: 12),
                               Text(
                                 _errorMessage!,
@@ -343,7 +384,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                   });
                                   _fetchPlaylist();
                                 },
-                                icon: Icon(Icons.refresh_rounded, size: 16, color: accent),
+                                icon: Icon(
+                                  Icons.refresh_rounded,
+                                  size: 16,
+                                  color: accent,
+                                ),
                                 label: Text(
                                   'RETRY',
                                   style: TextStyle(
@@ -362,11 +407,18 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                   else ...[
                     // Playlist info bar
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 4,
+                      ),
                       child: Row(
                         children: [
                           if (_playlistInfo?['author'] != null) ...[
-                            Icon(Icons.person_outline, size: 13, color: mutedClr),
+                            Icon(
+                              Icons.person_outline,
+                              size: 13,
+                              color: mutedClr,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               _playlistInfo!['author'] as String,
@@ -374,7 +426,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             ),
                             const SizedBox(width: 12),
                           ],
-                          Icon(Icons.video_library_outlined, size: 13, color: mutedClr),
+                          Icon(
+                            Icons.video_library_outlined,
+                            size: 13,
+                            color: mutedClr,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             '${_videos.length} videos',
@@ -395,8 +451,14 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                               color: accent,
                             ),
                             label: Text(
-                              _selectedCount == _videos.length ? 'DESELECT ALL' : 'SELECT ALL',
-                              style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.bold),
+                              _selectedCount == _videos.length
+                                  ? 'DESELECT ALL'
+                                  : 'SELECT ALL',
+                              style: TextStyle(
+                                color: accent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -409,12 +471,16 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                     Expanded(
                       child: ListView.builder(
                         controller: scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         itemCount: _videos.length,
                         itemBuilder: (context, index) {
                           final video = _videos[index];
                           final isSelected = video['selected'] as bool? ?? true;
-                          final title = video['title'] as String? ?? 'Video ${index + 1}';
+                          final title =
+                              video['title'] as String? ?? 'Video ${index + 1}';
                           final duration = video['duration'] as int? ?? 0;
                           final author = video['author'] as String? ?? '';
                           final thumbnailUrl = video['thumbnailUrl'] as String?;
@@ -434,112 +500,172 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                   onTap: () {
                                     runHaptic(settings);
                                     setState(() {
-                                      _videos[index] = {...video, 'selected': !isSelected};
+                                      _videos[index] = {
+                                        ...video,
+                                        'selected': !isSelected,
+                                      };
                                     });
                                   },
                                   child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  child: Row(
-                                    children: [
-                                      // Checkbox
-                                      SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: Checkbox(
-                                          value: isSelected,
-                                          activeColor: accent,
-                                          side: BorderSide(color: glassBorder, width: 0.8),
-                                          onChanged: (val) {
-                                            if (val != null) {
-                                              setState(() {
-                                                _videos[index] = {...video, 'selected': val};
-                                              });
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-
-                                      // Thumbnail
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: SizedBox(
-                                          width: 72,
-                                          height: 42,
-                                          child: thumbnailUrl != null
-                                              ? Image.network(
-                                                  thumbnailUrl,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (_, _, _) => Container(
-                                                    color: (isDark ? AppTheme.background : AppTheme.lightBackground)
-                                                        .withValues(alpha: 0.6),
-                                                    child: Icon(Icons.play_circle_outline, color: mutedClr, size: 24),
-                                                  ),
-                                                )
-                                              : Container(
-                                                  color: (isDark ? AppTheme.background : AppTheme.lightBackground)
-                                                      .withValues(alpha: 0.6),
-                                                  child: Icon(Icons.play_circle_outline, color: mutedClr, size: 24),
-                                                ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-
-                                      // Title & info
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              title,
-                                              style: TextStyle(
-                                                color: isSelected ? textClr : secClr,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                decoration: isSelected ? null : TextDecoration.lineThrough,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        // Checkbox
+                                        SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: Checkbox(
+                                            value: isSelected,
+                                            activeColor: accent,
+                                            side: BorderSide(
+                                              color: glassBorder,
+                                              width: 0.8,
                                             ),
-                                            const SizedBox(height: 3),
-                                            Row(
-                                              children: [
-                                                if (author.isNotEmpty) ...[
-                                                  Flexible(
-                                                    child: Text(
-                                                      author,
-                                                      style: TextStyle(color: mutedClr, fontSize: 9),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                            onChanged: (val) {
+                                              if (val != null) {
+                                                setState(() {
+                                                  _videos[index] = {
+                                                    ...video,
+                                                    'selected': val,
+                                                  };
+                                                });
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+
+                                        // Thumbnail
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: SizedBox(
+                                            width: 72,
+                                            height: 42,
+                                            child: thumbnailUrl != null
+                                                ? Image.network(
+                                                    thumbnailUrl,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, _, _) => Container(
+                                                      color:
+                                                          (isDark
+                                                                  ? AppTheme
+                                                                        .background
+                                                                  : AppTheme
+                                                                        .lightBackground)
+                                                              .withValues(
+                                                                alpha: 0.6,
+                                                              ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .play_circle_outline,
+                                                        color: mutedClr,
+                                                        size: 24,
+                                                      ),
+                                                    ),
+                                                  )
+                                                : Container(
+                                                    color:
+                                                        (isDark
+                                                                ? AppTheme
+                                                                      .background
+                                                                : AppTheme
+                                                                      .lightBackground)
+                                                            .withValues(
+                                                              alpha: 0.6,
+                                                            ),
+                                                    child: Icon(
+                                                      Icons.play_circle_outline,
+                                                      color: mutedClr,
+                                                      size: 24,
                                                     ),
                                                   ),
-                                                  const SizedBox(width: 8),
-                                                ],
-                                                Icon(Icons.access_time, size: 10, color: mutedClr),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  YoutubeService.formatDuration(duration),
-                                                  style: TextStyle(color: mutedClr, fontSize: 9),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
+                                          ),
                                         ),
-                                      ),
+                                        const SizedBox(width: 10),
 
-                                      // Index number
-                                      Text(
-                                        '#${index + 1}',
-                                        style: TextStyle(color: mutedClr, fontSize: 10, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
+                                        // Title & info
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                title,
+                                                style: TextStyle(
+                                                  color: isSelected
+                                                      ? textClr
+                                                      : secClr,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration: isSelected
+                                                      ? null
+                                                      : TextDecoration
+                                                            .lineThrough,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Row(
+                                                children: [
+                                                  if (author.isNotEmpty) ...[
+                                                    Flexible(
+                                                      child: Text(
+                                                        author,
+                                                        style: TextStyle(
+                                                          color: mutedClr,
+                                                          fontSize: 9,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                  ],
+                                                  Icon(
+                                                    Icons.access_time,
+                                                    size: 10,
+                                                    color: mutedClr,
+                                                  ),
+                                                  const SizedBox(width: 3),
+                                                  Text(
+                                                    YoutubeService.formatDuration(
+                                                      duration,
+                                                    ),
+                                                    style: TextStyle(
+                                                      color: mutedClr,
+                                                      fontSize: 9,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        // Index number
+                                        Text(
+                                          '#${index + 1}',
+                                          style: TextStyle(
+                                            color: mutedClr,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
                       ),
                     ),
 
@@ -547,7 +673,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                     Container(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                       decoration: BoxDecoration(
-                        color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.9),
+                        color:
+                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                                .withValues(alpha: 0.9),
                         border: Border(
                           top: BorderSide(color: glassBorder, width: 0.6),
                         ),
@@ -572,19 +700,37 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: (isDark ? AppTheme.background : AppTheme.lightBackground).withValues(alpha: 0.6),
+                                      color:
+                                          (isDark
+                                                  ? AppTheme.background
+                                                  : AppTheme.lightBackground)
+                                              .withValues(alpha: 0.6),
                                       borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: glassBorder, width: 0.8),
+                                      border: Border.all(
+                                        color: glassBorder,
+                                        width: 0.8,
+                                      ),
                                     ),
                                     child: DropdownButtonHideUnderline(
                                       child: DropdownButton<String>(
-                                        dropdownColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                                        dropdownColor: isDark
+                                            ? AppTheme.surface
+                                            : AppTheme.lightSurface,
                                         value: _qualityPreset,
                                         isExpanded: true,
-                                        icon: Icon(Icons.arrow_drop_down, color: secClr),
-                                        style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
+                                        icon: Icon(
+                                          Icons.arrow_drop_down,
+                                          color: secClr,
+                                        ),
+                                        style: TextStyle(
+                                          color: textClr,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                         items: _qualityOptions.map((opt) {
                                           return DropdownMenuItem<String>(
                                             value: opt['value'],
@@ -595,7 +741,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                             ? null
                                             : (val) {
                                                 if (val != null) {
-                                                  setState(() => _qualityPreset = val);
+                                                  setState(
+                                                    () => _qualityPreset = val,
+                                                  );
                                                 }
                                               },
                                       ),
@@ -604,24 +752,36 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 ),
                               ],
                             ),
-                            if (_qualityPreset == 'best_muxed' || _qualityPreset == 'best_combined')
+                            if (_qualityPreset == 'best_muxed' ||
+                                _qualityPreset == 'best_combined')
                               Padding(
-                                padding: const EdgeInsets.only(top: 8, left: 60),
+                                padding: const EdgeInsets.only(
+                                  top: 8,
+                                  left: 60,
+                                ),
                                 child: Row(
                                   children: [
                                     Icon(
                                       Icons.info_outline,
                                       size: 12,
-                                      color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                                      color: isDark
+                                          ? AppTheme.neonAmber
+                                          : AppTheme.lightNeonAmber,
                                     ),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         _qualityPreset == 'best_combined'
-                                            ? (L10n.isRtl(context) ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.' : 'Note: Best video and audio will be auto-merged.')
-                                            : (L10n.isRtl(context) ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).' : 'Note: Best merged quality will be downloaded (usually 360p).'),
+                                            ? (L10n.isRtl(context)
+                                                  ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.'
+                                                  : 'Note: Best video and audio will be auto-merged.')
+                                            : (L10n.isRtl(context)
+                                                  ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).'
+                                                  : 'Note: Best merged quality will be downloaded (usually 360p).'),
                                         style: TextStyle(
-                                          color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                                          color: isDark
+                                              ? AppTheme.neonAmber
+                                              : AppTheme.lightNeonAmber,
                                           fontSize: 10,
                                         ),
                                       ),
@@ -636,7 +796,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                               Column(
                                 children: [
                                   LinearProgressIndicator(
-                                    value: _selectedCount > 0 ? _downloadProgress / _selectedCount : 0,
+                                    value: _selectedCount > 0
+                                        ? _downloadProgress / _selectedCount
+                                        : 0,
                                     backgroundColor: glassBorder,
                                     color: greenClr,
                                     minHeight: 4,
@@ -650,7 +812,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                           L10n.isRtl(context)
                                               ? 'جاري إضافة $_downloadProgress من $_selectedCount فيديو...'
                                               : 'Enqueuing $_downloadProgress of $_selectedCount videos...',
-                                          style: TextStyle(color: secClr, fontSize: 11),
+                                          style: TextStyle(
+                                            color: secClr,
+                                            fontSize: 11,
+                                          ),
                                         ),
                                       ),
                                       TextButton(
@@ -659,13 +824,23 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                           setState(() => _isCancelled = true);
                                         },
                                         style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 4,
+                                          ),
                                           minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
                                         ),
                                         child: Text(
-                                          L10n.isRtl(context) ? 'إلغاء' : 'CANCEL',
-                                          style: TextStyle(color: redClr, fontSize: 11, fontWeight: FontWeight.bold),
+                                          L10n.isRtl(context)
+                                              ? 'إلغاء'
+                                              : 'CANCEL',
+                                          style: TextStyle(
+                                            color: redClr,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -676,7 +851,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                               NeonGlowButton(
                                 isExpanded: true,
                                 isFilled: true,
-                                onPressed: _selectedCount == 0 ? null : _startBatchDownload,
+                                onPressed: _selectedCount == 0
+                                    ? null
+                                    : _startBatchDownload,
                                 text: L10n.isRtl(context)
                                     ? 'تحميل $_selectedCount فيديو'
                                     : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',

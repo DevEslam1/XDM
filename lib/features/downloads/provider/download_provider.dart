@@ -996,7 +996,6 @@ class DownloadProvider extends ChangeNotifier
                 fileName: resolvedFileName,
                 localFilePath: resolvedLocalPath,
                 tempFilePath: resolvedTempPath,
-                clearYoutubeQualityPreset: true,
               );
             } else {
               task = task.copyWith(
@@ -1005,7 +1004,6 @@ class DownloadProvider extends ChangeNotifier
                 fileName: resolvedFileName,
                 localFilePath: resolvedLocalPath,
                 tempFilePath: resolvedTempPath,
-                clearYoutubeQualityPreset: true,
               );
             }
             await _setTask(task);
@@ -1018,7 +1016,6 @@ class DownloadProvider extends ChangeNotifier
           task.copyWith(
             status: DownloadStatus.failed,
             errorMessage: 'Failed to resolve YouTube stream: $e',
-            clearYoutubeQualityPreset: true,
           ),
         );
         pumpQueue();
