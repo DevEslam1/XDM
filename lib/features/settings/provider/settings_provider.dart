@@ -45,6 +45,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _autoRetryEnabledKey = 'autoRetryEnabled';
   static const _maxRetriesKey = 'maxRetries';
   static const _retryDelaySecondsKey = 'retryDelaySeconds';
+  static const _searchEngineKey = 'searchEngine';
 
   late final SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();
@@ -114,6 +115,7 @@ class SettingsProvider extends ChangeNotifier {
   bool autoRetryEnabled = true;
   int maxRetries = 3;
   int retryDelaySeconds = 10;
+  String searchEngine = 'Google';
 
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
@@ -168,6 +170,7 @@ class SettingsProvider extends ChangeNotifier {
     autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
     maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
     retryDelaySeconds = _prefs.getInt(_retryDelaySecondsKey) ?? retryDelaySeconds;
+    searchEngine = _prefs.getString(_searchEngineKey) ?? searchEngine;
   }
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
@@ -388,6 +391,12 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setSearchEngine(String value) async {
+    searchEngine = value;
+    await _prefs.setString(_searchEngineKey, value);
+    notifyListeners();
+  }
+
   Future<void> setThemeMode(String value) async {
     themeMode = value;
     await _prefs.setString(_themeModeKey, value);
@@ -496,6 +505,7 @@ class SettingsProvider extends ChangeNotifier {
       _autoRetryEnabledKey,
       _maxRetriesKey,
       _retryDelaySecondsKey,
+      _searchEngineKey,
     ];
     for (final key in settingsKeys) {
       if (key == _proxyPasswordKey) {
@@ -544,6 +554,7 @@ class SettingsProvider extends ChangeNotifier {
     autoRetryEnabled = true;
     maxRetries = 3;
     retryDelaySeconds = 10;
+    searchEngine = 'Google';
     await load();
     notifyListeners();
   }

@@ -13,9 +13,8 @@ import '../../downloads/widgets/filter_chips_bar.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
-import '../../add_download/screens/add_screen.dart';
+import '../../add_download/widgets/add_download_dialog.dart';
 import '../../../core/utils/haptic_helper.dart';
-import '../../../core/utils/premium_route.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,7 +47,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          backgroundColor: settings.classicUi ? (isDark ? AppTheme.surface : AppTheme.lightSurface) : Colors.transparent,
+          backgroundColor: settings.classicUi
+              ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+              : Colors.transparent,
           elevation: 0,
           shape: settings.classicUi
               ? Border(
@@ -61,10 +62,14 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           title: _isSearching
               ? Container(
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                    color: isDark
+                        ? const Color(0xFF0F0F16)
+                        : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                      color: isDark
+                          ? const Color(0x15FFFFFF)
+                          : const Color(0x0D000000),
                       width: 0.8,
                     ),
                   ),
@@ -89,7 +94,8 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                       focusedBorder: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    onChanged: (val) => context.read<DownloadProvider>().setSearchQuery(val),
+                    onChanged: (val) =>
+                        context.read<DownloadProvider>().setSearchQuery(val),
                   ),
                 )
               : Text(
@@ -142,85 +148,94 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
             child: SizedBox(
               width: contentMaxWidth(context),
               child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Sliding Segmented Tab Selector
-              _buildSegmentedControl(context, isDark, isRtl),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sliding Segmented Tab Selector
+                  _buildSegmentedControl(context, isDark, isRtl),
 
-              // Storage & Category Analytics Panel
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOutCubic,
-                child: _showAnalytics
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                        child: Consumer<DownloadProvider>(
-                          builder: (context, provider, _) => _DonutChartPanel(
-                            provider: provider,
-                            settings: settings,
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-
-              // Download Speed Statistics (only show for Active Downloads)
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOutCubic,
-                child: _selectedTab == 0
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                        child: DownloadStatsPanel(),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-
-              // Filter Chips
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: FilterChipsBar(isHistory: _selectedTab == 1),
-              ),
-              const SizedBox(height: 16),
-
-              // Title "DOWNLOADS OVERVIEW"
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  _selectedTab == 0
-                      ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
-                      : (isRtl ? 'سجل التنزيلات المكتملة' : 'COMPLETED DOWNLOADS'),
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: isDark
-                        ? AppTheme.textSecondary
-                        : AppTheme.lightTextSecondary,
-                    fontSize: 10,
-                    letterSpacing: 1.0,
-                    fontWeight: FontWeight.bold,
+                  // Storage & Category Analytics Panel
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOutCubic,
+                    child: _showAnalytics
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                              vertical: 8.0,
+                            ),
+                            child: Consumer<DownloadProvider>(
+                              builder: (context, provider, _) =>
+                                  _DonutChartPanel(
+                                    provider: provider,
+                                    settings: settings,
+                                  ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
-                ),
-              ),
-              const SizedBox(height: 8),
 
-              // Controls Row: Sort Option on the Left, Delete Sweep/Task count on the Right
-              _DownloadControlsRow(
-                selectedTab: _selectedTab,
-                isDark: isDark,
-                isRtl: isRtl,
-                settings: settings,
-              ),
-              const SizedBox(height: 10),
+                  // Download Speed Statistics (only show for Active Downloads)
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOutCubic,
+                    child: _selectedTab == 0
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                              vertical: 8.0,
+                            ),
+                            child: DownloadStatsPanel(),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
 
-              // Download Tasks list with Pull-to-Refresh
-              Expanded(
-                child: _DownloadTaskList(
-                  selectedTab: _selectedTab,
-                  isDark: isDark,
-                  isRtl: isRtl,
-                  settings: settings,
-                ),
-              ),
-            ],
+                  // Filter Chips
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: FilterChipsBar(isHistory: _selectedTab == 1),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Title "DOWNLOADS OVERVIEW"
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text(
+                      _selectedTab == 0
+                          ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
+                          : (isRtl
+                                ? 'سجل التنزيلات المكتملة'
+                                : 'COMPLETED DOWNLOADS'),
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: isDark
+                            ? AppTheme.textSecondary
+                            : AppTheme.lightTextSecondary,
+                        fontSize: 10,
+                        letterSpacing: 1.0,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Controls Row: Sort Option on the Left, Delete Sweep/Task count on the Right
+                  _DownloadControlsRow(
+                    selectedTab: _selectedTab,
+                    isDark: isDark,
+                    isRtl: isRtl,
+                    settings: settings,
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Download Tasks list with Pull-to-Refresh
+                  Expanded(
+                    child: _DownloadTaskList(
+                      selectedTab: _selectedTab,
+                      isDark: isDark,
+                      isRtl: isRtl,
+                      settings: settings,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -232,7 +247,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           child: settings.classicUi
               ? FloatingActionButton(
                   heroTag: null,
-                  backgroundColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  backgroundColor: isDark
+                      ? AppTheme.neonViolet
+                      : AppTheme.lightNeonViolet,
                   foregroundColor: isDark
                       ? AppTheme.background
                       : AppTheme.lightBackground,
@@ -242,12 +259,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   child: const Icon(Icons.add, size: 28),
                   onPressed: () {
                     triggerHaptic(settings);
-                    Navigator.push(
-                      context,
-                      PremiumPageRoute(
-                        type: PageTransitionType.slideUp,
-                        child: const AddScreen(),
-                      ),
+                    showDialog(
+                      context: context,
+                      builder: (_) => const AddDownloadDialog(),
                     );
                   },
                 )
@@ -256,7 +270,11 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.3),
+                        color:
+                            (isDark
+                                    ? AppTheme.neonViolet
+                                    : AppTheme.lightNeonViolet)
+                                .withValues(alpha: 0.3),
                         blurRadius: 16.0,
                         spreadRadius: 0,
                       ),
@@ -264,7 +282,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   ),
                   child: FloatingActionButton(
                     heroTag: null,
-                    backgroundColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                    backgroundColor: isDark
+                        ? AppTheme.neonViolet
+                        : AppTheme.lightNeonViolet,
                     foregroundColor: isDark
                         ? AppTheme.background
                         : AppTheme.lightBackground,
@@ -274,12 +294,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     child: const Icon(Icons.add, size: 28),
                     onPressed: () {
                       triggerHaptic(settings);
-                      Navigator.push(
-                        context,
-                        PremiumPageRoute(
-                          type: PageTransitionType.slideUp,
-                          child: const AddScreen(),
-                        ),
+                      showDialog(
+                        context: context,
+                        builder: (_) => const AddDownloadDialog(),
                       );
                     },
                   ),
@@ -291,7 +308,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
 
   Widget _buildSegmentedControl(BuildContext context, bool isDark, bool isRtl) {
     final activeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final inactiveClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final inactiveClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final provider = Provider.of<DownloadProvider>(context, listen: false);
 
@@ -326,14 +345,20 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 decoration: BoxDecoration(
                   color: _selectedTab == 0
                       ? (settings.classicUi
-                          ? (isDark ? AppTheme.background : AppTheme.lightBackground)
-                          : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg))
+                            ? (isDark
+                                  ? AppTheme.background
+                                  : AppTheme.lightBackground)
+                            : (isDark
+                                  ? AppTheme.glassBg
+                                  : AppTheme.lightGlassBg))
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(22),
                   border: _selectedTab == 0
                       ? Border.all(
                           color: settings.classicUi
-                              ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                              ? (isDark
+                                    ? AppTheme.border
+                                    : AppTheme.lightBorder)
                               : activeClr.withValues(alpha: 0.3),
                           width: 0.8,
                         )
@@ -365,14 +390,20 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 decoration: BoxDecoration(
                   color: _selectedTab == 1
                       ? (settings.classicUi
-                          ? (isDark ? AppTheme.background : AppTheme.lightBackground)
-                          : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg))
+                            ? (isDark
+                                  ? AppTheme.background
+                                  : AppTheme.lightBackground)
+                            : (isDark
+                                  ? AppTheme.glassBg
+                                  : AppTheme.lightGlassBg))
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(22),
                   border: _selectedTab == 1
                       ? Border.all(
                           color: settings.classicUi
-                              ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                              ? (isDark
+                                    ? AppTheme.border
+                                    : AppTheme.lightBorder)
                               : activeClr.withValues(alpha: 0.3),
                           width: 0.8,
                         )
@@ -394,7 +425,6 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
       ),
     );
   }
-
 }
 
 class _DownloadControlsRow extends StatelessWidget {
@@ -425,7 +455,9 @@ class _DownloadControlsRow extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
               side: BorderSide(
-                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
                 width: 0.6,
               ),
             ),
@@ -469,10 +501,14 @@ class _DownloadControlsRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0x1F000000) : const Color(0x0A000000),
+                color: isDark
+                    ? const Color(0x1F000000)
+                    : const Color(0x0A000000),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                  color: isDark
+                      ? AppTheme.glassBorder
+                      : AppTheme.lightGlassBorder,
                   width: 0.8,
                 ),
               ),
@@ -507,7 +543,8 @@ class _DownloadControlsRow extends StatelessWidget {
                   constraints: const BoxConstraints(),
                   padding: EdgeInsets.zero,
                   tooltip: isRtl ? 'مسح كل السجل' : 'CLEAR ALL HISTORY',
-                  onPressed: () => _showClearHistoryDialog(context, provider, isDark, isRtl),
+                  onPressed: () =>
+                      _showClearHistoryDialog(context, provider, isDark, isRtl),
                 );
               }
               return Text(
@@ -593,27 +630,43 @@ class _DownloadTaskList extends StatelessWidget {
       selector: (_, provider) => provider.filteredTasks,
       builder: (context, fullList, _) {
         final displayTasks = fullList.where((task) {
-          final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
+          final isSeeding =
+              task.status == DownloadStatus.completed &&
+              task.isTorrent &&
+              task.seedingEnabled;
           if (selectedTab == 0) {
-            return (task.status != DownloadStatus.completed && task.status != DownloadStatus.failed) || isSeeding;
+            return (task.status != DownloadStatus.completed &&
+                    task.status != DownloadStatus.failed) ||
+                isSeeding;
           } else {
-            return (task.status == DownloadStatus.completed || task.status == DownloadStatus.failed) && !isSeeding;
+            return (task.status == DownloadStatus.completed ||
+                    task.status == DownloadStatus.failed) &&
+                !isSeeding;
           }
         }).toList();
 
         if (displayTasks.isEmpty) {
-          return _EmptyState(selectedTab: selectedTab, isDark: isDark, isRtl: isRtl, settings: settings);
+          return _EmptyState(
+            selectedTab: selectedTab,
+            isDark: isDark,
+            isRtl: isRtl,
+            settings: settings,
+          );
         }
 
         return RefreshIndicator(
           color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
           onRefresh: () async {
-            await context.read<DownloadProvider>().load(pauseOrphanDownloads: false);
+            await context.read<DownloadProvider>().load(
+              pauseOrphanDownloads: false,
+            );
             if (context.mounted) {
               ThemedSnackbar.show(
                 context,
-                message: isRtl ? 'تم إعادة تحميل سجلات الاتصال' : 'Transmission logs reloaded',
+                message: isRtl
+                    ? 'تم إعادة تحميل سجلات الاتصال'
+                    : 'Transmission logs reloaded',
                 color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                 icon: Icons.sync,
                 isDarkMode: isDark,
@@ -632,20 +685,34 @@ class _DownloadTaskList extends StatelessWidget {
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
                   itemCount: displayTasks.length,
                   itemBuilder: (context, index) => RepaintBoundary(
-                    child: DownloadCard(task: displayTasks[index], compact: true),
+                    child: DownloadCard(
+                      task: displayTasks[index],
+                      compact: true,
+                    ),
                   ),
                 )
               : ListView.builder(
-                  padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: screenPadding(context).left,
+                  ),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
                   itemCount: displayTasks.length,
                   itemBuilder: (context, index) => RepaintBoundary(
                     child: Padding(
-                      padding: EdgeInsets.only(bottom: index == displayTasks.length - 1 ? 0 : 0),
-                      child: DownloadCard(task: displayTasks[index], compact: true),
+                      padding: EdgeInsets.only(
+                        bottom: index == displayTasks.length - 1 ? 0 : 0,
+                      ),
+                      child: DownloadCard(
+                        task: displayTasks[index],
+                        compact: true,
+                      ),
                     ),
                   ),
                 ),
@@ -677,8 +744,12 @@ class _EmptyState extends StatelessWidget {
         ? L10n.of(context, 'history_empty')
         : L10n.of(context, 'empty_transmissions');
     final subtitle = selectedTab == 1
-        ? (isRtl ? 'سيتم تصنيف السجلات المكتملة هنا.' : 'Finished downloads will be cataloged here.')
-        : (isRtl ? 'أدخل رابطاً لبدء التنزيل.' : 'Insert a URL to start downloading.');
+        ? (isRtl
+              ? 'سيتم تصنيف السجلات المكتملة هنا.'
+              : 'Finished downloads will be cataloged here.')
+        : (isRtl
+              ? 'أدخل رابطاً لبدء التنزيل.'
+              : 'Insert a URL to start downloading.');
 
     return Center(
       child: Column(
@@ -694,17 +765,25 @@ class _EmptyState extends StatelessWidget {
               border: Border.all(
                 color: settings.classicUi
                     ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                    : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                    : (isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder),
                 width: 0.8,
               ),
             ),
-            child: Icon(icon, size: 40, color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+            child: Icon(
+              icon,
+              size: 40,
+              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
             title,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
               letterSpacing: 1.0,
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -728,10 +807,7 @@ class _DonutChartPanel extends StatelessWidget {
   final DownloadProvider provider;
   final SettingsProvider settings;
 
-  const _DonutChartPanel({
-    required this.provider,
-    required this.settings,
-  });
+  const _DonutChartPanel({required this.provider, required this.settings});
 
   @override
   Widget build(BuildContext context) {
@@ -743,12 +819,27 @@ class _DonutChartPanel extends StatelessWidget {
     final totalSizeMb = sizes.values.fold(0.0, (sum, val) => sum + val);
 
     final categoryCards = [
-      {'name': 'Video', 'color': isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue},
-      {'name': 'Audio', 'color': isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet},
-      {'name': 'Document', 'color': isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen},
-      {'name': 'Archive', 'color': isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber},
+      {
+        'name': 'Video',
+        'color': isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+      },
+      {
+        'name': 'Audio',
+        'color': isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+      },
+      {
+        'name': 'Document',
+        'color': isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+      },
+      {
+        'name': 'Archive',
+        'color': isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+      },
       {'name': 'APK', 'color': const Color(0xFFF15BB5)},
-      {'name': 'Other', 'color': isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary},
+      {
+        'name': 'Other',
+        'color': isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+      },
     ];
 
     final totalSizeText = totalSizeMb >= 1024
@@ -759,22 +850,37 @@ class _DonutChartPanel extends StatelessWidget {
     final activeCategoryNames = hasNoData
         ? <String>[]
         : categoryCards
-            .where((card) => (sizes[card['name']] ?? 0.0) > 0)
-            .map<String>((card) => card['name'] as String)
-            .toList();
+              .where((card) => (sizes[card['name']] ?? 0.0) > 0)
+              .map<String>((card) => card['name'] as String)
+              .toList();
 
     final sections = hasNoData
-        ? [PieChartSectionData(color: isDark ? AppTheme.border : AppTheme.lightBorder, value: 1.0, radius: 16, title: '')]
+        ? [
+            PieChartSectionData(
+              color: isDark ? AppTheme.border : AppTheme.lightBorder,
+              value: 1.0,
+              radius: 16,
+              title: '',
+            ),
+          ]
         : activeCategoryNames.map((name) {
             final card = categoryCards.firstWhere((c) => c['name'] == name);
             final sizeMb = sizes[name] ?? 0.0;
-            final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
+            final percentage = totalSizeMb > 0
+                ? (sizeMb / totalSizeMb) * 100
+                : 0.0;
             return PieChartSectionData(
               color: card['color'] as Color,
               value: sizeMb,
               radius: 16,
-              title: percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
-              titleStyle: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+              title: percentage >= 10
+                  ? '${percentage.toStringAsFixed(0)}%'
+                  : '',
+              titleStyle: const TextStyle(
+                color: Colors.white,
+                fontSize: 8,
+                fontWeight: FontWeight.bold,
+              ),
             );
           }).toList();
 
@@ -788,7 +894,10 @@ class _DonutChartPanel extends StatelessWidget {
       decoration: settings.classicUi
           ? BoxDecoration(
               color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              border: Border.all(color: isDark ? AppTheme.border : AppTheme.lightBorder, width: 1.0),
+              border: Border.all(
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                width: 1.0,
+              ),
               borderRadius: BorderRadius.circular(20),
             )
           : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
@@ -803,10 +912,18 @@ class _DonutChartPanel extends StatelessWidget {
                   PieChartData(
                     pieTouchData: PieTouchData(
                       touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                        if (!event.isInterestedForInteractions || pieTouchResponse?.touchedSection == null) return;
-                        final touchedIndex = pieTouchResponse!.touchedSection!.touchedSectionIndex;
-                        if (touchedIndex >= 0 && touchedIndex < activeCategoryNames.length) {
-                          context.read<DownloadProvider>().toggleCategoryFilter(activeCategoryNames[touchedIndex]);
+                        if (!event.isInterestedForInteractions ||
+                            pieTouchResponse?.touchedSection == null) {
+                          return;
+                        }
+                        final touchedIndex = pieTouchResponse!
+                            .touchedSection!
+                            .touchedSectionIndex;
+                        if (touchedIndex >= 0 &&
+                            touchedIndex < activeCategoryNames.length) {
+                          context.read<DownloadProvider>().toggleCategoryFilter(
+                            activeCategoryNames[touchedIndex],
+                          );
                         }
                       },
                     ),
@@ -818,8 +935,23 @@ class _DonutChartPanel extends StatelessWidget {
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(isRtl ? 'الإجمالي' : 'TOTAL', style: TextStyle(color: mutedClr, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                    Text(totalSizeText, style: TextStyle(color: textClr, fontSize: 9, fontWeight: FontWeight.bold)),
+                    Text(
+                      isRtl ? 'الإجمالي' : 'TOTAL',
+                      style: TextStyle(
+                        color: mutedClr,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      totalSizeText,
+                      style: TextStyle(
+                        color: textClr,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -835,7 +967,14 @@ class _DonutChartPanel extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: categoryCards.take(3).map((card) {
-                            return _buildLegendItem(card, sizes, totalSizeMb, textClr, isDark, isRtl);
+                            return _buildLegendItem(
+                              card,
+                              sizes,
+                              totalSizeMb,
+                              textClr,
+                              isDark,
+                              isRtl,
+                            );
                           }).toList(),
                         ),
                       ),
@@ -845,7 +984,14 @@ class _DonutChartPanel extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: categoryCards.skip(3).map((card) {
-                            return _buildLegendItem(card, sizes, totalSizeMb, textClr, isDark, isRtl);
+                            return _buildLegendItem(
+                              card,
+                              sizes,
+                              totalSizeMb,
+                              textClr,
+                              isDark,
+                              isRtl,
+                            );
                           }).toList(),
                         ),
                       ),
@@ -855,7 +1001,14 @@ class _DonutChartPanel extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: categoryCards.map((card) {
-                      return _buildLegendItem(card, sizes, totalSizeMb, textClr, isDark, isRtl);
+                      return _buildLegendItem(
+                        card,
+                        sizes,
+                        totalSizeMb,
+                        textClr,
+                        isDark,
+                        isRtl,
+                      );
                     }).toList(),
                   ),
           ),
@@ -877,7 +1030,9 @@ class _DonutChartPanel extends StatelessWidget {
     final name = card['name'] as String;
     final sizeMb = sizes[name] ?? 0.0;
     final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
-    final sizeText = sizeMb >= 1024 ? '${(sizeMb / 1024).toStringAsFixed(1)}G' : '${sizeMb.toStringAsFixed(0)}M';
+    final sizeText = sizeMb >= 1024
+        ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
+        : '${sizeMb.toStringAsFixed(0)}M';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3.5),
@@ -895,7 +1050,11 @@ class _DonutChartPanel extends StatelessWidget {
           Expanded(
             child: Text(
               isRtl ? _translateCat(name) : name,
-              style: TextStyle(color: textClr, fontSize: 10, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: textClr,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -926,17 +1085,28 @@ class _DonutChartPanel extends StatelessWidget {
 
   String _translateCat(String name) {
     switch (name) {
-      case 'Video': return 'الفيديو';
-      case 'Audio': return 'الصوت';
-      case 'Document': return 'المستندات';
-      case 'Archive': return 'الأرشيف';
-      case 'APK': return 'التطبيقات';
-      default: return 'أخرى';
+      case 'Video':
+        return 'الفيديو';
+      case 'Audio':
+        return 'الصوت';
+      case 'Document':
+        return 'المستندات';
+      case 'Archive':
+        return 'الأرشيف';
+      case 'APK':
+        return 'التطبيقات';
+      default:
+        return 'أخرى';
     }
   }
 }
 
-void _showClearHistoryDialog(BuildContext context, DownloadProvider provider, bool isDark, bool isRtl) {
+void _showClearHistoryDialog(
+  BuildContext context,
+  DownloadProvider provider,
+  bool isDark,
+  bool isRtl,
+) {
   final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
   final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
   final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
@@ -946,7 +1116,8 @@ void _showClearHistoryDialog(BuildContext context, DownloadProvider provider, bo
     context: context,
     builder: (ctx) {
       final tasksToClear = provider.filteredTasks.where((task) {
-        return task.status == DownloadStatus.completed || task.status == DownloadStatus.failed;
+        return task.status == DownloadStatus.completed ||
+            task.status == DownloadStatus.failed;
       }).toList();
 
       return Directionality(
@@ -959,21 +1130,41 @@ void _showClearHistoryDialog(BuildContext context, DownloadProvider provider, bo
           ),
           title: Text(
             isRtl ? 'مسح سجل التاريخ' : 'CLEAR HISTORY LOGS',
-            style: Theme.of(ctx).textTheme.titleMedium?.copyWith(color: redClr, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+            style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+              color: redClr,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.0,
+            ),
           ),
           content: Text(
-            isRtl ? 'هل أنت متأكد من حذف جميع سجلات التاريخ البالغ عددها ${tasksToClear.length}؟' : 'Are you sure you want to delete all ${tasksToClear.length} completed history records?',
+            isRtl
+                ? 'هل أنت متأكد من حذف جميع سجلات التاريخ البالغ عددها ${tasksToClear.length}؟'
+                : 'Are you sure you want to delete all ${tasksToClear.length} completed history records?',
             style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: secClr),
           ),
           actions: [
             TextButton(
-              style: TextButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              child: Text(L10n.of(ctx, 'cancel_btn'), style: TextStyle(color: secClr)),
+              style: TextButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                L10n.of(ctx, 'cancel_btn'),
+                style: TextStyle(color: secClr),
+              ),
               onPressed: () => Navigator.of(ctx).pop(),
             ),
             TextButton(
-              style: TextButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              child: Text(isRtl ? 'مسح الكل' : 'CLEAR ALL', style: TextStyle(color: redClr, fontWeight: FontWeight.bold)),
+              style: TextButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: Text(
+                isRtl ? 'مسح الكل' : 'CLEAR ALL',
+                style: TextStyle(color: redClr, fontWeight: FontWeight.bold),
+              ),
               onPressed: () async {
                 for (final task in tasksToClear) {
                   await provider.deleteTask(task.id);

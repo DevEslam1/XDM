@@ -726,16 +726,27 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     var url = input.trim();
     if (url.isEmpty) return;
 
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final engine = settings.searchEngine;
+    String searchPrefix = 'https://google.com/search?q=';
+    if (engine == 'DuckDuckGo') {
+      searchPrefix = 'https://duckduckgo.com/?q=';
+    } else if (engine == 'Bing') {
+      searchPrefix = 'https://www.bing.com/search?q=';
+    } else if (engine == 'Yahoo') {
+      searchPrefix = 'https://search.yahoo.com/search?p=';
+    }
+
     final uri = Uri.tryParse(url);
     if (uri != null && uri.hasScheme) {
       if (uri.scheme != 'http' && uri.scheme != 'https') {
-        url = 'https://google.com/search?q=${Uri.encodeComponent(input)}';
+        url = '$searchPrefix${Uri.encodeComponent(input)}';
       }
     } else {
       if (url.contains('.') && !url.contains(' ')) {
         url = 'https://$url';
       } else {
-        url = 'https://google.com/search?q=${Uri.encodeComponent(url)}';
+        url = '$searchPrefix${Uri.encodeComponent(url)}';
       }
     }
 
@@ -2076,7 +2087,84 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               ],
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+
+          // Central Search Bar
+          GlassCard(
+            borderRadius: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            isDarkMode: isDark,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.search,
+                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: isRtl ? 'ابحث في الويب...' : 'Search the web...',
+                      hintStyle: TextStyle(
+                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                        fontSize: 14,
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                    style: TextStyle(
+                      color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                    ),
+                    onSubmitted: (val) {
+                      if (val.trim().isNotEmpty) {
+                        _navigateToUrl(val);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Search Engine Selector
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                isRtl ? 'محرك البحث:' : 'Search Engine:',
+                style: TextStyle(
+                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: settings.searchEngine,
+                dropdownColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                underline: const SizedBox(),
+                style: TextStyle(
+                  color: accentColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+                icon: Icon(Icons.arrow_drop_down, color: accentColor, size: 16),
+                items: ['Google', 'DuckDuckGo', 'Bing', 'Yahoo'].map((engine) {
+                  return DropdownMenuItem<String>(
+                    value: engine,
+                    child: Text(engine),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    triggerHaptic(settings);
+                    settings.setSearchEngine(val);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
 
           // Sniffer Toggle Card
           GlassCard(

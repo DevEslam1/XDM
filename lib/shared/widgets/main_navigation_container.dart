@@ -6,7 +6,7 @@ import '../../core/services/clipboard_service.dart';
 import '../../core/services/share_service.dart';
 import '../../core/utils/localization.dart';
 import '../../core/utils/responsive.dart';
-import '../../features/add_download/screens/add_screen.dart';
+import '../../features/add_download/widgets/add_download_dialog.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 
@@ -15,7 +15,6 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/downloads/provider/download_provider.dart';
 import 'clipboard_detection_sheet.dart';
 import 'dmx_backdrop_filter.dart';
-import '../../core/utils/premium_route.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -25,8 +24,8 @@ class MainNavigationContainer extends StatefulWidget {
       _MainNavigationContainerState();
 }
 
-class _MainNavigationContainerState extends State<MainNavigationContainer> with WidgetsBindingObserver {
-
+class _MainNavigationContainerState extends State<MainNavigationContainer>
+    with WidgetsBindingObserver {
   String? _lastClipboardUrl;
   DateTime _lastClipboardCheckTime = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -58,19 +57,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     }
   }
 
-
-
   void _onUrlReceived(String url) {
     // The share-intent callback fires on isolate-level events that can land
     // after this widget is unmounted (background → resume). Guard against
     // using a deactivated context.
     if (!mounted) return;
-    Navigator.push(
-      context,
-      PremiumPageRoute(
-        type: PageTransitionType.slideUp,
-        child: AddScreen(prefilledUrl: url),
-      ),
+    showDialog(
+      context: context,
+      builder: (_) => AddDownloadDialog(prefilledUrl: url),
     );
   }
 
@@ -113,10 +107,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
 
     final bodyContent = Directionality(
       textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-      child: FadeIndexedStack(
-        index: currentIndex,
-        children: _screens,
-      ),
+      child: FadeIndexedStack(index: currentIndex, children: _screens),
     );
 
     return Scaffold(
@@ -125,7 +116,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
       body: screenType == ScreenType.desktop
           ? Row(
               children: [
-                _buildNavigationRail(settings, downloadProvider, isDark, isRtl, currentIndex),
+                _buildNavigationRail(
+                  settings,
+                  downloadProvider,
+                  isDark,
+                  isRtl,
+                  currentIndex,
+                ),
                 const VerticalDivider(width: 1),
                 Expanded(child: bodyContent),
               ],
@@ -133,11 +130,23 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
           : bodyContent,
       bottomNavigationBar: screenType == ScreenType.phone
           ? _buildPhoneBottomNavigationBar(
-              context, settings, downloadProvider, isDark, isRtl, currentIndex)
+              context,
+              settings,
+              downloadProvider,
+              isDark,
+              isRtl,
+              currentIndex,
+            )
           : screenType == ScreenType.tablet
-              ? _buildTabletFloatingBottomNavigationBar(
-                  context, settings, downloadProvider, isDark, isRtl, currentIndex)
-              : null,
+          ? _buildTabletFloatingBottomNavigationBar(
+              context,
+              settings,
+              downloadProvider,
+              isDark,
+              isRtl,
+              currentIndex,
+            )
+          : null,
     );
   }
 
@@ -150,7 +159,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     int currentIndex,
   ) {
     return AnimatedSlide(
-      offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.0),
+      offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
+          ? Offset.zero
+          : const Offset(0, 1.0),
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
       child: ClipRRect(
@@ -164,7 +175,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
             decoration: BoxDecoration(
               color: settings.classicUi
                   ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                  : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+                  : (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                        .withValues(alpha: 0.65),
               borderRadius: settings.classicUi
                   ? BorderRadius.zero
                   : const BorderRadius.vertical(top: Radius.circular(24)),
@@ -172,7 +184,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
                 top: BorderSide(
                   color: settings.classicUi
                       ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                      : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                      : (isDark
+                            ? AppTheme.glassBorder
+                            : AppTheme.lightGlassBorder),
                   width: settings.classicUi ? 1.0 : 0.6,
                 ),
               ),
@@ -224,7 +238,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     int currentIndex,
   ) {
     return AnimatedSlide(
-      offset: (downloadProvider.isNavbarVisible && currentIndex != 1) ? Offset.zero : const Offset(0, 1.8),
+      offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
+          ? Offset.zero
+          : const Offset(0, 1.8),
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeInOutCubic,
       child: SafeArea(
@@ -245,15 +261,20 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
                     ),
                   )
                 : BoxDecoration(
-                    color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.65),
+                    color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                        .withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
-                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                      color: isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder,
                       width: 0.8,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.15),
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.45 : 0.15,
+                        ),
                         blurRadius: 20,
                         spreadRadius: 2,
                         offset: const Offset(0, 8),
@@ -299,16 +320,26 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     );
   }
 
-  Widget _buildNavigationRail(SettingsProvider settings, DownloadProvider downloadProvider, bool isDark, bool isRtl, int currentIndex) {
+  Widget _buildNavigationRail(
+    SettingsProvider settings,
+    DownloadProvider downloadProvider,
+    bool isDark,
+    bool isRtl,
+    int currentIndex,
+  ) {
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final inactiveColor = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final inactiveColor = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
 
     return DmxBackdropFilter(
       sigmaX: 15,
       sigmaY: 15,
       child: Container(
         decoration: BoxDecoration(
-          color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.85),
+          color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
+            alpha: 0.85,
+          ),
           border: Border(
             right: BorderSide(
               color: isDark ? AppTheme.border : AppTheme.lightBorder,
@@ -398,7 +429,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
-              color: isSelected ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
+              color: isSelected
+                  ? activeColor.withValues(alpha: 0.12)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -431,12 +464,17 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
     required String label,
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
+    final downloadProvider = Provider.of<DownloadProvider>(
+      context,
+      listen: false,
+    );
     final isDark = settings.isDarkMode;
     final currentIndex = downloadProvider.activeTabIndex;
     final isSelected = currentIndex == index;
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final inactiveColor = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final inactiveColor = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? activeIcon : icon;
 
@@ -457,7 +495,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer> with 
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? activeColor.withValues(alpha: 0.12)
@@ -511,10 +552,7 @@ class _FadeIndexedStackState extends State<FadeIndexedStack>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _controller.forward();
   }
 
@@ -537,10 +575,7 @@ class _FadeIndexedStackState extends State<FadeIndexedStack>
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _controller,
-      child: IndexedStack(
-        index: widget.index,
-        children: widget.children,
-      ),
+      child: IndexedStack(index: widget.index, children: widget.children),
     );
   }
 }
