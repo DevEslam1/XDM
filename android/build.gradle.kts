@@ -30,16 +30,43 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-subprojects {
-    if (name == "receive_sharing_intent") {
+// Align JVM target across ALL plugin subprojects to avoid
+// "Inconsistent JVM Target Compatibility" errors (e.g. disk_space).
+gradle.projectsEvaluated {
+    subprojects {
         tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
             compilerOptions {
-                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
             }
+        }
+        tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = JavaVersion.VERSION_17.toString()
+            targetCompatibility = JavaVersion.VERSION_17.toString()
         }
     }
 }
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
+}
+
+subprojects {
+    val proj = this
+    val setNamespace: () -> Unit = {
+        val androidExt = proj.extensions.findByName("android")
+        if (androidExt != null && androidExt is com.android.build.gradle.LibraryExtension) {
+            if (androidExt.namespace == null) {
+                val groupStr = proj.group.toString()
+                androidExt.namespace = if (groupStr.isNotEmpty()) groupStr else "com.example.plugin.\${proj.name}"
+            }
+        }
+    }
+    
+    if (proj.state.executed) {
+        setNamespace()
+    } else {
+        proj.afterEvaluate {
+            setNamespace()
+        }
+    }
 }

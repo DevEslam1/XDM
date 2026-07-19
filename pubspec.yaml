@@ -53,6 +53,8 @@ dependencies:
 dependency_overrides:
   webview_cookie_manager:
     path: packages/webview_cookie_manager
+  open_filex:
+    path: packages/open_filex
 
 
 dev_dependencies:
