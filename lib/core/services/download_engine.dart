@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -624,12 +625,45 @@ class DownloadEngine {
         final futures = <Future<void>>[];
         final chunkProgress = List<int>.filled(threadCount, 0);
         final chunkSizes = List<int>.filled(threadCount, 0);
-        final chunkFiles = List<File>.filled(threadCount, File(''));
 
         final totalSize = resolvedFileSize;
         final partSize = (totalSize / threadCount).floor();
 
-        // Calculate start/end boundaries and part files
+        final targetFile = File(currentTempFilePath);
+        await targetFile.parent.create(recursive: true);
+        final stateFile = File('$currentTempFilePath.dmxstate');
+
+        // Pre-allocate file if it doesn't exist or is the wrong size
+        RandomAccessFile? sharedRaf;
+        try {
+          sharedRaf = await targetFile.open(mode: FileMode.append);
+          final currentLen = await sharedRaf.length();
+          if (currentLen != totalSize) {
+            await sharedRaf.truncate(totalSize);
+          }
+          await sharedRaf.close();
+        } catch (e) {
+          debugPrint('Pre-allocation failed: $e');
+        }
+
+        // Initialize state
+        if (await stateFile.exists()) {
+          try {
+            final content = await stateFile.readAsString();
+            final stateList = jsonDecode(content) as List;
+            if (stateList.length == threadCount) {
+              for (int i = 0; i < threadCount; i++) {
+                chunkProgress[i] = stateList[i] as int;
+              }
+            } else {
+              await stateFile.delete(); // reset if thread count changed
+            }
+          } catch (e) {
+            await stateFile.delete();
+          }
+        }
+
+        // Calculate start/end boundaries
         for (int i = 0; i < threadCount; i++) {
           final start = i * partSize;
           final end = (i == threadCount - 1)
@@ -637,28 +671,9 @@ class DownloadEngine {
               : (start + partSize - 1);
           final size = end - start + 1;
           chunkSizes[i] = size;
-          chunkFiles[i] = File('$currentTempFilePath.part$i');
-          await chunkFiles[i].parent.create(recursive: true);
-        }
-
-        // Initialize chunk progress from existing files and validate chunk file size
-        for (int i = 0; i < threadCount; i++) {
-          if (await chunkFiles[i].exists()) {
-            final int fileLen;
-            try {
-              fileLen = await chunkFiles[i].length();
-            } catch (e) {
-              debugPrint('Failed to read chunk file size for part $i: $e');
-              await chunkFiles[i].delete();
-              chunkProgress[i] = 0;
-              continue;
-            }
-            if (fileLen > chunkSizes[i]) {
-              await chunkFiles[i].delete();
-              chunkProgress[i] = 0;
-            } else {
-              chunkProgress[i] = fileLen;
-            }
+          // Validate chunkProgress
+          if (chunkProgress[i] > size) {
+            chunkProgress[i] = 0;
           }
         }
 
@@ -666,12 +681,22 @@ class DownloadEngine {
         final speedSamples = Queue<_SpeedSample>();
 
         int lastReportTime = 0;
+        int lastStateSaveTime = 0;
+
+        Future<void> saveState() async {
+          try {
+            await stateFile.writeAsString(jsonEncode(chunkProgress));
+          } catch (e) {
+            debugPrint('Failed to save state: $e');
+          }
+        }
+
         void reportProgress() {
           final downloadedTotal = chunkProgress.reduce((a, b) => a + b);
           final nowMs = stopwatch.elapsedMilliseconds;
           speedSamples.add(_SpeedSample(nowMs, downloadedTotal));
 
-          // Keep samples from the last 3 seconds (3000 ms)
+          // Keep samples from the last 3 seconds
           while (speedSamples.isNotEmpty &&
               nowMs - speedSamples.first.timestampMs > 3000) {
             speedSamples.removeFirst();
@@ -697,7 +722,6 @@ class DownloadEngine {
           if (nowMs - lastReportTime >= 100 || isCompleted) {
             lastReportTime = nowMs;
 
-            // Construct actual chunk percentages only when emitting
             final chunksList = List<double>.generate(threadCount, (idx) {
               return chunkSizes[idx] > 0
                   ? (chunkProgress[idx] / chunkSizes[idx]).clamp(0.0, 1.0)
@@ -713,6 +737,11 @@ class DownloadEngine {
                 chunks: chunksList,
               ),
             );
+          }
+
+          if (nowMs - lastStateSaveTime >= 2000 || isCompleted) {
+            lastStateSaveTime = nowMs;
+            saveState();
           }
         }
 
@@ -731,187 +760,153 @@ class DownloadEngine {
             final end = (idx == threadCount - 1)
                 ? (totalSize - 1)
                 : (start + partSize - 1);
-            final file = chunkFiles[idx];
 
             futures.add(() async {
               final chunkStopwatch = Stopwatch()..start();
-              final resumeFrom = chunkProgress[idx];
-              if (resumeFrom >= chunkSizes[idx]) {
-                // Already finished this chunk
-                return;
-              }
+              var resumeFrom = chunkProgress[idx];
+              if (resumeFrom >= chunkSizes[idx]) return;
 
-              final headers = <String, dynamic>{};
-              headers['Range'] = 'bytes=${start + resumeFrom}-$end';
+              // Setup Micro-retries
+              int attempts = 0;
+              const maxAttempts = 3;
 
-              try {
-                final chunkResponse = await isolatedDio.get<ResponseBody>(
-                  punyUrl,
-                  cancelToken: chunkCancelToken,
-                  options: Options(
-                    responseType: ResponseType.stream,
-                    followRedirects: true,
-                    headers: headers,
-                    validateStatus: (_) => true,
-                  ),
-                );
-
-                if (chunkResponse.statusCode != 206) {
-                  throw DioException(
-                    requestOptions: RequestOptions(path: punyUrl),
-                    type: DioExceptionType.badResponse,
-                    response: chunkResponse,
-                    message:
-                        'Server returned ${chunkResponse.statusCode} instead of 206 for chunk range request.',
-                  );
-                }
-
-                _validateContentRange(
-                  chunkResponse.headers.value('content-range'),
-                  expectedStart: start + resumeFrom,
-                  expectedEnd: end,
-                  expectedTotal: totalSize,
-                );
-
-                final sink = file.openWrite(
-                  mode: resumeFrom > 0 ? FileMode.append : FileMode.write,
-                );
-
+              while (attempts < maxAttempts) {
+                attempts++;
                 try {
-                  final stream = chunkResponse.data?.stream;
-                  if (stream == null) {
+                  resumeFrom = chunkProgress[idx];
+                  if (resumeFrom >= chunkSizes[idx]) break;
+
+                  final headers = <String, dynamic>{};
+                  headers['Range'] = 'bytes=${start + resumeFrom}-$end';
+
+                  final chunkResponse = await isolatedDio.get<ResponseBody>(
+                    punyUrl,
+                    cancelToken: chunkCancelToken,
+                    options: Options(
+                      responseType: ResponseType.stream,
+                      followRedirects: true,
+                      headers: headers,
+                      validateStatus: (_) => true,
+                    ),
+                  );
+
+                  if (chunkResponse.statusCode != 206) {
                     throw DioException(
                       requestOptions: RequestOptions(path: punyUrl),
                       type: DioExceptionType.badResponse,
-                      message: 'Server returned empty response body.',
+                      response: chunkResponse,
+                      message: 'Server returned ${chunkResponse.statusCode} instead of 206.',
                     );
                   }
-                  var chunkDownloadedThisSession = 0;
-                  await for (final chunk in stream) {
-                    if (cancelToken.isCancelled ||
-                        chunkCancelToken.isCancelled) {
+
+                  _validateContentRange(
+                    chunkResponse.headers.value('content-range'),
+                    expectedStart: start + resumeFrom,
+                    expectedEnd: end,
+                    expectedTotal: totalSize,
+                  );
+
+                  // Open RandomAccessFile for this specific thread
+                  final raf = await targetFile.open(mode: FileMode.append);
+
+                  try {
+                    final stream = chunkResponse.data?.stream;
+                    if (stream == null) {
                       throw DioException(
                         requestOptions: RequestOptions(path: punyUrl),
-                        type: DioExceptionType.cancel,
-                        message: 'Download cancelled.',
+                        type: DioExceptionType.badResponse,
+                        message: 'Server returned empty response body.',
                       );
                     }
-                    sink.add(chunk);
-                    chunkProgress[idx] += chunk.length;
-                    chunkDownloadedThisSession += chunk.length;
-
-                    reportProgress();
-
-                    final limit = speedLimitBytesPerSecond();
-                    if (limit > 0) {
-                      final activeCount = activeDownloadCount().clamp(1, 1000);
-                      final perTaskLimit = limit / activeCount;
-                      final limitPerChunk = perTaskLimit / threadCount;
-                      final expectedElapsedMs =
-                          (chunkDownloadedThisSession / limitPerChunk * 1000)
-                              .round();
-                      final actualElapsedMs =
-                          chunkStopwatch.elapsedMilliseconds;
-                      if (expectedElapsedMs > actualElapsedMs) {
-                        await Future<void>.delayed(
-                          Duration(
-                            milliseconds: expectedElapsedMs - actualElapsedMs,
-                          ),
+                    var chunkDownloadedThisSession = 0;
+                    await for (final chunk in stream) {
+                      if (cancelToken.isCancelled || chunkCancelToken.isCancelled) {
+                        throw DioException(
+                          requestOptions: RequestOptions(path: punyUrl),
+                          type: DioExceptionType.cancel,
+                          message: 'Download cancelled.',
                         );
                       }
+
+                      // Write to the precise absolute file position
+                      final currentOffset = start + chunkProgress[idx];
+                      await raf.setPosition(currentOffset);
+                      await raf.writeFrom(chunk);
+
+                      chunkProgress[idx] += chunk.length;
+                      chunkDownloadedThisSession += chunk.length;
+
+                      reportProgress();
+
+                      final limit = speedLimitBytesPerSecond();
+                      if (limit > 0) {
+                        final activeCount = activeDownloadCount().clamp(1, 1000);
+                        final perTaskLimit = limit / activeCount;
+                        final limitPerChunk = perTaskLimit / threadCount;
+                        final expectedElapsedMs = (chunkDownloadedThisSession / limitPerChunk * 1000).round();
+                        final actualElapsedMs = chunkStopwatch.elapsedMilliseconds;
+                        if (expectedElapsedMs > actualElapsedMs) {
+                          await Future<void>.delayed(
+                            Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
+                          );
+                        }
+                      }
+                    }
+                    // Success, break out of retry loop
+                    break;
+                  } finally {
+                    try {
+                      await raf.close();
+                    } catch (e) {
+                      debugPrint('RAF close failed: $e');
                     }
                   }
-                } finally {
-                  try {
-                    await sink.flush();
-                  } catch (e) {
-                    debugPrint('Chunk sink flush failed: $e');
+                } catch (e) {
+                  if (cancelToken.isCancelled || chunkCancelToken.isCancelled) {
+                    rethrow;
                   }
-                  try {
-                    await sink.close();
-                  } catch (e) {
-                    debugPrint('Chunk sink close failed: $e');
+                  if (attempts >= maxAttempts) {
+                    chunkError ??= e;
+                    rethrow;
                   }
+                  debugPrint('Thread $idx failed attempt $attempts: $e. Retrying in ${attempts}s...');
+                  await Future.delayed(Duration(seconds: attempts));
                 }
-              } catch (e) {
-                if (chunkError == null && !cancelToken.isCancelled) {
-                  chunkError = e;
-                }
-                if (!chunkCancelToken.isCancelled) {
-                  chunkCancelToken.cancel('chunk_error: $e');
-                }
-                rethrow;
               }
             }());
           }
 
           // Wait for all threads to complete
           await Future.wait(futures);
-
-          // Verify each chunk's size before merging
-          for (int i = 0; i < threadCount; i++) {
-            final partFile = chunkFiles[i];
-            final expectedSize = chunkSizes[i];
-            if (expectedSize > 0) {
-              final actualSize = await partFile.exists()
-                  ? await partFile.length()
-                  : 0;
-              if (actualSize != expectedSize) {
-                throw Exception(
-                  'Chunk $i integrity check failed: expected $expectedSize bytes, got $actualSize bytes.',
-                );
-              }
-            }
-          }
-
-          // Merge chunk files into localFilePath
-          final localFile = File(currentLocalFilePath);
-          await localFile.parent.create(recursive: true);
-          if (await localFile.exists()) {
-            await localFile.delete();
-          }
-
-          final outputSink = localFile.openWrite();
-          try {
-            for (int i = 0; i < threadCount; i++) {
-              final partFile = chunkFiles[i];
-              if (await partFile.exists()) {
-                final partStream = partFile.openRead();
-                await for (final data in partStream) {
-                  outputSink.add(data);
-                }
-                await partFile.delete();
-              }
-            }
-          } finally {
-            try {
-              await outputSink.flush();
-            } catch (e) {
-              debugPrint('Merge output sink flush failed: $e');
-            }
-            try {
-              await outputSink.close();
-            } catch (e) {
-              debugPrint('Merge output sink close failed: $e');
-            }
-          }
+          await saveState();
 
           if (totalSize > 0) {
-            final actualSize = await localFile.length();
+            final actualSize = await targetFile.length();
             if (actualSize != totalSize) {
               throw Exception(
                 'Download integrity check failed: expected $totalSize bytes, got $actualSize bytes.',
               );
             }
           }
+
+          // Rename to final local file and cleanup state
+          final finalFile = File(currentLocalFilePath);
+          if (await finalFile.exists()) {
+             await finalFile.delete();
+          }
+          await targetFile.rename(currentLocalFilePath);
+          if (await stateFile.exists()) {
+            await stateFile.delete();
+          }
+
         } catch (e) {
           if (cancelToken.isCancelled) {
+            await saveState(); // Save state on cancel
             rethrow;
           }
 
           final errorToCheck = chunkError ?? e;
 
-          // Check if the error indicates range requests are not supported or rejected
           bool isRangeRejection = false;
           if (errorToCheck is DioException &&
               errorToCheck.type == DioExceptionType.badResponse) {
@@ -926,8 +921,7 @@ class DownloadEngine {
           }
 
           if (!isRangeRejection) {
-            // Rethrow connection, timeout, or server-side transient exceptions
-            // so the download provider can retry without deleting part files.
+            await saveState();
             rethrow;
           }
 
@@ -935,17 +929,10 @@ class DownloadEngine {
           debugPrint(
             'Multi-threaded range request failed (Range Rejection): $e. Falling back to single-threaded download.',
           );
-          // Clean up part files
-          for (int i = 0; i < threadCount; i++) {
-            final partFile = chunkFiles[i];
-            if (await partFile.exists()) {
-              try {
-                await partFile.delete();
-              } catch (e) {
-                debugPrint('Failed to delete part file $i: $e');
-              }
-            }
-          }
+
+          if (await targetFile.exists()) await targetFile.delete();
+          if (await stateFile.exists()) await stateFile.delete();
+
           // Fallback to single-threaded stream download
           await _downloadSingleThreaded(
             url: url,
