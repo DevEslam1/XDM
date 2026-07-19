@@ -1012,10 +1012,45 @@ class DownloadProvider extends ChangeNotifier
           }
         }
       } catch (e) {
+        final isRetryable = _isRetryableError(e);
+        final maxRetries = _settingsProvider.autoRetryEnabled && isRetryable
+            ? _settingsProvider.maxRetries
+            : 0;
+        final currentRetry = _retryCounts[task.id] ?? 0;
+
+        if (currentRetry < maxRetries) {
+          _retryCounts[task.id] = currentRetry + 1;
+          final delaySeconds = _settingsProvider.retryDelaySeconds;
+          debugPrint(
+            'Transient error resolving stream for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
+          );
+
+          await _setTask(
+            task.copyWith(
+              status: DownloadStatus.queued,
+              speed: 0,
+              errorMessage:
+                  'Retrying in $delaySeconds seconds: ${_errorMessage(e)}',
+            ),
+          );
+
+          _retryTimers[task.id]?.cancel();
+          _retryTimers[task.id] = Timer(Duration(seconds: delaySeconds), () {
+            _retryTimers.remove(task.id);
+            final checkedTask = _findTask(task.id);
+            if (checkedTask != null &&
+                checkedTask.status == DownloadStatus.queued) {
+              pumpQueue();
+            }
+          });
+          return;
+        }
+
+        _retryCounts.remove(task.id);
         await _setTask(
           task.copyWith(
             status: DownloadStatus.failed,
-            errorMessage: 'Failed to resolve YouTube stream: $e',
+            errorMessage: 'Failed to resolve YouTube stream: ${_errorMessage(e)}',
           ),
         );
         pumpQueue();
@@ -1503,22 +1538,28 @@ class DownloadProvider extends ChangeNotifier
               YoutubeService.resetClient();
 
               try {
-                final newUrl = await YoutubeService.refreshStreamUrl(
+                final newUrlInfo = await YoutubeService.refreshStreamUrl(
                   current.downloadPageUrl!,
                   current.url,
                 );
+                final newUrl = newUrlInfo?['url'] as String?;
+                final newFileSize = newUrlInfo?['size'] as int?;
+
                 String? newAudioUrl;
+                int? newAudioSize;
                 if (current.mergedAudioUrl != null) {
-                  newAudioUrl = await YoutubeService.refreshStreamUrl(
+                  final newAudioInfo = await YoutubeService.refreshStreamUrl(
                     current.downloadPageUrl!,
                     current.mergedAudioUrl!,
                   );
+                  newAudioUrl = newAudioInfo?['url'] as String?;
+                  newAudioSize = newAudioInfo?['size'] as int?;
                 }
                 // Only count as refreshed when we have a new *video* URL.
-                // If only newAudioUrl was returned and newUrl is null, resuming
-                // with `newUrl ?? current.url` would reuse the expired video URL
-                // and immediately 403 again.
-                if (newUrl != null) {
+                // If it's a combined download, we MUST ALSO have a new *audio* URL.
+                // Otherwise, resuming with `newUrl ?? current.url` and an expired
+                // audio URL would immediately 403 again on the audio part.
+                if (newUrl != null && (current.mergedAudioUrl == null || newAudioUrl != null)) {
                   debugPrint('[DMX] YouTube URL refreshed successfully.');
                   // Use startOverTask instead of updateTaskUrlAndResume:
                   // updateTaskUrl makes a HEAD request to resolve metadata, but
@@ -1530,6 +1571,9 @@ class DownloadProvider extends ChangeNotifier
                     current.id,
                     newUrl,
                     newAudioUrl: newAudioUrl,
+                    fromError: true,
+                    newFileSize: newFileSize,
+                    newAudioSize: newAudioSize,
                   );
                   refreshed = true;
                   return;
@@ -1544,20 +1588,46 @@ class DownloadProvider extends ChangeNotifier
                 debugPrint('YouTube refresh failed. Trying fresh stream fetch...');
                 YoutubeService.resetClient();
                 try {
-                  final fresh = await YoutubeService.getFreshStreams(
-                    current.downloadPageUrl!,
-                  );
-                  if (fresh != null && fresh['url'] != null) {
-                    debugPrint('[DMX] YouTube fresh stream fetch succeeded.');
-                    await Future.delayed(const Duration(seconds: 2));
-                    // Same reason as above: startOverTask avoids the HEAD→403
-                    // chain that updateTaskUrlAndResume would trigger.
-                    await startOverTask(
-                      current.id,
-                      fresh['url']!,
-                      newAudioUrl: fresh['audioUrl'],
+                  if (current.youtubeQualityPreset != null) {
+                    final videoId = YoutubeService.extractVideoId(current.downloadPageUrl!);
+                    if (videoId != null) {
+                      final streamInfo = await YoutubeService.getStreamForVideo(
+                        videoId,
+                        current.youtubeQualityPreset!,
+                      );
+                      if (streamInfo != null) {
+                        debugPrint('[DMX] YouTube fresh stream fetch (via preset) succeeded.');
+                        await Future.delayed(const Duration(seconds: 2));
+                        await startOverTask(
+                          current.id,
+                          streamInfo['src'] as String,
+                          newAudioUrl: streamInfo['audioSrc'] as String?,
+                          clearAudioUrl: streamInfo['audioSrc'] == null,
+                          fromError: true,
+                          newFileSize: streamInfo['videoSize'] as int?,
+                          newAudioSize: streamInfo['audioSize'] as int?,
+                        );
+                        return;
+                      }
+                    }
+                  } else {
+                    final fresh = await YoutubeService.getFreshStreams(
+                      current.downloadPageUrl!,
                     );
-                    return;
+                    if (fresh != null && fresh['url'] != null) {
+                      debugPrint('[DMX] YouTube fresh stream fetch succeeded.');
+                      await Future.delayed(const Duration(seconds: 2));
+                      // Same reason as above: startOverTask avoids the HEAD→403
+                      // chain that updateTaskUrlAndResume would trigger.
+                      await startOverTask(
+                        current.id,
+                        fresh['url']!,
+                        newAudioUrl: fresh['audioUrl'],
+                        clearAudioUrl: fresh['audioUrl'] == null,
+                        fromError: true,
+                      );
+                      return;
+                    }
                   }
                 } catch (e) {
                   debugPrint('Fresh YouTube stream fetch also failed: $e');
@@ -2186,7 +2256,15 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-  Future<void> startOverTask(String id, String newUrl, {String? newAudioUrl}) async {
+  Future<void> startOverTask(
+    String id,
+    String newUrl, {
+    String? newAudioUrl,
+    bool clearAudioUrl = false,
+    bool fromError = false,
+    int? newFileSize,
+    int? newAudioSize,
+  }) async {
     final task = _findTask(id);
     if (task == null) return;
 
@@ -2194,7 +2272,7 @@ class DownloadProvider extends ChangeNotifier
     _cancelTokens.remove(id);
 
     final activeFuture = _activeFutures[id];
-    if (activeFuture != null) {
+    if (activeFuture != null && !fromError) {
       try {
         await activeFuture;
       } catch (_) {}
@@ -2221,6 +2299,9 @@ class DownloadProvider extends ChangeNotifier
       task.copyWith(
         url: newUrl.trim(),
         mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
+        clearMergedAudioUrl: clearAudioUrl,
+        fileSize: newFileSize ?? task.fileSize,
+        audioSize: newAudioSize ?? task.audioSize,
         status: DownloadStatus.queued,
         downloadedBytes: 0,
         speed: 0,

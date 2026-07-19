@@ -2760,21 +2760,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                 }
 
                                 // Single-video download
-                                final detectedSources = _detectedMediaSources[tabUrl] ?? [];
-                                if (detectedSources.length > 1) {
-                                  _showDetectedMediaSheet(context, tabUrl);
-                                } else {
-                                  final stream = await YoutubeQualitySheet.show(context, tabUrl);
-                                  if (stream != null && context.mounted) {
-                                    if (stream['type'] == 'combined') return;
-                                    final title = stream['title'] as String? ?? 'YouTube Video';
-                                    final ext = stream['ext'] as String? ?? 'mp4';
-                                    _startDirectDownload(
-                                      stream['src'] as String,
-                                      suggestedName: '$title.$ext',
-                                      type: 'video',
-                                    );
-                                  }
+                                final stream = await YoutubeQualitySheet.show(context, tabUrl);
+                                if (stream != null && context.mounted) {
+                                  if (stream['type'] == 'combined') return;
+                                  final title = stream['title'] as String? ?? 'YouTube Video';
+                                  final ext = stream['ext'] as String? ?? 'mp4';
+                                  _startDirectDownload(
+                                    stream['src'] as String,
+                                    suggestedName: '$title.$ext',
+                                    type: 'video',
+                                  );
                                 }
                               },
                             ),

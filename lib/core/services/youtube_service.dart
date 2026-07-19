@@ -321,7 +321,7 @@ class YoutubeService {
   /// back to returning a fresh URL from a stream of the same type as
   /// [oldStreamUrl] (muxed / video‑only / audio‑only). This avoids retrying
   /// the same expired URL when the itag is absent from the URL format.
-  static Future<String?> refreshStreamUrl(
+  static Future<Map<String, dynamic>?> refreshStreamUrl(
     String downloadPageUrl,
     String oldStreamUrl,
   ) async {
@@ -340,12 +340,15 @@ class YoutubeService {
         'Refreshing stream URL for video $videoId, itag=$oldItag',
       );
 
-      String? candidate;
+      Map<String, dynamic>? candidate;
       if (oldItag != null) {
         for (final stream in manifest.streams) {
           final newUri = Uri.tryParse(stream.url.toString());
           if (newUri != null && newUri.queryParameters['itag'] == oldItag) {
-            candidate = stream.url.toString();
+            candidate = {
+              'url': stream.url.toString(),
+              'size': stream.size.totalBytes,
+            };
             break;
           }
         }
@@ -353,12 +356,20 @@ class YoutubeService {
 
       // Fallback: itag not found or absent. Return a fresh URL from the
       // same stream type so the download never stalls on an expired URL.
-      candidate ??= _firstUrlByType(manifest, oldStreamUrl);
+      if (candidate == null) {
+        final fallbackStream = _firstStreamByType(manifest, oldStreamUrl);
+        if (fallbackStream != null) {
+          candidate = {
+            'url': fallbackStream.url.toString(),
+            'size': fallbackStream.size.totalBytes,
+          };
+        }
+      }
 
       // Guard: if the library returned the exact same URL, the manifest is
       // stale / cached. Treat this as a failed refresh so the caller can
       // escalate to getFreshStreams (which recreates the client).
-      if (candidate != null && _urlsAreEquivalent(candidate, oldStreamUrl)) {
+      if (candidate != null && _urlsAreEquivalent(candidate['url'] as String, oldStreamUrl)) {
         Logger.root.warning(
           'refreshStreamUrl: new URL is identical to old URL — manifest is stale. Returning null.',
         );
@@ -431,7 +442,7 @@ class YoutubeService {
 
   /// Returns the first URL from the manifest whose stream type matches the
   /// nature of [oldStreamUrl] (muxed / video‑only / audio‑only).
-  static String? _firstUrlByType(
+  static StreamInfo? _firstStreamByType(
     StreamManifest manifest,
     String oldStreamUrl,
   ) {
@@ -441,21 +452,13 @@ class YoutubeService {
     final isAudio =
         lower.contains('mime%3Daudio') || lower.contains('mime=audio');
     if (isAudio) {
-      for (final s in manifest.audioOnly) {
-        return s.url.toString();
-      }
+      if (manifest.audioOnly.isNotEmpty) return manifest.audioOnly.first;
     }
 
     // Return muxed first (preferred), then video-only.
-    for (final s in manifest.muxed) {
-      return s.url.toString();
-    }
-    for (final s in manifest.videoOnly) {
-      return s.url.toString();
-    }
-    for (final s in manifest.audioOnly) {
-      return s.url.toString();
-    }
+    if (manifest.muxed.isNotEmpty) return manifest.muxed.first;
+    if (manifest.videoOnly.isNotEmpty) return manifest.videoOnly.first;
+    if (manifest.audioOnly.isNotEmpty) return manifest.audioOnly.first;
     return null;
   }
 
