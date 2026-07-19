@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 class YoutubeService {
@@ -46,25 +48,20 @@ class YoutubeService {
   /// Whether the service currently has authentication cookies set.
   static bool get isSignedIn => _cookies != null;
 
-  /// Signs in using cookies from the in-app browser's WebView.
-  /// Call this immediately after the user navigates to youtube.com
-  /// and the page finishes loading.
-  ///
-  /// Note: document.cookie only returns non-HttpOnly cookies. For full
-  /// authentication (including SSID, SID, HSID), use the WebView's
-  /// CookieManager to extract cookies from the jar and pass them to
-  /// [signIn]() directly.
-  ///
-  /// To extract cookies from the WebView:
-  /// ```dart
-  /// final cookies = await controller.runJavaScriptReturningResult(
-  ///   'document.cookie',
-  /// );
-  /// YoutubeService.signInFromBrowser(cookies);
-  /// ```
-  static void signInFromBrowser(String rawDocumentCookie) {
-    if (rawDocumentCookie.trim().isEmpty) return;
-    signIn(rawDocumentCookie.trim());
+  /// Extracts cookies directly from the native WebView cookie jar
+  /// using `webview_cookie_manager` and signs into YouTube. This handles
+  /// HttpOnly cookies like __Secure-3PSID successfully.
+  static Future<void> authenticateFromBrowser() async {
+    try {
+      final cookieManager = WebviewCookieManager();
+      final cookies = await cookieManager.getCookies('https://youtube.com');
+      final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+      if (cookieStr.isNotEmpty) {
+        signIn(cookieStr);
+      }
+    } catch (e) {
+      debugPrint('Failed to authenticate YouTube from browser cookies: $e');
+    }
   }
 
   /// Signs in using cookies from a proper cookie list (e.g. from CookieManager).
@@ -628,7 +625,7 @@ class YoutubeService {
   static Future<Map<String, dynamic>?> getStreamForVideo(
     String videoId,
     String qualityPreset, {
-    bool forceMuxed = true,
+    bool forceMuxed = false,
   }) async {
     final result = await _fetchWithFallback(videoId);
     final manifest = result.manifest;

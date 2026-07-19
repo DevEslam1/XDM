@@ -39,6 +39,7 @@ class FakeDownloadEngine extends DownloadEngine {
   Future<DownloadMetadata> resolveMetadata({
     required String url,
     String? requestedFileName,
+    String? referer,
     String? customUserAgent,
     bool enableProxy = false,
     String? proxyAddress,
@@ -47,6 +48,7 @@ class FakeDownloadEngine extends DownloadEngine {
     String? proxyUsername,
     String? proxyPassword,
     bool bypassSSL = false,
+    String? cookies,
   }) async {
     return DownloadMetadata(
       fileName: requestedFileName ?? 'file.zip',
@@ -69,6 +71,8 @@ class FakeDownloadEngine extends DownloadEngine {
     required int Function() activeDownloadCount,
     int threadCount = 1,
     String? customUserAgent,
+    String? referer,
+    String? cookies,
     bool enableProxy = false,
     String? proxyAddress,
     String? proxyHost,

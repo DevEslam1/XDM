@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 import 'package:dmx/core/services/youtube_service.dart';
 
 void main() async {

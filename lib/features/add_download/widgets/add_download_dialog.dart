@@ -66,6 +66,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
   final bool _isScheduled = false;
   DateTime? _scheduledDateTime;
+  String? _resolvedYoutubeQualityPreset;
 
   bool _isMetadataResolved = false;
   bool _isResolvingLink = false;
@@ -353,6 +354,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               : 'Video';
           _selectedCategory = _resolvedCategory;
           _isMetadataResolved = true;
+          _resolvedYoutubeQualityPreset = (stream['type'] as String? ?? 'muxed') == 'audio' ? 'audio_only' : stream['quality'] as String?;
         });
       }
       return;
@@ -677,6 +679,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       downloadPageUrl:
                           widget.downloadPageUrl ??
                           _referrerController.text.trim(),
+                      youtubeQualityPreset: _resolvedYoutubeQualityPreset,
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;
@@ -736,6 +739,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             _resolvedYoutubePageUrl ??
             widget.downloadPageUrl ??
             _referrerController.text.trim(),
+        youtubeQualityPreset: _resolvedYoutubeQualityPreset,
       );
       if (!mounted) return;
       if (!context.mounted) return;

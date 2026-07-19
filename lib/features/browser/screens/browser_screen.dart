@@ -402,30 +402,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
 
             if (url.contains('youtube.com')) {
-              tab.controller
-                  .runJavaScriptReturningResult('document.cookie')
-                  .then((cookieResult) {
-                    if (cookieResult is String &&
-                        cookieResult.isNotEmpty &&
-                        cookieResult != 'null') {
-                      var cleanCookie = cookieResult;
-                      if (cleanCookie.startsWith('"') &&
-                          cleanCookie.endsWith('"')) {
-                        try {
-                          cleanCookie = jsonDecode(cleanCookie);
-                        } catch (_) {
-                          if (cleanCookie.length > 2) {
-                            cleanCookie = cleanCookie.substring(
-                              1,
-                              cleanCookie.length - 1,
-                            );
-                          }
-                        }
-                      }
-                      YoutubeService.signInFromBrowser(cleanCookie);
-                    }
-                  })
-                  .catchError((_) {});
+              YoutubeService.authenticateFromBrowser();
             }
 
             _updateNavState();

@@ -516,12 +516,13 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     await provider.addDownload(
       name: videoName,
       url: videoUrl,
-      size: videoSize + audioSize, // Show total size
+      size: videoSize + audioSize,
       category: 'Video',
       savePath: savePath,
       downloadPageUrl: widget.videoUrl,
       mergedAudioUrl: audioUrl,
       audioSize: audioSize,
+      youtubeQualityPreset: 'best_combined',
     );
 
     if (!context.mounted) return;

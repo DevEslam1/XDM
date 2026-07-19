@@ -44,6 +44,7 @@ dependencies:
   package_info_plus: ^9.0.1
   drift: ^2.34.2
   sqlite3_flutter_libs: ^0.6.0+eol
+  webview_cookie_manager: ^2.0.6
 
 dev_dependencies:
   flutter_test:
