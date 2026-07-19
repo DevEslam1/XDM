@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'torrent_models.dart';
+import '../../features/settings/provider/settings_provider.dart';
 
 class TorrentService {
   static bool get isSupported => false;
@@ -18,4 +19,6 @@ class TorrentService {
   static List<TorrentFileItem> getFiles(int id) => [];
 
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => const Stream.empty();
+
+  static void applyAdvancedSettings(SettingsProvider settings) {}
 }

@@ -1854,6 +1854,7 @@ class DownloadProvider extends ChangeNotifier
   void _onSettingsChanged() {
     _checkWifiOnlyConstraint();
     updateActualTorrentUploadLimit();
+    TorrentService.applyAdvancedSettings(_settingsProvider);
     pumpQueue();
   }
 

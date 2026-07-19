@@ -594,6 +594,55 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
                         settings: settings,
+                        title: L10n.isRtl(context) ? 'تفعيل DHT' : 'Enable DHT',
+                        subtitle: L10n.isRtl(context) ? 'البحث عن أقران بدون خادم تتبع' : 'Find peers without a tracker',
+                        value: settings.enableDht,
+                        onChanged: (val) {
+                          settings.setEnableDht(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context) ? 'تفعيل UPnP' : 'Enable UPnP',
+                        subtitle: L10n.isRtl(context) ? 'فتح المنافذ تلقائياً في جهاز التوجيه' : 'Automatic port forwarding on router',
+                        value: settings.enableUpnp,
+                        onChanged: (val) {
+                          settings.setEnableUpnp(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context) ? 'فرض التشفير' : 'Force Encryption',
+                        subtitle: L10n.isRtl(context) ? 'الاتصال فقط بالأقران المشفرين' : 'Only connect to encrypted peers',
+                        value: settings.forceEncrypt,
+                        onChanged: (val) {
+                          settings.setForceEncrypt(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSliderTile(
+                        settings: settings,
+                        title: L10n.isRtl(context) ? 'أقصى عدد اتصالات للتورنت' : 'Max Torrent Connections',
+                        subtitle: '${settings.torrentConnectionsLimit} ${L10n.isRtl(context) ? 'اتصال' : 'connections'}',
+                        value: settings.torrentConnectionsLimit.toDouble(),
+                        min: 25.0,
+                        max: 500.0,
+                        divisions: 19,
+                        onChanged: (val) {
+                          settings.setTorrentConnectionsLimit(val.round());
+                        },
+                        onChangeEnd: (val) {
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
                         title: L10n.of(context, 'settings_auto_retry'),
                         subtitle: L10n.of(context, 'settings_auto_retry_sub'),
                         value: settings.autoRetryEnabled,

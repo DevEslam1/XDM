@@ -29,6 +29,10 @@ class SettingsProvider extends ChangeNotifier {
   static const _globalTorrentSeedingKey = 'globalTorrentSeeding';
   static const _globalTorrentSeedingLimitedKey = 'globalTorrentSeedingLimited';
   static const _globalTorrentSeedingLimitKbpsKey = 'globalTorrentSeedingLimitKbps';
+  static const _enableDhtKey = 'enableDht';
+  static const _enableUpnpKey = 'enableUpnp';
+  static const _forceEncryptKey = 'forceEncrypt';
+  static const _torrentConnectionsLimitKey = 'torrentConnectionsLimit';
   static const _defaultThreadCountKey = 'defaultThreadCount';
   static const _customDownloadPathKey = 'customDownloadPath';
   static const _incognitoEnabledKey = 'incognitoEnabled';
@@ -96,6 +100,12 @@ class SettingsProvider extends ChangeNotifier {
   bool globalTorrentSeedingLimited = false;
   int globalTorrentSeedingLimitKbps = 500;
 
+  // Advanced Torrent settings
+  bool enableDht = true;
+  bool enableUpnp = true;
+  bool forceEncrypt = false;
+  int torrentConnectionsLimit = 200;
+
   // Connection settings
   int _defaultThreadCount = 5;
   int get defaultThreadCount => batterySaverMode ? 2 : _defaultThreadCount;
@@ -147,6 +157,10 @@ class SettingsProvider extends ChangeNotifier {
     globalTorrentSeeding = _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
     globalTorrentSeedingLimited = _prefs.getBool(_globalTorrentSeedingLimitedKey) ?? globalTorrentSeedingLimited;
     globalTorrentSeedingLimitKbps = _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ?? globalTorrentSeedingLimitKbps;
+    enableDht = _prefs.getBool(_enableDhtKey) ?? enableDht;
+    enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
+    forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
+    torrentConnectionsLimit = _prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit;
     _defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
     incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
@@ -306,6 +320,30 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setGlobalTorrentSeedingLimitKbps(int value) async {
     globalTorrentSeedingLimitKbps = value;
     await _prefs.setInt(_globalTorrentSeedingLimitKbpsKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnableDht(bool value) async {
+    enableDht = value;
+    await _prefs.setBool(_enableDhtKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnableUpnp(bool value) async {
+    enableUpnp = value;
+    await _prefs.setBool(_enableUpnpKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setForceEncrypt(bool value) async {
+    forceEncrypt = value;
+    await _prefs.setBool(_forceEncryptKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setTorrentConnectionsLimit(int value) async {
+    torrentConnectionsLimit = value;
+    await _prefs.setInt(_torrentConnectionsLimitKey, value);
     notifyListeners();
   }
 
@@ -489,6 +527,10 @@ class SettingsProvider extends ChangeNotifier {
       _globalTorrentSeedingKey,
       _globalTorrentSeedingLimitedKey,
       _globalTorrentSeedingLimitKbpsKey,
+      _enableDhtKey,
+      _enableUpnpKey,
+      _forceEncryptKey,
+      _torrentConnectionsLimitKey,
       _defaultThreadCountKey,
       _customDownloadPathKey,
       _incognitoEnabledKey,
@@ -540,6 +582,10 @@ class SettingsProvider extends ChangeNotifier {
     globalTorrentSeeding = true;
     globalTorrentSeedingLimited = false;
     globalTorrentSeedingLimitKbps = 500;
+    enableDht = true;
+    enableUpnp = true;
+    forceEncrypt = false;
+    torrentConnectionsLimit = 200;
     _defaultThreadCount = 5;
     incognitoEnabled = false;
     desktopMode = false;

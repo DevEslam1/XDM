@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes;
 import 'package:logging/logging.dart';
+import '../../features/settings/provider/settings_provider.dart';
 import 'torrent_models.dart';
 
 class TorrentService {
@@ -144,6 +145,24 @@ class TorrentService {
         LibtorrentFlutter.instance.setUploadLimit(bps);
       } catch (e) {
         _log.warning('setUploadLimit failed: $e');
+      }
+    }
+  }
+
+  static void applyAdvancedSettings(SettingsProvider settings) {
+    _startTrackingUpdates();
+    if (isInitialized) {
+      try {
+        final currentConfig = LibtorrentFlutter.instance.getDefaultConfig();
+        final newConfig = currentConfig.copyWith(
+          disableDht: !settings.enableDht,
+          disableUpnp: !settings.enableUpnp,
+          forceEncrypt: settings.forceEncrypt,
+          connectionsLimit: settings.torrentConnectionsLimit,
+        );
+        LibtorrentFlutter.instance.configureSession(newConfig);
+      } catch (e) {
+        _log.warning('applyAdvancedSettings failed: $e');
       }
     }
   }
