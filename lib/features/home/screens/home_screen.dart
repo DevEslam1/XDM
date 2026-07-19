@@ -37,21 +37,24 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
-    final isDark = settings.isDarkMode;
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final isRtl = L10n.isRtl(context);
+    return Selector<SettingsProvider, ({bool isDarkMode, bool classicUi})>(
+      selector: (_, s) => (isDarkMode: s.isDarkMode, classicUi: s.classicUi),
+      builder: (context, settingsState, _) {
+        final isDark = settingsState.isDarkMode;
+        final classicUi = settingsState.classicUi;
+        final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+        final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        final isRtl = L10n.isRtl(context);
 
-    return GeometricGridBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
+        return GeometricGridBackground(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
         appBar: AppBar(
-          backgroundColor: settings.classicUi
+          backgroundColor: classicUi
               ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
               : Colors.transparent,
           elevation: 0,
-          shape: settings.classicUi
+          shape: classicUi
               ? Border(
                   bottom: BorderSide(
                     color: isDark ? AppTheme.border : AppTheme.lightBorder,
@@ -116,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 ),
                 tooltip: isRtl ? 'تحليل التخزين' : 'STORAGE ANALYTICS',
                 onPressed: () {
-                  triggerHaptic(settings);
+                  triggerHaptic(context.read<SettingsProvider>());
                   setState(() {
                     _showAnalytics = !_showAnalytics;
                   });
@@ -128,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 color: textClr,
               ),
               onPressed: () {
-                triggerHaptic(settings);
+                triggerHaptic(context.read<SettingsProvider>());
                 setState(() {
                   if (_isSearching) {
                     _isSearching = false;
@@ -163,11 +166,19 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                               horizontal: 16.0,
                               vertical: 8.0,
                             ),
-                            child: Consumer<DownloadProvider>(
-                              builder: (context, provider, _) =>
+                            child: Selector<DownloadProvider, Map<String, double>>(
+                              selector: (_, provider) => provider.categorySizes,
+                              shouldRebuild: (prev, next) {
+                                if (prev.length != next.length) return true;
+                                for (final key in prev.keys) {
+                                  if (prev[key] != next[key]) return true;
+                                }
+                                return false;
+                              },
+                              builder: (context, categorySizes, _) =>
                                   _DonutChartPanel(
-                                    provider: provider,
-                                    settings: settings,
+                                    categorySizes: categorySizes,
+                                    settings: context.read<SettingsProvider>(),
                                   ),
                             ),
                           )
@@ -222,7 +233,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     selectedTab: _selectedTab,
                     isDark: isDark,
                     isRtl: isRtl,
-                    settings: settings,
+                    settings: context.read<SettingsProvider>(),
                   ),
                   const SizedBox(height: 10),
 
@@ -232,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                       selectedTab: _selectedTab,
                       isDark: isDark,
                       isRtl: isRtl,
-                      settings: settings,
+                      settings: context.read<SettingsProvider>(),
                     ),
                   ),
                 ],
@@ -244,7 +255,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).padding.bottom + 8.0,
           ),
-          child: settings.classicUi
+          child: classicUi
               ? FloatingActionButton(
                   heroTag: null,
                   backgroundColor: isDark
@@ -258,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   ),
                   child: const Icon(Icons.add, size: 28),
                   onPressed: () {
-                    triggerHaptic(settings);
+                    triggerHaptic(context.read<SettingsProvider>());
                     showDialog(
                       context: context,
                       builder: (_) => const AddDownloadDialog(),
@@ -293,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                     ),
                     child: const Icon(Icons.add, size: 28),
                     onPressed: () {
-                      triggerHaptic(settings);
+                      triggerHaptic(context.read<SettingsProvider>());
                       showDialog(
                         context: context,
                         builder: (_) => const AddDownloadDialog(),
@@ -303,6 +314,8 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 ),
         ),
       ),
+    );
+      },
     );
   }
 
@@ -449,86 +462,92 @@ class _DownloadControlsRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          PopupMenuButton<SortOption>(
-            tooltip: 'SORT CHANNELS',
-            color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: isDark
-                    ? AppTheme.glassBorder
-                    : AppTheme.lightGlassBorder,
-                width: 0.6,
-              ),
-            ),
-            onSelected: (option) {
-              if (provider.sortOption == option) {
-                provider.toggleSortDirection();
-              } else {
-                provider.setSortOption(option);
-              }
-            },
-            itemBuilder: (context) => [
-              _buildSortMenuItem(
-                option: SortOption.dateAdded,
-                label: L10n.of(context, 'sort_date'),
-                currentOption: provider.sortOption,
-                ascending: provider.sortAscending,
-                isDark: isDark,
-              ),
-              _buildSortMenuItem(
-                option: SortOption.fileSize,
-                label: L10n.of(context, 'details_size'),
-                currentOption: provider.sortOption,
-                ascending: provider.sortAscending,
-                isDark: isDark,
-              ),
-              _buildSortMenuItem(
-                option: SortOption.fileName,
-                label: L10n.of(context, 'details_filename'),
-                currentOption: provider.sortOption,
-                ascending: provider.sortAscending,
-                isDark: isDark,
-              ),
-              _buildSortMenuItem(
-                option: SortOption.status,
-                label: L10n.of(context, 'sort_status'),
-                currentOption: provider.sortOption,
-                ascending: provider.sortAscending,
-                isDark: isDark,
-              ),
-            ],
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0x1F000000)
-                    : const Color(0x0A000000),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isDark
-                      ? AppTheme.glassBorder
-                      : AppTheme.lightGlassBorder,
-                  width: 0.8,
+          Selector<DownloadProvider, ({SortOption option, bool ascending})>(
+            selector: (_, p) => (option: p.sortOption, ascending: p.sortAscending),
+            builder: (context, sortState, _) {
+              return PopupMenuButton<SortOption>(
+                tooltip: 'SORT CHANNELS',
+                color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: isDark
+                        ? AppTheme.glassBorder
+                        : AppTheme.lightGlassBorder,
+                    width: 0.6,
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.sort_rounded, color: textClr, size: 14),
-                  const SizedBox(width: 6),
-                  Text(
-                    isRtl ? 'فرز' : 'SORT',
-                    style: TextStyle(
-                      color: textClr,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
+                onSelected: (option) {
+                  final p = context.read<DownloadProvider>();
+                  if (p.sortOption == option) {
+                    p.toggleSortDirection();
+                  } else {
+                    p.setSortOption(option);
+                  }
+                },
+                itemBuilder: (context) => [
+                  _buildSortMenuItem(
+                    option: SortOption.dateAdded,
+                    label: L10n.of(context, 'sort_date'),
+                    currentOption: sortState.option,
+                    ascending: sortState.ascending,
+                    isDark: isDark,
+                  ),
+                  _buildSortMenuItem(
+                    option: SortOption.fileSize,
+                    label: L10n.of(context, 'details_size'),
+                    currentOption: sortState.option,
+                    ascending: sortState.ascending,
+                    isDark: isDark,
+                  ),
+                  _buildSortMenuItem(
+                    option: SortOption.fileName,
+                    label: L10n.of(context, 'details_filename'),
+                    currentOption: sortState.option,
+                    ascending: sortState.ascending,
+                    isDark: isDark,
+                  ),
+                  _buildSortMenuItem(
+                    option: SortOption.status,
+                    label: L10n.of(context, 'sort_status'),
+                    currentOption: sortState.option,
+                    ascending: sortState.ascending,
+                    isDark: isDark,
                   ),
                 ],
-              ),
-            ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0x1F000000)
+                        : const Color(0x0A000000),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder,
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.sort_rounded, color: textClr, size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        isRtl ? 'فرز' : 'SORT',
+                        style: TextStyle(
+                          color: textClr,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
           Selector<DownloadProvider, int>(
             selector: (_, p) => p.filteredTasks.length,
@@ -705,14 +724,9 @@ class _DownloadTaskList extends StatelessWidget {
                   ),
                   itemCount: displayTasks.length,
                   itemBuilder: (context, index) => RepaintBoundary(
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        bottom: index == displayTasks.length - 1 ? 0 : 0,
-                      ),
-                      child: DownloadCard(
-                        task: displayTasks[index],
-                        compact: true,
-                      ),
+                    child: DownloadCard(
+                      task: displayTasks[index],
+                      compact: true,
                     ),
                   ),
                 ),
@@ -804,10 +818,10 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _DonutChartPanel extends StatelessWidget {
-  final DownloadProvider provider;
+  final Map<String, double> categorySizes;
   final SettingsProvider settings;
 
-  const _DonutChartPanel({required this.provider, required this.settings});
+  const _DonutChartPanel({required this.categorySizes, required this.settings});
 
   @override
   Widget build(BuildContext context) {
@@ -815,7 +829,7 @@ class _DonutChartPanel extends StatelessWidget {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final isRtl = L10n.isRtl(context);
-    final sizes = provider.categorySizes;
+    final sizes = categorySizes;
     final totalSizeMb = sizes.values.fold(0.0, (sum, val) => sum + val);
 
     final categoryCards = [
@@ -959,58 +973,70 @@ class _DonutChartPanel extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: isTabletDevice
-                ? Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: categoryCards.take(3).map((card) {
-                            return _buildLegendItem(
-                              card,
-                              sizes,
-                              totalSizeMb,
-                              textClr,
-                              isDark,
-                              isRtl,
-                            );
-                          }).toList(),
-                        ),
+            child: hasNoData
+                ? Center(
+                    child: Text(
+                      isRtl ? 'لا توجد بيانات' : 'NO DATA AVAILABLE',
+                      style: TextStyle(
+                        color: mutedClr,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: categoryCards.skip(3).map((card) {
-                            return _buildLegendItem(
-                              card,
-                              sizes,
-                              totalSizeMb,
-                              textClr,
-                              isDark,
-                              isRtl,
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
+                    ),
                   )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: categoryCards.map((card) {
-                      return _buildLegendItem(
-                        card,
-                        sizes,
-                        totalSizeMb,
-                        textClr,
-                        isDark,
-                        isRtl,
-                      );
-                    }).toList(),
-                  ),
+                : isTabletDevice
+                    ? Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: categoryCards.take(3).map((card) {
+                                return _buildLegendItem(
+                                  card,
+                                  sizes,
+                                  totalSizeMb,
+                                  textClr,
+                                  isDark,
+                                  isRtl,
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: categoryCards.skip(3).map((card) {
+                                return _buildLegendItem(
+                                  card,
+                                  sizes,
+                                  totalSizeMb,
+                                  textClr,
+                                  isDark,
+                                  isRtl,
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: categoryCards.map((card) {
+                          return _buildLegendItem(
+                            card,
+                            sizes,
+                            totalSizeMb,
+                            textClr,
+                            isDark,
+                            isRtl,
+                          );
+                        }).toList(),
+                      ),
           ),
         ],
       ),
@@ -1116,8 +1142,13 @@ void _showClearHistoryDialog(
     context: context,
     builder: (ctx) {
       final tasksToClear = provider.filteredTasks.where((task) {
-        return task.status == DownloadStatus.completed ||
-            task.status == DownloadStatus.failed;
+        final isSeeding =
+            task.status == DownloadStatus.completed &&
+            task.isTorrent &&
+            task.seedingEnabled;
+        return (task.status == DownloadStatus.completed ||
+                task.status == DownloadStatus.failed) &&
+            !isSeeding;
       }).toList();
 
       return Directionality(

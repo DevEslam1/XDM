@@ -116,12 +116,12 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       body: screenType == ScreenType.desktop
           ? Row(
               children: [
-                _buildNavigationRail(
-                  settings,
-                  downloadProvider,
-                  isDark,
-                  isRtl,
-                  currentIndex,
+                _NavigationRailWidget(
+                  settings: settings,
+                  downloadProvider: downloadProvider,
+                  isDark: isDark,
+                  isRtl: isRtl,
+                  currentIndex: currentIndex,
                 ),
                 const VerticalDivider(width: 1),
                 Expanded(child: bodyContent),
@@ -129,35 +129,43 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             )
           : bodyContent,
       bottomNavigationBar: screenType == ScreenType.phone
-          ? _buildPhoneBottomNavigationBar(
-              context,
-              settings,
-              downloadProvider,
-              isDark,
-              isRtl,
-              currentIndex,
+          ? _PhoneBottomNavBar(
+              settings: settings,
+              downloadProvider: downloadProvider,
+              isDark: isDark,
+              isRtl: isRtl,
+              currentIndex: currentIndex,
             )
           : screenType == ScreenType.tablet
-          ? _buildTabletFloatingBottomNavigationBar(
-              context,
-              settings,
-              downloadProvider,
-              isDark,
-              isRtl,
-              currentIndex,
+          ? _TabletFloatingNavBar(
+              settings: settings,
+              downloadProvider: downloadProvider,
+              isDark: isDark,
+              isRtl: isRtl,
+              currentIndex: currentIndex,
             )
           : null,
     );
   }
+}
 
-  Widget _buildPhoneBottomNavigationBar(
-    BuildContext context,
-    SettingsProvider settings,
-    DownloadProvider downloadProvider,
-    bool isDark,
-    bool isRtl,
-    int currentIndex,
-  ) {
+class _PhoneBottomNavBar extends StatelessWidget {
+  final SettingsProvider settings;
+  final DownloadProvider downloadProvider;
+  final bool isDark;
+  final bool isRtl;
+  final int currentIndex;
+
+  const _PhoneBottomNavBar({
+    required this.settings,
+    required this.downloadProvider,
+    required this.isDark,
+    required this.isRtl,
+    required this.currentIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return AnimatedSlide(
       offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
           ? Offset.zero
@@ -200,23 +208,35 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildNavItem(
+                      _NavItem(
                         index: 0,
                         icon: Icons.file_download_outlined,
                         activeIcon: Icons.file_download,
                         label: L10n.of(context, 'title_transmissions'),
+                        settings: settings,
+                        downloadProvider: downloadProvider,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
                       ),
-                      _buildNavItem(
+                      _NavItem(
                         index: 1,
                         icon: Icons.language_outlined,
                         activeIcon: Icons.language,
                         label: L10n.of(context, 'title_browser'),
+                        settings: settings,
+                        downloadProvider: downloadProvider,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
                       ),
-                      _buildNavItem(
+                      _NavItem(
                         index: 2,
                         icon: Icons.settings_outlined,
                         activeIcon: Icons.settings_rounded,
                         label: L10n.of(context, 'title_config'),
+                        settings: settings,
+                        downloadProvider: downloadProvider,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
                       ),
                     ],
                   ),
@@ -228,15 +248,25 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       ),
     );
   }
+}
 
-  Widget _buildTabletFloatingBottomNavigationBar(
-    BuildContext context,
-    SettingsProvider settings,
-    DownloadProvider downloadProvider,
-    bool isDark,
-    bool isRtl,
-    int currentIndex,
-  ) {
+class _TabletFloatingNavBar extends StatelessWidget {
+  final SettingsProvider settings;
+  final DownloadProvider downloadProvider;
+  final bool isDark;
+  final bool isRtl;
+  final int currentIndex;
+
+  const _TabletFloatingNavBar({
+    required this.settings,
+    required this.downloadProvider,
+    required this.isDark,
+    required this.isRtl,
+    required this.currentIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return AnimatedSlide(
       offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
           ? Offset.zero
@@ -291,23 +321,35 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildNavItem(
+                      _NavItem(
                         index: 0,
                         icon: Icons.file_download_outlined,
                         activeIcon: Icons.file_download,
                         label: L10n.of(context, 'title_transmissions'),
+                        settings: settings,
+                        downloadProvider: downloadProvider,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
                       ),
-                      _buildNavItem(
+                      _NavItem(
                         index: 1,
                         icon: Icons.language_outlined,
                         activeIcon: Icons.language,
                         label: L10n.of(context, 'title_browser'),
+                        settings: settings,
+                        downloadProvider: downloadProvider,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
                       ),
-                      _buildNavItem(
+                      _NavItem(
                         index: 2,
                         icon: Icons.settings_outlined,
                         activeIcon: Icons.settings_rounded,
                         label: L10n.of(context, 'title_config'),
+                        settings: settings,
+                        downloadProvider: downloadProvider,
+                        isDark: isDark,
+                        currentIndex: currentIndex,
                       ),
                     ],
                   ),
@@ -319,14 +361,25 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       ),
     );
   }
+}
 
-  Widget _buildNavigationRail(
-    SettingsProvider settings,
-    DownloadProvider downloadProvider,
-    bool isDark,
-    bool isRtl,
-    int currentIndex,
-  ) {
+class _NavigationRailWidget extends StatelessWidget {
+  final SettingsProvider settings;
+  final DownloadProvider downloadProvider;
+  final bool isDark;
+  final bool isRtl;
+  final int currentIndex;
+
+  const _NavigationRailWidget({
+    required this.settings,
+    required this.downloadProvider,
+    required this.isDark,
+    required this.isRtl,
+    required this.currentIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final inactiveColor = isDark
         ? AppTheme.textSecondary
@@ -340,12 +393,19 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
             alpha: 0.85,
           ),
-          border: Border(
-            right: BorderSide(
-              color: isDark ? AppTheme.border : AppTheme.lightBorder,
-              width: 1.0,
-            ),
-          ),
+          border: isRtl
+              ? Border(
+                  left: BorderSide(
+                    color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                    width: 1.0,
+                  ),
+                )
+              : Border(
+                  right: BorderSide(
+                    color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                    width: 1.0,
+                  ),
+                ),
         ),
         child: SafeArea(
           child: Column(
@@ -360,7 +420,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                 ),
               ),
               const SizedBox(height: 8),
-              _buildRailItem(
+              _RailItem(
                 index: 0,
                 icon: Icons.file_download_outlined,
                 selectedIcon: Icons.file_download,
@@ -373,7 +433,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   downloadProvider.setActiveTabIndex(0);
                 },
               ),
-              _buildRailItem(
+              _RailItem(
                 index: 1,
                 icon: Icons.language_outlined,
                 selectedIcon: Icons.language,
@@ -386,7 +446,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   downloadProvider.setActiveTabIndex(1);
                 },
               ),
-              _buildRailItem(
+              _RailItem(
                 index: 2,
                 icon: Icons.settings_outlined,
                 selectedIcon: Icons.settings_rounded,
@@ -405,17 +465,31 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       ),
     );
   }
+}
 
-  Widget _buildRailItem({
-    required int index,
-    required IconData icon,
-    required IconData selectedIcon,
-    required String label,
-    required bool isSelected,
-    required Color activeColor,
-    required Color inactiveColor,
-    required VoidCallback onTap,
-  }) {
+class _RailItem extends StatelessWidget {
+  final int index;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool isSelected;
+  final Color activeColor;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+
+  const _RailItem({
+    required this.index,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.isSelected,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? selectedIcon : icon;
 
@@ -456,20 +530,31 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       ),
     );
   }
+}
 
-  Widget _buildNavItem({
-    required int index,
-    required IconData icon,
-    required IconData activeIcon,
-    required String label,
-  }) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final downloadProvider = Provider.of<DownloadProvider>(
-      context,
-      listen: false,
-    );
-    final isDark = settings.isDarkMode;
-    final currentIndex = downloadProvider.activeTabIndex;
+class _NavItem extends StatelessWidget {
+  final int index;
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final SettingsProvider settings;
+  final DownloadProvider downloadProvider;
+  final bool isDark;
+  final int currentIndex;
+
+  const _NavItem({
+    required this.index,
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.settings,
+    required this.downloadProvider,
+    required this.isDark,
+    required this.currentIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final inactiveColor = isDark

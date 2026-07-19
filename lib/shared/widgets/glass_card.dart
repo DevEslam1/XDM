@@ -23,8 +23,8 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.read<SettingsProvider>();
-    if (settings.classicUi || !enableBlur) {
+    final classicUi = context.select((SettingsProvider s) => s.classicUi);
+    if (classicUi || !enableBlur) {
       return Container(
         padding: padding,
         decoration: BoxDecoration(

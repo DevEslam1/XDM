@@ -79,6 +79,7 @@ class SettingsProvider extends ChangeNotifier {
   set isDarkMode(bool value) {
     _isDarkMode = value;
     _prefs.setBool(_isDarkModeKey, value);
+    notifyListeners();
   }
   String themeMode = 'system';
   bool showOnboarding = true;
@@ -127,8 +128,19 @@ class SettingsProvider extends ChangeNotifier {
   int retryDelaySeconds = 10;
   String searchEngine = 'Google';
 
+  void _onPlatformBrightnessChanged() {
+    if (themeMode == 'system') {
+      final newDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+      if (newDark != _isDarkMode) {
+        _isDarkMode = newDark;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
+    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = _onPlatformBrightnessChanged;
     autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
     _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
     speedLimitMb = _prefs.getDouble(_speedLimitKey) ?? speedLimitMb;
@@ -439,8 +451,6 @@ class SettingsProvider extends ChangeNotifier {
     themeMode = value;
     await _prefs.setString(_themeModeKey, value);
     isDarkMode = (value == 'dark');
-    await _prefs.setBool(_isDarkModeKey, isDarkMode);
-    notifyListeners();
   }
 
   Future<void> setNotificationsEnabled(bool value) async {
@@ -556,9 +566,12 @@ class SettingsProvider extends ChangeNotifier {
         await _prefs.remove(key);
       }
     }
+    _isDarkMode = true;
+    _classicUi = true;
+    _maxDownloads = 3;
+    _defaultThreadCount = 5;
     autoStart = true;
     customDownloadPath = null;
-    _maxDownloads = 3;
     speedLimitMb = 0.0;
     enableGlow = true;
     gridOpacity = 12.0;
@@ -567,11 +580,8 @@ class SettingsProvider extends ChangeNotifier {
     wifiOnly = false;
     languageCode = 'en';
     themeMode = 'system';
-    isDarkMode = true;
     showOnboarding = true;
-    _classicUi = true;
     batterySaverMode = false;
-
     enableProxy = false;
     proxyAddress = '';
     bypassSSL = false;
@@ -586,7 +596,6 @@ class SettingsProvider extends ChangeNotifier {
     enableUpnp = true;
     forceEncrypt = false;
     torrentConnectionsLimit = 200;
-    _defaultThreadCount = 5;
     incognitoEnabled = false;
     desktopMode = false;
     adBlockerEnabled = true;
@@ -601,7 +610,55 @@ class SettingsProvider extends ChangeNotifier {
     maxRetries = 3;
     retryDelaySeconds = 10;
     searchEngine = 'Google';
-    await load();
+
+    await _prefs.setBool(_isDarkModeKey, _isDarkMode);
+    await _prefs.setBool(_classicUiKey, _classicUi);
+    await _prefs.setInt(_maxDownloadsKey, _maxDownloads);
+    await _prefs.setInt(_defaultThreadCountKey, _defaultThreadCount);
+    await _prefs.setBool(_autoStartKey, autoStart);
+    await _prefs.setDouble(_speedLimitKey, speedLimitMb);
+    await _prefs.setBool(_enableGlowKey, enableGlow);
+    await _prefs.setDouble(_gridOpacityKey, gridOpacity);
+    await _prefs.setBool(_soundNotificationKey, soundNotification);
+    await _prefs.setBool(_vibrationKey, vibration);
+    await _prefs.setBool(_wifiOnlyKey, wifiOnly);
+    await _prefs.setString(_languageCodeKey, languageCode);
+    await _prefs.setString(_themeModeKey, themeMode);
+    await _prefs.setBool(_showOnboardingKey, showOnboarding);
+    await _prefs.setBool(_batterySaverModeKey, batterySaverMode);
+    await _prefs.setBool(_enableProxyKey, enableProxy);
+    await _prefs.setString(_proxyAddressKey, proxyAddress);
+    await _prefs.setBool(_bypassSSLKey, bypassSSL);
+    await _prefs.setBool(_reduceVisualsKey, reduceVisuals);
+    await _prefs.setString(_customUserAgentKey, customUserAgent);
+    await _prefs.setInt(_cleanupDaysKey, cleanupDays);
+    await _prefs.setBool(_categoryFoldersKey, categoryFolders);
+    await _prefs.setBool(_globalTorrentSeedingKey, globalTorrentSeeding);
+    await _prefs.setBool(_globalTorrentSeedingLimitedKey, globalTorrentSeedingLimited);
+    await _prefs.setInt(_globalTorrentSeedingLimitKbpsKey, globalTorrentSeedingLimitKbps);
+    await _prefs.setBool(_enableDhtKey, enableDht);
+    await _prefs.setBool(_enableUpnpKey, enableUpnp);
+    await _prefs.setBool(_forceEncryptKey, forceEncrypt);
+    await _prefs.setInt(_torrentConnectionsLimitKey, torrentConnectionsLimit);
+    await _prefs.setBool(_incognitoEnabledKey, incognitoEnabled);
+    await _prefs.setBool(_desktopModeKey, desktopMode);
+    await _prefs.setBool(_adBlockerEnabledKey, adBlockerEnabled);
+    await _prefs.setBool(_pinchToZoomKey, pinchToZoom);
+    await _prefs.setBool(_saveBrowserHistoryKey, saveBrowserHistory);
+    await _prefs.setBool(_notificationsEnabledKey, notificationsEnabled);
+    await _prefs.setString(_proxyHostKey, proxyHost);
+    await _prefs.setInt(_proxyPortKey, proxyPort);
+    await _prefs.setString(_proxyUsernameKey, proxyUsername);
+    await _prefs.setBool(_autoRetryEnabledKey, autoRetryEnabled);
+    await _prefs.setInt(_maxRetriesKey, maxRetries);
+    await _prefs.setInt(_retryDelaySecondsKey, retryDelaySeconds);
+    await _prefs.setString(_searchEngineKey, searchEngine);
+    if (customDownloadPath != null) {
+      await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
+    }
+    if (proxyPassword.isNotEmpty) {
+      await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
+    }
     notifyListeners();
   }
 }

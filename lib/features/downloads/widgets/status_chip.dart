@@ -60,6 +60,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
     _controller?.dispose();
     _controller = null;
     _pulseAnimation = null;
+    setState(() {});
   }
 
   @override
@@ -71,7 +72,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.read<SettingsProvider>().isDarkMode;
+    final isDark = context.watch<SettingsProvider>().isDarkMode;
 
     Color color;
     String label;
@@ -107,70 +108,80 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
     }
 
     final isPulseActive = _shouldPulse(task) && _pulseAnimation != null;
-
-    final chipContent = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: isPulseActive
-          ? BoxDecoration(
-              color: color.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: color.withValues(alpha: 0.45 * _pulseAnimation!.value),
-                width: 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.08 * _pulseAnimation!.value),
-                  blurRadius: 6.0,
-                  spreadRadius: 0.5,
-                ),
-              ],
-            )
-          : BoxDecoration(
-              color: color.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
-            ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.0,
-        ),
-      ),
+    final textWidget = Text(
+      label,
+      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: color,
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.0,
+          ),
     );
 
     if (isPulseActive) {
       return AnimatedBuilder(
         animation: _pulseAnimation!,
-        child: chipContent,
+        child: textWidget,
         builder: (context, child) {
-          final pulse = _pulseAnimation!.value;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: color.withValues(alpha: 0.45 * pulse),
-                width: 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.08 * pulse),
-                  blurRadius: 6.0,
-                  spreadRadius: 0.5,
-                ),
-              ],
-            ),
-            child: child,
+          return _buildChipContent(
+            context,
+            color: color,
+            label: label,
+            pulseValue: _pulseAnimation!.value,
+            isPulsing: true,
+            textWidget: child,
           );
         },
       );
     }
 
-    return chipContent;
+    return _buildChipContent(
+      context,
+      color: color,
+      label: label,
+      pulseValue: 1.0,
+      isPulsing: false,
+      textWidget: textWidget,
+    );
+  }
+
+  Widget _buildChipContent(
+    BuildContext context, {
+    required Color color,
+    required String label,
+    required double pulseValue,
+    required bool isPulsing,
+    Widget? textWidget,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: isPulsing ? 0.45 * pulseValue : 0.3),
+          width: 0.8,
+        ),
+        boxShadow: isPulsing
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.08 * pulseValue),
+                  blurRadius: 6.0,
+                  spreadRadius: 0.5,
+                ),
+              ]
+            : null,
+      ),
+      child: textWidget ??
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                ),
+          ),
+    );
   }
 }

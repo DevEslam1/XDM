@@ -1127,7 +1127,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                                       color: isDark
                                           ? AppTheme.neonRed
                                           : AppTheme.lightNeonRed,
-                                      fontSize: 10,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -1293,7 +1293,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   color: mutedClr,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.8,
-                  fontSize: 9,
+                  fontSize: 11,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1326,7 +1326,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 L10n.of(context, 'settings_developer'),
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   color: accentClr,
-                  fontSize: 9,
+                  fontSize: 11,
                   letterSpacing: 1.0,
                   fontWeight: FontWeight.bold,
                 ),
@@ -1444,7 +1444,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: secClr, fontSize: 9)),
+                  Text(subtitle, style: TextStyle(color: secClr, fontSize: 11)),
                 ],
               ),
             ),
@@ -1504,7 +1504,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                               color: settings.isDarkMode
                                   ? AppTheme.textSecondary
                                   : AppTheme.lightTextSecondary,
-                              fontSize: 9,
+                              fontSize: 11,
                               letterSpacing: 1.0,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1574,7 +1574,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           fontWeight: FontWeight.bold,
         ),
       ),
-      subtitle: Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
+      subtitle: Text(subtitle, style: TextStyle(color: subClr, fontSize: 12)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1631,7 +1631,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           fontWeight: FontWeight.bold,
         ),
       ),
-      subtitle: Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
+      subtitle: Text(subtitle, style: TextStyle(color: subClr, fontSize: 12)),
     );
   }
 
@@ -1737,7 +1737,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
+                Text(subtitle, style: TextStyle(color: subClr, fontSize: 12)),
               ],
             ),
           ),
@@ -1806,7 +1806,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
             ),
           ),
           const SizedBox(height: 2),
-          Text(subtitle, style: TextStyle(color: subClr, fontSize: 10)),
+          Text(subtitle, style: TextStyle(color: subClr, fontSize: 12)),
           const SizedBox(height: 8),
           Container(
             height: 42,
@@ -1878,7 +1878,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       isRtl
                           ? 'تحديث يدوي لقوائم حجب الإعلانات والتعقب'
                           : 'Manually download and update ad & tracker blocklists',
-                      style: TextStyle(color: subClr, fontSize: 10),
+                      style: TextStyle(color: subClr, fontSize: 12),
                     ),
                   ],
                 ),
@@ -1984,7 +1984,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           const SizedBox(height: 2),
           Text(
             L10n.of(context, 'settings_backup_sub'),
-            style: TextStyle(color: subClr, fontSize: 10),
+            style: TextStyle(color: subClr, fontSize: 12),
           ),
           const SizedBox(height: 12),
           Row(
@@ -2193,7 +2193,7 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                   isRtl
                       ? 'يقيد قنوات الاتصال إلى ٢، والتحميلات المتزامنة إلى ١، ويفرض الواجهة الكلاسيكية لتوفير الطاقة'
                       : 'Limits threads to 2, downloads to 1, and forces Classic UI to save battery',
-                  style: TextStyle(color: subClr, fontSize: 10),
+                  style: TextStyle(color: subClr, fontSize: 12),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2225,7 +2225,7 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                   isRtl
                       ? 'إيقاف تأثيرات التوهج والضبابية لتحسين الأداء على الأجهزة الضعيفة'
                       : 'Disable glow and blur effects to improve performance on low-end devices',
-                  style: TextStyle(color: subClr, fontSize: 10),
+                  style: TextStyle(color: subClr, fontSize: 12),
                 ),
               ),
             ],
@@ -2267,7 +2267,7 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                     color: isDark
                         ? AppTheme.textMuted
                         : AppTheme.lightTextMuted,
-                    fontSize: 9,
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
                   ),
@@ -2307,7 +2307,7 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
             color: isDark
                 ? AppTheme.textSecondary
                 : AppTheme.lightTextSecondary,
-            fontSize: 10,
+            fontSize: 12,
           ),
         ),
         Text(
@@ -2316,7 +2316,7 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
             color:
                 valueColor ??
                 (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.bold,
           ),
         ),

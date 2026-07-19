@@ -17,8 +17,9 @@ class DmxBackdropFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    if (settings.reduceVisuals || settings.classicUi) {
+    final reduceVisuals = context.select((SettingsProvider s) => s.reduceVisuals);
+    final classicUi = context.select((SettingsProvider s) => s.classicUi);
+    if (reduceVisuals || classicUi) {
       return child;
     }
     return BackdropFilter(

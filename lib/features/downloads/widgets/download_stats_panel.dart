@@ -11,124 +11,133 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.read<SettingsProvider>();
-    final isDark = settings.isDarkMode;
+    return Selector<SettingsProvider, ({bool isDark, bool classicUi})>(
+      selector: (_, settings) => (isDark: settings.isDarkMode, classicUi: settings.classicUi),
+      builder: (context, settingsState, _) {
+        final isDark = settingsState.isDark;
+        final classicUi = settingsState.classicUi;
 
-    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final dividerClr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+        final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+        final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+        final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+        final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+        final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+        final dividerClr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
 
-    final isRtl = L10n.isRtl(context);
+        final isRtl = L10n.isRtl(context);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: settings.classicUi
-          ? BoxDecoration(
-              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              border: Border.all(color: isDark ? AppTheme.border : AppTheme.lightBorder, width: 1.0),
-              borderRadius: BorderRadius.circular(20),
-            )
-          : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Selector<DownloadProvider, _StatsData>(
-            selector: (_, p) => _StatsData(
-              speed: p.currentDownloadSpeedFormatted,
-              active: p.downloadingTasksCount,
-              queued: p.queuedTasksCount,
-              completed: p.completedTasksCount,
-              failed: p.failedTasksCount + p.pausedTasksCount,
-              hasActive: p.downloadingTasksCount > 0 || p.queuedTasksCount > 0,
-            ),
-            builder: (context, data, _) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: classicUi
+              ? BoxDecoration(
+                  color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                  border: Border.all(color: isDark ? AppTheme.border : AppTheme.lightBorder, width: 1.0),
+                  borderRadius: BorderRadius.circular(20),
+                )
+              : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Selector<DownloadProvider, _StatsData>(
+                selector: (_, p) => _StatsData(
+                  speed: p.currentDownloadSpeedFormatted,
+                  active: p.downloadingTasksCount,
+                  queued: p.queuedTasksCount,
+                  completed: p.completedTasksCount,
+                  failed: p.failedTasksCount,
+                  paused: p.pausedTasksCount,
+                  hasActive: p.downloadingTasksCount > 0 || p.queuedTasksCount > 0,
+                ),
+                builder: (context, data, _) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'TOTAL DOWNLOAD SPEED',
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: secClr,
-                              fontSize: 10,
-                              letterSpacing: 1.0,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'TOTAL DOWNLOAD SPEED',
+                                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: secClr,
+                                  fontSize: 10,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                data.speed,
+                                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                                  fontSize: 24,
+                                  color: blueClr,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            data.speed,
-                            style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                              fontSize: 24,
-                              color: blueClr,
-                              letterSpacing: -0.5,
+                          Material(
+                            color: Colors.transparent,
+                            child: Tooltip(
+                              message: data.hasActive
+                                  ? (isRtl ? 'إيقاف مؤقت للكل' : 'PAUSE ALL')
+                                  : (isRtl ? 'استئناف الكل' : 'RESUME ALL'),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () {
+                                  triggerHaptic(context.read<SettingsProvider>());
+                                  context.read<DownloadProvider>().toggleStartStopAll();
+                                },
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: (data.hasActive ? redClr : greenClr).withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: (data.hasActive ? redClr : greenClr).withValues(alpha: 0.15),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    data.hasActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                    color: data.hasActive ? redClr : greenClr,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      Material(
-                        color: Colors.transparent,
-                        child: Tooltip(
-                          message: data.hasActive
-                              ? (isRtl ? 'إيقاف مؤقت للكل' : 'PAUSE ALL')
-                              : (isRtl ? 'استئناف الكل' : 'RESUME ALL'),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: () {
-                              triggerHaptic(settings);
-                              context.read<DownloadProvider>().toggleStartStopAll();
-                            },
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: (data.hasActive ? redClr : greenClr).withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: (data.hasActive ? redClr : greenClr).withValues(alpha: 0.15),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Icon(
-                                data.hasActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                color: data.hasActive ? redClr : greenClr,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
+                      const SizedBox(height: 16),
+                      Divider(color: dividerClr, height: 1.0),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStatItem(context, title: 'ACTIVE', value: '${data.active}', color: blueClr, isDark: isDark),
+                          _buildDivider(isDark),
+                          _buildStatItem(context, title: 'QUEUED', value: '${data.queued}', color: violetClr, isDark: isDark),
+                          _buildDivider(isDark),
+                          _buildStatItem(context, title: 'COMPLETED', value: '${data.completed}', color: greenClr, isDark: isDark),
+                          _buildDivider(isDark),
+                          _buildStatItem(context, title: 'PAUSED', value: '${data.paused}', color: amberClr, isDark: isDark),
+                          _buildDivider(isDark),
+                          _buildStatItem(context, title: 'FAILED', value: '${data.failed}', color: redClr, isDark: isDark),
+                        ],
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(color: dividerClr, height: 1.0),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildStatItem(context, title: 'ACTIVE', value: '${data.active}', color: blueClr, isDark: isDark),
-                      _buildDivider(isDark),
-                      _buildStatItem(context, title: 'QUEUED', value: '${data.queued}', color: violetClr, isDark: isDark),
-                      _buildDivider(isDark),
-                      _buildStatItem(context, title: 'COMPLETED', value: '${data.completed}', color: greenClr, isDark: isDark),
-                      _buildDivider(isDark),
-                      _buildStatItem(context, title: 'FAILED', value: '${data.failed}', color: redClr, isDark: isDark),
-                    ],
-                  ),
-                ],
-              );
-            },
+                  );
+                },
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -156,15 +165,15 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
           title,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
             color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-            fontSize: 9,
-            letterSpacing: 0.8,
+            fontSize: 8,
+            letterSpacing: 0.5,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           value,
           style: Theme.of(context).textTheme.displayLarge?.copyWith(
-            fontSize: 18,
+            fontSize: 16,
             color: color,
           ),
         ),
@@ -179,6 +188,7 @@ class _StatsData {
   final int queued;
   final int completed;
   final int failed;
+  final int paused;
   final bool hasActive;
 
   const _StatsData({
@@ -187,6 +197,23 @@ class _StatsData {
     required this.queued,
     required this.completed,
     required this.failed,
+    required this.paused,
     required this.hasActive,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _StatsData &&
+          runtimeType == other.runtimeType &&
+          speed == other.speed &&
+          active == other.active &&
+          queued == other.queued &&
+          completed == other.completed &&
+          failed == other.failed &&
+          paused == other.paused &&
+          hasActive == other.hasActive;
+
+  @override
+  int get hashCode => Object.hash(speed, active, queued, completed, failed, paused, hasActive);
 }

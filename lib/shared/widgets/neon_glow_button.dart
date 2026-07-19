@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../features/settings/provider/settings_provider.dart';
-import 'dmx_backdrop_filter.dart';
 
 class NeonGlowButton extends StatelessWidget {
   final VoidCallback? onPressed;
@@ -75,60 +74,58 @@ class NeonGlowButton extends StatelessWidget {
 
     const double height = 48.0;
 
+    final effectiveOnPressed = isLoading ? null : onPressed;
+
     return Opacity(
-      opacity: onPressed != null ? 1.0 : 0.5,
+      opacity: effectiveOnPressed != null ? 1.0 : 0.5,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: DmxBackdropFilter(
-          sigmaX: 8,
-          sigmaY: 8,
-          child: Container(
-            height: height,
-            width: isExpanded ? double.infinity : null,
-            decoration: BoxDecoration(
-              gradient: isFilled
-                  ? LinearGradient(
-                      colors: [
-                        color,
-                        Color.lerp(color, Colors.white, 0.15)!,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    )
-                  : null,
-              color: isFilled ? null : glassBgColor,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: isFilled
-                    ? color.withValues(alpha: 0.4)
-                    : color.withValues(alpha: 0.3),
-                width: 1.0,
-              ),
-              boxShadow: (hasGlow && onPressed != null && isDark)
-                  ? [
-                      BoxShadow(
-                        color: effectiveGlowColor.withValues(alpha: 0.2),
-                        blurRadius: 14.0,
-                        spreadRadius: 0,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : null,
+        child: Container(
+          height: height,
+          width: isExpanded ? double.infinity : null,
+          decoration: BoxDecoration(
+            gradient: isFilled
+                ? LinearGradient(
+                    colors: [
+                      color,
+                      Color.lerp(color, Colors.white, 0.15)!,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isFilled ? null : glassBgColor,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isFilled
+                  ? color.withValues(alpha: 0.4)
+                  : color.withValues(alpha: 0.3),
+              width: 1.0,
             ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(24),
-                onTap: onPressed,
-                overlayColor: WidgetStateProperty.all(
-                  isFilled
-                      ? Colors.white.withValues(alpha: 0.15)
-                      : color.withValues(alpha: 0.12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: buttonContent,
-                ),
+            boxShadow: (hasGlow && effectiveOnPressed != null && isDark)
+                ? [
+                    BoxShadow(
+                      color: effectiveGlowColor.withValues(alpha: 0.2),
+                      blurRadius: 14.0,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: effectiveOnPressed,
+              overlayColor: WidgetStateProperty.all(
+                isFilled
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : color.withValues(alpha: 0.12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: buttonContent,
               ),
             ),
           ),

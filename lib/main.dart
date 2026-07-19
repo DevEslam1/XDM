@@ -27,46 +27,49 @@ Future<void> main() async {
     return true;
   };
 
-  runZonedGuarded(() async {
-    try {
-      await AdBlocker.initialize();
-      if (TorrentService.isSupported) {
-        await TorrentService.init();
-      }
-      await Hive.initFlutter();
+  runZonedGuarded(
+    () async {
+      try {
+        await AdBlocker.initialize();
+        if (TorrentService.isSupported) {
+          await TorrentService.init();
+        }
+        await Hive.initFlutter();
 
-      final databaseService = DatabaseService();
-      await databaseService.init();
+        final databaseService = DatabaseService();
+        await databaseService.init();
 
-      final settingsProvider = SettingsProvider();
-      await settingsProvider.load();
+        final settingsProvider = SettingsProvider();
+        await settingsProvider.load();
 
-      final notificationService = NotificationService();
-      await notificationService.init();
+        final notificationService = NotificationService();
+        await notificationService.init();
 
-      await BackgroundService.initialize();
+        await BackgroundService.initialize();
 
-      final downloadProvider = DownloadProvider(
-        databaseService: databaseService,
-        settingsProvider: settingsProvider,
-        notificationService: notificationService,
-      );
-      await downloadProvider.load();
-
-      runApp(
-        DmxApp(
+        final downloadProvider = DownloadProvider(
           databaseService: databaseService,
           settingsProvider: settingsProvider,
-          downloadProvider: downloadProvider,
-        ),
-      );
-    } catch (e, stack) {
-      debugPrint('Initialization error: $e\n$stack');
-      runApp(ErrorApp(error: e.toString()));
-    }
-  }, (error, stack) {
-    debugPrint('Uncaught zone error: $error\n$stack');
-  });
+          notificationService: notificationService,
+        );
+        await downloadProvider.load();
+
+        runApp(
+          DmxApp(
+            databaseService: databaseService,
+            settingsProvider: settingsProvider,
+            downloadProvider: downloadProvider,
+          ),
+        );
+      } catch (e, stack) {
+        debugPrint('Initialization error: $e\n$stack');
+        runApp(ErrorApp(error: e.toString()));
+      }
+    },
+    (error, stack) {
+      debugPrint('Uncaught zone error: $error\n$stack');
+    },
+  );
 }
 
 class ErrorApp extends StatelessWidget {
@@ -85,7 +88,11 @@ class ErrorApp extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, color: Colors.redAccent, size: 64),
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.redAccent,
+                  size: 64,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'Initialization Failed',
@@ -141,10 +148,18 @@ class DmxApp extends StatelessWidget {
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(
                   statusBarColor: Colors.transparent,
-                  statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-                  statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-                  systemNavigationBarColor: isDark ? AppTheme.background : AppTheme.lightBackground,
-                  systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                  statusBarIconBrightness: isDark
+                      ? Brightness.light
+                      : Brightness.dark,
+                  statusBarBrightness: isDark
+                      ? Brightness.dark
+                      : Brightness.light,
+                  systemNavigationBarColor: isDark
+                      ? AppTheme.background
+                      : AppTheme.lightBackground,
+                  systemNavigationBarIconBrightness: isDark
+                      ? Brightness.light
+                      : Brightness.dark,
                 ),
                 child: child!,
               );

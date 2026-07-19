@@ -24,14 +24,16 @@ class GeometricGridBackground extends StatelessWidget {
 
     final double blobAlpha = isDark ? 0.08 : 0.04;
 
-    return Stack(
-      children: [
-        Positioned.fill(child: Container(color: bgColor)),
-        Positioned(top: -120, left: -80, child: _Blob(size: 400, color: violetClr, alpha: blobAlpha)),
-        Positioned(right: -100, child: _Blob(size: 350, color: blueClr, alpha: blobAlpha * 0.8)),
-        Positioned(bottom: -150, left: -60, child: _Blob(size: 320, color: greenClr, alpha: blobAlpha * 0.6)),
-        Positioned.fill(child: child),
-      ],
+    return RepaintBoundary(
+      child: Stack(
+        children: [
+          Positioned.fill(child: Container(color: bgColor)),
+          Positioned(top: -120, left: -80, child: _Blob(size: 400, color: violetClr, alpha: blobAlpha)),
+          Positioned(right: -100, child: _Blob(size: 350, color: blueClr, alpha: blobAlpha * 0.8)),
+          Positioned(bottom: -150, left: -60, child: _Blob(size: 320, color: greenClr, alpha: blobAlpha * 0.6)),
+          Positioned.fill(child: child),
+        ],
+      ),
     );
   }
 }

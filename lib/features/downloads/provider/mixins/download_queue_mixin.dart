@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../models/download_task.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 
@@ -25,6 +26,7 @@ mixin DownloadQueueMixin {
   bool _queueProcessing = false;
   bool _batchMode = false;
   bool _needsNotify = false;
+  bool _needsRePump = false;
 
   // ---------------------------------------------------------------------------
   // Batch mode
@@ -32,8 +34,10 @@ mixin DownloadQueueMixin {
   /// Begins a batch — all `notifyListeners()` calls are deferred until
   /// [endBatch] is called.
   void startBatch() {
+    if (!_batchMode) {
+      _needsNotify = false;
+    }
     _batchMode = true;
-    _needsNotify = false;
   }
 
   /// Ends the batch and fires a single notification if any were deferred.
@@ -58,12 +62,19 @@ mixin DownloadQueueMixin {
   // Queue pump
   // ---------------------------------------------------------------------------
   void pumpQueue() {
-    if (_queueProcessing) return;
+    if (_queueProcessing) {
+      _needsRePump = true;
+      return;
+    }
     _queueProcessing = true;
+    _needsRePump = false;
     try {
       final availableSlots =
           providerSettingsProvider.maxDownloads - downloadingTasksCount;
-      if (availableSlots <= 0) return;
+      if (availableSlots <= 0) {
+        _queueProcessing = false;
+        return;
+      }
 
       final queued = providerTasks
           .where((task) =>
@@ -74,8 +85,14 @@ mixin DownloadQueueMixin {
       for (final task in queued) {
         startTaskFromQueue(task);
       }
+    } catch (e) {
+      debugPrint('Queue pump error: $e');
     } finally {
       _queueProcessing = false;
+      if (_needsRePump) {
+        _needsRePump = false;
+        pumpQueue();
+      }
     }
   }
 }
