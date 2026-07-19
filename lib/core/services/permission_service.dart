@@ -37,14 +37,31 @@ class PermissionService {
   Future<String> defaultDownloadDirectory() async {
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-      final downloads = await getDownloadsDirectory();
-      if (downloads != null) {
-        final pth = p.join(downloads.path, 'XDM');
-        final dir = Directory(pth);
-        if (!await dir.exists()) {
-          await dir.create(recursive: true);
+      try {
+        final downloads = await getDownloadsDirectory();
+        if (downloads != null) {
+          final pth = p.join(downloads.path, 'XDM');
+          final dir = Directory(pth);
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          return pth;
         }
-        return pth;
+      } catch (_) {
+        String? home;
+        if (Platform.isWindows) {
+          home = Platform.environment['USERPROFILE'];
+        } else if (Platform.isLinux) {
+          home = Platform.environment['HOME'];
+        }
+        if (home != null) {
+          final pth = p.join(home, 'Downloads', 'XDM');
+          final dir = Directory(pth);
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          return pth;
+        }
       }
     }
 

@@ -138,6 +138,10 @@ class DownloadProvider extends ChangeNotifier
   @override
   void updateTelemetryWidget() => _updateTelemetryWidget();
 
+  /// Called by [DownloadQueueMixin.pumpQueue] to check if a task is waiting for a retry delay.
+  @override
+  bool isTaskWaitingForRetry(String taskId) => _retryTimers.containsKey(taskId);
+
   // ---------------------------------------------------------------------------
   // Public getters (delegated to [DownloadFilterMixin])
   // ---------------------------------------------------------------------------
@@ -1360,22 +1364,48 @@ class DownloadProvider extends ChangeNotifier
             return;
           }
 
-          // Check if YouTube link expired (403 Forbidden or 410 Gone)
-          if (realError is DioException &&
-              (realError.response?.statusCode == 403 ||
-                  realError.response?.statusCode == 410 ||
-                  realError.message?.contains('403') == true ||
-                  realError.message?.contains('410') == true) &&
-              current.downloadPageUrl != null &&
-              YoutubeService.extractVideoId(current.downloadPageUrl!) != null) {
+          // Check if YouTube link expired or failed due to signature/IP mismatch/blackhole
+          final isYoutubeDownload = current.downloadPageUrl != null &&
+              YoutubeService.extractVideoId(current.downloadPageUrl!) != null;
+
+          bool shouldRefreshYoutube = false;
+          String refreshReason = 'unknown';
+
+          if (realError is DioException && isYoutubeDownload) {
+            final statusCode = realError.response?.statusCode;
+            final isExpiredStatus = statusCode == 403 || statusCode == 410;
+            final isTimeout = realError.type == DioExceptionType.connectionTimeout ||
+                realError.type == DioExceptionType.receiveTimeout ||
+                realError.type == DioExceptionType.sendTimeout;
+            final isNetworkError = realError.type == DioExceptionType.connectionError ||
+                realError.error is SocketException ||
+                realError.message?.contains('SocketException') == true;
+            final isGenericBadResponse = realError.type == DioExceptionType.badResponse;
+
+            if (isExpiredStatus ||
+                isTimeout ||
+                isNetworkError ||
+                isGenericBadResponse ||
+                realError.message?.contains('403') == true ||
+                realError.message?.contains('410') == true) {
+              shouldRefreshYoutube = true;
+              refreshReason = isExpiredStatus
+                  ? 'Expired (HTTP $statusCode)'
+                  : (isTimeout
+                      ? 'Timeout (${realError.type.name})'
+                      : (isNetworkError ? 'Network/Socket Error' : 'Bad Response'));
+            }
+          }
+
+          if (shouldRefreshYoutube) {
             debugPrint(
-              'Detected YouTube ${realError.response?.statusCode ?? 403} error. Attempting to refresh stream URL...',
+              'Detected YouTube error: $refreshReason. Attempting to refresh stream URL...',
             );
 
             final currentRetry = _retryCounts[task.id] ?? 0;
             final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
             if (currentRetry >= maxRetries && maxRetries > 0) {
-              debugPrint('Max retries reached for YouTube 403 error. Failing task.');
+              debugPrint('Max retries reached for YouTube error. Failing task.');
               // Let it fall through to the normal error handler which will fail the task
             } else {
               _retryCounts[task.id] = currentRetry + 1;

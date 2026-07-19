@@ -17,6 +17,7 @@ mixin DownloadQueueMixin {
   SettingsProvider get providerSettingsProvider;
   int get downloadingTasksCount;
   void startTaskFromQueue(DownloadTask task);
+  bool isTaskWaitingForRetry(String taskId);
 
   // ---------------------------------------------------------------------------
   // State
@@ -65,7 +66,9 @@ mixin DownloadQueueMixin {
       if (availableSlots <= 0) return;
 
       final queued = providerTasks
-          .where((task) => task.status == DownloadStatus.queued)
+          .where((task) =>
+              task.status == DownloadStatus.queued &&
+              !isTaskWaitingForRetry(task.id))
           .take(availableSlots)
           .toList();
       for (final task in queued) {
