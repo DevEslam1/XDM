@@ -15,12 +15,12 @@ class AppTheme {
   static const Color lightBorder = Color(0xFFCBD5E1);
 
   // Glass-morphism Colors
-  static const Color glassBg = Color(0x14FFFFFF); // ~8% white
-  static const Color glassBorder = Color(0x1AFFFFFF); // ~10% white
-  static const Color glassSurface = Color(0x0DFFFFFF); // ~5% white
+  static const Color glassBg = Color(0x14FFFFFF);
+  static const Color glassBorder = Color(0x1AFFFFFF);
+  static const Color glassSurface = Color(0x0DFFFFFF);
 
-  static const Color lightGlassBg = Color(0x0F000000); // ~6% black
-  static const Color lightGlassBorder = Color(0x1F000000); // ~12% black
+  static const Color lightGlassBg = Color(0x0F000000);
+  static const Color lightGlassBorder = Color(0x1F000000);
 
   // Neon Accents
   static const Color neonBlue = Color(0xFF00E5FF);
@@ -43,6 +43,38 @@ class AppTheme {
   static const Color lightTextPrimary = Color(0xFF0F172A);
   static const Color lightTextSecondary = Color(0xFF475569);
   static const Color lightTextMuted = Color(0xFF94A3B8);
+
+  // Pre-allocated TextStyles for dark theme (reused across builds)
+  static const TextStyle _darkDisplayLarge = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold);
+  static const TextStyle _darkDisplayMedium = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold);
+  static const TextStyle _darkDisplaySmall = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold);
+  static const TextStyle _darkHeadlineLarge = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold, letterSpacing: -0.5);
+  static const TextStyle _darkHeadlineMedium = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.w600);
+  static const TextStyle _darkHeadlineSmall = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.w600);
+  static const TextStyle _darkTitleLarge = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.w600);
+  static const TextStyle _darkTitleMedium = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.w500);
+  static const TextStyle _darkTitleSmall = TextStyle(fontFamily: 'Space Grotesk', color: textSecondary, fontWeight: FontWeight.w500);
+  static const TextStyle _darkBodyLarge = TextStyle(fontFamily: 'Inter', color: textPrimary);
+  static const TextStyle _darkBodyMedium = TextStyle(fontFamily: 'Inter', color: textSecondary);
+  static const TextStyle _darkBodySmall = TextStyle(fontFamily: 'Inter', color: textMuted);
+  static const TextStyle _darkLabelLarge = TextStyle(fontFamily: 'Space Grotesk', color: neonBlue, fontWeight: FontWeight.w600, letterSpacing: 0.5);
+  static const TextStyle _darkLabelMedium = TextStyle(fontFamily: 'Inter', color: textSecondary, fontWeight: FontWeight.w500);
+
+  // Pre-allocated TextStyles for light theme
+  static const TextStyle _lightDisplayLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold);
+  static const TextStyle _lightDisplayMedium = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold);
+  static const TextStyle _lightDisplaySmall = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold);
+  static const TextStyle _lightHeadlineLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold, letterSpacing: -0.5);
+  static const TextStyle _lightHeadlineMedium = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.w600);
+  static const TextStyle _lightHeadlineSmall = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.w600);
+  static const TextStyle _lightTitleLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.w600);
+  static const TextStyle _lightTitleMedium = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.w500);
+  static const TextStyle _lightTitleSmall = TextStyle(fontFamily: 'Space Grotesk', color: lightTextSecondary, fontWeight: FontWeight.w500);
+  static const TextStyle _lightBodyLarge = TextStyle(fontFamily: 'Inter', color: lightTextPrimary);
+  static const TextStyle _lightBodyMedium = TextStyle(fontFamily: 'Inter', color: lightTextSecondary);
+  static const TextStyle _lightBodySmall = TextStyle(fontFamily: 'Inter', color: lightTextMuted);
+  static const TextStyle _lightLabelLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightNeonBlue, fontWeight: FontWeight.w600, letterSpacing: 0.5);
+  static const TextStyle _lightLabelMedium = TextStyle(fontFamily: 'Inter', color: lightTextSecondary, fontWeight: FontWeight.w500);
 
   // --- Glass decoration helpers ---
 
@@ -156,56 +188,21 @@ class AppTheme {
           side: const BorderSide(color: glassBorder, width: 0.6),
         ),
       ),
-      textTheme: TextTheme(
-        displayLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.bold,
-        ),
-        displayMedium: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.bold,
-        ),
-        displaySmall: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.bold,
-        ),
-        headlineLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: -0.5,
-        ),
-        headlineMedium: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        headlineSmall: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        titleLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        titleMedium: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textPrimary,
-          fontWeight: FontWeight.w500,
-        ),
-        titleSmall: TextStyle(fontFamily: 'Space Grotesk', 
-          color: textSecondary,
-          fontWeight: FontWeight.w500,
-        ),
-        bodyLarge: TextStyle(fontFamily: 'Inter', color: textPrimary),
-        bodyMedium: TextStyle(fontFamily: 'Inter', color: textSecondary),
-        bodySmall: TextStyle(fontFamily: 'Inter', color: textMuted),
-        labelLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: neonBlue,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-        labelMedium: TextStyle(fontFamily: 'Inter', 
-          color: textSecondary,
-          fontWeight: FontWeight.w500,
-        ),
+      textTheme: const TextTheme(
+        displayLarge: _darkDisplayLarge,
+        displayMedium: _darkDisplayMedium,
+        displaySmall: _darkDisplaySmall,
+        headlineLarge: _darkHeadlineLarge,
+        headlineMedium: _darkHeadlineMedium,
+        headlineSmall: _darkHeadlineSmall,
+        titleLarge: _darkTitleLarge,
+        titleMedium: _darkTitleMedium,
+        titleSmall: _darkTitleSmall,
+        bodyLarge: _darkBodyLarge,
+        bodyMedium: _darkBodyMedium,
+        bodySmall: _darkBodySmall,
+        labelLarge: _darkLabelLarge,
+        labelMedium: _darkLabelMedium,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -286,56 +283,21 @@ class AppTheme {
           side: const BorderSide(color: lightGlassBorder, width: 0.6),
         ),
       ),
-      textTheme: TextTheme(
-        displayLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.bold,
-        ),
-        displayMedium: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.bold,
-        ),
-        displaySmall: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.bold,
-        ),
-        headlineLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: -0.5,
-        ),
-        headlineMedium: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        headlineSmall: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        titleLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-        titleMedium: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextPrimary,
-          fontWeight: FontWeight.w500,
-        ),
-        titleSmall: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightTextSecondary,
-          fontWeight: FontWeight.w500,
-        ),
-        bodyLarge: TextStyle(fontFamily: 'Inter', color: lightTextPrimary),
-        bodyMedium: TextStyle(fontFamily: 'Inter', color: lightTextSecondary),
-        bodySmall: TextStyle(fontFamily: 'Inter', color: lightTextMuted),
-        labelLarge: TextStyle(fontFamily: 'Space Grotesk', 
-          color: lightNeonBlue,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
-        labelMedium: TextStyle(fontFamily: 'Inter', 
-          color: lightTextSecondary,
-          fontWeight: FontWeight.w500,
-        ),
+      textTheme: const TextTheme(
+        displayLarge: _lightDisplayLarge,
+        displayMedium: _lightDisplayMedium,
+        displaySmall: _lightDisplaySmall,
+        headlineLarge: _lightHeadlineLarge,
+        headlineMedium: _lightHeadlineMedium,
+        headlineSmall: _lightHeadlineSmall,
+        titleLarge: _lightTitleLarge,
+        titleMedium: _lightTitleMedium,
+        titleSmall: _lightTitleSmall,
+        bodyLarge: _lightBodyLarge,
+        bodyMedium: _lightBodyMedium,
+        bodySmall: _lightBodySmall,
+        labelLarge: _lightLabelLarge,
+        labelMedium: _lightLabelMedium,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,

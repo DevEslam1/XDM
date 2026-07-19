@@ -879,9 +879,9 @@ class DownloadEngine {
                       await lock.synchronized(() async {
                         await sharedRaf.setPosition(currentOffset);
                         await sharedRaf.writeFrom(chunk);
+                        chunkProgress[idx] += chunk.length;
                       });
 
-                      chunkProgress[idx] += chunk.length;
                       chunkDownloadedThisSession += chunk.length;
 
                       reportProgress();
@@ -898,6 +898,8 @@ class DownloadEngine {
                             Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
                           );
                         }
+                        chunkStopwatch.reset();
+                        chunkDownloadedThisSession = 0;
                       }
                     }
                     // Success, break out of retry loop
@@ -926,6 +928,7 @@ class DownloadEngine {
           await saveState();
 
           try {
+            await sharedRaf.flush();
             await sharedRaf.close();
           } catch (e) {
             debugPrint('Failed to close shared RAF: $e');

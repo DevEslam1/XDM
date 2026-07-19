@@ -8,22 +8,26 @@ class ClipboardService {
   ClipboardService._internal();
 
   String? _lastCheckedUrl;
+  DateTime? _lastCheckedAt;
+  static const Duration _urlTtl = Duration(minutes: 30);
 
   /// Checks if there is a new valid HTTP/HTTPS URL on the clipboard.
-  /// Returns the URL if it's new, otherwise null.
+  /// Returns the URL if it's new (or if the last check was >30 minutes ago),
+  /// otherwise null.
   Future<String?> checkClipboardForUrl() async {
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
       if (text != null && isHttpUrl(text)) {
-        if (text != _lastCheckedUrl) {
+        final isExpired = _lastCheckedAt == null ||
+            DateTime.now().difference(_lastCheckedAt!) > _urlTtl;
+        if (text != _lastCheckedUrl || isExpired) {
           _lastCheckedUrl = text;
+          _lastCheckedAt = DateTime.now();
           return text;
         }
       }
     } catch (e) {
-      // Clipboard access might fail on some platforms or permissions
-      // We import foundation.dart or just print. debugPrint is preferred.
       debugPrint('ClipboardService error checking URL: $e');
     }
     return null;
@@ -32,5 +36,6 @@ class ClipboardService {
   /// Sets the last checked URL so we don't prompt for it again.
   void markAsChecked(String url) {
     _lastCheckedUrl = url;
+    _lastCheckedAt = DateTime.now();
   }
 }

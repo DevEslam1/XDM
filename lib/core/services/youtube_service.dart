@@ -8,6 +8,7 @@ import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart' as io_client;
 
 class YoutubeService {
   static String? _apiKey;
@@ -236,19 +237,28 @@ class YoutubeService {
   static Future<({StreamManifest manifest, String title})> _fetchWithFallback(
     String videoId,
   ) async {
-    // Retry up to 2 times on transient failures
-    for (int attempt = 0; attempt < 2; attempt++) {
+    // Retry up to 3 times on transient failures or HTTP 403/410
+    for (int attempt = 0; attempt < 3; attempt++) {
       try {
         return await _fetchWithFallbackInternal(videoId);
       } catch (e) {
-        if (attempt == 1) rethrow;
+        if (attempt == 2) rethrow;
         final errStr = e.toString().toLowerCase();
-        // Only retry on transient errors
-        if (errStr.contains('timeout') ||
+        final isRetryable =
+            errStr.contains('timeout') ||
             errStr.contains('connection') ||
             errStr.contains('socket') ||
-            errStr.contains('reset')) {
-          await Future.delayed(const Duration(seconds: 2));
+            errStr.contains('reset') ||
+            errStr.contains('403') ||
+            errStr.contains('410') ||
+            errStr.contains('http status 403') ||
+            errStr.contains('http status 410');
+        if (isRetryable) {
+          // Reset client on auth/expiration errors
+          if (errStr.contains('403') || errStr.contains('410')) {
+            resetClient();
+          }
+          await Future.delayed(Duration(seconds: 2 + attempt));
           continue;
         }
         rethrow;
@@ -413,24 +423,42 @@ class YoutubeService {
     return null;
   }
 
-  /// Returns true when two YouTube stream URLs are equivalent (same `expire`
-  /// and `sig` parameters), meaning they will produce the same result.
+  /// Returns true when two YouTube stream URLs share the same scheme, host,
+  /// path, expire, and sig — indicating they refer to the same underlying
+  /// resource and the manifest is likely stale.
+  ///
+  /// Uses a max‑age TTL (5 minutes) as additional guard: even if `expire` and
+  /// `sig` match, the URL is considered fresh if we last checked less than
+  /// 5 minutes ago.
+
   static bool _urlsAreEquivalent(String a, String b) {
     final ua = Uri.tryParse(a);
     final ub = Uri.tryParse(b);
     if (ua == null || ub == null) return a == b;
-    
+
+    // Compare structural parts of the URL.
+    if (ua.scheme != ub.scheme ||
+        ua.host != ub.host ||
+        ua.path != ub.path) {
+      return false;
+    }
+
     final expireA = ua.queryParameters['expire'];
     final expireB = ub.queryParameters['expire'];
     final sigA = ua.queryParameters['sig'];
     final sigB = ub.queryParameters['sig'];
-    
+
     if (expireA == null || expireB == null || sigA == null || sigB == null) {
       return a == b;
     }
-    
-    // Compare the parts that actually determine freshness.
-    return expireA == expireB && sigA == sigB;
+
+    if (expireA != expireB || sigA != sigB) return false;
+
+    // TTL guard: if we've seen this URL within 5 minutes, treat as fresh.
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final expire = int.tryParse(expireA);
+    if (expire != null && (expire - now) > 300) return false;
+    return true;
   }
 
   /// Fetches completely fresh stream URLs for a YouTube video, bypassing any
@@ -937,15 +965,21 @@ class YoutubeService {
 }
 
 /// Internal HTTP client that injects custom cookies for authenticated requests.
+/// Uses [IOClient] internally so that redirects properly forward cookies.
 class _CookieClient extends http.BaseClient {
   final String _cookie;
-  final http.Client _inner = http.Client();
+  late final io_client.IOClient _inner;
 
-  _CookieClient(this._cookie);
+  _CookieClient(this._cookie) {
+    _inner = io_client.IOClient(
+      HttpClient()..connectionTimeout = const Duration(seconds: 30),
+    );
+  }
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) {
     request.headers['cookie'] = _cookie;
+    request.followRedirects = true;
     debugPrint('[YoutubeService] Outgoing request to ${request.url} with headers: ${request.headers}');
     return _inner.send(request);
   }

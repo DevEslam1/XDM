@@ -98,9 +98,29 @@ class PermissionService {
     if (!kIsWeb && Platform.isAndroid) {
       final sdk = await _androidSdkLevel();
 
-      // On API 30+, skip hardcoded path — it requires MANAGE_EXTERNAL_STORAGE which
-      // most users won't grant. Use path_provider scoped storage APIs directly.
+      // On API 30+, try SAF-style public path via getExternalStorageDirectory,
+      // then fall back to app-specific directory. The getDownloadsDirectory()
+      // returns an app-private dir on API 30+ which users cannot browse.
       if (sdk >= 30) {
+        // Try public Downloads via external storage directory
+        try {
+          final extDir = await getExternalStorageDirectory();
+          if (extDir != null) {
+            // Navigate up to the actual external storage root, then to Download/XDM
+            final root = extDir.path;
+            // On most devices: /storage/emulated/0/Android/data/pkg/files -> /storage/emulated/0
+            final parts = root.split(Platform.pathSeparator);
+            final publicPath = p.join(
+              parts[0], parts[1], parts[2], 'Download', 'XDM',
+            );
+            final dir = Directory(publicPath);
+            if (!await dir.exists()) {
+              await dir.create(recursive: true);
+            }
+            return publicPath;
+          }
+        } catch (_) {}
+        // Fallback to app-specific directory
         try {
           final dir = await getDownloadsDirectory();
           if (dir != null) {
@@ -108,17 +128,6 @@ class PermissionService {
             final xdmDir = Directory(pth);
             if (!await xdmDir.exists()) {
               await xdmDir.create(recursive: true);
-            }
-            return pth;
-          }
-        } catch (_) {}
-        try {
-          final extDir = await getExternalStorageDirectory();
-          if (extDir != null) {
-            final pth = p.join(extDir.path, 'Download');
-            final dir = Directory(pth);
-            if (!await dir.exists()) {
-              await dir.create(recursive: true);
             }
             return pth;
           }
@@ -177,11 +186,15 @@ class PermissionService {
 
     final sdk = await _androidSdkLevel();
     if (sdk >= 33) {
-      await [
-        Permission.photos,
-        Permission.videos,
-        Permission.audio,
-      ].request();
+      // Only request permissions that are not already granted
+      final permissions = [
+        if (!await Permission.photos.isGranted) Permission.photos,
+        if (!await Permission.videos.isGranted) Permission.videos,
+        if (!await Permission.audio.isGranted) Permission.audio,
+      ];
+      if (permissions.isNotEmpty) {
+        await permissions.request();
+      }
     } else if (sdk >= 29) {
       final status = await Permission.storage.status;
       if (!status.isGranted) {

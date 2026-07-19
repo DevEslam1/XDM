@@ -9,7 +9,7 @@ class ShareService {
 
   StreamSubscription? _intentSub;
   bool _initialized = false;
-  static bool _initialMediaConsumed = false;
+  bool _initialMediaConsumed = false;
   String? _lastReceivedUrl;
 
   void init({required void Function(String url) onUrlReceived}) {

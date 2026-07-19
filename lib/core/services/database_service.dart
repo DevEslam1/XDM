@@ -8,6 +8,7 @@ import '../../features/browser/models/bookmark.dart';
 
 class DatabaseService {
   late final AppDatabase _db;
+  bool _migrated = false;
 
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
@@ -17,7 +18,10 @@ class DatabaseService {
   Future<void> init() async {
     await Hive.initFlutter();
     _db = AppDatabase();
-    await _migrateFromHive();
+    if (!_migrated) {
+      await _migrateFromHive();
+      _migrated = true;
+    }
   }
 
   Future<void> _migrateFromHive() async {
@@ -179,7 +183,7 @@ class DatabaseService {
       try {
         return DateTime.parse(dateStr);
       } catch (_) {
-        return DateTime.now();
+        return DateTime(2000);
       }
     }
 
@@ -188,7 +192,7 @@ class DatabaseService {
       try {
         return DateTime.parse(dateStr);
       } catch (_) {
-        return DateTime.now();
+        return DateTime(2000);
       }
     }
 

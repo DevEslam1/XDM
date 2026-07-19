@@ -116,6 +116,7 @@ class AdBlocker {
   /// Asynchronously loads local hosts from cache file or triggers background download
   static Future<void> initialize() async {
     if (_initialized) return;
+    _invalidateCache();
 
     // Load defaults immediately as fallback
     _blockedDomains.addAll(_fallbackDomains);
@@ -163,6 +164,7 @@ class AdBlocker {
     }
 
     if (newDomains.isNotEmpty) {
+      _invalidateCache();
       final updated = <String>{..._fallbackDomains, ...newDomains};
       _blockedDomains
         ..clear()
@@ -246,11 +248,11 @@ class AdBlocker {
   }
 
   /// Extracts the host and runs a domain suffix lookup (e.g. sub.domain.com -> domain.com)
+  /// NOTE: [initialize] should be awaited before calling this. If not yet
+  /// initialized, the check is skipped rather than mutating state.
   static bool shouldBlock(String url) {
-    if (!_initialized) {
-      _blockedDomains.addAll(_fallbackDomains);
-      _initialized = true;
-    }
+    if (!_initialized) return false;
+    // Must be initialized: at minimum _fallbackDomains are loaded
 
     // 0. Always allow YouTube domains and API paths
     if (_isAllowedUrl(url)) return false;
@@ -319,10 +321,18 @@ class AdBlocker {
     return '';
   }
 
+  static String? _cachedAdBlockScript;
+
+  /// Invalidates the cached script so the next access rebuilds it.
+  static void _invalidateCache() {
+    _cachedAdBlockScript = null;
+  }
+
   /// Adblocking and Anti-Adblock bypass JavaScript script to inject into pages
   static String get adBlockJavaScript {
+    if (_cachedAdBlockScript != null) return _cachedAdBlockScript!;
     final domainsJson = jsonEncode(_blockedDomains.toList());
-    return '''
+    _cachedAdBlockScript = '''
 (function() {
   if (window.__xdmAdBlockerInjected) return;
   window.__xdmAdBlockerInjected = true;
@@ -515,5 +525,6 @@ class AdBlocker {
   } catch(e) {}
 })();
 ''';
+    return _cachedAdBlockScript!;
   }
 }

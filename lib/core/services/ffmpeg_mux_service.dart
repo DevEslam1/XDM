@@ -76,6 +76,9 @@ class FFmpegMuxService {
         if (await outputFile.exists()) {
           final outputSize = await outputFile.length();
           _log.info('Merge successful: $outputPath ($outputSize bytes)');
+          // Clean up temp input files
+          try { await videoFile.delete(); } catch (_) {}
+          try { await audioFile.delete(); } catch (_) {}
         } else {
           _log.warning('Merge reported success but output file not found: $outputPath');
         }

@@ -162,6 +162,7 @@ class BrowserDetector {
     final detected = detect(url);
     if (detected == null) return false;
     if (detected.kind == DetectedMediaKind.image) return false;
+    if (detected.kind == DetectedMediaKind.unknown) return false;
     return true;
   }
 

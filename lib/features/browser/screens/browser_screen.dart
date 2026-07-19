@@ -86,7 +86,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   // Sniffer and detected media
   final Map<String, String> _detectedDownloadUrls = {}; // tab.id -> url
   final Map<String, List<Map<String, dynamic>>> _detectedMediaSources =
-      {}; // tab.url -> sources
+      {}; // tab.id -> sources
   final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
   final Set<String> _ytDetectionFailed = {}; // tab.url -> yt fetch failed
   final Set<String> _recordedHistoryThisSession = {};
@@ -97,6 +97,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   String? _pendingTitleUpdate;
   final Set<String> _bypassedSniffUrls = {};
   final ScrollController _dashboardScrollController = ScrollController();
+  Timer? _navDebounce;
   static const String _snifferPrefKey = 'browserSnifferEnabled';
   bool _isSnifferEnabled = true;
   bool _lastZoomEnabled = false; // Cached to avoid redundant enableZoom calls
@@ -282,9 +283,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // Restore tabs from previous session; _restoreTabs() creates tabs as needed
     _restoreTabs();
 
-    // Auto update adblock filters on browser launch
+    // Initialize adblock filters on browser launch
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
+      AdBlocker.initialize();
       AdBlocker.autoUpdateHosts();
     }
   }
@@ -495,7 +497,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
     if (cleanInitialUrl != 'about:blank') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        controller.loadRequest(Uri.parse(cleanInitialUrl));
+        if (mounted) {
+          controller.loadRequest(Uri.parse(cleanInitialUrl));
+        }
       });
     }
 
@@ -537,6 +541,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             'visitedAt': now.toIso8601String(),
           })
           .then((id) {
+            if (!mounted) return;
             if (clean == _lastHistoryEntryUrl) {
               _lastHistoryEntryId = id;
               if (_pendingTitleUpdate != null &&
@@ -630,7 +635,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       try {
         tab.controller.clearCache();
         tab.controller.clearLocalStorage();
-        tab.controller.loadRequest(Uri.parse('about:blank'));
       } catch (_) {}
     }
     _tabs.clear();
@@ -643,6 +647,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       timer.cancel();
     }
     _mediaScanTimers.clear();
+    _navDebounce?.cancel();
     _downloadProvider?.removeListener(_onDownloadProviderChanged);
     _urlController.dispose();
     _focusNode.dispose();
@@ -1135,9 +1140,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   Future<void> _scanPageMedia(BrowserTab tab) async {
     if (!mounted || !_tabs.contains(tab) || tab.isHome) return;
 
-    // Clean up stale media sources from previous URLs on this tab
+    // Clean up stale media sources from removed tabs
+    final activeIds = _tabs.map((t) => t.id).toSet();
     final staleKeys = _detectedMediaSources.keys
-        .where((key) => key != tab.url && !_tabs.any((t) => t.url == key))
+        .where((key) => !activeIds.contains(key))
         .toList();
     for (final key in staleKeys) {
       _detectedMediaSources.remove(key);
@@ -1163,7 +1169,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           final youtubeStreams = await YoutubeService.getStreams(tab.url);
           if (youtubeStreams.isNotEmpty && mounted) {
             setState(() {
-              _detectedMediaSources[tab.url] = youtubeStreams;
+              _detectedMediaSources[tab.id] = youtubeStreams;
             });
           }
         } catch (_) {}
@@ -1177,7 +1183,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         final youtubeStreams = await YoutubeService.getStreams(tab.url);
         if (youtubeStreams.isNotEmpty && mounted) {
           setState(() {
-            _detectedMediaSources[tab.url] = youtubeStreams;
+            _detectedMediaSources[tab.id] = youtubeStreams;
             _ytDetectionFailed.remove(tab.url);
             if (_detectedDownloadUrls[tab.id] == null) {
               _detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
@@ -1264,7 +1270,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         final List<dynamic> parsed = jsonDecode(cleanResult);
         if (parsed.isNotEmpty) {
           setState(() {
-            _detectedMediaSources[tab.url] = parsed
+            _detectedMediaSources[tab.id] = parsed
                 .map((e) => Map<String, dynamic>.from(e as Map))
                 .toList();
             if (_detectedDownloadUrls[tab.id] == null) {
@@ -1425,11 +1431,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   // Shows all detected streams from FAB
-  void _showDetectedMediaSheet(BuildContext context, String pageUrl) {
+  void _showDetectedMediaSheet(BuildContext context, String tabId) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final detectedSources = _detectedMediaSources[pageUrl] ?? [];
+    final detectedSources = _detectedMediaSources[tabId] ?? [];
+    final downloadPageUrl = _tabs
+        .where((t) => t.id == tabId)
+        .map((t) => t.url)
+        .firstOrNull;
 
     showModalBottomSheet(
       context: context,
@@ -1558,7 +1568,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                       ? 'audio'
                                       : 'video',
                                   onQuality: () => _showQualityPicker(srcUrl),
-                                  downloadPageUrl: pageUrl,
+                                  downloadPageUrl: downloadPageUrl,
                                 );
                               },
                             );
@@ -1926,8 +1936,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                                 padding: EdgeInsets.zero,
                                                 constraints:
                                                     const BoxConstraints(),
-                                                onPressed: () {
+                                                  onPressed: () {
                                                   triggerHaptic(settings);
+                                                  _mediaScanTimers[tab.id]
+                                                      ?.cancel();
+                                                  _mediaScanTimers
+                                                      .remove(tab.id);
                                                   setModalState(() {
                                                     setState(() {
                                                       _detectedDownloadUrls
@@ -2370,7 +2384,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final activeTabIndex = context.select<DownloadProvider, int>((p) => p.activeTabIndex);
     final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
@@ -2384,7 +2397,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final showFab =
         !activeTab.isHome &&
         (_detectedDownloadUrls[activeTab.id] != null ||
-            (_detectedMediaSources[activeTab.url]?.isNotEmpty ?? false) ||
+            (_detectedMediaSources[activeTab.id]?.isNotEmpty ?? false) ||
             _detectedPlaylistUrls.containsKey(activeTab.id));
 
     // Reactively ensure zoom configuration matches settings changes
@@ -2394,10 +2407,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
 
     return PopScope(
-      canPop: activeTabIndex != 1,
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+          return;
+        }
         final activeTab = _tabs[_currentTabIndex];
         final canGoBack = await activeTab.controller.canGoBack();
         if (canGoBack) {
@@ -2416,7 +2433,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           body: Column(
             children: [
               // Custom collapsing App Bar
-              AnimatedContainer(
+              RepaintBoundary(
+                child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
                 height: _showBars ? (kToolbarHeight + statusBarHeight) : 0,
@@ -2617,7 +2635,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                                   vertical: 6,
                                                 ),
                                           ),
-                                          onSubmitted: _navigateToUrl,
+                                          onSubmitted: (val) {
+                                            _navDebounce?.cancel();
+                                            _navDebounce = Timer(
+                                              const Duration(milliseconds: 300),
+                                              () => _navigateToUrl(val),
+                                            );
+                                          },
                                         );
                                       },
                                     ),
@@ -2921,8 +2945,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         ],
                       ),
                     ),
-                  ),
-                ),
+              ),
+            ),
+          ),
               ),
 
               // Loading Progress line
@@ -2941,26 +2966,39 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     GestureDetector(
                       onTap: () => _focusNode.unfocus(),
                       behavior: HitTestBehavior.translucent,
-                      child: IndexedStack(
-                        index: _currentTabIndex >= 0 && _currentTabIndex < _tabs.length
-                            ? _currentTabIndex
-                            : 0,
-                        children: _tabs.isEmpty
-                            ? [const SizedBox.shrink()]
-                            : _tabs.map((tab) {
+                      child: _tabs.isEmpty
+                          ? const SizedBox.shrink()
+                          : IndexedStack(
+                              index: _currentTabIndex >= 0 && _currentTabIndex < _tabs.length
+                                  ? _currentTabIndex
+                                  : 0,
+                              children: _tabs.map((tab) {
+                                final isActive = _currentTabIndex >= 0 &&
+                                    _currentTabIndex < _tabs.length &&
+                                    _tabs[_currentTabIndex].id == tab.id;
                                 if (tab.isHome) {
-                                  return Container(
-                                    key: ValueKey('home_${tab.id}'),
-                                    child: _buildHomeDashboard(context, settings),
+                                  return Offstage(
+                                    offstage: !isActive,
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      child: _buildHomeDashboard(context, settings),
+                                    ),
                                   );
                                 } else {
-                                  return Container(
-                                    key: ValueKey('web_${tab.id}'),
+                                  return Offstage(
+                                    offstage: !isActive,
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      child: RepaintBoundary(
                                     child: WebViewWidget(controller: tab.controller),
+                                  ),
+                                    ),
                                   );
                                 }
                               }).toList(),
-                      ),
+                            ),
                     ),
 
                     // Left edge gesture zone (Swipe edge -> Go Back)
@@ -2976,7 +3014,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             if (details.primaryVelocity != null &&
                                 details.primaryVelocity! > 300) {
                               activeTab.controller.canGoBack().then((canGo) {
-                                if (canGo) {
+                                if (canGo && mounted) {
                                   triggerHaptic(settings);
                                   activeTab.controller.goBack();
                                 }
@@ -2999,7 +3037,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             if (details.primaryVelocity != null &&
                                 details.primaryVelocity! < -300) {
                               activeTab.controller.canGoForward().then((canGo) {
-                                if (canGo) {
+                                if (canGo && mounted) {
                                   triggerHaptic(settings);
                                   activeTab.controller.goForward();
                                 }
@@ -3064,7 +3102,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final activeTab = _tabs[_currentTabIndex];
-    final detectedSources = _detectedMediaSources[activeTab.url] ?? [];
+    final detectedSources = _detectedMediaSources[activeTab.id] ?? [];
     final isPlaylist = _detectedPlaylistUrls.containsKey(activeTab.id);
     final playlistCount = _detectedPlaylistUrls[activeTab.id] ?? 0;
 
@@ -3108,7 +3146,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         onPressed: () async {
           triggerHaptic(settings);
           if (detectedSources.length > 1) {
-            _showDetectedMediaSheet(context, activeTab.url);
+            _showDetectedMediaSheet(context, activeTab.id);
           } else {
             final stream = await YoutubeQualitySheet.show(
               context,
@@ -3166,7 +3204,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       onPressed: () {
         triggerHaptic(settings);
         if (detectedSources.length > 1) {
-          _showDetectedMediaSheet(context, activeTab.url);
+          _showDetectedMediaSheet(context, activeTab.id);
         } else {
           final url = detectedSources.isNotEmpty
               ? detectedSources.first['src']

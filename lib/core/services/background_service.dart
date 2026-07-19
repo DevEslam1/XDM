@@ -35,7 +35,8 @@ class BackgroundService {
   /// How long without an [updateNotification] event before the service
   /// auto-stops itself. If no download progress is received within this
   /// window the service is considered stale and killed to save battery.
-  static const _heartbeatTimeout = Duration(seconds: 15);
+  /// Increased from 15s to 60s to avoid premature shutdown on slow networks.
+  static const _heartbeatTimeout = Duration(seconds: 60);
 
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {
@@ -85,6 +86,9 @@ class BackgroundService {
 
   @pragma('vm:entry-point')
   static bool _onIosBackground(ServiceInstance service) {
+    // iOS background fetch is currently a no-op because Flutter background
+    // execution is severely limited on iOS. Consider using a native
+    // BGTaskScheduler plugin for actual background downloads.
     return true;
   }
 
