@@ -70,6 +70,10 @@ String safeFileName(String value) {
       .replaceAll(RegExp(r'^\.+|\.+$'), '')
       .trim();
   if (sanitized.isEmpty) return 'download.bin';
+  if (sanitized.length > 120) {
+    sanitized = sanitized.substring(0, 120).trim();
+    if (sanitized.isEmpty) return 'download.bin';
+  }
   if (_windowsReserved.contains(sanitized.toUpperCase())) sanitized = '_$sanitized';
   return sanitized;
 }

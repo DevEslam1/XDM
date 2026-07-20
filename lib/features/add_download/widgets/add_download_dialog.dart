@@ -99,6 +99,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   final bool _isScheduled = false;
   DateTime? _scheduledDateTime;
   String? _resolvedYoutubeQualityPreset;
+  String? _resolvedAudioUrl;
+  int? _resolvedAudioSize;
 
   bool _isMetadataResolved = false;
   bool _isResolvingLink = false;
@@ -211,6 +213,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           _isMetadataResolved = false;
           _resolvedFileName = '';
           _resolvedTorrentId = null;
+          _resolvedAudioUrl = null;
+          _resolvedAudioSize = null;
           _nameController.clear();
           _extController.clear();
         });
@@ -388,6 +392,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           _resolvedFileName = '$title.$ext';
           _setNameAndExt(_resolvedFileName);
           _resolvedFileSize = stream['size'] as int? ?? 0;
+          _resolvedAudioUrl = stream['audioSrc'] as String?;
+          _resolvedAudioSize = stream['audioSize'] as int?;
           _resolvedCategory = (stream['type'] as String? ?? 'muxed') == 'audio'
               ? 'Audio'
               : 'Video';
@@ -722,6 +728,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           _referrerController.text.trim(),
                       youtubeQualityPreset: _resolvedYoutubeQualityPreset,
                       torrentId: _resolvedTorrentId,
+                      mergedAudioUrl: _resolvedAudioUrl,
+                      audioSize: _resolvedAudioSize ?? 0,
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;
@@ -783,6 +791,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             _referrerController.text.trim(),
         youtubeQualityPreset: _resolvedYoutubeQualityPreset,
         torrentId: _resolvedTorrentId,
+        mergedAudioUrl: _resolvedAudioUrl,
+        audioSize: _resolvedAudioSize ?? 0,
       );
       if (!mounted) return;
       if (!context.mounted) return;

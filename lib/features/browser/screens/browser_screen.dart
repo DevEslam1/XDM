@@ -42,7 +42,7 @@ class BrowserTab {
   String title;
   bool isIncognito;
   bool isLoading;
-  double progress;
+  final ValueNotifier<double> progressNotifier;
   bool isHome;
   bool canGoBack;
   bool canGoForward;
@@ -54,11 +54,14 @@ class BrowserTab {
     required this.title,
     this.isIncognito = false,
     this.isLoading = false,
-    this.progress = 0.0,
+    double progress = 0.0,
     this.isHome = true,
     this.canGoBack = false,
     this.canGoForward = false,
-  });
+  }) : progressNotifier = ValueNotifier<double>(progress);
+
+  double get progress => progressNotifier.value;
+  set progress(double val) => progressNotifier.value = val;
 }
 
 class BrowserScreen extends StatefulWidget {
@@ -411,16 +414,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
             // Trigger background DOM media scanner
             _mediaScanTimers[tab.id]?.cancel();
-            _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1000), () {
+            _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
               _scanPageMedia(tab);
             });
           },
           onProgress: (progress) {
-            if (mounted) {
-              setState(() {
-                tab.progress = progress / 100;
-              });
-            }
+            tab.progress = progress / 100;
           },
           onUrlChange: (change) {
             if (change.url != null) {
@@ -445,7 +444,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
                 // Re-scan media for SPA pages (YouTube, etc.)
                 _mediaScanTimers[tab.id]?.cancel();
-                _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 2000), () {
+                _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
                   _scanPageMedia(tab);
                 });
 
@@ -635,6 +634,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       try {
         tab.controller.clearCache();
         tab.controller.clearLocalStorage();
+      } catch (_) {}
+      try {
+        tab.progressNotifier.dispose();
       } catch (_) {}
     }
     _tabs.clear();
@@ -1618,7 +1620,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || tab.isHome) return;
     if (_customJs.isNotEmpty) {
       try {
-        await tab.controller.runJavaScript(_customJs);
+        final jsWrapper = """
+          if (!window._xdmCustomJsInjected) {
+            window._xdmCustomJsInjected = true;
+            (function() {
+              $_customJs
+            })();
+          }
+        """;
+        await tab.controller.runJavaScript(jsWrapper);
       } catch (_) {}
     }
     if (_customCss.isNotEmpty) {
@@ -2955,11 +2965,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
               // Loading Progress line
               if (activeTab.isLoading && !activeTab.isHome)
-                LinearProgressIndicator(
-                  value: activeTab.progress,
-                  minHeight: 2.0,
-                  backgroundColor: Colors.transparent,
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ValueListenableBuilder<double>(
+                  valueListenable: activeTab.progressNotifier,
+                  builder: (context, progressValue, child) {
+                    return LinearProgressIndicator(
+                      value: progressValue,
+                      minHeight: 2.0,
+                      backgroundColor: Colors.transparent,
+                      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    );
+                  },
                 ),
 
               // Main browser view (preserving controllers state with IndexedStack)

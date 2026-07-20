@@ -21,6 +21,10 @@
 ## ✨ Features
 
 ### Download Engine
+- **Background Isolate Architecture** — offloads HTTP networking and File I/O to background threads, guaranteeing 0 UI jank during high-speed parallel downloads
+- **Network Connectivity Resilience** — detects network dropouts, pauses streams, and surgically resumes only affected tasks when the connection is restored
+- **Dynamic Speed Limiting** — instant, on-the-fly stream throttling via cross-isolate message passing
+- **Database Write Batching** — minimizes SQLite bottlenecks by batching high-frequency progress updates
 - **Multi-threaded parallel downloads** — dynamic file segmentation with configurable threads (1–16)
 - **Single-thread fallback** — auto-switches when servers don't support range headers
 - **Resume broken downloads** — continue from where they left off after interruptions
@@ -28,6 +32,7 @@
 - **Rolling-window speed estimation** — smooth 3-second interval for accurate speed display
 
 ### YouTube Integration
+- **Auto-Retry & Seamless URL Refresh** — detects `403/410` expirations, stealthily refreshes stream manifests, and cleanly retries chunks without failing the task
 - **Video & audio stream fetching** — powered by `youtube_explode_dart`
 - **Playlist support** — batch download entire playlists
 - **Auto URL detection** — recognizes all YouTube formats (watch, embed, live, music, shorts)

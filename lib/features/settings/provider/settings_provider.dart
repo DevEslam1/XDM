@@ -125,7 +125,7 @@ class SettingsProvider extends ChangeNotifier {
   String proxyPassword = '';
   bool autoRetryEnabled = true;
   int maxRetries = 3;
-  int retryDelaySeconds = 10;
+  int retryDelaySeconds = 3;
   String searchEngine = 'Google';
 
   void _onPlatformBrightnessChanged() {

@@ -266,8 +266,8 @@ class YoutubeService {
     Object? lastError;
 
     final clientsToTry = [
-      null, // default
       [YoutubeApiClient.android],
+      null, // default
       [YoutubeApiClient.ios],
       [YoutubeApiClient.safari],
       [YoutubeApiClient.tv],
