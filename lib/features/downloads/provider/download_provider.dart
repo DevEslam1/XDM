@@ -866,6 +866,32 @@ class DownloadProvider extends ChangeNotifier
     _updateTelemetryWidget();
   }
 
+  Future<void> clearHistoryTasks(List<String> ids) async {
+    for (final id in ids) {
+      _cancelTokens.remove(id);
+      _speedHistories.remove(id);
+      _lastProgressUpdateTimes.remove(id);
+      _lastDbSaveTimes.remove(id);
+      _pendingProgressUpdates.remove(id);
+      _retryCounts.remove(id);
+      _retryTimers[id]?.cancel();
+      _retryTimers.remove(id);
+      _activeFutures.remove(id);
+      _tasks.removeWhere((task) => task.id == id);
+
+      final torrentId = _torrentIds[id];
+      if (torrentId != null) {
+        TorrentService.removeTorrent(torrentId, deleteFiles: false);
+        _torrentIds.remove(id);
+      }
+      _notificationService.cancelNotification(_getNotificationId(id));
+    }
+    filteredTasksDirty = true;
+    await _databaseService.deleteTasks(ids);
+    updateActualTorrentUploadLimit();
+    notifyListeners();
+  }
+
   /// Deletes the partial .dmxpart and .partN files on disk for [task].
   Future<void> _cleanupPartFiles(DownloadTask task) async {
     try {

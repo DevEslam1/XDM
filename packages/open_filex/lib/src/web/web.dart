@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:js_interop';
 import 'package:web/web.dart';
 
 /// Open your file with [uri] on the web

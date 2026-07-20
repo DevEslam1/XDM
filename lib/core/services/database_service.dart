@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:drift/drift.dart' as drift;
+import 'package:drift/native.dart';
 
 import 'database/app_database.dart';
 import '../../features/downloads/models/download_task.dart';
@@ -18,10 +19,11 @@ class DatabaseService {
   Future<void> init({String? testPath}) async {
     if (testPath != null) {
       Hive.init(testPath);
+      _db = AppDatabase.forTesting(NativeDatabase.memory());
     } else {
       await Hive.initFlutter();
+      _db = AppDatabase();
     }
-    _db = AppDatabase();
     if (!_migrated) {
       await _migrateFromHive();
       _migrated = true;
