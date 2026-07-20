@@ -7,12 +7,15 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import java.util.concurrent.Executors
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.dmx/widget"
+    private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
+    private val backgroundExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +27,25 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, YOUTUBE_CHANNEL).setMethodCallHandler { call, result ->
+            if (call.method != "getStreams") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val url = call.argument<String>("url")
+            if (url.isNullOrBlank()) {
+                result.error("invalid_url", "A YouTube URL is required.", null)
+                return@setMethodCallHandler
+            }
+            backgroundExecutor.execute {
+                try {
+                    val streams = YoutubeExtractor.getStreams(url)
+                    runOnUiThread { result.success(streams) }
+                } catch (error: Exception) {
+                    runOnUiThread { result.error("extractor_failed", error.message, null) }
+                }
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "updateWidget") {
                 val activeCount = call.argument<Int>("activeCount") ?: 0

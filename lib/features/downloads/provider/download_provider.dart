@@ -1245,6 +1245,12 @@ class DownloadProvider extends ChangeNotifier
       if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
     });
 
+    // Googlevideo signed URLs are short lived and can reject parallel range
+    // requests with 403. Keep each YouTube stream to a single HTTP request.
+    // The two streams are already downloaded sequentially below (audio, then
+    // video), so this also avoids competing requests from the same manifest.
+    final streamThreadCount = isYoutube ? 1 : task.threadCount;
+
     // Run video and audio sequentially (audio first, then video)
     final downloadFuture = () async {
       if (hasAudio) {
@@ -1302,7 +1308,7 @@ class DownloadProvider extends ChangeNotifier
             return _settingsProvider.speedLimitBytesPerSecond;
           },
           activeDownloadCount: () => downloadingTasksCount,
-          threadCount: task.threadCount,
+          threadCount: streamThreadCount,
           customUserAgent: _settingsProvider.customUserAgent,
           referer: isYoutube ? task.downloadPageUrl : null,
           enableProxy: _settingsProvider.enableProxy,
@@ -1452,7 +1458,7 @@ class DownloadProvider extends ChangeNotifier
           return _settingsProvider.speedLimitBytesPerSecond;
         },
         activeDownloadCount: () => downloadingTasksCount,
-        threadCount: task.threadCount,
+        threadCount: streamThreadCount,
         customUserAgent: _settingsProvider.customUserAgent,
         enableProxy: _settingsProvider.enableProxy,
         proxyAddress: _settingsProvider.proxyAddress,

@@ -709,36 +709,26 @@ class YoutubeService {
     String qualityPreset, {
     bool forceMuxed = false,
   }) async {
-    final result = await _fetchWithFallback(videoId);
-    final manifest = result.manifest;
-    final title = result.title;
+    final url = 'https://www.youtube.com/watch?v=$videoId';
+    final allStreams = await getStreams(url);
+
+    if (allStreams.isEmpty) return null;
 
     if (qualityPreset == 'audio_only') {
-      if (manifest.audioOnly.isEmpty) return null;
-      final sorted = manifest.audioOnly.toList()
-        ..sort(
-          (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
-        );
-      final stream = sorted.first;
-      return {
-        'src': stream.url.toString(),
-        'label':
-            'Audio Only: (${stream.bitrate.kiloBitsPerSecond.round()} Kbps)',
-        'size': stream.size.totalBytes,
-        'ext': stream.container.name,
-        'title': title,
-        'type': 'audio',
-      };
+      final audios = allStreams.where((s) => s['type'] == 'audio').toList();
+      if (audios.isEmpty) return null;
+      audios.sort((a, b) => (b['size'] as int).compareTo(a['size'] as int));
+      return audios.first;
     }
 
     if (qualityPreset == 'best_combined') {
       forceMuxed = false;
     }
 
-    // For muxed streams, find the requested quality or best available
-    MuxedStreamInfo? chosen;
+    final muxed = allStreams.where((s) => s['type'] == 'muxed').toList();
+    Map<String, dynamic>? chosen;
 
-    if (manifest.muxed.isNotEmpty && 
+    if (muxed.isNotEmpty && 
         (qualityPreset == 'best_combined' || qualityPreset == 'best_muxed' || 
          ['1080p', '720p', '480p', '360p'].contains(qualityPreset))) {
       final targetQualities = switch (qualityPreset) {
@@ -746,13 +736,14 @@ class YoutubeService {
         '720p' => ['720p', '480p', '360p', '240p', '1080p'],
         '480p' => ['480p', '360p', '240p', '720p', '1080p'],
         '360p' => ['360p', '240p', '480p', '720p', '1080p'],
-        _ => <String>[], // best_muxed — use the highest available
+        _ => <String>[],
       };
 
       if (targetQualities.isNotEmpty) {
         for (final target in targetQualities) {
-          for (final stream in manifest.muxed) {
-            if (_formatQuality(stream.videoQuality) == target) {
+          for (final stream in muxed) {
+            final q = stream['quality'] as String;
+            if (q.startsWith(target.replaceAll('p', ''))) {
               chosen = stream;
               break;
             }
@@ -761,33 +752,18 @@ class YoutubeService {
         }
       }
 
-      chosen ??=
-          (manifest.muxed.toList()..sort(
-                (a, b) => b.videoQuality.index.compareTo(a.videoQuality.index),
-              ))
-              .first;
+      if (chosen == null) {
+         muxed.sort((a, b) => (b['size'] as int).compareTo(a['size'] as int));
+         chosen = muxed.first;
+      }
     }
 
-    // If muxed found, return it
-    if (chosen != null) {
-      final qLabel = _formatQuality(chosen.videoQuality);
-      return {
-        'src': chosen.url.toString(),
-        'label': 'Video: $qLabel (Muxed)',
-        'size': chosen.size.totalBytes,
-        'ext': chosen.container.name,
-        'title': title,
-        'type': 'muxed',
-        'quality': qLabel,
-      };
-    }
+    if (chosen != null) return chosen;
 
-    if (forceMuxed) {
-      return null;
-    }
+    if (forceMuxed) return null;
 
-    // Fallback: combine video-only + audio-only for the requested quality
-    if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
+    final combined = allStreams.where((s) => s['type'] == 'combined').toList();
+    if (combined.isNotEmpty) {
       final targetQualities = switch (qualityPreset) {
         '360p' => ['360p', '480p', '240p', '720p'],
         '480p' => ['480p', '360p', '720p', '240p'],
@@ -796,48 +772,30 @@ class YoutubeService {
         _ => <String>[],
       };
 
-      VideoOnlyStreamInfo? chosenVideo;
+      Map<String, dynamic>? chosenCombined;
       if (targetQualities.isNotEmpty) {
         for (final target in targetQualities) {
-          for (final stream in manifest.videoOnly) {
-            if (_formatQuality(stream.videoQuality) == target) {
-              chosenVideo = stream;
+          for (final stream in combined) {
+            final q = stream['quality'] as String;
+            if (q.startsWith(target.replaceAll('p', ''))) {
+              chosenCombined = stream;
               break;
             }
           }
-          if (chosenVideo != null) break;
+          if (chosenCombined != null) break;
         }
       } else {
-        // best_muxed — use highest video-only
-        final sorted = manifest.videoOnly.toList()
-          ..sort(
-            (a, b) => b.videoQuality.index.compareTo(a.videoQuality.index),
-          );
-        chosenVideo = sorted.first;
+        combined.sort((a, b) => ((b['videoSize'] as int?) ?? 0).compareTo((a['videoSize'] as int?) ?? 0));
+        chosenCombined = combined.first;
       }
+      
+      if (chosenCombined != null) return chosenCombined;
+    }
 
-      if (chosenVideo != null) {
-        final sortedAudio = manifest.audioOnly.toList()
-          ..sort(
-            (a, b) =>
-                b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
-          );
-        final bestAudio = sortedAudio.first;
-        final qLabel = _formatQuality(chosenVideo.videoQuality);
-        return {
-          'src': chosenVideo.url.toString(),
-          'audioSrc': bestAudio.url.toString(),
-          'label': 'Video: $qLabel + Audio (Best)',
-          'size': chosenVideo.size.totalBytes + bestAudio.size.totalBytes,
-          'videoSize': chosenVideo.size.totalBytes,
-          'audioSize': bestAudio.size.totalBytes,
-          'ext': chosenVideo.container.name,
-          'audioExt': bestAudio.container.name,
-          'title': title,
-          'type': 'combined',
-          'quality': qLabel,
-        };
-      }
+    final videoOnly = allStreams.where((s) => s['type'] == 'video_only').toList();
+    if (videoOnly.isNotEmpty) {
+      videoOnly.sort((a, b) => (b['size'] as int).compareTo(a['size'] as int));
+      return videoOnly.first;
     }
 
     return null;
