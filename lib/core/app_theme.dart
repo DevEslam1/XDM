@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 
 class AppTheme {
   // Theme Colors (Dark Mode)
-  static const Color background = Color(0xFF050508);
-  static const Color surface = Color(0xFF0C0C12);
-  static const Color cardBg = Color(0xFF121218);
-  static const Color border = Color(0xFF1E1E28);
+  static const Color background = Color(0xFF121212);
+  static const Color surface = Color(0xFF1E1E1E);
+  static const Color cardBg = Color(0xFF242424);
+  static const Color border = Color(0xFF333333);
 
   // Theme Colors (Light Mode)
   static const Color lightBackground = Color(0xFFF4F6F9);
@@ -22,12 +22,12 @@ class AppTheme {
   static const Color lightGlassBg = Color(0x0F000000);
   static const Color lightGlassBorder = Color(0x1F000000);
 
-  // Neon Accents
-  static const Color neonBlue = Color(0xFF00E5FF);
-  static const Color neonViolet = Color(0xFF9D4EDD);
-  static const Color neonGreen = Color(0xFF00FF87);
-  static const Color neonRed = Color(0xFFFF0055);
-  static const Color neonAmber = Color(0xFFFFB703);
+  // Professional Accents
+  static const Color neonBlue = Color(0xFF3B82F6);
+  static const Color neonViolet = Color(0xFF8B5CF6);
+  static const Color neonGreen = Color(0xFF10B981);
+  static const Color neonRed = Color(0xFFEF4444);
+  static const Color neonAmber = Color(0xFFF59E0B);
 
   static const Color lightNeonBlue = Color(0xFF0097B2);
   static const Color lightNeonViolet = Color(0xFF7B2CBF);
@@ -48,7 +48,7 @@ class AppTheme {
   static const TextStyle _darkDisplayLarge = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold);
   static const TextStyle _darkDisplayMedium = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold);
   static const TextStyle _darkDisplaySmall = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold);
-  static const TextStyle _darkHeadlineLarge = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold, letterSpacing: -0.5);
+  static const TextStyle _darkHeadlineLarge = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.bold);
   static const TextStyle _darkHeadlineMedium = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.w600);
   static const TextStyle _darkHeadlineSmall = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.w600);
   static const TextStyle _darkTitleLarge = TextStyle(fontFamily: 'Space Grotesk', color: textPrimary, fontWeight: FontWeight.w600);
@@ -57,14 +57,14 @@ class AppTheme {
   static const TextStyle _darkBodyLarge = TextStyle(fontFamily: 'Inter', color: textPrimary);
   static const TextStyle _darkBodyMedium = TextStyle(fontFamily: 'Inter', color: textSecondary);
   static const TextStyle _darkBodySmall = TextStyle(fontFamily: 'Inter', color: textMuted);
-  static const TextStyle _darkLabelLarge = TextStyle(fontFamily: 'Space Grotesk', color: neonBlue, fontWeight: FontWeight.w600, letterSpacing: 0.5);
+  static const TextStyle _darkLabelLarge = TextStyle(fontFamily: 'Space Grotesk', color: neonBlue, fontWeight: FontWeight.w600);
   static const TextStyle _darkLabelMedium = TextStyle(fontFamily: 'Inter', color: textSecondary, fontWeight: FontWeight.w500);
 
   // Pre-allocated TextStyles for light theme
   static const TextStyle _lightDisplayLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold);
   static const TextStyle _lightDisplayMedium = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold);
   static const TextStyle _lightDisplaySmall = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold);
-  static const TextStyle _lightHeadlineLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold, letterSpacing: -0.5);
+  static const TextStyle _lightHeadlineLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.bold);
   static const TextStyle _lightHeadlineMedium = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.w600);
   static const TextStyle _lightHeadlineSmall = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.w600);
   static const TextStyle _lightTitleLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightTextPrimary, fontWeight: FontWeight.w600);
@@ -73,7 +73,7 @@ class AppTheme {
   static const TextStyle _lightBodyLarge = TextStyle(fontFamily: 'Inter', color: lightTextPrimary);
   static const TextStyle _lightBodyMedium = TextStyle(fontFamily: 'Inter', color: lightTextSecondary);
   static const TextStyle _lightBodySmall = TextStyle(fontFamily: 'Inter', color: lightTextMuted);
-  static const TextStyle _lightLabelLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightNeonBlue, fontWeight: FontWeight.w600, letterSpacing: 0.5);
+  static const TextStyle _lightLabelLarge = TextStyle(fontFamily: 'Space Grotesk', color: lightNeonBlue, fontWeight: FontWeight.w600);
   static const TextStyle _lightLabelMedium = TextStyle(fontFamily: 'Inter', color: lightTextSecondary, fontWeight: FontWeight.w500);
 
   // --- Glass decoration helpers ---
@@ -113,11 +113,12 @@ class AppTheme {
         color: accentColor.withValues(alpha: borderOpacity),
         width: 0.8,
       ),
-      boxShadow: [
+      boxShadow: const [
         BoxShadow(
-          color: accentColor.withValues(alpha: glowOpacity),
-          blurRadius: 16.0,
+          color: Colors.black12,
+          blurRadius: 8.0,
           spreadRadius: 0,
+          offset: Offset(0, 2),
         ),
       ],
     );

@@ -22,7 +22,7 @@ class NeonGlowButton extends StatelessWidget {
     this.color = AppTheme.neonBlue,
     this.glowColor,
     this.isFilled = false,
-    this.hasGlow = true,
+    this.hasGlow = false,
     this.isExpanded = false,
     this.isLoading = false,
   });
@@ -30,10 +30,6 @@ class NeonGlowButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Provider.of<SettingsProvider>(context, listen: false).isDarkMode;
-    final effectiveGlowColor = glowColor ?? color;
-    final glassBgColor = isDark ? AppTheme.glassBg : AppTheme.lightGlassBg;
-
-    // For filled buttons, use a contrast color for text/icons
     final filledContentColor = isDark ? AppTheme.background : AppTheme.lightBackground;
 
     Widget buttonContent = Row(
@@ -57,12 +53,10 @@ class NeonGlowButton extends StatelessWidget {
           const SizedBox(width: 8),
         ],
         Text(
-          text.toUpperCase(),
+          text,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
             color: isFilled ? filledContentColor : color,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.5,
-            fontSize: 13,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
@@ -72,65 +66,36 @@ class NeonGlowButton extends StatelessWidget {
       buttonContent = Center(child: buttonContent);
     }
 
-    const double height = 48.0;
-
     final effectiveOnPressed = isLoading ? null : onPressed;
 
-    return Opacity(
-      opacity: effectiveOnPressed != null ? 1.0 : 0.5,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-          height: height,
-          width: isExpanded ? double.infinity : null,
-          decoration: BoxDecoration(
-            gradient: isFilled
-                ? LinearGradient(
-                    colors: [
-                      color,
-                      Color.lerp(color, Colors.white, 0.15)!,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : null,
-            color: isFilled ? null : glassBgColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isFilled
-                  ? color.withValues(alpha: 0.4)
-                  : color.withValues(alpha: 0.3),
-              width: 1.0,
-            ),
-            boxShadow: (hasGlow && effectiveOnPressed != null && isDark)
-                ? [
-                    BoxShadow(
-                      color: effectiveGlowColor.withValues(alpha: 0.2),
-                      blurRadius: 14.0,
-                      spreadRadius: 0,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
+    if (isFilled) {
+      return FilledButton(
+        onPressed: effectiveOnPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: filledContentColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(24),
-              onTap: effectiveOnPressed,
-              overlayColor: WidgetStateProperty.all(
-                isFilled
-                    ? Colors.white.withValues(alpha: 0.15)
-                    : color.withValues(alpha: 0.12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: buttonContent,
-              ),
-            ),
-          ),
+          minimumSize: Size(isExpanded ? double.infinity : 0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
         ),
-      ),
-    );
+        child: buttonContent,
+      );
+    } else {
+      return OutlinedButton(
+        onPressed: effectiveOnPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color.withValues(alpha: 0.3), width: 1.0),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          minimumSize: Size(isExpanded ? double.infinity : 0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+        ),
+        child: buttonContent,
+      );
+    }
   }
 }

@@ -14,7 +14,7 @@ class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,
     required this.child,
-    this.borderRadius = 20.0,
+    this.borderRadius = 16.0,
     this.padding,
     required this.isDarkMode,
     this.enableBlur = false,
@@ -23,29 +23,15 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final classicUi = context.select((SettingsProvider s) => s.classicUi);
-    if (classicUi || !enableBlur) {
-      return Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: isDarkMode ? AppTheme.surface : AppTheme.lightSurface,
-          border: border ?? Border.all(
-            color: isDarkMode ? AppTheme.border : AppTheme.lightBorder,
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.circular(borderRadius),
-        ),
-        child: child,
-      );
-    }
-
     return Container(
       padding: padding,
-      decoration: AppTheme.glassDecoration(
-        borderRadius: borderRadius,
-        isDark: isDarkMode,
-      ).copyWith(
-        border: border,
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF1E1E1E) : AppTheme.lightSurface,
+        border: border ?? Border.all(
+          color: isDarkMode ? const Color(0xFF333333) : AppTheme.lightBorder,
+          width: 0.5,
+        ),
+        borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: child,
     );

@@ -289,7 +289,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               backgroundColor:
                   isDark ? AppTheme.surface : AppTheme.lightSurface,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
               ),
               title: Text(
                 isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
@@ -541,7 +541,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           return AlertDialog(
             backgroundColor: isDark ? AppTheme.surface : Colors.white,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
               side: BorderSide(
                 color: isDark
                     ? AppTheme.glassBorder
@@ -575,7 +575,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   backgroundColor: blueClr.withValues(alpha: 0.1),
                   side: BorderSide(color: blueClr),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 onPressed: () async {
@@ -630,7 +630,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                         : AppTheme.lightNeonViolet,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 onPressed: () async {
@@ -687,7 +687,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                         : AppTheme.lightNeonGreen,
                   ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 onPressed: () async {
@@ -840,7 +840,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: GlassCard(
         isDarkMode: isDark,
@@ -929,7 +929,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       Icon(Icons.share, color: secClr, size: 14),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
 
                   // Download link field
                   _buildTextField(
@@ -963,7 +963,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     textClr: textClr,
                     secClr: secClr,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
                   // Save as
                   Text(
@@ -974,7 +974,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -1025,7 +1025,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   RichText(
                     text: TextSpan(
                       style: TextStyle(fontSize: 12, color: secClr),
@@ -1056,7 +1056,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
-                      vertical: 10,
+                      vertical: 12,
                     ),
                     decoration: BoxDecoration(
                       color: inputBgColor,
@@ -1324,8 +1324,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 20,
-          height: 20,
+          width: 24,
+          height: 24,
           child: Checkbox(
             value: value,
             activeColor: activeColor,

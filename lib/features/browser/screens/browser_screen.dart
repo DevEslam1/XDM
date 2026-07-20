@@ -767,7 +767,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       child: Row(
         children: [
           Icon(icon, size: 16, color: textClr),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Text(label, style: TextStyle(color: textClr, fontSize: 12)),
         ],
       ),
@@ -998,7 +998,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color:
                                     (isDark
@@ -1043,7 +1043,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     : AppTheme.lightTextSecondary,
                               ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(14),
@@ -1089,7 +1089,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                       ? AppTheme.textSecondary
                                       : AppTheme.lightTextSecondary,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(24),
                                   ),
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
@@ -1512,7 +1512,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           shrinkWrap: true,
                           itemCount: detectedSources.length,
                           separatorBuilder: (context, index) =>
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
                           itemBuilder: (context, i) {
                             final src = detectedSources[i];
                             final label =
@@ -1790,7 +1790,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             // Header
                             Padding(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 20.0,
+                                horizontal: 24.0,
                                 vertical: 16.0,
                               ),
                               child: Row(
@@ -2002,7 +2002,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(height: 6),
+                                          const SizedBox(height: 8),
                                           Text(
                                             tab.isHome ? 'Dashboard' : tab.url,
                                             maxLines: 1,
@@ -2047,7 +2047,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Center(
             child: Column(
               children: [
@@ -2353,7 +2353,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(icon, color: color, size: 20),
                 ),
@@ -2522,7 +2522,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                               alpha: 0.08,
                                             )
                                           : const Color(0xFFF1F5F9)),
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(24),
                                 border: Border.all(
                                   color: _isFocused
                                       ? (isDark
@@ -2724,7 +2724,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     context: context,
                                     builder: (ctx) => AlertDialog(
                                       backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                                       title: Text(isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
                                           style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
                                       content: Text(isRtl ? 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.' : 'This link contains both a single video and a playlist.',
@@ -3448,7 +3448,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
     return AlertDialog(
       backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface)
           .withValues(alpha: 0.95),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: Text(
         'JS / CSS INJECTOR',
         style: TextStyle(
