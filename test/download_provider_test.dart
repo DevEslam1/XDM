@@ -109,7 +109,7 @@ Future<(DatabaseService, SettingsProvider)> _setupServices() async {
   await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
 
   final database = DatabaseService();
-  await database.init();
+  await database.init(testPath: 'build/test_hive_provider');
   final settings = SettingsProvider();
   await settings.load();
   return (database, settings);

@@ -837,7 +837,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         padding: EdgeInsets.zero,
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: EdgeInsets.only(
+              left: 20.0,
+              right: 20.0,
+              top: 20.0,
+              bottom: 20.0 + MediaQuery.of(context).viewInsets.bottom,
+            ),
             child: Form(
               key: _formKey,
               child: Column(

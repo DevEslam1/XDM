@@ -30,7 +30,7 @@ Future<DmxApp> _buildTestApp() async {
     await Hive.openBox<dynamic>(DatabaseService.downloadsBoxName);
   }
   final databaseService = DatabaseService();
-  await databaseService.init();
+  await databaseService.init(testPath: 'build/test_hive_widget');
   settingsProvider = SettingsProvider();
   await settingsProvider!.load();
   downloadProvider = DownloadProvider(

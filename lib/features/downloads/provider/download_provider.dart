@@ -312,17 +312,17 @@ class DownloadProvider extends ChangeNotifier
     }
 
     updateActualTorrentUploadLimit();
-    _checkScheduledDownloads();
     _startWidgetTimer();
     notifyListeners();
 
-    // Ensure initial connectivity state is resolved to avoid race conditions
-    // where downloads start on mobile data before the WiFi-only check completes.
+    // Resolve connectivity BEFORE any scheduled downloads or pumpQueue to
+    // prevent downloads starting on mobile data when wifiOnly is enabled.
     if (!_hasResolvedInitialConnectivity) {
       _currentConnectivity = await Connectivity().checkConnectivity();
       _hasResolvedInitialConnectivity = true;
     }
     await _checkWifiOnlyConstraint();
+    _checkScheduledDownloads();
 
     // Auto-resume if enabled — unpause orphaned downloads (excluding
     // user-paused, scheduled, or Wi-Fi-waiting tasks) and pump the queue so queued
@@ -1531,6 +1531,16 @@ class DownloadProvider extends ChangeNotifier
             _notificationService.cancelNotification(notificationId);
             return;
           }
+
+          // Clean up orphaned temp files on failure (audio or video may have been partially downloaded)
+          try {
+            if (hasAudio && audioTempPath != null) {
+              final audioFile = File(audioTempPath);
+              if (await audioFile.exists()) await audioFile.delete();
+            }
+            final videoTemp = File(current.tempFilePath);
+            if (await videoTemp.exists()) await videoTemp.delete();
+          } catch (_) {}
 
           // Check if YouTube link expired or failed due to signature/IP mismatch/blackhole
           final isYoutubeDownload = current.downloadPageUrl != null &&

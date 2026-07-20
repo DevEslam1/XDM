@@ -15,8 +15,12 @@ class DatabaseService {
   static const String bookmarksBoxName = 'browser_bookmarks';
   static const String browserHistoryBoxName = 'browser_history';
 
-  Future<void> init() async {
-    await Hive.initFlutter();
+  Future<void> init({String? testPath}) async {
+    if (testPath != null) {
+      Hive.init(testPath);
+    } else {
+      await Hive.initFlutter();
+    }
     _db = AppDatabase();
     if (!_migrated) {
       await _migrateFromHive();
@@ -258,6 +262,11 @@ class DatabaseService {
 
   Future<void> deleteTask(String id) {
     return (_db.delete(_db.downloadTasks)..where((t) => t.id.equals(id))).go();
+  }
+
+  Future<void> deleteTasks(Iterable<String> ids) {
+    if (ids.isEmpty) return Future.value();
+    return (_db.delete(_db.downloadTasks)..where((t) => t.id.isIn(ids))).go();
   }
 
   Future<void> clearAllTasks() {

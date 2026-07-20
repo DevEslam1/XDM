@@ -186,6 +186,7 @@ class DownloadEngine {
             tempDir = directory.path;
           } catch (e) {
             debugPrint('Failed to get temporary directory: $e');
+            throw StateError('Cannot resolve temporary directory for Torrent download: $e');
           }
         }
         final torrentId = TorrentService.addMagnet(url, tempDir);

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 @pragma('vm:entry-point')
 class BackgroundService {
@@ -64,6 +65,7 @@ class BackgroundService {
       resetHeartbeat();
 
       stopSub = service.on('stopService').listen((_) {
+        WakelockPlus.disable();
         cancelAll();
         service.stopSelf();
       });
@@ -94,6 +96,7 @@ class BackgroundService {
 
   static Future<void> start() async {
     if (!isSupported) return;
+    await WakelockPlus.enable();
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
     if (!isRunning) {
@@ -103,6 +106,7 @@ class BackgroundService {
 
   static Future<void> stop() async {
     if (!isSupported) return;
+    await WakelockPlus.disable();
     final service = FlutterBackgroundService();
     service.invoke('stopService');
   }

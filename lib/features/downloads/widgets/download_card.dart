@@ -25,9 +25,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
 
-    return Selector<DownloadProvider, DownloadTask>(
-      selector: (_, p) => p.taskById(task.id) ?? task,
-      builder: (context, task, child) {
+    return Selector<DownloadProvider, _CardSnapshot>(
+      selector: (_, p) {
+        final t = p.taskById(task.id) ?? task;
+        return _CardSnapshot.fromTask(t);
+      },
+      builder: (context, snapshot, child) {
+        final task = context.read<DownloadProvider>().taskById(this.task.id) ?? this.task;
 
     // Determine status colors
     Color statusColor;
@@ -871,4 +875,69 @@ class _ProgressBar extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Value-type snapshot used with [Selector] to detect task changes
+/// despite [DownloadTask] using id-based equality.
+class _CardSnapshot {
+  final DownloadStatus status;
+  final String category;
+  final String? errorMessage;
+  final double progress;
+  final double audioProgress;
+  final double speed;
+  final int? eta;
+  final int downloadedBytes;
+  final int fileSize;
+  final bool isTorrent;
+  final bool seedingEnabled;
+
+  const _CardSnapshot({
+    required this.status,
+    required this.category,
+    required this.errorMessage,
+    required this.progress,
+    required this.audioProgress,
+    required this.speed,
+    required this.eta,
+    required this.downloadedBytes,
+    required this.fileSize,
+    required this.isTorrent,
+    required this.seedingEnabled,
+  });
+
+  factory _CardSnapshot.fromTask(DownloadTask t) => _CardSnapshot(
+        status: t.status,
+        category: t.category,
+        errorMessage: t.errorMessage,
+        progress: t.progress,
+        audioProgress: t.audioProgress,
+        speed: t.speed,
+        eta: t.eta,
+        downloadedBytes: t.downloadedBytes,
+        fileSize: t.fileSize,
+        isTorrent: t.isTorrent,
+        seedingEnabled: t.seedingEnabled,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CardSnapshot &&
+      other.status == status &&
+      other.category == category &&
+      other.errorMessage == errorMessage &&
+      other.progress == progress &&
+      other.audioProgress == audioProgress &&
+      other.speed == speed &&
+      other.eta == eta &&
+      other.downloadedBytes == downloadedBytes &&
+      other.fileSize == fileSize &&
+      other.isTorrent == isTorrent &&
+      other.seedingEnabled == seedingEnabled;
+
+  @override
+  int get hashCode => Object.hash(
+        status, category, errorMessage, progress, audioProgress,
+        speed, eta, downloadedBytes, fileSize, isTorrent, seedingEnabled,
+      );
 }

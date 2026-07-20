@@ -350,15 +350,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
                 onPressed: () async {
-                  // TODO: Add batch clearHistoryTasks method to DownloadProvider
-                  provider.startBatch();
-                  try {
-                    for (final task in tasksToClear) {
-                      await provider.deleteTask(task.id);
-                    }
-                  } finally {
-                    provider.endBatch(provider.notifyListeners);
-                  }
+                  await provider.clearHistoryTasks(tasksToClear.map((t) => t.id).toList());
                   if (context.mounted) {
                     Navigator.of(context).pop();
                   }
