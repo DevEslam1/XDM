@@ -45,14 +45,22 @@ mixin DownloadTorrentMixin {
       TorrentService.resumeTorrent(torrentId);
 
       if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
-        final priorities = task.torrentFiles!
-            .map((f) {
-              final selected = f['selected'] as bool? ?? true;
-              if (!selected) return 0;
-              return f['priority'] as int? ?? 4;
-            })
-            .toList();
-        TorrentService.setFilePriorities(torrentId, priorities);
+        final fileCount = TorrentService.getFileCount(torrentId);
+        if (fileCount == task.torrentFiles!.length) {
+          final priorities = task.torrentFiles!
+              .map((f) {
+                final selected = f['selected'] as bool? ?? true;
+                if (!selected) return 0;
+                return f['priority'] as int? ?? 4;
+              })
+              .toList();
+          TorrentService.setFilePriorities(torrentId, priorities);
+        } else {
+          debugPrint(
+            'Skipping file priorities for ${task.id}: stored file count '
+            '(${task.torrentFiles!.length}) does not match torrent ($fileCount).',
+          );
+        }
       }
     } catch (e) {
       debugPrint('Failed to restart seeding for task ${task.id}: $e');
@@ -221,12 +229,31 @@ mixin DownloadTorrentMixin {
     if (remainingPhased > 0 && lowFiles.isNotEmpty) {
       final lowSize =
           lowFiles.fold(0, (sum, f) => sum + (f['length'] as int));
-      for (final f in lowFiles) {
+      if (remainingPhased <= lowSize) {
+        for (final f in lowFiles) {
+          final length = f['length'] as int;
+          final share = lowSize > 0
+              ? (remainingPhased * (length / lowSize)).round()
+              : 0;
+          phasedShares[f['name'] as String] = share.clamp(0, length);
+        }
+      } else {
+        for (final f in lowFiles) {
+          phasedShares[f['name'] as String] = f['length'] as int;
+        }
+      }
+    }
+    // If any bytes remain unassigned (all phases exhausted), distribute proportionally
+    if (remainingPhased > 0 && selectedSize > 0) {
+      for (final f in selectedFiles) {
+        final name = f['name'] as String;
         final length = f['length'] as int;
-        final share = lowSize > 0
-            ? (remainingPhased * (length / lowSize)).round()
-            : 0;
-        phasedShares[f['name'] as String] = share.clamp(0, length);
+        final current = phasedShares[name] ?? 0;
+        final remaining = length - current;
+        if (remaining > 0) {
+          final share = (remainingPhased * (remaining / selectedSize)).round();
+          phasedShares[name] = current + share.clamp(0, remaining);
+        }
       }
     }
 

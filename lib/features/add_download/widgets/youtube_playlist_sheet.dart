@@ -170,6 +170,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
           youtubeQualityPreset: _qualityPreset,
         );
         enqueuedVideos.add(video);
+        completed++;
       } catch (e) {
         debugPrint('Failed to enqueue video $videoId: $e');
         failed++;
@@ -193,7 +194,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         break;
       }
 
-      completed++;
       if (mounted) {
         setState(() => _downloadProgress = completed);
       }

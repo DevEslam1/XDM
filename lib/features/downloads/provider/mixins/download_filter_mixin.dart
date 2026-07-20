@@ -116,7 +116,8 @@ mixin DownloadFilterMixin {
   List<DownloadTask> get filteredTasks {
     if (!_filteredTasksDirty && _cachedFilteredTasks != null) {
       return _cachedFilteredTasks!
-          .map((t) => findTaskById(t.id) ?? t)
+          .map((t) => findTaskById(t.id))
+          .whereType<DownloadTask>()
           .toList();
     }
     final list = providerTasks.where((task) {

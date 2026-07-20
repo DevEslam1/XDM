@@ -123,8 +123,9 @@ class AppTheme {
     );
   }
 
+  static ThemeData? _cachedDarkTheme;
   static ThemeData get darkTheme {
-    return ThemeData(
+    return _cachedDarkTheme ??= ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: background,
@@ -218,8 +219,9 @@ class AppTheme {
     );
   }
 
+  static ThemeData? _cachedLightTheme;
   static ThemeData get lightTheme {
-    return ThemeData(
+    return _cachedLightTheme ??= ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: lightBackground,

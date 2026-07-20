@@ -282,7 +282,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             final isDark = context.read<SettingsProvider>().isDarkMode;
             final isRtl = L10n.isRtl(context);
             return AlertDialog(
-              backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+              backgroundColor:
+                  isDark ? AppTheme.surface : AppTheme.lightSurface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -1201,8 +1202,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   const SizedBox(height: 32),
 
                   // Action Buttons
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
@@ -1215,7 +1218,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
                       if (_isResolvingLink)
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 16),
@@ -1237,7 +1239,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                             ),
                           ),
                         ),
-                      const SizedBox(width: 8),
                       NeonGlowButton(
                         onPressed: () {
                           if (_formKey.currentState!.validate()) {

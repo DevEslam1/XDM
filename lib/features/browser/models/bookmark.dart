@@ -39,7 +39,7 @@ class Bookmark {
 
   factory Bookmark.fromMap(Map<String, dynamic> map) {
     return Bookmark(
-      id: map['id'] as String,
+      id: map['id'] as String? ?? '',
       title: map['title'] as String? ?? '',
       url: map['url'] as String? ?? '',
       folder: map['folder'] as String?,

@@ -69,21 +69,18 @@ mixin DownloadQueueMixin {
     _queueProcessing = true;
     _needsRePump = false;
     try {
-      final availableSlots =
-          providerSettingsProvider.maxDownloads - downloadingTasksCount;
-      if (availableSlots <= 0) {
-        _queueProcessing = false;
-        return;
-      }
-
+      final maxSlots = providerSettingsProvider.maxDownloads;
       final queued = providerTasks
           .where((task) =>
               task.status == DownloadStatus.queued &&
               !isTaskWaitingForRetry(task.id))
-          .take(availableSlots)
           .toList();
+      var startedThisPass = 0;
       for (final task in queued) {
+        final availableSlots = maxSlots - downloadingTasksCount - startedThisPass;
+        if (availableSlots <= 0) break;
         startTaskFromQueue(task);
+        startedThisPass++;
       }
     } catch (e) {
       debugPrint('Queue pump error: $e');

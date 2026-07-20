@@ -50,10 +50,17 @@ class NotificationService {
 
   ReceivePort? _receivePort;
   StreamSubscription<dynamic>? _receivePortSub;
+  Future<void>? _initFuture;
 
   Future<void> init() async {
     if (!isSupported) return;
-
+    // Guard against concurrent re-entrancy: if an init is already in
+    // progress (or completed), reuse its future instead of re-running
+    // setup, which would re-create the ReceivePort and leak the old one.
+    if (_initFuture != null) return _initFuture!;
+    final completer = Completer<void>();
+    _initFuture = completer.future;
+    try {
     IsolateNameServer.removePortNameMapping('dmx_notification_port');
     _receivePortSub?.cancel();
     _receivePortSub = null;
@@ -144,6 +151,12 @@ class NotificationService {
       );
     }
     _initialized = true;
+    completer.complete();
+    } catch (e) {
+      _initFuture = null;
+      completer.completeError(e);
+      rethrow;
+    }
   }
 
   Future<void> showDownloadProgress({

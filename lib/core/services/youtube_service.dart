@@ -188,17 +188,9 @@ class YoutubeService {
   // ───────────────────────── Quality Helpers ─────────────────────────
 
   static String _formatQuality(VideoQuality q) {
-    final name = q.name.toLowerCase();
-    if (name.contains('2160') || name == 'high2160') return '4K';
-    if (name.contains('1440') || name == 'high1440') return '1440p';
-    if (name.contains('1080') || name == 'high1080') return '1080p';
-    if (name.contains('720') || name == 'high720') return '720p';
-    if (name.contains('480') || name == 'medium480') return '480p';
-    if (name.contains('360') || name == 'medium360') return '360p';
-    if (name.contains('240') || name == 'low240') return '240p';
-    if (name == 'low144') return '144p';
-    if (name.contains('144')) return '144p';
-    return q.name;
+    // Use the library's canonical label so it stays consistent between
+    // getStreams (sheet options) and getStreamForVideo (resolution lookup).
+    return q.qualityString;
   }
 
   // ──────────────────────── Cleanup ─────────────────────────────────
@@ -520,12 +512,16 @@ class YoutubeService {
         lower.contains('mime%3Daudio') || lower.contains('mime=audio');
     if (isAudio) {
       if (manifest.audioOnly.isNotEmpty) return manifest.audioOnly.first;
+      // Never fall back to a video stream for an audio download — that would
+      // corrupt the file. Signal failure instead.
+      return null;
     }
 
-    // Return muxed first (preferred), then video-only.
-    if (manifest.muxed.isNotEmpty) return manifest.muxed.first;
+    // For non-audio downloads prefer video-only (used by combined downloads
+    // alongside a separate audio stream) before muxed, but never an audio-only
+    // stream which would swap the media type.
     if (manifest.videoOnly.isNotEmpty) return manifest.videoOnly.first;
-    if (manifest.audioOnly.isNotEmpty) return manifest.audioOnly.first;
+    if (manifest.muxed.isNotEmpty) return manifest.muxed.first;
     return null;
   }
 
@@ -980,7 +976,11 @@ class _CookieClient extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) {
     request.headers['cookie'] = _cookie;
     request.followRedirects = true;
-    debugPrint('[YoutubeService] Outgoing request to ${request.url} with headers: ${request.headers}');
+    // Avoid logging the cookie header — it contains authenticated session
+    // tokens (e.g. __Secure-3PSID) that must not leak into console output.
+    final redactedHeaders = Map<String, String>.from(request.headers)
+      ..remove('cookie');
+    debugPrint('[YoutubeService] Outgoing request to ${request.url} with headers: $redactedHeaders');
     return _inner.send(request);
   }
 
@@ -1199,6 +1199,7 @@ class _InnerTubeFallback {
     };
 
     final allVideos = <Map<String, dynamic>>[];
+    final seenVideoIds = <String>{};
     String? continuationToken;
     var pageNum = 0;
     const maxPages = 50; // Safety limit (~5000 videos)
@@ -1221,7 +1222,10 @@ class _InnerTubeFallback {
 
       for (final item in items) {
         final video = _parseVideoItem(item, author);
-        if (video != null) allVideos.add(video);
+        if (video == null) continue;
+        final id = video['id'] as String? ?? '';
+        if (id.isNotEmpty && !seenVideoIds.add(id)) continue;
+        allVideos.add(video);
       }
 
       if (continuationToken == null || continuationToken.isEmpty) break;

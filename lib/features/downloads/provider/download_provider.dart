@@ -190,7 +190,7 @@ class DownloadProvider extends ChangeNotifier
           final stateList = jsonDecode(content) as List;
           var total = 0;
           for (final chunk in stateList) {
-            total += chunk as int;
+            total += (chunk as num).toInt();
           }
           return total;
         } catch (e) {
@@ -357,6 +357,9 @@ class DownloadProvider extends ChangeNotifier
       if (autoResumeTasks.isNotEmpty) {
         notifyListeners();
       }
+      // Re-apply the Wi-Fi-only constraint so auto-resumed tasks that should
+      // wait for Wi-Fi are not started on mobile data.
+      await _checkWifiOnlyConstraint();
     }
 
     // Always pump the queue so queued-downloads (including newly
@@ -813,6 +816,7 @@ class DownloadProvider extends ChangeNotifier
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
     _activeFutures.remove(id);
+    _notificationIds.remove(id);
     _tasks.removeWhere((task) => task.id == id);
     filteredTasksDirty = true;
 
@@ -877,6 +881,7 @@ class DownloadProvider extends ChangeNotifier
       _retryTimers[id]?.cancel();
       _retryTimers.remove(id);
       _activeFutures.remove(id);
+      _notificationIds.remove(id);
       _tasks.removeWhere((task) => task.id == id);
 
       final torrentId = _torrentIds[id];
@@ -1265,6 +1270,7 @@ class DownloadProvider extends ChangeNotifier
                 downloadedBytes: progress.downloadedBytes,
                 speed: progress.speed,
                 eta: progress.eta,
+                audioSize: size,
               );
               _tasks[index] = updated;
               if (DateTime.now().millisecondsSinceEpoch - (_lastProgressUpdateTimes[task.id] ?? 0) >= 200) {
@@ -1358,27 +1364,33 @@ class DownloadProvider extends ChangeNotifier
             speedList.removeAt(0);
           }
 
+          // Re-read the freshest task from the list right before mutating so
+          // that any concurrent update (e.g. a YouTube URL refresh) is not
+          // clobbered by this progress write.
+          final latest = _tasks[index];
+          final base = latest.status == DownloadStatus.downloading ? latest : current;
+
           final newFileName = isAutoName && progress.fileName != null
               ? progress.fileName!
-              : current.fileName;
+              : base.fileName;
 
-          final newLocalPath = newFileName != current.fileName
-              ? p.join(p.dirname(current.localFilePath), safeFileName(newFileName))
-              : current.localFilePath;
+          final newLocalPath = newFileName != base.fileName
+              ? p.join(p.dirname(base.localFilePath), safeFileName(newFileName))
+              : base.localFilePath;
 
-          final newTempPath = newFileName != current.fileName
-              ? p.join(p.dirname(current.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
-              : current.tempFilePath;
+          final newTempPath = newFileName != base.fileName
+              ? p.join(p.dirname(base.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
+              : base.tempFilePath;
 
-          final newCategory = newFileName != current.fileName && current.category == 'Other'
+          final newCategory = newFileName != base.fileName && base.category == 'Other'
               ? categoryFromFileName(newFileName)
-              : current.category;
+              : base.category;
 
           final resolvedVideoSize = progress.fileSize > 0 ? progress.fileSize : videoTransferSize;
-          final resolvedTotalSize = hasAudio ? resolvedVideoSize + current.audioSize : resolvedVideoSize;
-          final currentDownloadedBytes = (hasAudio ? current.audioSize : 0) + progress.downloadedBytes;
+          final resolvedTotalSize = hasAudio ? resolvedVideoSize + base.audioSize : resolvedVideoSize;
+          final currentDownloadedBytes = (hasAudio ? base.audioSize : 0) + progress.downloadedBytes;
 
-          final updatedTask = current.copyWith(
+          final updatedTask = base.copyWith(
             fileName: newFileName,
             localFilePath: newLocalPath,
             tempFilePath: newTempPath,
@@ -1389,11 +1401,11 @@ class DownloadProvider extends ChangeNotifier
             eta: progress.eta,
             chunks: progress.chunks ??
                 _buildChunks(
-                  current.threadCount,
+                  base.threadCount,
                   resolvedVideoSize,
                   progress.downloadedBytes,
                 ),
-            supportsResume: progress.supportsResume ?? current.supportsResume,
+            supportsResume: progress.supportsResume ?? base.supportsResume,
           );
 
           if (now - lastUpdate >= 200) {
@@ -1422,6 +1434,10 @@ class DownloadProvider extends ChangeNotifier
               _databaseService.saveTask(updatedTask).catchError((e) {
                 debugPrint('Failed to save task progress to database: $e');
               });
+              // Keep the foreground service alive directly from the active
+              // download path so it never self-stops while bytes are flowing,
+              // even if the 5s widget timer is not running.
+              BackgroundService.sendHeartbeat();
             }
           } else {
             _tasks[index] = updatedTask;
@@ -2023,6 +2039,7 @@ class DownloadProvider extends ChangeNotifier
     for (var i = 0; i < _tasks.length; i++) {
       final task = _tasks[i];
       if (task.status == DownloadStatus.paused &&
+          !task.pausedByUser &&
           task.scheduledAt != null &&
           task.scheduledAt!.isBefore(now)) {
         _tasks[i] = task.copyWith(
@@ -2291,12 +2308,19 @@ class DownloadProvider extends ChangeNotifier
     final resolvedSupportsResume = isRefresh ? true : (metadata?.supportsResume ?? task.supportsResume);
 
     bool sizeChanged = false;
-    if (!isRefresh &&
+    
+    final oldUri = Uri.tryParse(task.url);
+    final newUri = Uri.tryParse(cleanUrl);
+    final oldItag = oldUri?.queryParameters['itag'];
+    final newItag = newUri?.queryParameters['itag'];
+    final itagChanged = oldItag != null && newItag != null && oldItag != newItag;
+
+    if (isYoutube && itagChanged) {
+      sizeChanged = true;
+    } else if (!isRefresh &&
         resolvedFileSize > 0 &&
         task.fileSize > 0 &&
         resolvedFileSize != task.fileSize) {
-      // For YouTube refreshes, sizes might vary slightly due to metadata.
-      // We should not trigger sizeChanged for YouTube.
       if (!isYoutube) {
         sizeChanged = true;
       }
@@ -2309,8 +2333,12 @@ class DownloadProvider extends ChangeNotifier
     final updatedTask = task.copyWith(
       url: cleanUrl,
       mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
-      fileSize: resolvedFileSize > 0 ? resolvedFileSize : task.fileSize,
-      audioSize: newAudioSize ?? task.audioSize,
+      fileSize: sizeChanged || task.fileSize <= 0 
+          ? (resolvedFileSize > 0 ? resolvedFileSize : task.fileSize) 
+          : task.fileSize,
+      audioSize: sizeChanged || task.audioSize <= 0 
+          ? (newAudioSize ?? task.audioSize) 
+          : task.audioSize,
       supportsResume: resolvedSupportsResume,
       downloadedBytes: sizeChanged ? 0 : task.downloadedBytes,
       chunks: sizeChanged

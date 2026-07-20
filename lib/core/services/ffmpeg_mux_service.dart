@@ -68,7 +68,9 @@ class FFmpegMuxService {
       ];
 
       _log.info('FFmpeg arguments: $arguments');
-      final session = await FFmpegKit.executeWithArguments(arguments);
+      final session = await FFmpegKit
+          .executeWithArguments(arguments)
+          .timeout(const Duration(minutes: 10));
       final returnCode = await session.getReturnCode();
 
       if (ReturnCode.isSuccess(returnCode)) {
@@ -79,13 +81,22 @@ class FFmpegMuxService {
           // Clean up temp input files
           try { await videoFile.delete(); } catch (_) {}
           try { await audioFile.delete(); } catch (_) {}
+          return true;
         } else {
           _log.warning('Merge reported success but output file not found: $outputPath');
+          return false;
         }
-        return true;
       } else {
         final logs = await session.getLogsAsString();
         _log.severe('Merge failed with return code $returnCode.\nLogs:\n$logs');
+        // Only clean up the partial/failed output. The input video/audio
+        // files are the user's already-downloaded streams — deleting them on
+        // failure would lose download progress, so we preserve them so a
+        // later retry can reuse them.
+        try {
+          final outputFile = File(outputPath);
+          if (await outputFile.exists()) await outputFile.delete();
+        } catch (_) {}
         return false;
       }
     } catch (e, stackTrace) {

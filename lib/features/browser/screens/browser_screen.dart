@@ -919,7 +919,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       url,
       type: type,
       downloadPageUrl: activeTab.isHome ? null : activeTab.url,
-      onQuality: hasMultipleQualities ? () => _showQualityPicker(url) : null,
+      onQuality: hasMultipleQualities ? () => _showQualityPicker(activeTab.id, fallbackUrl: url) : null,
     );
   }
 
@@ -1283,11 +1283,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   // Show dialog to choose quality
-  void _showQualityPicker(String url) {
+  void _showQualityPicker(String tabId, {String? fallbackUrl}) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final detectedSources = _detectedMediaSources[url] ?? [];
+    final detectedSources = _detectedMediaSources[tabId] ?? [];
+    final downloadUrl = fallbackUrl ?? '';
 
     showModalBottomSheet(
       context: context,
@@ -1366,28 +1367,28 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         _buildQualityTile(
                           context,
                           '1080p (FHD)',
-                          url,
+                          downloadUrl,
                           isDark,
                           settings,
                         ),
                         _buildQualityTile(
                           context,
                           '720p (HD)',
-                          url,
+                          downloadUrl,
                           isDark,
                           settings,
                         ),
                         _buildQualityTile(
                           context,
                           '480p (SD)',
-                          url,
+                          downloadUrl,
                           isDark,
                           settings,
                         ),
                         _buildQualityTile(
                           context,
                           '360p (Low)',
-                          url,
+                          downloadUrl,
                           isDark,
                           settings,
                         ),
@@ -1604,7 +1605,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             await prefs.setString('browser_custom_css', css);
 
             // Apply immediately to the active tab
-            _injectCustomJsCss(_tabs[_currentTabIndex]);
+            if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
+              _injectCustomJsCss(_tabs[_currentTabIndex]);
+            }
           },
         );
       },
@@ -2710,7 +2713,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   final choice = await showDialog<String>(
                                     context: context,
                                     builder: (ctx) => AlertDialog(
-                                      backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
+                                      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                       title: Text(isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
                                           style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),

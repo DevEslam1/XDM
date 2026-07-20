@@ -50,19 +50,30 @@ class DatabaseService {
               failedItems.add(value);
             }
           }
-          if (tasks.isNotEmpty) {
+            if (tasks.isNotEmpty) {
             try {
               await _db.batch((batch) => batch.insertAll(
                   _db.downloadTasks, tasks,
                   mode: drift.InsertMode.insertOrReplace));
             } catch (e) {
-              failedItems.addAll(box.values);
+              // Re-deriving failed items must not throw — guard the re-parse so
+              // the original migration error is preserved, not masked.
+              try {
+                failedItems.addAll(box.values.where((v) => !tasks.any((t) =>
+                    v is Map && t.id.value == DownloadTask.fromMap(Map<String, dynamic>.from(v)).id)));
+              } catch (_) {
+                failedItems.addAll(box.values);
+              }
             }
           }
           if (failedItems.isNotEmpty) {
-            debugPrint('Migration of $downloadsBoxName had ${failedItems.length} failures.');
+            debugPrint('Migration of $downloadsBoxName had ${failedItems.length} failures; '
+                'keeping the Hive box intact for recovery.');
+          } else {
+            // Only delete the source box once the migration has fully succeeded,
+            // so a partial/failed migration never destroys the original data.
+            await box.deleteFromDisk();
           }
-          await box.deleteFromDisk();
         } else {
           await box.deleteFromDisk();
         }
@@ -95,9 +106,11 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
-            debugPrint('Migration of $bookmarksBoxName had ${failedItems.length} failures.');
+            debugPrint('Migration of $bookmarksBoxName had ${failedItems.length} failures; '
+                'keeping the Hive box intact for recovery.');
+          } else {
+            await box.deleteFromDisk();
           }
-          await box.deleteFromDisk();
         } else {
           await box.deleteFromDisk();
         }
@@ -136,9 +149,11 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
-            debugPrint('Migration of $browserHistoryBoxName had ${failedItems.length} failures.');
+            debugPrint('Migration of $browserHistoryBoxName had ${failedItems.length} failures; '
+                'keeping the Hive box intact for recovery.');
+          } else {
+            await box.deleteFromDisk();
           }
-          await box.deleteFromDisk();
         } else {
           await box.deleteFromDisk();
         }
@@ -198,7 +213,7 @@ class DatabaseService {
       try {
         return DateTime.parse(dateStr);
       } catch (_) {
-        return DateTime(2000);
+        return null;
       }
     }
 
@@ -336,9 +351,8 @@ class DatabaseService {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return '';
     final now = DateTime.now();
-    final ts = now.millisecondsSinceEpoch;
-    final us = now.microsecond;
-    final id = '${ts}_${us}_${url.hashCode}';
+    final ts = now.microsecondsSinceEpoch;
+    final id = '${ts}_${url.hashCode}';
 
     await _db.into(_db.browserHistory).insert(
         BrowserHistoryCompanion.insert(

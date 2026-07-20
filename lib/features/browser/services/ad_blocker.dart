@@ -163,6 +163,8 @@ class AdBlocker {
       }
     }
 
+    dio.close();
+
     if (newDomains.isNotEmpty) {
       _invalidateCache();
       final updated = <String>{..._fallbackDomains, ...newDomains};

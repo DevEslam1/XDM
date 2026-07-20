@@ -198,7 +198,10 @@ class PermissionService {
     } else if (sdk >= 29) {
       final status = await Permission.storage.status;
       if (!status.isGranted) {
-        await Permission.storage.request();
+        final requestStatus = await Permission.storage.request();
+        if (!requestStatus.isGranted) {
+          return false;
+        }
       }
     } else {
       final status = await Permission.storage.status;

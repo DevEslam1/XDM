@@ -52,5 +52,6 @@ const double kGridTileGap = 24.0;
 double gridChildAspectRatio(BuildContext context, {int columns = 2, double horizontalPadding = 32.0}) {
   final w = MediaQuery.of(context).size.width;
   final availableWidth = w - horizontalPadding * 2;
-  return (availableWidth / columns - kGridTileGap) / kGridTileHeight;
+  final ratio = (availableWidth / columns - kGridTileGap) / kGridTileHeight;
+  return ratio.clamp(0.3, 3.0);
 }

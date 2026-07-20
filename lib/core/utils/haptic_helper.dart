@@ -26,7 +26,7 @@ mixin HapticHelper {
 
   void errorPulse(SettingsProvider settings) {
     if (settings.vibration) {
-      _runErrorPulse();
+      _runErrorPulse().catchError((Object _) {});
     }
   }
 

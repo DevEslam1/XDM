@@ -43,39 +43,47 @@ class FilterChipsBar extends StatelessWidget {
               height: 40,
               child: Row(
                 children: [
-                  ...state.categoryFilters.map((category) {
-                    final count = state.categoryCounts[category.toLowerCase()] ?? 0;
-                    return Padding(
-                      padding: const EdgeInsetsDirectional.only(end: 8.0),
-                      child: InputChip(
-                        label: Text(
-                          '${isRtl ? 'تصنيف: ' : 'CAT: '}${category.toUpperCase()} ($count)',
-                          style: TextStyle(
-                            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        deleteIcon: Icon(
-                          Icons.close_rounded,
-                          size: 14,
-                          color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                        ),
-                        onDeleted: () {
-                          if (context.read<SettingsProvider>().vibration) {
-                            HapticFeedback.lightImpact();
-                          }
-                          context.read<DownloadProvider>().toggleCategoryFilter(category);
+                  if (state.categoryFilters.isNotEmpty)
+                    Expanded(
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: state.categoryFilters.length,
+                        itemBuilder: (context, index) {
+                          final category = state.categoryFilters[index];
+                          final count = state.categoryCounts[category.toLowerCase()] ?? 0;
+                          return Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 8.0),
+                            child: InputChip(
+                              label: Text(
+                                '${isRtl ? 'تصنيف: ' : 'CAT: '}${category.toUpperCase()} ($count)',
+                                style: TextStyle(
+                                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              deleteIcon: Icon(
+                                Icons.close_rounded,
+                                size: 14,
+                                color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                              ),
+                              onDeleted: () {
+                                if (context.read<SettingsProvider>().vibration) {
+                                  HapticFeedback.lightImpact();
+                                }
+                                context.read<DownloadProvider>().toggleCategoryFilter(category);
+                              },
+                              backgroundColor: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.1),
+                              side: BorderSide(
+                                color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.35),
+                                width: 0.8,
+                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                          );
                         },
-                        backgroundColor: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.1),
-                        side: BorderSide(
-                          color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.35),
-                          width: 0.8,
-                        ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       ),
-                    );
-                  }),
+                    ),
                   Expanded(
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,

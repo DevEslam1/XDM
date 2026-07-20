@@ -155,8 +155,10 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       const SizedBox(height: 24),
 
                       // Controls panel
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 16,
+                        runSpacing: 12,
                         children: [
                           if (task.status == DownloadStatus.downloading)
                             NeonGlowButton(
@@ -1317,146 +1319,147 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     );
   }
 
-  void _showUpdateUrlDialog(
+  Future<void> _showUpdateUrlDialog(
     BuildContext context,
     DownloadTask task,
     DownloadProvider provider,
     SettingsProvider settings,
-  ) {
+  ) async {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textController = TextEditingController(text: task.url);
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: isDark ? AppTheme.surface : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(
-              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-            ),
-          ),
-          title: Text(
-            isRtl ? 'تحديث رابط التحميل' : 'UPDATE DOWNLOAD LINK',
-            style: TextStyle(
-              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isRtl
-                    ? 'أدخل الرابط الجديد لمتابعة التحميل:'
-                    : 'Enter the new URL to continue downloading:',
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: textController,
-                maxLines: 3,
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
-                  fontSize: 12,
-                ),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: isDark
-                      ? const Color(0xFF0F0F16)
-                      : const Color(0xFFF1F5F9),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(
-                      color: isDark
-                          ? const Color(0x15FFFFFF)
-                          : const Color(0x0D000000),
-                      width: 0.8,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(
-                      color: isDark
-                          ? const Color(0x15FFFFFF)
-                          : const Color(0x0D000000),
-                      width: 0.8,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(
-                      color:
-                          (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                              .withValues(alpha: 0.5),
-                      width: 1.2,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                triggerHaptic(settings);
-                Navigator.pop(context);
-              },
-              child: Text(
-                L10n.of(context, 'cancel_btn'),
-                style: TextStyle(
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                ),
+    try {
+      await showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: isDark ? AppTheme.surface : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
               ),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark
-                    ? AppTheme.neonBlue.withValues(alpha: 0.2)
-                    : AppTheme.lightNeonBlue.withValues(alpha: 0.1),
-                side: BorderSide(
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            title: Text(
+              isRtl ? 'تحديث رابط التحميل' : 'UPDATE DOWNLOAD LINK',
+              style: TextStyle(
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isRtl
+                      ? 'أدخل الرابط الجديد لمتابعة التحميل:'
+                      : 'Enter the new URL to continue downloading:',
+                  style: TextStyle(
+                    color: isDark
+                        ? AppTheme.textSecondary
+                        : AppTheme.lightTextSecondary,
+                    fontSize: 12,
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textController,
+                  maxLines: 3,
+                  style: TextStyle(
+                    color: isDark
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: isDark
+                        ? const Color(0xFF0F0F16)
+                        : const Color(0xFFF1F5F9),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? const Color(0x15FFFFFF)
+                            : const Color(0x0D000000),
+                        width: 0.8,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? const Color(0x15FFFFFF)
+                            : const Color(0x0D000000),
+                        width: 0.8,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(
+                        color:
+                            (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                                .withValues(alpha: 0.5),
+                        width: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  triggerHaptic(settings);
+                  Navigator.pop(context);
+                },
+                child: Text(
+                  L10n.of(context, 'cancel_btn'),
+                  style: TextStyle(
+                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  ),
                 ),
               ),
-              onPressed: () async {
-                triggerHaptic(settings);
-                final newUrl = textController.text.trim();
-                if (newUrl.isEmpty) return;
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark
+                      ? AppTheme.neonBlue.withValues(alpha: 0.2)
+                      : AppTheme.lightNeonBlue.withValues(alpha: 0.1),
+                  side: BorderSide(
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () async {
+                  triggerHaptic(settings);
+                  final newUrl = textController.text.trim();
+                  if (newUrl.isEmpty) return;
 
-                Navigator.pop(context);
-                try {
-                  await provider.updateTaskUrl(task.id, newUrl);
-                  if (context.mounted) {
-                    ThemedSnackbar.show(
-                      context,
-                      message: isRtl
-                          ? 'تم تحديث الرابط بنجاح. يمكنك استئناف التحميل الآن.'
-                          : 'Link updated successfully. You can resume download now.',
-                      color: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
-                      icon: Icons.check_circle_outline,
-                      isDarkMode: isDark,
-                    );
-                  }
+                  Navigator.pop(context);
+                  try {
+                    await provider.updateTaskUrl(task.id, newUrl);
+                    if (context.mounted) {
+                      ThemedSnackbar.show(
+                        context,
+                        message: isRtl
+                            ? 'تم تحديث الرابط بنجاح. يمكنك استئناف التحميل الآن.'
+                            : 'Link updated successfully. You can resume download now.',
+                        color: isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen,
+                        icon: Icons.check_circle_outline,
+                        isDarkMode: isDark,
+                      );
+                    }
                 } catch (e) {
                   if (context.mounted) {
                     ThemedSnackbar.show(
@@ -1481,6 +1484,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
         );
       },
     );
+    } finally {
+      textController.dispose();
+    }
   }
 
   Future<bool?> _showDeleteConfirmationDialog(

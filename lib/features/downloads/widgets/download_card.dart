@@ -31,7 +31,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         return _CardSnapshot.fromTask(t);
       },
       builder: (context, snapshot, child) {
-        final task = context.read<DownloadProvider>().taskById(this.task.id) ?? this.task;
+        final task = this.task;
 
     // Determine status colors
     Color statusColor;
@@ -399,15 +399,19 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Size progress
-                    Text(
-                      '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppTheme.textSecondary
-                            : AppTheme.lightTextSecondary,
-                        fontSize: compact ? 10 : 11,
+                    Flexible(
+                      child: Text(
+                        '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? AppTheme.textSecondary
+                              : AppTheme.lightTextSecondary,
+                          fontSize: compact ? 10 : 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     // Progress percent
                     Text(
                       task.progressPercentString,
@@ -419,9 +423,12 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                         fontSize: compact ? 10 : 11,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     // ETA or status message
-                    Row(
-                      children: [
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                         if (task.status == DownloadStatus.downloading) ...[
                           Icon(
                             Icons.download,
@@ -540,11 +547,12 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                               ),
                         ),
                       ],
+                        ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
           ),
         ),
       ),

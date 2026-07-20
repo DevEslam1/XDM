@@ -62,8 +62,6 @@ class BackgroundService {
         });
       }
 
-      resetHeartbeat();
-
       stopSub = service.on('stopService').listen((_) {
         WakelockPlus.disable();
         cancelAll();
@@ -83,6 +81,8 @@ class BackgroundService {
       heartbeatSub = service.on('heartbeat').listen((_) {
         resetHeartbeat();
       });
+
+      resetHeartbeat();
     }
   }
 

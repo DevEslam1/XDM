@@ -8,7 +8,7 @@ class TorrentService {
   static final _log = Logger('TorrentService');
   static Set<int> _activeTorrentIds = {};
   static StreamSubscription? _updatesSub;
-  static Stream<Map<int, TorrentUpdateInfo>>? _torrentUpdatesStream;
+  static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
   static bool _disposed = false;
 
   static bool get isSupported => true;
@@ -23,16 +23,37 @@ class TorrentService {
   static void _startTrackingUpdates() {
     if (_disposed || !isInitialized) return;
     if (_updatesSub != null) return;
-    _updatesSub = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
+    final controller =
+        StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
+    final sub = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
       _activeTorrentIds = Set<int>.from(torrents.keys);
+      final mapped = torrents.map((key, value) => MapEntry(key, TorrentUpdateInfo(
+        id: value.id,
+        name: value.name,
+        progress: value.progress,
+        downloadRate: value.downloadRate,
+        uploadRate: value.uploadRate,
+        totalDone: value.totalDone,
+        totalWanted: value.totalWanted,
+        hasMetadata: value.hasMetadata,
+        stateLabel: value.state.label,
+        numSeeds: value.numSeeds,
+        numPeers: value.numPeers,
+      )));
+      controller.add(mapped);
     });
+    // Assign atomically so concurrent callers cannot each create a controller
+    // and leak the first subscription.
+    _updateController = controller;
+    _updatesSub = sub;
   }
 
   static Future<void> dispose() async {
     _disposed = true;
     await _updatesSub?.cancel();
     _updatesSub = null;
-    _torrentUpdatesStream = null;
+    await _updateController?.close();
+    _updateController = null;
     _activeTorrentIds.clear();
     if (isInitialized) {
       try {
@@ -108,6 +129,16 @@ class TorrentService {
     }
   }
 
+  static int getFileCount(int id) {
+    if (_disposed || !isInitialized || id < 0) return -1;
+    try {
+      return LibtorrentFlutter.instance.getFiles(id).length;
+    } catch (e) {
+      _log.warning('getFileCount failed for id $id: $e');
+      return -1;
+    }
+  }
+
   static List<TorrentFileItem> getFiles(int id) {
     if (_disposed || !isInitialized) return [];
     if (id >= 0) {
@@ -127,21 +158,8 @@ class TorrentService {
 
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates {
     if (_disposed || !isInitialized) return const Stream.empty();
-    return _torrentUpdatesStream ??= LibtorrentFlutter.instance.torrentUpdates.map((map) {
-      return map.map((key, value) => MapEntry(key, TorrentUpdateInfo(
-        id: value.id,
-        name: value.name,
-        progress: value.progress,
-        downloadRate: value.downloadRate,
-        uploadRate: value.uploadRate,
-        totalDone: value.totalDone,
-        totalWanted: value.totalWanted,
-        hasMetadata: value.hasMetadata,
-        stateLabel: value.state.label,
-        numSeeds: value.numSeeds,
-        numPeers: value.numPeers,
-      )));
-    });
+    _startTrackingUpdates();
+    return _updateController?.stream ?? const Stream.empty();
   }
 
   static void setUploadLimit(int bps) {

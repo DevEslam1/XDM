@@ -15,12 +15,26 @@ class ShareService {
   void init({required void Function(String url) onUrlReceived}) {
     dispose();
 
+    void handleUrl(String? raw) {
+      final trimmed = (raw ?? '').trim();
+      if (isHttpUrl(trimmed) && trimmed != _lastReceivedUrl) {
+        _lastReceivedUrl = trimmed;
+        onUrlReceived(trimmed);
+      }
+    }
+
+    // Shared links/URLs arrive as SharedMediaFile entries where the value is
+    // carried in `path` (type text/url/file). Handle all of them so shared
+    // URL text isn't silently dropped.
     _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
       for (final file in value) {
-        final trimmed = file.path.trim();
-        if (isHttpUrl(trimmed) && trimmed != _lastReceivedUrl) {
-          _lastReceivedUrl = trimmed;
-          onUrlReceived(trimmed);
+        final type = file.type;
+        if (type == SharedMediaType.text ||
+            type == SharedMediaType.url ||
+            type == SharedMediaType.file) {
+          handleUrl(file.path);
+        } else {
+          handleUrl(file.path);
         }
       }
     }, onError: (err) {
@@ -31,11 +45,7 @@ class ShareService {
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {
         if (!_initialized) return;
         for (final file in value) {
-          final trimmed = file.path.trim();
-          if (isHttpUrl(trimmed) && trimmed != _lastReceivedUrl) {
-            _lastReceivedUrl = trimmed;
-            onUrlReceived(trimmed);
-          }
+          handleUrl(file.path);
         }
       });
     }
@@ -46,6 +56,7 @@ class ShareService {
     _intentSub?.cancel();
     _intentSub = null;
     _initialized = false;
+    _initialMediaConsumed = false;
     _lastReceivedUrl = null;
   }
 

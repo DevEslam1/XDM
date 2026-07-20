@@ -450,7 +450,14 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setThemeMode(String value) async {
     themeMode = value;
     await _prefs.setString(_themeModeKey, value);
-    isDarkMode = (value == 'dark');
+    final resolved = value == 'dark' ? true
+        : value == 'light' ? false
+        : WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    if (resolved != _isDarkMode) {
+      _isDarkMode = resolved;
+      await _prefs.setBool(_isDarkModeKey, resolved);
+    }
+    notifyListeners();
   }
 
   Future<void> setNotificationsEnabled(bool value) async {

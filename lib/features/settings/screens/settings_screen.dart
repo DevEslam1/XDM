@@ -76,106 +76,110 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   }) async {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          title: Text(
-            isExport
-                ? (isRtl ? 'حماية النسخة الاحتياطية' : 'ENCRYPT BACKUP')
-                : (isRtl ? 'فك تشفير النسخة الاحتياطية' : 'DECRYPT BACKUP'),
-            style: TextStyle(
-              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isExport
-                    ? (isRtl
-                          ? 'أدخل كلمة مرور لتشفير ملف النسخ الاحتياطي (اتركه فارغاً للتصدير بدون تشفير):'
-                          : 'Enter a password to encrypt the backup file (leave empty to export unencrypted):')
-                    : (isRtl
-                          ? 'هذا الملف مشفر. يرجى إدخال كلمة المرور لفك التشفير:'
-                          : 'This backup file is encrypted. Enter the password to decrypt:'),
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary,
-                  fontSize: 11,
-                ),
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+            title: Text(
+              isExport
+                  ? (isRtl ? 'حماية النسخة الاحتياطية' : 'ENCRYPT BACKUP')
+                  : (isRtl ? 'فك تشفير النسخة الاحتياطية' : 'DECRYPT BACKUP'),
+              style: TextStyle(
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
               ),
-              const SizedBox(height: 12),
-              Container(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF0F0F16)
-                      : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isExport
+                      ? (isRtl
+                            ? 'أدخل كلمة مرور لتشفير ملف النسخ الاحتياطي (اتركه فارغاً للتصدير بدون تشفير):'
+                            : 'Enter a password to encrypt the backup file (leave empty to export unencrypted):')
+                      : (isRtl
+                            ? 'هذا الملف مشفر. يرجى إدخال كلمة المرور لفك التشفير:'
+                            : 'This backup file is encrypted. Enter the password to decrypt:'),
+                  style: TextStyle(
                     color: isDark
-                        ? const Color(0x15FFFFFF)
-                        : const Color(0x0D000000),
-                    width: 0.8,
+                        ? AppTheme.textSecondary
+                        : AppTheme.lightTextSecondary,
+                    fontSize: 11,
                   ),
                 ),
-                child: TextField(
-                  controller: controller,
-                  obscureText: true,
-                  style: TextStyle(color: textClr, fontSize: 12),
-                  decoration: InputDecoration(
-                    border: InputBorder.none,
-                    hintText: isRtl ? 'كلمة المرور' : 'Password',
-                    hintStyle: TextStyle(
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F0F16)
+                        : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
                       color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
-                      fontSize: 12,
+                          ? const Color(0x15FFFFFF)
+                          : const Color(0x0D000000),
+                      width: 0.8,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
+                  ),
+                  child: TextField(
+                    controller: controller,
+                    obscureText: true,
+                    style: TextStyle(color: textClr, fontSize: 12),
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      hintText: isRtl ? 'كلمة المرور' : 'Password',
+                      hintStyle: TextStyle(
+                        color: isDark
+                            ? AppTheme.textMuted
+                            : AppTheme.lightTextMuted,
+                        fontSize: 12,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                     ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: Text(
+                  isRtl ? 'إلغاء' : 'CANCEL',
+                  style: TextStyle(
+                    color: isDark
+                        ? AppTheme.textSecondary
+                        : AppTheme.lightTextSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, controller.text),
+                child: Text(
+                  isExport
+                      ? (isRtl ? 'تصدير' : 'EXPORT')
+                      : (isRtl ? 'فك التشفير' : 'DECRYPT'),
+                  style: TextStyle(
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: Text(
-                isRtl ? 'إلغاء' : 'CANCEL',
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: Text(
-                isExport
-                    ? (isRtl ? 'تصدير' : 'EXPORT')
-                    : (isRtl ? 'فك التشفير' : 'DECRYPT'),
-                style: TextStyle(
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Future<bool?> _showImportOptionDialog(

@@ -204,7 +204,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         // History Tasks List
                         Expanded(
                           child: historyTasks.isEmpty
-                              ? _buildEmptyState(context, isDark, isRtl)
+                              ? _buildEmptyState(
+                                  context,
+                                  isDark,
+                                  isRtl,
+                                  hasRecords: historyTasksFromProvider.isNotEmpty,
+                                  hasQuery: _searchQuery.trim().isNotEmpty,
+                                  onClearSearch: () {
+                                    if (mounted) {
+                                      setState(() => _searchQuery = '');
+                                    }
+                                  },
+                                )
                               : ListView.builder(
                                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                                   physics: const BouncingScrollPhysics(),
@@ -229,12 +240,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, bool isDark, bool isRtl) {
+  Widget _buildEmptyState(
+    BuildContext context,
+    bool isDark,
+    bool isRtl, {
+    required bool hasRecords,
+    required bool hasQuery,
+    required VoidCallback onClearSearch,
+  }) {
     final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final glassBg = isDark ? AppTheme.glassBg : AppTheme.lightGlassBg;
     final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+
+    final isNoMatch = hasQuery && hasRecords;
 
     return Center(
       child: Column(
@@ -257,14 +277,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   : null,
             ),
             child: Icon(
-              Icons.history_toggle_off_outlined,
+              isNoMatch ? Icons.search_off_outlined : Icons.history_toggle_off_outlined,
               size: 40,
               color: mutedClr,
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            isRtl ? 'لم يتم العثور على إشارات مكتملة' : 'NO COMPLETED SIGNALS FOUND',
+            isNoMatch
+                ? (isRtl ? 'لا توجد نتائج مطابقة' : 'NO MATCHING RECORDS')
+                : (isRtl ? 'لم يتم العثور على إشارات مكتملة' : 'NO COMPLETED SIGNALS FOUND'),
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
               color: secClr,
               letterSpacing: 1.0,
@@ -274,12 +296,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            isRtl ? 'سيتم تصنيف السجلات المكتملة هنا.' : 'Finished logs will be cataloged here.',
+            isNoMatch
+                ? (isRtl ? 'جرّب كلمات بحث مختلفة.' : 'Try a different search term.')
+                : (isRtl ? 'سيتم تصنيف السجلات المكتملة هنا.' : 'Finished logs will be cataloged here.'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: mutedClr,
               fontSize: 11,
             ),
           ),
+          if (isNoMatch) ...[
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: onClearSearch,
+              icon: const Icon(Icons.clear, size: 16),
+              label: Text(isRtl ? 'مسح البحث' : 'CLEAR SEARCH'),
+            ),
+          ],
         ],
       ),
     );

@@ -429,7 +429,7 @@ class L10n {
         return 'موقوف';
       case DownloadStatus.failed:
         return 'فشل';
-      default:
+      case DownloadStatus.downloading:
         return rawEta
             .replaceAllMapped(RegExp(r'(\d+)\s*h\b'), (m) => '${m[1]}س')
             .replaceAllMapped(RegExp(r'(\d+)\s*m\b'), (m) => '${m[1]}د')
@@ -443,25 +443,20 @@ class L10n {
     DownloadStatus status,
   ) {
     if (!isRtl(context)) {
-      switch (status) {
-        case DownloadStatus.downloading: return 'Downloading';
-        case DownloadStatus.completed: return 'Completed';
-        case DownloadStatus.paused: return 'Paused';
-        case DownloadStatus.queued: return 'Queued';
-        case DownloadStatus.failed: return 'Failed';
-      }
+      return switch (status) {
+        DownloadStatus.downloading => 'Downloading',
+        DownloadStatus.completed => 'Completed',
+        DownloadStatus.paused => 'Paused',
+        DownloadStatus.queued => 'Queued',
+        DownloadStatus.failed => 'Failed',
+      };
     }
-    switch (status) {
-      case DownloadStatus.downloading:
-        return 'جاري التحميل';
-      case DownloadStatus.completed:
-        return 'مكتمل';
-      case DownloadStatus.paused:
-        return 'موقوف مؤقتاً';
-      case DownloadStatus.queued:
-        return 'في الانتظار';
-      case DownloadStatus.failed:
-        return 'فشل الاتصال';
-    }
+    return switch (status) {
+      DownloadStatus.downloading => 'جاري التحميل',
+      DownloadStatus.completed => 'مكتمل',
+      DownloadStatus.paused => 'موقوف مؤقتاً',
+      DownloadStatus.queued => 'في الانتظار',
+      DownloadStatus.failed => 'فشل الاتصال',
+    };
   }
 }

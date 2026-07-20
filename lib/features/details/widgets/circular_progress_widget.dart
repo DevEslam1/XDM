@@ -19,12 +19,17 @@ class CircularProgressWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipOval(
-      child: DmxBackdropFilter(
-        sigmaX: 10,
-        sigmaY: 10,
-        child: Container(
-          width: 220,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.maxWidth == double.infinity
+            ? 220.0
+            : constraints.maxWidth.clamp(160.0, 220.0);
+        return ClipOval(
+          child: DmxBackdropFilter(
+            sigmaX: 10,
+            sigmaY: 10,
+            child: Container(
+              width: size,
           height: 220,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -106,6 +111,8 @@ class CircularProgressWidget extends StatelessWidget {
         ),
       ),
     );
+    },
+  );
   }
 }
 

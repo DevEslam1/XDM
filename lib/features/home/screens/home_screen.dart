@@ -49,6 +49,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
         return GeometricGridBackground(
           child: Scaffold(
             backgroundColor: Colors.transparent,
+            extendBody: true,
+            floatingActionButtonLocation:
+                FloatingActionButtonLocation.endDocked,
         appBar: AppBar(
           backgroundColor: classicUi
               ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
@@ -253,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
         ),
         floatingActionButton: Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).padding.bottom + 8.0,
+            bottom: MediaQuery.of(context).padding.bottom + 76.0,
           ),
           child: classicUi
               ? FloatingActionButton(
@@ -918,7 +921,7 @@ class _DonutChartPanel extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 110,
+            width: isTabletDevice ? 110 : 96,
             child: Stack(
               alignment: Alignment.center,
               children: [

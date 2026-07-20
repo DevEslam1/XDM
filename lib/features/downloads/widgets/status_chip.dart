@@ -60,7 +60,6 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
     _controller?.dispose();
     _controller = null;
     _pulseAnimation = null;
-    if (mounted) setState(() {});
   }
 
   @override

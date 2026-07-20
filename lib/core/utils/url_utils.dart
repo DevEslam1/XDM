@@ -107,7 +107,11 @@ String fileNameFromUrl(String url) {
       .where((segment) => segment.trim().isNotEmpty)
       .toList();
   if (segments.isEmpty) return fallback;
-  return safeFileName(Uri.decodeComponent(segments.last));
+  try {
+    return safeFileName(Uri.decodeComponent(segments.last));
+  } catch (_) {
+    return safeFileName(segments.last);
+  }
 }
 
 String? fileNameFromContentDisposition(Headers headers) {
@@ -119,7 +123,11 @@ String? fileNameFromContentDisposition(Headers headers) {
     caseSensitive: false,
   ).firstMatch(value);
   if (utf8Match != null) {
-    return safeFileName(Uri.decodeComponent(utf8Match.group(1)!));
+    try {
+      return safeFileName(Uri.decodeComponent(utf8Match.group(1)!));
+    } catch (_) {
+      return safeFileName(utf8Match.group(1)!);
+    }
   }
 
   final quotedMatch = RegExp(

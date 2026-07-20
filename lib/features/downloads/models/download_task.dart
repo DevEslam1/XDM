@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 
@@ -240,10 +242,17 @@ class DownloadTask {
 
   factory DownloadTask.fromMap(Map<String, dynamic> map) {
     final statusName = map['status'] as String? ?? DownloadStatus.paused.name;
-    final status = DownloadStatus.values.firstWhere(
-      (value) => value.name == statusName,
-      orElse: () => DownloadStatus.paused,
-    );
+    final matched = DownloadStatus.values.where((v) => v.name == statusName);
+    final status = matched.isNotEmpty
+        ? matched.first
+        : (() {
+            debugPrint(
+              'DownloadTask.fromMap: unknown status "$statusName" for task '
+              '${map['id']}; defaulting to paused to avoid silently resuming a '
+              'potentially corrupt task.',
+            );
+            return DownloadStatus.paused;
+          })();
     final rawChunks = (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
         .map((value) => (value as num?)?.toDouble().clamp(0.0, 1.0) ?? 0.0)
         .toList();
