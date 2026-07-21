@@ -143,6 +143,7 @@ class SettingsProvider extends ChangeNotifier {
     WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = _onPlatformBrightnessChanged;
     autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
     _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
+    if (![1, 2, 3, 5, 8].contains(_maxDownloads)) _maxDownloads = 3;
     speedLimitMb = _prefs.getDouble(_speedLimitKey) ?? speedLimitMb;
     enableGlow = _prefs.getBool(_enableGlowKey) ?? enableGlow;
     gridOpacity = _prefs.getDouble(_gridOpacityKey) ?? gridOpacity;
@@ -164,6 +165,7 @@ class SettingsProvider extends ChangeNotifier {
     reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
     customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
+    if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 7;
     categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
 
     globalTorrentSeeding = _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
@@ -174,6 +176,7 @@ class SettingsProvider extends ChangeNotifier {
     forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
     torrentConnectionsLimit = _prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit;
     _defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
+    if (![1, 2, 4, 5, 6, 8, 16].contains(_defaultThreadCount)) _defaultThreadCount = 5;
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
     incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
     desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
@@ -195,7 +198,9 @@ class SettingsProvider extends ChangeNotifier {
 
     autoRetryEnabled = _prefs.getBool(_autoRetryEnabledKey) ?? autoRetryEnabled;
     maxRetries = _prefs.getInt(_maxRetriesKey) ?? maxRetries;
+    if (![1, 2, 3, 5, 10].contains(maxRetries)) maxRetries = 3;
     retryDelaySeconds = _prefs.getInt(_retryDelaySecondsKey) ?? retryDelaySeconds;
+    if (![5, 10, 30, 60].contains(retryDelaySeconds)) retryDelaySeconds = 10;
     searchEngine = _prefs.getString(_searchEngineKey) ?? searchEngine;
   }
 

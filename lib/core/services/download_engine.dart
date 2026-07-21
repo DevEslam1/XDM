@@ -127,7 +127,7 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) async {
   });
 
   try {
-    final onProgress = (DownloadProgress p) {
+    void onProgress(DownloadProgress p) {
       sendPort.send({
         'type': 'progress',
         'progress': {
@@ -140,7 +140,7 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) async {
            'supportsResume': p.supportsResume,
         }
       });
-    };
+    }
 
     await engine._doHttpDownload(
       url: args.url,
@@ -172,12 +172,12 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) async {
     String errType = 'unknown';
     int? errStatus;
     if (e is DioException) {
-      if (e.type == DioExceptionType.cancel) errType = 'cancel';
-      else if (e.type == DioExceptionType.badResponse) errType = 'badResponse';
-      else if (e.type == DioExceptionType.connectionTimeout) errType = 'connectionTimeout';
-      else if (e.type == DioExceptionType.receiveTimeout) errType = 'receiveTimeout';
-      else if (e.type == DioExceptionType.sendTimeout) errType = 'sendTimeout';
-      else if (e.type == DioExceptionType.connectionError) errType = 'connectionError';
+      if (e.type == DioExceptionType.cancel) { errType = 'cancel'; }
+      else if (e.type == DioExceptionType.badResponse) { errType = 'badResponse'; }
+      else if (e.type == DioExceptionType.connectionTimeout) { errType = 'connectionTimeout'; }
+      else if (e.type == DioExceptionType.receiveTimeout) { errType = 'receiveTimeout'; }
+      else if (e.type == DioExceptionType.sendTimeout) { errType = 'sendTimeout'; }
+      else if (e.type == DioExceptionType.connectionError) { errType = 'connectionError'; }
       errStatus = e.response?.statusCode;
     }
     sendPort.send({
@@ -222,7 +222,16 @@ class DownloadEngine {
     client.options.sendTimeout = const Duration(seconds: 60);
     client.options.receiveTimeout = const Duration(seconds: 60);
     if (url != null && url.contains('.googlevideo.com/')) {
-      client.options.headers['User-Agent'] = 'com.google.android.youtube/17.31.35 (Linux; U; Android 11)';
+      final uri = Uri.tryParse(url);
+      final clientName = uri?.queryParameters['c']?.toUpperCase();
+      if (clientName == 'ANDROID') {
+        client.options.headers['User-Agent'] = 'com.google.android.youtube/17.31.35 (Linux; U; Android 11)';
+      } else if (clientName == 'IOS') {
+        client.options.headers['User-Agent'] = 'com.google.ios.youtube/19.29.1 (iPhone; CPU iPhone OS 15_0 like Mac OS X)';
+      } else {
+        // WEB client or unknown, use standard browser UA
+        client.options.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+      }
     } else if (customUserAgent != null && customUserAgent.trim().isNotEmpty) {
       client.options.headers['User-Agent'] = customUserAgent.trim();
     } else {
@@ -579,14 +588,11 @@ class DownloadEngine {
     }
 
     var finalUrl = url;
-    try {
-      final uri = Uri.parse(url);
-      if (uri.queryParameters.containsKey('range')) {
-        final newParams = Map<String, String>.from(uri.queryParameters)
-          ..remove('range');
-        finalUrl = uri.replace(queryParameters: newParams).toString();
-      }
-    } catch (_) {}
+    // Safely remove 'range' without reordering query parameters
+    finalUrl = finalUrl.replaceAll(RegExp(r'[?&]range=[^&]*'), '');
+    if (finalUrl.contains('?&')) {
+      finalUrl = finalUrl.replaceFirst('?&', '?');
+    }
 
     final punyUrl = convertIdnToPunycode(finalUrl);
 
@@ -664,12 +670,12 @@ class DownloadEngine {
           final isCancel = errType == 'cancel';
           
           DioExceptionType dioType = DioExceptionType.unknown;
-          if (isCancel) dioType = DioExceptionType.cancel;
-          else if (errType == 'badResponse') dioType = DioExceptionType.badResponse;
-          else if (errType == 'connectionTimeout') dioType = DioExceptionType.connectionTimeout;
-          else if (errType == 'receiveTimeout') dioType = DioExceptionType.receiveTimeout;
-          else if (errType == 'sendTimeout') dioType = DioExceptionType.sendTimeout;
-          else if (errType == 'connectionError') dioType = DioExceptionType.connectionError;
+          if (isCancel) { dioType = DioExceptionType.cancel; }
+          else if (errType == 'badResponse') { dioType = DioExceptionType.badResponse; }
+          else if (errType == 'connectionTimeout') { dioType = DioExceptionType.connectionTimeout; }
+          else if (errType == 'receiveTimeout') { dioType = DioExceptionType.receiveTimeout; }
+          else if (errType == 'sendTimeout') { dioType = DioExceptionType.sendTimeout; }
+          else if (errType == 'connectionError') { dioType = DioExceptionType.connectionError; }
           
           final dioException = DioException(
             requestOptions: RequestOptions(path: punyUrl),
@@ -933,17 +939,7 @@ int id = torrentId ?? -1;
     if (isNameAutoGenerated) {
        resolvedFileName = fileNameFromUrl(url);
     }
-var finalUrl = url;
-    try {
-      final uri = Uri.parse(url);
-      if (uri.queryParameters.containsKey('range')) {
-        final newParams = Map<String, String>.from(uri.queryParameters)
-          ..remove('range');
-        finalUrl = uri.replace(queryParameters: newParams).toString();
-      }
-    } catch (_) {}
 
-    final punyUrl = convertIdnToPunycode(finalUrl);
 
     // Use a per-call Dio so concurrent downloads don't share UA/proxy/SSL
     // state via the engine's long-lived client.

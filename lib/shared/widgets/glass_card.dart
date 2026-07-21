@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
-import '../../features/settings/provider/settings_provider.dart';
 
 class GlassCard extends StatelessWidget {
   final Widget child;
@@ -27,10 +25,14 @@ class GlassCard extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: isDarkMode ? const Color(0xFF1E1E1E) : AppTheme.lightSurface,
-        border: border ?? Border.all(
-          color: isDarkMode ? const Color(0xFF333333) : AppTheme.lightBorder,
-          width: 0.5,
-        ),
+        border:
+            border ??
+            Border.all(
+              color: isDarkMode
+                  ? const Color(0xFF333333)
+                  : AppTheme.lightBorder,
+              width: 0.5,
+            ),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: child,
