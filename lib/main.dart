@@ -15,20 +15,19 @@ import 'features/browser/services/ad_blocker.dart';
 import 'features/onboarding/screens/splash_screen.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    debugPrint('FlutterError: ${details.exception}');
-  };
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('Platform error: $error\n$stack');
-    return true;
-  };
-
   runZonedGuarded(
     () async {
+      WidgetsFlutterBinding.ensureInitialized();
+
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        debugPrint('FlutterError: ${details.exception}');
+      };
+
+      PlatformDispatcher.instance.onError = (error, stack) {
+        debugPrint('Platform error: $error\n$stack');
+        return true;
+      };
       try {
         await AdBlocker.initialize();
         if (TorrentService.isSupported) {

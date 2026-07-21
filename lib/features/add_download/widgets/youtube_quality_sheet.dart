@@ -8,9 +8,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/glass_card.dart';
-import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../../../shared/widgets/themed_snackbar.dart';
 
 /// A bottom sheet that fetches available YouTube streams for a single video
 /// and lets the user pick one. Returns the selected stream map via Navigator.pop.
@@ -20,7 +18,10 @@ class YoutubeQualitySheet extends StatefulWidget {
   const YoutubeQualitySheet({super.key, required this.videoUrl});
 
   /// Shows the sheet and returns the chosen stream map, or null if dismissed.
-  static Future<Map<String, dynamic>?> show(BuildContext context, String videoUrl) {
+  static Future<Map<String, dynamic>?> show(
+    BuildContext context,
+    String videoUrl,
+  ) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     runHaptic(settings);
     return showModalBottomSheet<Map<String, dynamic>>(
@@ -111,20 +112,31 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     // Group streams by type
-    final muxed = _streams.where((s) => s['type'] == 'muxed' && s['ext'] == 'mp4').toList();
-    final audio = _streams.where((s) => s['type'] == 'audio' && s['ext'] != 'webm').toList();
-    final combined = _streams.where((s) => s['type'] == 'combined' && s['ext'] == 'mp4').toList()
-      ..sort((a, b) {
-        final aQuality = _parseQuality(a['quality'] as String? ?? '');
-        final bQuality = _parseQuality(b['quality'] as String? ?? '');
-        return bQuality.compareTo(aQuality); // descending
-      });
+    final muxed = _streams
+        .where((s) => s['type'] == 'muxed' && s['ext'] == 'mp4')
+        .toList();
+    final audio = _streams
+        .where((s) => s['type'] == 'audio' && s['ext'] != 'webm')
+        .toList();
+    final combined =
+        _streams
+            .where((s) => s['type'] == 'combined' && s['ext'] == 'mp4')
+            .toList()
+          ..sort((a, b) {
+            final aQuality = _parseQuality(a['quality'] as String? ?? '');
+            final bQuality = _parseQuality(b['quality'] as String? ?? '');
+            return bQuality.compareTo(aQuality); // descending
+          });
 
-    final videoTitle = _streams.isNotEmpty ? (_streams.first['title'] as String? ?? 'YouTube Video') : 'YouTube Video';
+    final videoTitle = _streams.isNotEmpty
+        ? (_streams.first['title'] as String? ?? 'YouTube Video')
+        : 'YouTube Video';
 
     return DraggableScrollableSheet(
       expand: false,
@@ -139,10 +151,18 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
             sigmaY: 15,
             child: Container(
               decoration: BoxDecoration(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.95),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                    .withValues(alpha: 0.95),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
                 border: Border(
-                  top: BorderSide(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder, width: 0.8),
+                  top: BorderSide(
+                    color: isDark
+                        ? AppTheme.glassBorder
+                        : AppTheme.lightGlassBorder,
+                    width: 0.8,
+                  ),
                 ),
               ),
               child: Column(
@@ -162,7 +182,10 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
 
                   // Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
                     child: Row(
                       children: [
                         Container(
@@ -171,7 +194,11 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             color: Colors.red.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: const Icon(Icons.play_circle_filled, color: Colors.red, size: 22),
+                          child: const Icon(
+                            Icons.play_circle_filled,
+                            color: Colors.red,
+                            size: 22,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -180,19 +207,23 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             children: [
                               Text(
                                 'YOUTUBE VIDEO QUALITY',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: accent,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.0,
-                                  fontSize: 14,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: accent,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
+                                      fontSize: 14,
+                                    ),
                               ),
                               if (!_isLoading && _streams.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: Text(
                                     videoTitle,
-                                    style: TextStyle(color: secClr, fontSize: 11),
+                                    style: TextStyle(
+                                      color: secClr,
+                                      fontSize: 11,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -208,7 +239,10 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
 
                   // Tabs
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -217,17 +251,25 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: _selectedTabIndex == 0 ? accent.withValues(alpha: 0.15) : Colors.transparent,
+                                color: _selectedTabIndex == 0
+                                    ? accent.withValues(alpha: 0.15)
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: _selectedTabIndex == 0 ? accent : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                                  color: _selectedTabIndex == 0
+                                      ? accent
+                                      : (isDark
+                                            ? AppTheme.glassBorder
+                                            : AppTheme.lightGlassBorder),
                                 ),
                               ),
                               alignment: Alignment.center,
                               child: Text(
                                 'VIDEO',
                                 style: TextStyle(
-                                  color: _selectedTabIndex == 0 ? accent : secClr,
+                                  color: _selectedTabIndex == 0
+                                      ? accent
+                                      : secClr,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                   letterSpacing: 0.5,
@@ -243,17 +285,32 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: _selectedTabIndex == 1 ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.15) : Colors.transparent,
+                                color: _selectedTabIndex == 1
+                                    ? (isDark
+                                              ? AppTheme.neonGreen
+                                              : AppTheme.lightNeonGreen)
+                                          .withValues(alpha: 0.15)
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: _selectedTabIndex == 1 ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen) : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+                                  color: _selectedTabIndex == 1
+                                      ? (isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen)
+                                      : (isDark
+                                            ? AppTheme.glassBorder
+                                            : AppTheme.lightGlassBorder),
                                 ),
                               ),
                               alignment: Alignment.center,
                               child: Text(
                                 'AUDIO',
                                 style: TextStyle(
-                                  color: _selectedTabIndex == 1 ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen) : secClr,
+                                  color: _selectedTabIndex == 1
+                                      ? (isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen)
+                                      : secClr,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                   letterSpacing: 0.5,
@@ -275,9 +332,18 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            ),
                             SizedBox(height: 16),
-                            Text('Fetching available streams...', style: TextStyle(fontSize: 12)),
+                            Text(
+                              'Fetching available streams...',
+                              style: TextStyle(fontSize: 12),
+                            ),
                           ],
                         ),
                       ),
@@ -290,7 +356,13 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.error_outline, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, size: 40),
+                              Icon(
+                                Icons.error_outline,
+                                color: isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed,
+                                size: 40,
+                              ),
                               const SizedBox(height: 12),
                               Text(
                                 _errorMessage!,
@@ -307,7 +379,11 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                                   });
                                   _fetchStreams();
                                 },
-                                icon: Icon(Icons.refresh_rounded, size: 16, color: accent),
+                                icon: Icon(
+                                  Icons.refresh_rounded,
+                                  size: 16,
+                                  color: accent,
+                                ),
                                 label: Text(
                                   'RETRY',
                                   style: TextStyle(
@@ -331,36 +407,77 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                         children: [
                           if (_selectedTabIndex == 0) ...[
                             if (combined.isNotEmpty) ...[
-                              _sectionHeader(context, 'VIDEO', Icons.video_file_outlined,
-                                  isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue, isDark,
-                                  trailing: _recommendBadge(isDark)),
-                              ...combined.map((s) => _streamTile(context, s, isDark, settings)),
+                              _sectionHeader(
+                                context,
+                                'VIDEO',
+                                Icons.video_file_outlined,
+                                isDark
+                                    ? AppTheme.neonBlue
+                                    : AppTheme.lightNeonBlue,
+                                isDark,
+                                trailing: _recommendBadge(isDark),
+                              ),
+                              ...combined.map(
+                                (s) =>
+                                    _streamTile(context, s, isDark, settings),
+                              ),
                               const SizedBox(height: 12),
                             ],
                             if (combined.isEmpty && muxed.isNotEmpty) ...[
-                              _sectionHeader(context, 'VIDEO + AUDIO (MUXED)', Icons.ondemand_video_outlined, accent, isDark),
-                              ...muxed.map((s) => _streamTile(context, s, isDark, settings)),
+                              _sectionHeader(
+                                context,
+                                'VIDEO + AUDIO (MUXED)',
+                                Icons.ondemand_video_outlined,
+                                accent,
+                                isDark,
+                              ),
+                              ...muxed.map(
+                                (s) =>
+                                    _streamTile(context, s, isDark, settings),
+                              ),
                               const SizedBox(height: 12),
                             ],
                             if (combined.isEmpty && muxed.isEmpty)
                               Padding(
                                 padding: const EdgeInsets.all(32),
                                 child: Center(
-                                  child: Text('No MP4 video streams found.', style: TextStyle(color: secClr, fontSize: 12)),
+                                  child: Text(
+                                    'No MP4 video streams found.',
+                                    style: TextStyle(
+                                      color: secClr,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ),
                               ),
                           ] else ...[
                             if (audio.isNotEmpty) ...[
-                              _sectionHeader(context, 'AUDIO', Icons.audiotrack_outlined,
-                                  isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen, isDark),
-                              ...audio.map((s) => _streamTile(context, s, isDark, settings)),
+                              _sectionHeader(
+                                context,
+                                'AUDIO',
+                                Icons.audiotrack_outlined,
+                                isDark
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.lightNeonGreen,
+                                isDark,
+                              ),
+                              ...audio.map(
+                                (s) =>
+                                    _streamTile(context, s, isDark, settings),
+                              ),
                               const SizedBox(height: 12),
                             ],
                             if (audio.isEmpty)
                               Padding(
                                 padding: const EdgeInsets.all(32),
                                 child: Center(
-                                  child: Text('No audio streams found.', style: TextStyle(color: secClr, fontSize: 12)),
+                                  child: Text(
+                                    'No audio streams found.',
+                                    style: TextStyle(
+                                      color: secClr,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ),
                               ),
                           ],
@@ -377,7 +494,14 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     );
   }
 
-  Widget _sectionHeader(BuildContext context, String title, IconData icon, Color color, bool isDark, {Widget? trailing}) {
+  Widget _sectionHeader(
+    BuildContext context,
+    String title,
+    IconData icon,
+    Color color,
+    bool isDark, {
+    Widget? trailing,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
       child: Row(
@@ -393,10 +517,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
               fontSize: 10,
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing],
         ],
       ),
     );
@@ -406,17 +527,23 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber).withValues(alpha: 0.2),
+        color: (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
+            .withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber).withValues(alpha: 0.5),
+          color: (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
+              .withValues(alpha: 0.5),
           width: 0.6,
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star, size: 9, color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber),
+          Icon(
+            Icons.star,
+            size: 9,
+            color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+          ),
           const SizedBox(width: 3),
           Text(
             'RECOMMENDED',
@@ -461,7 +588,9 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
           content: Text(
             content,
             style: TextStyle(
-              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
               fontSize: 13,
             ),
           ),
@@ -477,7 +606,9 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.1),
+                backgroundColor:
+                    (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                        .withValues(alpha: 0.1),
                 side: BorderSide(
                   color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                 ),
@@ -502,49 +633,21 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     return result ?? false;
   }
 
-  Future<void> _handleCombinedDownload(BuildContext context, Map<String, dynamic> stream, bool isDark, SettingsProvider settings) async {
-    final provider = Provider.of<DownloadProvider>(context, listen: false);
-    final title = stream['title'] as String? ?? 'YouTube Video';
-    final qLabel = stream['quality'] as String? ?? 'HD';
-    final ext = stream['ext'] as String? ?? 'mp4';
-    final videoUrl = stream['src'] as String;
-    final audioUrl = stream['audioSrc'] as String;
-    final videoSize = stream['videoSize'] as int? ?? 0;
-    final audioSize = stream['audioSize'] as int? ?? 0;
-    final savePath = settings.customDownloadPath ?? '';
-
-    final videoName = '$title [$qLabel].$ext';
-    await provider.addDownload(
-      name: videoName,
-      url: videoUrl,
-      size: videoSize + audioSize,
-      category: 'Video',
-      savePath: savePath,
-      downloadPageUrl: widget.videoUrl,
-      mergedAudioUrl: audioUrl,
-      audioSize: audioSize,
-      youtubeQualityPreset: 'best_combined',
-    );
-
-    if (!context.mounted) return;
-    ThemedSnackbar.show(
-      context,
-      message: 'Downloading $qLabel video + audio',
-      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-      icon: Icons.check_circle_outline,
-      isDarkMode: settings.isDarkMode,
-    );
-    Navigator.pop(context, null);
-  }
-
-  Widget _streamTile(BuildContext context, Map<String, dynamic> stream, bool isDark, SettingsProvider settings) {
+  Widget _streamTile(
+    BuildContext context,
+    Map<String, dynamic> stream,
+    bool isDark,
+    SettingsProvider settings,
+  ) {
     final type = stream['type'] as String? ?? 'muxed';
     final label = stream['label'] as String? ?? 'Stream';
     final size = stream['size'] as int? ?? 0;
     final ext = stream['ext'] as String? ?? '';
     final color = _colorForType(type, isDark);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -558,7 +661,10 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
           clipBehavior: Clip.antiAlias,
           child: ListTile(
             dense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 2,
+            ),
             leading: Container(
               width: 36,
               height: 36,
@@ -570,7 +676,11 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
             ),
             title: Text(
               label,
-              style: TextStyle(color: textClr, fontSize: 12, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: textClr,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             subtitle: Text(
               '${formatBytes(size)} • .$ext',
@@ -579,13 +689,12 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
             trailing: Icon(Icons.download_rounded, color: color, size: 20),
             onTap: () async {
               runHaptic(settings);
-              if (type == 'combined') {
-                // Now handled automatically by DownloadProvider with FFmpeg merging
-                await _handleCombinedDownload(context, stream, isDark, settings);
-              } else if (type == 'video_only') {
+              if (type == 'video_only') {
                 final confirm = await _showConfirmDialog(
                   context: context,
-                  title: L10n.isRtl(context) ? 'تنبيه فيديو بدون صوت' : 'Silent Video Warning',
+                  title: L10n.isRtl(context)
+                      ? 'تنبيه فيديو بدون صوت'
+                      : 'Silent Video Warning',
                   content: L10n.isRtl(context)
                       ? 'هذا الملف يحتوي على الفيديو فقط وبدون صوت. هل تريد المتابعة؟'
                       : 'This file contains only video and has no audio. Do you want to proceed?',

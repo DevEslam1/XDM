@@ -89,6 +89,40 @@ class FFmpegMuxService {
       } else {
         final logs = await session.getLogsAsString();
         _log.severe('Merge failed with return code $returnCode.\nLogs:\n$logs');
+        
+        // Fallback: If stream copy fails (e.g., Opus audio in MP4 container), retry with AAC audio encoding
+        _log.info('Retrying merge with AAC audio encoding...');
+        final fallbackArguments = [
+          '-i', videoPath,
+          '-i', audioPath,
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-map', '0:v:0',
+          '-map', '1:a:0',
+          '-shortest',
+          '-y',
+          outputPath
+        ];
+        
+        final fallbackSession = await FFmpegKit.executeWithArguments(fallbackArguments)
+            .timeout(const Duration(minutes: 15));
+        final fallbackReturnCode = await fallbackSession.getReturnCode();
+        
+        if (ReturnCode.isSuccess(fallbackReturnCode)) {
+          final outputFile = File(outputPath);
+          if (await outputFile.exists()) {
+            final outputSize = await outputFile.length();
+            _log.info('Fallback merge successful: $outputPath ($outputSize bytes)');
+            try { await videoFile.delete(); } catch (_) {}
+            try { await audioFile.delete(); } catch (_) {}
+            return true;
+          }
+        }
+        
+        final fallbackLogs = await fallbackSession.getLogsAsString();
+        _log.severe('Fallback merge failed with return code $fallbackReturnCode.\nLogs:\n$fallbackLogs');
+
         // Only clean up the partial/failed output. The input video/audio
         // files are the user's already-downloaded streams — deleting them on
         // failure would lose download progress, so we preserve them so a

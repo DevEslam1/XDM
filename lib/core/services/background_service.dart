@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 
 @pragma('vm:entry-point')
 class BackgroundService {
@@ -43,11 +42,13 @@ class BackgroundService {
   static void _onStart(ServiceInstance service) {
     if (service is AndroidServiceInstance) {
       Timer? heartbeatTimer;
+      bool isStopped = false;
       late final StreamSubscription<Map<String, dynamic>?> stopSub;
       late final StreamSubscription<Map<String, dynamic>?> updateSub;
       late final StreamSubscription<Map<String, dynamic>?> heartbeatSub;
 
       void cancelAll() {
+        isStopped = true;
         heartbeatTimer?.cancel();
         stopSub.cancel();
         updateSub.cancel();
@@ -55,20 +56,22 @@ class BackgroundService {
       }
 
       void resetHeartbeat() {
+        if (isStopped) return;
         heartbeatTimer?.cancel();
         heartbeatTimer = Timer(_heartbeatTimeout, () {
+          if (isStopped) return;
           cancelAll();
           service.stopSelf();
         });
       }
 
       stopSub = service.on('stopService').listen((_) {
-        WakelockPlus.disable();
         cancelAll();
         service.stopSelf();
       });
 
       updateSub = service.on('updateNotification').listen((event) {
+        if (isStopped) return;
         resetHeartbeat();
         if (event is Map<String, dynamic>) {
           service.setForegroundNotificationInfo(
@@ -79,6 +82,7 @@ class BackgroundService {
       });
 
       heartbeatSub = service.on('heartbeat').listen((_) {
+        if (isStopped) return;
         resetHeartbeat();
       });
 
@@ -96,7 +100,6 @@ class BackgroundService {
 
   static Future<void> start() async {
     if (!isSupported) return;
-    await WakelockPlus.enable();
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
     if (!isRunning) {
@@ -106,7 +109,6 @@ class BackgroundService {
 
   static Future<void> stop() async {
     if (!isSupported) return;
-    await WakelockPlus.disable();
     final service = FlutterBackgroundService();
     service.invoke('stopService');
   }

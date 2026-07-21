@@ -108,16 +108,18 @@ class PermissionService {
           if (extDir != null) {
             // Navigate up to the actual external storage root, then to Download/XDM
             final root = extDir.path;
-            // On most devices: /storage/emulated/0/Android/data/pkg/files -> /storage/emulated/0
-            final parts = root.split(Platform.pathSeparator);
-            final publicPath = p.join(
-              parts[0], parts[1], parts[2], 'Download', 'XDM',
-            );
-            final dir = Directory(publicPath);
-            if (!await dir.exists()) {
-              await dir.create(recursive: true);
+            final parts = root.split('/');
+            final androidIndex = parts.indexOf('Android');
+            if (androidIndex > 0) {
+              final publicPath = p.join(
+                p.joinAll(parts.sublist(0, androidIndex)), 'Download', 'XDM',
+              );
+              final dir = Directory(publicPath);
+              if (!await dir.exists()) {
+                await dir.create(recursive: true);
+              }
+              return publicPath;
             }
-            return publicPath;
           }
         } catch (_) {}
         // Fallback to app-specific directory

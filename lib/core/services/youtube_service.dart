@@ -40,6 +40,27 @@ class YoutubeService {
 
   static YoutubeExplode _yt = YoutubeExplode();
 
+  static String innerTubeClientVersion = '2.20240327.01.00';
+
+  static Future<void>? _fetchMutex;
+  static Future<T> _synchronized<T>(Future<T> Function() action) async {
+    while (_fetchMutex != null) {
+      try {
+        await _fetchMutex;
+      } catch (_) {}
+    }
+    final completer = Completer<void>();
+    _fetchMutex = completer.future;
+    try {
+      return await action();
+    } finally {
+      completer.complete();
+      if (_fetchMutex == completer.future) {
+        _fetchMutex = null;
+      }
+    }
+  }
+
   static String? _cookies;
 
   static YoutubeExplode _createYt() {
@@ -229,34 +250,36 @@ class YoutubeService {
   static Future<({StreamManifest manifest, String title})> _fetchWithFallback(
     String videoId,
   ) async {
-    // Retry up to 3 times on transient failures or HTTP 403/410
-    for (int attempt = 0; attempt < 3; attempt++) {
-      try {
-        return await _fetchWithFallbackInternal(videoId);
-      } catch (e) {
-        if (attempt == 2) rethrow;
-        final errStr = e.toString().toLowerCase();
-        final isRetryable =
-            errStr.contains('timeout') ||
-            errStr.contains('connection') ||
-            errStr.contains('socket') ||
-            errStr.contains('reset') ||
-            errStr.contains('403') ||
-            errStr.contains('410') ||
-            errStr.contains('http status 403') ||
-            errStr.contains('http status 410');
-        if (isRetryable) {
-          // Reset client on auth/expiration errors
-          if (errStr.contains('403') || errStr.contains('410')) {
-            resetClient();
+    return _synchronized(() async {
+      // Retry up to 3 times on transient failures or HTTP 403/410
+      for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await _fetchWithFallbackInternal(videoId);
+        } catch (e) {
+          if (attempt == 2) rethrow;
+          final errStr = e.toString().toLowerCase();
+          final isRetryable =
+              errStr.contains('timeout') ||
+              errStr.contains('connection') ||
+              errStr.contains('socket') ||
+              errStr.contains('reset') ||
+              errStr.contains('403') ||
+              errStr.contains('410') ||
+              errStr.contains('http status 403') ||
+              errStr.contains('http status 410');
+          if (isRetryable) {
+            // Reset client on auth/expiration errors
+            if (errStr.contains('403') || errStr.contains('410')) {
+              resetClient();
+            }
+            await Future.delayed(Duration(seconds: 2 + attempt));
+            continue;
           }
-          await Future.delayed(Duration(seconds: 2 + attempt));
-          continue;
+          rethrow;
         }
-        rethrow;
       }
-    }
-    throw Exception('Failed after retries');
+      throw Exception('Failed after retries');
+    });
   }
 
   static Future<({StreamManifest manifest, String title})>
@@ -990,7 +1013,7 @@ class _InnerTubeFallback {
     'context': {
       'client': {
         'clientName': 'WEB',
-        'clientVersion': '2.20240327.01.00',
+        'clientVersion': YoutubeService.innerTubeClientVersion,
         'browserName': 'Chrome',
         'browserVersion': '131.0.0.0',
         'clientFormFactor': 'UNKNOWN_FORM_FACTOR',

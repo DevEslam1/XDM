@@ -306,7 +306,7 @@ class DownloadTask {
               .toList()
           : null,
       downloadPageUrl: map['downloadPageUrl'] as String?,
-      mergedAudioUrl: map['mergedAudioUrl'] as String?,
+      mergedAudioUrl: map['mergedAudioUrl'] as String? ?? map['audioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       pausedByUser: map['pausedByUser'] as bool? ?? false,

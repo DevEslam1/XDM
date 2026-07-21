@@ -389,6 +389,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               setState(() {
                 tab.isLoading = false;
                 _detectedDownloadUrls.remove(tab.id);
+                _detectedMediaSources.remove(tab.id);
               });
 
               tab.controller.getTitle().then((t) {
@@ -440,6 +441,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 // Clear cached download/playlist tags on dynamic navigation
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedPlaylistUrls.remove(tab.id);
+                _detectedMediaSources.remove(tab.id);
                 _ytDetectionFailed.remove(tab.url);
 
                 // Re-scan media for SPA pages (YouTube, etc.)

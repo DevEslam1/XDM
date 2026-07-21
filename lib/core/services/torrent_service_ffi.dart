@@ -173,10 +173,6 @@ class TorrentService {
 
   static void applyAdvancedSettings(SettingsProvider settings) {
     if (_disposed || !isInitialized) return;
-    if (_activeTorrentIds.isNotEmpty) {
-      _log.warning('applyAdvancedSettings skipped because active torrents exist. Reconfiguring session on-the-fly risks DHT state/active torrents data loss.');
-      return;
-    }
     try {
       final currentConfig = LibtorrentFlutter.instance.getDefaultConfig();
       final newConfig = currentConfig.copyWith(

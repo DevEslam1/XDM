@@ -74,6 +74,7 @@ String safeFileName(String value) {
     sanitized = sanitized.substring(0, 120).trim();
     if (sanitized.isEmpty) return 'download.bin';
   }
-  if (_windowsReserved.contains(sanitized.toUpperCase())) sanitized = '_$sanitized';
+  final baseName = sanitized.split('.').first.toUpperCase();
+  if (_windowsReserved.contains(baseName)) sanitized = '_$sanitized';
   return sanitized;
 }

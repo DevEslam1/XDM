@@ -171,6 +171,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         );
         enqueuedVideos.add(video);
         completed++;
+        consecutiveErrors = 0;
       } catch (e) {
         debugPrint('Failed to enqueue video $videoId: $e');
         failed++;

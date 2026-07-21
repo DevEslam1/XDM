@@ -379,10 +379,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (stream == null) {
         return;
       }
-      if (stream['type'] == 'combined') {
-        if (mounted) Navigator.pop(context);
-        return;
-      }
       if (mounted) {
         final title = stream['title'] as String? ?? 'YouTube Video';
         final ext = stream['ext'] as String? ?? 'mp4';
@@ -474,6 +470,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         bypassSSL: settings.bypassSSL,
       );
 
+      if (!mounted) return;
       setState(() {
         _resolvedFileName = meta.fileName;
         _resolvedFileSize = meta.fileSize;
