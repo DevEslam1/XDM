@@ -7,9 +7,15 @@ import 'database/app_database.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/browser/models/bookmark.dart';
 
+import 'dart:io';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import '../../features/settings/provider/settings_provider.dart';
+import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 class DatabaseService {
   late final AppDatabase _db;
-  bool _migrated = false;
 
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
@@ -22,11 +28,33 @@ class DatabaseService {
       _db = AppDatabase.forTesting(NativeDatabase.memory());
     } else {
       await Hive.initFlutter();
-      _db = AppDatabase();
+      final settings = SettingsProvider();
+      await settings.load();
+      bool isPortable = false;
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        final exePath = Platform.resolvedExecutable;
+        final exeDir = File(exePath).parent.path;
+        if (File(p.join(exeDir, '.portable')).existsSync()) {
+          isPortable = true;
+        }
+      }
+
+      late String dbPath;
+      if (isPortable) {
+        final exePath = Platform.resolvedExecutable;
+        final exeDir = File(exePath).parent.path;
+        dbPath = p.join(exeDir, 'dmx_app.sqlite');
+      } else {
+        final dbFolder = await getApplicationDocumentsDirectory();
+        dbPath = p.join(dbFolder.path, 'dmx_app.sqlite');
+      }
+      _db = AppDatabase(dbPath);
     }
-    if (!_migrated) {
+    
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('hive_migrated') != true) {
       await _migrateFromHive();
-      _migrated = true;
+      await prefs.setBool('hive_migrated', true);
     }
   }
 
@@ -350,9 +378,7 @@ class DatabaseService {
   Future<String> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return '';
-    final now = DateTime.now();
-    final ts = now.microsecondsSinceEpoch;
-    final id = '${ts}_${url.hashCode}';
+    final id = const Uuid().v4();
 
     await _db.into(_db.browserHistory).insert(
         BrowserHistoryCompanion.insert(
@@ -363,6 +389,7 @@ class DatabaseService {
               DateTime.now().toIso8601String(),
         ),
         mode: drift.InsertMode.insertOrReplace);
+
     return id;
   }
 

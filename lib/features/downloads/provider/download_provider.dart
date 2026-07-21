@@ -37,6 +37,8 @@ class DownloadProvider extends ChangeNotifier
         DownloadQueueMixin,
         DownloadTorrentMixin,
         DownloadBackupMixin {
+  static const _mediaChannel = MethodChannel('com.example.dmx/media');
+
   DownloadProvider({
     required DatabaseService databaseService,
     required SettingsProvider settingsProvider,
@@ -203,7 +205,9 @@ class DownloadProvider extends ChangeNotifier
     }
 
     final partial = File(task.tempFilePath);
-    return await partial.exists() ? partial.length() : null;
+    if (!await partial.exists()) return null;
+    if (task.downloadedBytes > 0) return task.downloadedBytes;
+    return await partial.length();
   }
 
   Future<DownloadTask> _reconcilePartialProgress(DownloadTask task) async {
@@ -1584,6 +1588,16 @@ class DownloadProvider extends ChangeNotifier
                   : null,
             ),
           );
+
+          final finalPath = p.join(current.savePath, current.fileName);
+          if (Platform.isAndroid && finalPath.isNotEmpty) {
+            try {
+              _mediaChannel.invokeMethod('scanMedia', {'path': finalPath});
+            } catch (e) {
+              debugPrint('Failed to scan media: $e');
+            }
+          }
+
           if (_settingsProvider.notificationsEnabled) {
             _notificationService.showDownloadComplete(
               notificationId: notificationId,

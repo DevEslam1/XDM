@@ -75,26 +75,32 @@ class YoutubeService {
   ///
   /// To get cookies: sign into YouTube in a browser, open DevTools →
   /// Application → Cookies → copy the full cookie string and pass it here.
-  static void signIn(String cookieString) {
-    _yt.close();
-    _cookies = cookieString;
-    _yt = _createYt();
+  static Future<void> signIn(String cookieString) async {
+    await _synchronized(() async {
+      _yt.close();
+      _cookies = cookieString;
+      _yt = _createYt();
+    });
   }
 
   /// Clears any stored cookies and resets to the default unauthenticated client.
-  static void signOut() {
-    _yt.close();
-    _cookies = null;
-    _yt = _createYt();
+  static Future<void> signOut() async {
+    await _synchronized(() async {
+      _yt.close();
+      _cookies = null;
+      _yt = _createYt();
+    });
   }
 
   /// Recreates the [YoutubeExplode] instance, busting any internal manifest
   /// cache. Call this before refreshing an expired stream URL so that the
   /// library fetches a fresh manifest from YouTube instead of returning a
   /// cached (and still-expired) response.
-  static void resetClient() {
-    _yt.close();
-    _yt = _createYt();
+  static Future<void> resetClient() async {
+    await _synchronized(() async {
+      _yt.close();
+      _yt = _createYt();
+    });
   }
 
   /// Whether the service currently has authentication cookies set.
@@ -109,7 +115,7 @@ class YoutubeService {
       final cookies = await cookieManager.getCookies('https://youtube.com');
       final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
       if (cookieStr.isNotEmpty) {
-        signIn(cookieStr);
+        await signIn(cookieStr);
       }
     } catch (e) {
       debugPrint('Failed to authenticate YouTube from browser cookies: $e');
@@ -118,9 +124,9 @@ class YoutubeService {
 
   /// Signs in using cookies from a proper cookie list (e.g. from CookieManager).
   /// Use this instead of [signInFromBrowser] when you need HttpOnly cookies.
-  static void signInFromCookieManager(List<Cookie> cookies) {
+  static Future<void> signInFromCookieManager(List<Cookie> cookies) async {
     final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
-    if (cookieStr.isNotEmpty) signIn(cookieStr);
+    if (cookieStr.isNotEmpty) await signIn(cookieStr);
   }
 
   /// Returns the current YouTube auth cookie for display/debug, or null.
@@ -423,8 +429,9 @@ class YoutubeService {
 
       // Guard: if the library returned the exact same URL, the manifest is
       // stale / cached. Treat this as a failed refresh so the caller can
+      // stale / cached. Treat this as a failed refresh so the caller can
       // escalate to getFreshStreams (which recreates the client).
-      if (candidate != null && _urlsAreEquivalent(candidate['url'] as String, oldStreamUrl)) {
+      if (candidate != null && _isUrlStale(candidate['url'] as String, oldStreamUrl)) {
         Logger.root.warning(
           'refreshStreamUrl: new URL is identical to old URL — manifest is stale. Returning null.',
         );
@@ -446,7 +453,7 @@ class YoutubeService {
   /// `sig` match, the URL is considered fresh if we last checked less than
   /// 5 minutes ago.
 
-  static bool _urlsAreEquivalent(String a, String b) {
+  static bool _isUrlStale(String a, String b) {
     final ua = Uri.tryParse(a);
     final ub = Uri.tryParse(b);
     if (ua == null || ub == null) return a == b;
@@ -455,7 +462,7 @@ class YoutubeService {
     if (ua.scheme != ub.scheme ||
         ua.host != ub.host ||
         ua.path != ub.path) {
-      return false;
+      return false; // Not structurally the same, so not stale version of same url
     }
 
     final expireA = ua.queryParameters['expire'];
@@ -464,16 +471,16 @@ class YoutubeService {
     final sigB = ub.queryParameters['sig'];
 
     if (expireA == null || expireB == null || sigA == null || sigB == null) {
-      return a == b;
+      return a == b; // Strict fallback
     }
 
     if (expireA != expireB || sigA != sigB) return false;
 
-    // TTL guard: if we've seen this URL within 5 minutes, treat as fresh.
+    // TTL guard: if we've seen this URL within 5 minutes, it's still fresh, so NOT stale.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final expire = int.tryParse(expireA);
-    if (expire != null && (expire - now) > 300) return false;
-    return true;
+    if (expire != null && (expire - now) > 300) return false; // Fresh
+    return true; // Equivalent and stale
   }
 
   /// Fetches completely fresh stream URLs for a YouTube video, bypassing any
@@ -756,10 +763,10 @@ class YoutubeService {
          ['1080p', '720p', '480p', '360p'].contains(qualityPreset))) {
       final targetQualities = switch (qualityPreset) {
         '1080p' => ['1080p', '720p', '480p', '360p', '240p'],
-        '720p' => ['720p', '480p', '360p', '240p', '1080p'],
-        '480p' => ['480p', '360p', '240p', '720p', '1080p'],
-        '360p' => ['360p', '240p', '480p', '720p', '1080p'],
-        _ => <String>[],
+        '720p' => ['720p', '480p', '360p', '240p'],
+        '480p' => ['480p', '360p', '240p'],
+        '360p' => ['360p', '240p'],
+        _ => ['240p'],
       };
 
       if (targetQualities.isNotEmpty) {
@@ -988,8 +995,8 @@ void updateInnerTubeApiKey(String key) {
 /// This fallback parses both formats.
 class _InnerTubeFallback {
   static String? get _browseUrl {
-    final key = YoutubeService.effectiveApiKey;
-    if (key == null || key.isEmpty) return null;
+    final key = YoutubeService.effectiveApiKey ?? 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+    if (key.isEmpty) return null;
     return 'https://www.youtube.com/youtubei/v1/browse?key=$key';
   }
 
@@ -1005,7 +1012,7 @@ class _InnerTubeFallback {
   }
 
   static void close() {
-    __client?.close(force: true);
+    __client?.close();
     __closed = true;
   }
 

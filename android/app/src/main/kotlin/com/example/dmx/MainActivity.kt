@@ -4,8 +4,10 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.view.WindowManager
 import java.util.concurrent.Executors
 import io.flutter.embedding.android.FlutterActivity
@@ -14,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.dmx/widget"
+    private val MEDIA_CHANNEL = "com.example.dmx/media"
     private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
 
@@ -44,6 +47,19 @@ class MainActivity : FlutterActivity() {
                 } catch (error: Exception) {
                     runOnUiThread { result.error("extractor_failed", error.message, null) }
                 }
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL).setMethodCallHandler { call, result ->
+            if (call.method == "scanMedia") {
+                val path = call.argument<String>("path")
+                if (path != null) {
+                    MediaScannerConnection.scanFile(this, arrayOf(path), null) { _, _ -> }
+                    result.success(true)
+                } else {
+                    result.error("INVALID_PATH", "Path cannot be null", null)
+                }
+            } else {
+                result.notImplemented()
             }
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->

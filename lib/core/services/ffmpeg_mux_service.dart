@@ -70,7 +70,7 @@ class FFmpegMuxService {
       _log.info('FFmpeg arguments: $arguments');
       final session = await FFmpegKit
           .executeWithArguments(arguments)
-          .timeout(const Duration(minutes: 10));
+          .timeout(const Duration(minutes: 60));
       final returnCode = await session.getReturnCode();
 
       if (ReturnCode.isSuccess(returnCode)) {
@@ -106,7 +106,7 @@ class FFmpegMuxService {
         ];
         
         final fallbackSession = await FFmpegKit.executeWithArguments(fallbackArguments)
-            .timeout(const Duration(minutes: 15));
+            .timeout(const Duration(minutes: 60));
         final fallbackReturnCode = await fallbackSession.getReturnCode();
         
         if (ReturnCode.isSuccess(fallbackReturnCode)) {

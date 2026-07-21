@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 @pragma('vm:entry-point')
 class BackgroundService {
@@ -40,54 +41,52 @@ class BackgroundService {
 
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {
-    if (service is AndroidServiceInstance) {
-      Timer? heartbeatTimer;
-      bool isStopped = false;
-      late final StreamSubscription<Map<String, dynamic>?> stopSub;
-      late final StreamSubscription<Map<String, dynamic>?> updateSub;
-      late final StreamSubscription<Map<String, dynamic>?> heartbeatSub;
+    Timer? heartbeatTimer;
+    bool isStopped = false;
+    late final StreamSubscription<Map<String, dynamic>?> stopSub;
+    late final StreamSubscription<Map<String, dynamic>?> updateSub;
+    late final StreamSubscription<Map<String, dynamic>?> heartbeatSub;
 
-      void cancelAll() {
-        isStopped = true;
-        heartbeatTimer?.cancel();
-        stopSub.cancel();
-        updateSub.cancel();
-        heartbeatSub.cancel();
-      }
+    void cancelAll() {
+      isStopped = true;
+      heartbeatTimer?.cancel();
+      stopSub.cancel();
+      updateSub.cancel();
+      heartbeatSub.cancel();
+    }
 
-      void resetHeartbeat() {
+    void resetHeartbeat() {
+      if (isStopped) return;
+      heartbeatTimer?.cancel();
+      heartbeatTimer = Timer(_heartbeatTimeout, () {
         if (isStopped) return;
-        heartbeatTimer?.cancel();
-        heartbeatTimer = Timer(_heartbeatTimeout, () {
-          if (isStopped) return;
-          cancelAll();
-          service.stopSelf();
-        });
-      }
-
-      stopSub = service.on('stopService').listen((_) {
         cancelAll();
         service.stopSelf();
       });
-
-      updateSub = service.on('updateNotification').listen((event) {
-        if (isStopped) return;
-        resetHeartbeat();
-        if (event is Map<String, dynamic>) {
-          service.setForegroundNotificationInfo(
-            title: event['title'] as String? ?? 'XDM',
-            content: event['content'] as String? ?? '',
-          );
-        }
-      });
-
-      heartbeatSub = service.on('heartbeat').listen((_) {
-        if (isStopped) return;
-        resetHeartbeat();
-      });
-
-      resetHeartbeat();
     }
+
+    stopSub = service.on('stopService').listen((_) {
+      cancelAll();
+      service.stopSelf();
+    });
+
+    updateSub = service.on('updateNotification').listen((event) {
+      if (isStopped) return;
+      resetHeartbeat();
+      if (service is AndroidServiceInstance && event is Map<String, dynamic>) {
+        service.setForegroundNotificationInfo(
+          title: event['title'] as String? ?? 'XDM',
+          content: event['content'] as String? ?? '',
+        );
+      }
+    });
+
+    heartbeatSub = service.on('heartbeat').listen((_) {
+      if (isStopped) return;
+      resetHeartbeat();
+    });
+
+    resetHeartbeat();
   }
 
   @pragma('vm:entry-point')
@@ -100,6 +99,11 @@ class BackgroundService {
 
   static Future<void> start() async {
     if (!isSupported) return;
+    try {
+      await WakelockPlus.enable();
+    } catch (e) {
+      debugPrint('Failed to enable WakelockPlus: $e');
+    }
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
     if (!isRunning) {
@@ -109,6 +113,11 @@ class BackgroundService {
 
   static Future<void> stop() async {
     if (!isSupported) return;
+    try {
+      await WakelockPlus.disable();
+    } catch (e) {
+      debugPrint('Failed to disable WakelockPlus: $e');
+    }
     final service = FlutterBackgroundService();
     service.invoke('stopService');
   }

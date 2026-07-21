@@ -195,12 +195,13 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) async {
 }
 
 class DownloadEngine {
-  DownloadEngine({Dio? dio}) : _sharedDio = dio ?? Dio();
-
+  final List<CancelToken> _activeCancelTokens = [];
+  final List<SendPort> _activeIsolateCommandPorts = [];
+  final List<Isolate> _activeIsolates = [];
   final Dio _sharedDio;
   final List<Dio> _activeDioClients = [];
-  final Set<CancelToken> _activeCancelTokens = {};
-  final Set<SendPort> _activeIsolateCommandPorts = {};
+
+  DownloadEngine({Dio? dio}) : _sharedDio = dio ?? Dio();
 
   /// Builds an isolated Dio instance configured with per-call options.
   /// Using a fresh client per request prevents the shared [_dio] instance
@@ -240,7 +241,7 @@ class DownloadEngine {
     } else {
       client.options.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     }
-    if (referer != null && referer.isNotEmpty && url != null && url.contains('.googlevideo.com/')) {
+    if (referer != null && referer.isNotEmpty) {
       client.options.headers['Referer'] = referer;
     }
     if (cookies != null && cookies.isNotEmpty) {
@@ -487,8 +488,8 @@ class DownloadEngine {
       // Some servers block HEAD; GET will still attempt the download.
       debugPrint('HEAD request failed for $punyUrl: $e');
     } finally {
-      isolatedDio.close();
       _activeDioClients.remove(isolatedDio);
+      isolatedDio.close(force: true);
     }
 
     return DownloadMetadata(
@@ -500,6 +501,7 @@ class DownloadEngine {
   }
 
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
+    TorrentService.setDownloadLimit(bytesPerSecond);
     for (final port in _activeIsolateCommandPorts) {
       port.send({'type': 'update_speed_limit', 'value': bytesPerSecond, 'activeCount': activeCount});
     }
@@ -599,11 +601,9 @@ class DownloadEngine {
     }
 
     var finalUrl = url;
-    // Safely remove 'range' without reordering query parameters
-    finalUrl = finalUrl.replaceAll(RegExp(r'[?&]range=[^&]*'), '');
-    if (finalUrl.contains('?&')) {
-      finalUrl = finalUrl.replaceFirst('?&', '?');
-    }
+    finalUrl = finalUrl.replaceAll(RegExp(r'(?<=[?&])range=[^&]*&?'), '');
+    if (finalUrl.endsWith('?')) finalUrl = finalUrl.substring(0, finalUrl.length - 1);
+    if (finalUrl.endsWith('&')) finalUrl = finalUrl.substring(0, finalUrl.length - 1);
 
     final punyUrl = convertIdnToPunycode(finalUrl);
 
@@ -634,15 +634,17 @@ class DownloadEngine {
       activeCount: activeDownloadCount(),
     );
 
-    final completer = Completer<void>();
-    SendPort? isolateCommandPort;
-    bool isCancelledEarly = false;
-
     final isolate = await Isolate.spawn(
       _isolateHttpDownloadEntryPoint,
       args,
+      debugName: 'DownloadIsolate_${finalUrl.hashCode}',
       onError: errorPort.sendPort,
     );
+    _activeIsolates.add(isolate);
+
+    final completer = Completer<void>();
+    SendPort? isolateCommandPort;
+    bool isCancelledEarly = false;
 
     cancelToken.whenCancel.then((_) {
       if (isolateCommandPort != null) {
@@ -715,6 +717,7 @@ class DownloadEngine {
       }
       receivePort.close();
       errorPort.close();
+      _activeIsolates.removeWhere((i) => i == isolate);
       isolate.kill(priority: Isolate.immediate);
       _activeCancelTokens.remove(cancelToken);
     }
@@ -730,7 +733,7 @@ class DownloadEngine {
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
     int? torrentId,
   }) async {
-int id = torrentId ?? -1;
+    int id = torrentId ?? -1;
       if (id == -1) {
         final saveDir = File(currentLocalFilePath).parent.path;
         if (url.startsWith('magnet:')) {
@@ -739,6 +742,10 @@ int id = torrentId ?? -1;
           String filePath = url;
           if (url.startsWith('file://')) {
             filePath = Uri.parse(url).toFilePath();
+          } else if (url.startsWith('http://') || url.startsWith('https://')) {
+            final tempTorrentPath = p.join(Directory.systemTemp.path, 'temp_${DateTime.now().millisecondsSinceEpoch}.torrent');
+            await Dio().download(url, tempTorrentPath);
+            filePath = tempTorrentPath;
           }
           id = TorrentService.addTorrentFile(filePath, saveDir);
         }
@@ -774,6 +781,7 @@ int id = torrentId ?? -1;
           await metadataSub?.cancel();
           metadataTimer?.cancel();
           TorrentService.pauseTorrent(id);
+          TorrentService.removeTorrent(id);
           metadataCompleter.completeError(
             DioException(
               requestOptions: RequestOptions(path: url),
@@ -783,6 +791,7 @@ int id = torrentId ?? -1;
           );
         } else {
           TorrentService.pauseTorrent(id);
+          TorrentService.removeTorrent(id);
           if (!downloadCompleter.isCompleted) {
             downloadCompleter.completeError(
               DioException(
@@ -1009,7 +1018,15 @@ int id = torrentId ?? -1;
         final stateFile = File('$currentTempFilePath.dmxstate');
 
         // Pre-allocate file if it doesn't exist or is the wrong size
-        final sharedRaf = await targetFile.open(mode: FileMode.write);
+        final exists = await targetFile.exists();
+        final actualLen = exists ? await targetFile.length() : 0;
+        if (actualLen != totalSize) {
+          if (await stateFile.exists()) await stateFile.delete();
+          for (int i = 0; i < threadCount; i++) {
+            chunkProgress[i] = 0;
+          }
+        }
+        final sharedRaf = await targetFile.open(mode: FileMode.append);
         await sharedRaf.truncate(totalSize);
         bool isRafClosed = false;
 
@@ -1127,13 +1144,6 @@ int id = torrentId ?? -1;
 
         Object? chunkError;
         try {
-          final chunkCancelToken = CancelToken();
-          cancelToken.whenCancel.then((_) {
-            if (!chunkCancelToken.isCancelled) {
-              chunkCancelToken.cancel();
-            }
-          });
-
           for (int i = 0; i < threadCount; i++) {
             final idx = i;
             final start = idx * partSize;
@@ -1142,6 +1152,13 @@ int id = torrentId ?? -1;
                 : (start + partSize - 1);
 
             futures.add(() async {
+              final chunkCancelToken = CancelToken();
+              cancelToken.whenCancel.then((_) {
+                if (!chunkCancelToken.isCancelled) {
+                  chunkCancelToken.cancel();
+                }
+              });
+
               final chunkStopwatch = Stopwatch()..start();
               var resumeFrom = chunkProgress[idx];
               if (resumeFrom >= chunkSizes[idx]) return;
@@ -1369,17 +1386,18 @@ int id = torrentId ?? -1;
             'Multi-threaded range request failed (Range Rejection): $e. Checking aggregated progress.',
           );
 
-          final aggregatedDownloadedBytes = chunkProgress.reduce((a, b) => a + b);
-          if (aggregatedDownloadedBytes < 1024 * 1024) {
-            // Less than 1MB downloaded, start from scratch
-            if (await targetFile.exists()) await targetFile.delete();
+          final contiguousBytes = chunkProgress.isNotEmpty ? chunkProgress[0] : 0;
+          if (contiguousBytes > 0 && supportsResume) {
+            // Re-use the first chunk's progress since it's sequentially valid from 0.
+            // Other chunks leave holes in the file, so we must truncate.
+            if (await targetFile.exists()) {
+              final raf = await targetFile.open(mode: FileMode.append);
+              await raf.truncate(contiguousBytes);
+              await raf.close();
+            }
             if (await stateFile.exists()) await stateFile.delete();
           } else {
-            // Re-use aggregated bytes since the file buffer is sequentially accurate
-            // up to the lowest common contiguous size. But chunked files are sparse,
-            // so we actually must start from scratch unless we downloaded perfectly
-            // sequentially (which isn't guaranteed). To be safe, we'll start from scratch.
-            debugPrint('Range rejected but partial file exists. Restarting single-threaded.');
+            // Server doesn't support resume or no progress made, start from scratch
             if (await targetFile.exists()) await targetFile.delete();
             if (await stateFile.exists()) await stateFile.delete();
           }
@@ -1391,7 +1409,7 @@ int id = torrentId ?? -1;
             tempFilePath: currentTempFilePath,
             localFilePath: currentLocalFilePath,
             knownFileSize: resolvedFileSize,
-            supportsResume: false,
+            supportsResume: supportsResume,
             cancelToken: cancelToken,
             onProgress: onProgress,
             speedLimitBytesPerSecond: speedLimitBytesPerSecond,
@@ -1402,8 +1420,8 @@ int id = torrentId ?? -1;
         }
       }
     } finally {
-      isolatedDio.close(force: true);
       _activeDioClients.remove(isolatedDio);
+      isolatedDio.close(force: true);
     }
   }
 
@@ -1703,9 +1721,6 @@ int id = torrentId ?? -1;
   }
 
   void close() {
-    // Cancel in-flight downloads cleanly (via their cancel path) before
-    // tearing down the HTTP clients, so they don't surface as unhandled
-    // DioExceptions from abruptly-closed sockets.
     for (final token in List<CancelToken>.from(_activeCancelTokens)) {
       try {
         token.cancel('Engine closing');
@@ -1719,6 +1734,13 @@ int id = torrentId ?? -1;
       } catch (_) {}
     }
     _activeDioClients.clear();
+    for (final isolate in _activeIsolates) {
+      try {
+        isolate.kill(priority: Isolate.immediate);
+      } catch (_) {}
+    }
+    _activeIsolates.clear();
+    _activeIsolateCommandPorts.clear();
   }
 }
 

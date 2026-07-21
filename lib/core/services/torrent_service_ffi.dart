@@ -20,9 +20,12 @@ class TorrentService {
     _startTrackingUpdates();
   }
 
+  static bool _isStartingTracking = false;
+
   static void _startTrackingUpdates() {
     if (_disposed || !isInitialized) return;
-    if (_updatesSub != null) return;
+    if (_updatesSub != null || _isStartingTracking) return;
+    _isStartingTracking = true;
     final controller =
         StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
     final sub = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
@@ -42,10 +45,18 @@ class TorrentService {
       )));
       controller.add(mapped);
     });
-    // Assign atomically so concurrent callers cannot each create a controller
-    // and leak the first subscription.
     _updateController = controller;
     _updatesSub = sub;
+    _isStartingTracking = false;
+  }
+
+  static void setDownloadLimit(int bytesPerSecond) {
+    if (!isInitialized) return;
+    try {
+      LibtorrentFlutter.instance.setDownloadLimit(bytesPerSecond);
+    } catch (e) {
+      _log.warning('setDownloadLimit failed: $e');
+    }
   }
 
   static Future<void> dispose() async {
@@ -173,6 +184,9 @@ class TorrentService {
 
   static void applyAdvancedSettings(SettingsProvider settings) {
     if (_disposed || !isInitialized) return;
+    if (_activeTorrentIds.isNotEmpty) {
+      _log.warning('Applying settings while torrents are active may cause connection resets or instability.');
+    }
     try {
       final currentConfig = LibtorrentFlutter.instance.getDefaultConfig();
       final newConfig = currentConfig.copyWith(
