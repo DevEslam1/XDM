@@ -484,8 +484,40 @@ class DownloadEngine {
       } else {
         supportsResume = isYoutube || response.statusCode == 206;
       }
+
+      // If HEAD returns 403, 405, 400 or no content length, fall back to ranged GET probe
+      if (fileSize == 0 || response.statusCode == 403 || response.statusCode == 405 || response.statusCode == 400) {
+        try {
+          final getResponse = await isolatedDio.get<ResponseBody>(
+            punyUrl,
+            options: Options(
+              responseType: ResponseType.stream,
+              followRedirects: true,
+              headers: {'Range': 'bytes=0-0'},
+              validateStatus: (_) => true,
+            ),
+          );
+          if (getResponse.statusCode == 200 || getResponse.statusCode == 206) {
+            final getHeaderName = fileNameFromContentDisposition(getResponse.headers);
+            if (requestedFileName?.trim().isNotEmpty != true && getHeaderName != null) {
+              fileName = getHeaderName;
+            }
+            final contentRange = getResponse.headers.value('content-range');
+            if (contentRange != null) {
+              final totalMatch = RegExp(r'/(\d+)').firstMatch(contentRange);
+              if (totalMatch != null) {
+                fileSize = int.tryParse(totalMatch.group(1)!) ?? 0;
+              }
+            }
+            if (fileSize == 0) {
+              final getLen = getResponse.headers.value(Headers.contentLengthHeader);
+              fileSize = int.tryParse(getLen ?? '') ?? 0;
+            }
+            supportsResume = isYoutube || getResponse.statusCode == 206 || getResponse.headers.value('accept-ranges') == 'bytes';
+          }
+        } catch (_) {}
+      }
     } catch (e) {
-      // Some servers block HEAD; GET will still attempt the download.
       debugPrint('HEAD request failed for $punyUrl: $e');
     } finally {
       _activeDioClients.remove(isolatedDio);
@@ -646,6 +678,22 @@ class DownloadEngine {
     SendPort? isolateCommandPort;
     bool isCancelledEarly = false;
 
+    Timer? isolateWatchdog;
+    isolateWatchdog = Timer(const Duration(seconds: 5), () {
+      if (cancelToken.isCancelled && isolateCommandPort == null) {
+        isolate.kill(priority: Isolate.immediate);
+        if (!completer.isCompleted) {
+          completer.completeError(
+            DioException(
+              requestOptions: RequestOptions(path: punyUrl),
+              type: DioExceptionType.cancel,
+              message: 'Download cancelled before isolate initialized.',
+            ),
+          );
+        }
+      }
+    });
+
     cancelToken.whenCancel.then((_) {
       if (isolateCommandPort != null) {
         isolateCommandPort?.send({'type': 'cancel'});
@@ -712,6 +760,7 @@ class DownloadEngine {
     try {
       await completer.future;
     } finally {
+      isolateWatchdog?.cancel();
       if (isolateCommandPort != null) {
         _activeIsolateCommandPorts.remove(isolateCommandPort);
       }
@@ -1246,12 +1295,15 @@ class DownloadEngine {
                           final activeCount = activeDownloadCount().clamp(1, 1000);
                           final perTaskLimit = limit / activeCount;
                           final limitPerChunk = perTaskLimit / threadCount;
-                          final expectedElapsedMs = (chunkDownloadedThisSession / limitPerChunk * 1000).round();
-                          final actualElapsedMs = chunkStopwatch.elapsedMilliseconds;
-                          if (expectedElapsedMs > actualElapsedMs) {
-                            await Future<void>.delayed(
-                              Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
-                            );
+                          if (limitPerChunk > 0) {
+                            final expectedElapsedMs = (chunkDownloadedThisSession / limitPerChunk * 1000).round();
+                            final actualElapsedMs = chunkStopwatch.elapsedMilliseconds;
+                            if (expectedElapsedMs > actualElapsedMs) {
+                              final sleepTimeMs = (expectedElapsedMs - actualElapsedMs).clamp(0, 2000);
+                              if (sleepTimeMs > 0) {
+                                await Future<void>.delayed(Duration(milliseconds: sleepTimeMs));
+                              }
+                            }
                           }
                           chunkStopwatch.reset();
                           chunkDownloadedThisSession = 0;
@@ -1706,11 +1758,9 @@ class DownloadEngine {
         : int.tryParse(totalText);
 
     if (start != expectedStart ||
-        end != expectedEnd ||
-        (expectedTotal > 0 &&
-            (total == null || total != expectedTotal))) {
+        (expectedTotal > 0 && total != null && total != expectedTotal)) {
       throw DioException(
-        requestOptions: RequestOptions(),
+        requestOptions: RequestOptions(path: ''),
         type: DioExceptionType.badResponse,
         message: 'Invalid Content-Range response: $value. '
             'Expected start: $expectedStart, got start: $start. '

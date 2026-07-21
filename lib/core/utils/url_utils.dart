@@ -56,10 +56,25 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
   final trimmed = magnetUrl.trim();
   if (!trimmed.toLowerCase().startsWith('magnet:')) return result;
 
+  String normalizeHash(String hash) {
+    final clean = hash.trim().toUpperCase();
+    if (RegExp(r'^[A-F0-9]{40}$').hasMatch(clean) || RegExp(r'^[A-F0-9]{64}$').hasMatch(clean)) {
+      return clean;
+    }
+    if (RegExp(r'^[A-Z2-7]{32}$').hasMatch(clean)) {
+      try {
+        return _base32ToHex(clean);
+      } catch (_) {
+        return clean;
+      }
+    }
+    return clean;
+  }
+
   // Try regex extraction first, as it's robust to unescaped query chars
-  final xtMatch = RegExp(r'xt=urn:btih:([a-zA-Z0-9]+)', caseSensitive: false).firstMatch(trimmed);
+  final xtMatch = RegExp(r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)', caseSensitive: false).firstMatch(trimmed);
   if (xtMatch != null) {
-    result['infoHash'] = xtMatch.group(1)!.toUpperCase();
+    result['infoHash'] = normalizeHash(xtMatch.group(1)!);
   }
 
   final dnMatch = RegExp(r'dn=([^&]+)', caseSensitive: false).firstMatch(trimmed);
@@ -79,8 +94,9 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
     if (!result.containsKey('infoHash')) {
       final xtList = queryParams['xt'] ?? [];
       for (final xt in xtList) {
-        if (xt.startsWith('urn:btih:')) {
-          result['infoHash'] = xt.substring('urn:btih:'.length).toUpperCase();
+        if (xt.startsWith('urn:btih:') || xt.startsWith('urn:btmh:')) {
+          final rawHash = xt.substring(xt.indexOf(':', 9) + 1);
+          result['infoHash'] = normalizeHash(rawHash);
         }
       }
     }
@@ -88,7 +104,11 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
     if (!result.containsKey('name')) {
       final dnList = queryParams['dn'] ?? [];
       if (dnList.isNotEmpty) {
-        result['name'] = Uri.decodeComponent(dnList.first);
+        try {
+          result['name'] = Uri.decodeComponent(dnList.first);
+        } catch (_) {
+          result['name'] = dnList.first;
+        }
       }
     }
   } catch (_) {
@@ -96,6 +116,26 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
   }
 
   return result;
+}
+
+String _base32ToHex(String base32) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  var bits = 0;
+  var value = 0;
+  final hex = StringBuffer();
+
+  for (var i = 0; i < base32.length; i++) {
+    final idx = alphabet.indexOf(base32[i].toUpperCase());
+    if (idx == -1) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    while (bits >= 4) {
+      bits -= 4;
+      final hexDigit = (value >> bits) & 0x0F;
+      hex.write(hexDigit.toRadixString(16).toUpperCase());
+    }
+  }
+  return hex.toString();
 }
 
 String fileNameFromUrl(String url) {
@@ -118,8 +158,9 @@ String? fileNameFromContentDisposition(Headers headers) {
   final value = headers.value('content-disposition');
   if (value == null) return null;
 
+  // Check RFC 5987 filename*=charset'lang'encoded_value
   final utf8Match = RegExp(
-    "filename\\*=UTF-8''([^;]+)",
+    r"filename\*=(?:UTF-8|ISO-8859-1)''([^;\s]+)",
     caseSensitive: false,
   ).firstMatch(value);
   if (utf8Match != null) {
@@ -131,7 +172,7 @@ String? fileNameFromContentDisposition(Headers headers) {
   }
 
   final quotedMatch = RegExp(
-    'filename="([^"]+)"|filename=([^";\\s]+)',
+    r'filename="([^"]+)"|filename=([^";\s]+)',
     caseSensitive: false,
   ).firstMatch(value);
   if (quotedMatch != null) {
@@ -145,15 +186,23 @@ String? fileNameFromContentDisposition(Headers headers) {
 String convertIdnToPunycode(String urlStr) {
   try {
     final uri = Uri.parse(urlStr.trim());
-    final host = uri.host;
+    var host = uri.host;
     if (host.isEmpty) return urlStr;
+    try {
+      host = Uri.decodeComponent(host);
+    } catch (_) {}
 
     final parts = host.split('.');
     var isEncoded = false;
     final punyParts = parts.map((part) {
       if (part.runes.any((r) => r > 127)) {
-        isEncoded = true;
-        return 'xn--${_punycodeEncode(part)}';
+        try {
+          final encoded = _punycodeEncode(part);
+          isEncoded = true;
+          return 'xn--$encoded';
+        } catch (_) {
+          return part;
+        }
       }
       return part;
     }).toList();

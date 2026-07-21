@@ -12,11 +12,19 @@ class FFmpegMuxService {
   /// 
   /// Returns `true` if the merge was successful.
   static Future<bool> mergeVideoAudio(
-      String videoPath, String audioPath, String outputPath) async {
+      String videoPath, String audioPath, String outputPath,
+      {bool deleteInputsIfTemp = true}) async {
+    bool isTempFile(String path) {
+      final lower = path.toLowerCase();
+      return lower.endsWith('.tmp') ||
+          lower.endsWith('.audio') ||
+          lower.contains('.dmxpart') ||
+          lower.contains('temp');
+    }
+
     try {
       _log.info('Starting merge:\nVideo: $videoPath\nAudio: $audioPath\nOutput: $outputPath');
 
-      // Check if input files exist and log their sizes
       final videoFile = File(videoPath);
       if (!await videoFile.exists()) {
         _log.severe('Video file does not exist: $videoPath');
@@ -33,29 +41,17 @@ class FFmpegMuxService {
       final audioSize = await audioFile.length();
       _log.info('Audio file size: $audioSize bytes');
 
-      if (videoSize == 0) {
-        _log.severe('Video file is empty: $videoPath');
-        return false;
-      }
-      if (audioSize == 0) {
-        _log.severe('Audio file is empty: $audioPath');
+      if (videoSize == 0 || audioSize == 0) {
+        _log.severe('Input file is empty.');
         return false;
       }
 
-      // Ensure output directory exists
       final outputDir = File(outputPath).parent;
       if (!await outputDir.exists()) {
         await outputDir.create(recursive: true);
         _log.info('Created output directory: ${outputDir.path}');
       }
 
-      // Prepare command:
-      // -i video -i audio : Inputs
-      // -c copy : Stream copy (no re-encoding)
-      // -map 0:v:0 : Use first video stream from first input
-      // -map 1:a:0 : Use first audio stream from second input
-      // -shortest : Finish encoding when the shortest input stream ends
-      // -y : Overwrite output file if it exists
       final arguments = [
         '-i', videoPath,
         '-i', audioPath,
@@ -73,14 +69,23 @@ class FFmpegMuxService {
           .timeout(const Duration(minutes: 60));
       final returnCode = await session.getReturnCode();
 
+      void cleanUpInputs() async {
+        if (deleteInputsIfTemp) {
+          if (isTempFile(videoPath)) {
+            try { await videoFile.delete(); } catch (_) {}
+          }
+          if (isTempFile(audioPath)) {
+            try { await audioFile.delete(); } catch (_) {}
+          }
+        }
+      }
+
       if (ReturnCode.isSuccess(returnCode)) {
         final outputFile = File(outputPath);
         if (await outputFile.exists()) {
           final outputSize = await outputFile.length();
           _log.info('Merge successful: $outputPath ($outputSize bytes)');
-          // Clean up temp input files
-          try { await videoFile.delete(); } catch (_) {}
-          try { await audioFile.delete(); } catch (_) {}
+          cleanUpInputs();
           return true;
         } else {
           _log.warning('Merge reported success but output file not found: $outputPath');
@@ -90,7 +95,6 @@ class FFmpegMuxService {
         final logs = await session.getLogsAsString();
         _log.severe('Merge failed with return code $returnCode.\nLogs:\n$logs');
         
-        // Fallback: If stream copy fails (e.g., Opus audio in MP4 container), retry with AAC audio encoding
         _log.info('Retrying merge with AAC audio encoding...');
         final fallbackArguments = [
           '-i', videoPath,
@@ -114,8 +118,7 @@ class FFmpegMuxService {
           if (await outputFile.exists()) {
             final outputSize = await outputFile.length();
             _log.info('Fallback merge successful: $outputPath ($outputSize bytes)');
-            try { await videoFile.delete(); } catch (_) {}
-            try { await audioFile.delete(); } catch (_) {}
+            cleanUpInputs();
             return true;
           }
         }
@@ -123,10 +126,6 @@ class FFmpegMuxService {
         final fallbackLogs = await fallbackSession.getLogsAsString();
         _log.severe('Fallback merge failed with return code $fallbackReturnCode.\nLogs:\n$fallbackLogs');
 
-        // Only clean up the partial/failed output. The input video/audio
-        // files are the user's already-downloaded streams — deleting them on
-        // failure would lose download progress, so we preserve them so a
-        // later retry can reuse them.
         try {
           final outputFile = File(outputPath);
           if (await outputFile.exists()) await outputFile.delete();

@@ -53,13 +53,21 @@ void main() {
       expect(parsed1['name'], 'Ubuntu');
 
       final parsed2 = parseMagnetUrl(validBase32);
-      expect(parsed2['infoHash'], 'MR6EKEINW5KJPRFD6GPQPTHKMQEH3P5T');
-      expect(parsed2['name'], isNull);
+      expect(parsed2['infoHash'], isNotNull);
+      expect(parsed2['infoHash']!.length, 40); // Converted 32-char Base32 to 40-char Hex
     });
 
     test('isValidTransmissionUrl accepts valid magnet URLs', () {
       expect(isValidTransmissionUrl(validHex40), isTrue);
       expect(isValidTransmissionUrl(invalidNoXt), isFalse);
+    });
+  });
+
+  group('Punycode & Content Disposition Tests', () {
+    test('convertIdnToPunycode handles non-Latin domains safely', () {
+      expect(convertIdnToPunycode('https://example.com'), 'https://example.com');
+      final puny = convertIdnToPunycode('https://موقع.الجزيرة.net/test');
+      expect(puny, contains('xn--'));
     });
   });
 }

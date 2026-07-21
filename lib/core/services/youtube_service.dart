@@ -732,8 +732,16 @@ class YoutubeService {
     return (details?['videos'] as List<Map<String, dynamic>>?) ?? [];
   }
 
+  static int parseQualityHeight(String quality) {
+    final match = RegExp(r'(\d+)p?').firstMatch(quality);
+    if (match != null) {
+      return int.tryParse(match.group(1)!) ?? 0;
+    }
+    return 0;
+  }
+
   /// Fetches the best stream URL for a given video ID and quality preference.
-  /// [qualityPreset] can be: 'best_combined', 'best_muxed', '720p', '480p', '360p', 'audio_only'.
+  /// [qualityPreset] can be: 'best_combined', 'best_muxed', '1080p', '720p', '480p', '360p', 'audio_only'.
   static Future<Map<String, dynamic>?> getStreamForVideo(
     String videoId,
     String qualityPreset, {
@@ -751,81 +759,71 @@ class YoutubeService {
       return audios.first;
     }
 
-    if (qualityPreset == 'best_combined') {
-      forceMuxed = false;
-    }
-
+    final targetHeight = parseQualityHeight(qualityPreset);
     final muxed = allStreams.where((s) => s['type'] == 'muxed').toList();
-    Map<String, dynamic>? chosen;
+    final combined = allStreams.where((s) => s['type'] == 'combined').toList();
 
-    if (muxed.isNotEmpty && 
-        (qualityPreset == 'best_combined' || qualityPreset == 'best_muxed' || 
-         ['1080p', '720p', '480p', '360p'].contains(qualityPreset))) {
-      final targetQualities = switch (qualityPreset) {
-        '1080p' => ['1080p', '720p', '480p', '360p', '240p'],
-        '720p' => ['720p', '480p', '360p', '240p'],
-        '480p' => ['480p', '360p', '240p'],
-        '360p' => ['360p', '240p'],
-        _ => ['240p'],
-      };
+    Map<String, dynamic>? findBestMatch(List<Map<String, dynamic>> streams) {
+      if (streams.isEmpty) return null;
+      if (targetHeight == 0) {
+        streams.sort((a, b) {
+          final hA = parseQualityHeight(a['quality'] as String? ?? '');
+          final hB = parseQualityHeight(b['quality'] as String? ?? '');
+          if (hA != hB) return hB.compareTo(hA);
+          return ((b['size'] as int?) ?? 0).compareTo((a['size'] as int?) ?? 0);
+        });
+        return streams.first;
+      }
 
-      if (targetQualities.isNotEmpty) {
-        for (final target in targetQualities) {
-          for (final stream in muxed) {
-            final q = stream['quality'] as String;
-            if (q.startsWith(target.replaceAll('p', ''))) {
-              chosen = stream;
-              break;
-            }
-          }
-          if (chosen != null) break;
+      for (final s in streams) {
+        if (parseQualityHeight(s['quality'] as String? ?? '') == targetHeight) {
+          return s;
         }
       }
 
-      if (chosen == null) {
-         muxed.sort((a, b) => (b['size'] as int).compareTo(a['size'] as int));
-         chosen = muxed.first;
-      }
+      streams.sort((a, b) {
+        final hA = parseQualityHeight(a['quality'] as String? ?? '');
+        final hB = parseQualityHeight(b['quality'] as String? ?? '');
+        final diffA = (hA - targetHeight).abs();
+        final diffB = (hB - targetHeight).abs();
+        if (diffA != diffB) return diffA.compareTo(diffB);
+        return ((b['size'] as int?) ?? 0).compareTo((a['size'] as int?) ?? 0);
+      });
+      return streams.first;
     }
 
-    if (chosen != null) return chosen;
+    if (qualityPreset == 'best_muxed') {
+      final match = findBestMatch(muxed);
+      if (match != null) return match;
+      if (forceMuxed) return null;
+      return findBestMatch(combined);
+    }
 
-    if (forceMuxed) return null;
+    if (targetHeight > 0) {
+      final exactMuxed = muxed.firstWhere(
+        (s) => parseQualityHeight(s['quality'] as String? ?? '') == targetHeight,
+        orElse: () => <String, dynamic>{},
+      );
+      if (exactMuxed.isNotEmpty) return exactMuxed;
 
-    final combined = allStreams.where((s) => s['type'] == 'combined').toList();
-    if (combined.isNotEmpty) {
-      final targetQualities = switch (qualityPreset) {
-        '360p' => ['360p', '480p', '240p', '720p'],
-        '480p' => ['480p', '360p', '720p', '240p'],
-        '720p' => ['720p', '480p', '1080p', '360p'],
-        '1080p' => ['1080p', '720p', '1440p', '2160p', '480p', '360p'],
-        _ => <String>[],
-      };
+      final bestCombined = findBestMatch(combined);
+      if (bestCombined != null) return bestCombined;
 
-      Map<String, dynamic>? chosenCombined;
-      if (targetQualities.isNotEmpty) {
-        for (final target in targetQualities) {
-          for (final stream in combined) {
-            final q = stream['quality'] as String;
-            if (q.startsWith(target.replaceAll('p', ''))) {
-              chosenCombined = stream;
-              break;
-            }
-          }
-          if (chosenCombined != null) break;
-        }
-      } else {
-        combined.sort((a, b) => ((b['videoSize'] as int?) ?? 0).compareTo((a['videoSize'] as int?) ?? 0));
-        chosenCombined = combined.first;
+      if (!forceMuxed) {
+        final bestMuxedFallback = findBestMatch(muxed);
+        if (bestMuxedFallback != null) return bestMuxedFallback;
       }
-      
-      if (chosenCombined != null) return chosenCombined;
+    } else {
+      final bestCombined = findBestMatch(combined);
+      if (bestCombined != null) return bestCombined;
+
+      final bestMuxed = findBestMatch(muxed);
+      if (bestMuxed != null) return bestMuxed;
     }
 
     final videoOnly = allStreams.where((s) => s['type'] == 'video_only').toList();
-    if (videoOnly.isNotEmpty) {
-      videoOnly.sort((a, b) => (b['size'] as int).compareTo(a['size'] as int));
-      return videoOnly.first;
+    if (videoOnly.isNotEmpty && !forceMuxed) {
+      return findBestMatch(videoOnly);
     }
 
     return null;

@@ -10,8 +10,19 @@ part 'app_database.g.dart';
 class DoubleListConverter extends TypeConverter<List<double>, String> {
   const DoubleListConverter();
   @override
-  List<double> fromSql(String fromDb) =>
-      (jsonDecode(fromDb) as List).map((e) => (e as num).toDouble()).toList();
+  List<double> fromSql(String fromDb) {
+    if (fromDb.trim().isEmpty) return [];
+    try {
+      final decoded = jsonDecode(fromDb);
+      if (decoded is List) {
+        return decoded.map((e) => (e as num).toDouble()).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   @override
   String toSql(List<double> value) => jsonEncode(value);
 }
@@ -21,9 +32,16 @@ class TorrentFilesConverter
   const TorrentFilesConverter();
   @override
   List<Map<String, dynamic>> fromSql(String fromDb) {
-    if (fromDb.isEmpty) return [];
-    final decoded = jsonDecode(fromDb) as List;
-    return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    if (fromDb.trim().isEmpty) return [];
+    try {
+      final decoded = jsonDecode(fromDb);
+      if (decoded is List) {
+        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
   }
 
   @override
@@ -116,6 +134,8 @@ class AppDatabase extends _$AppDatabase {
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
-        onUpgrade: (m, from, to) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          // Migration logic for future schemaVersion updates
+        },
       );
 }
