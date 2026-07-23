@@ -91,9 +91,12 @@ class BackgroundService {
 
   @pragma('vm:entry-point')
   static bool _onIosBackground(ServiceInstance service) {
-    // iOS background fetch is currently a no-op because Flutter background
-    // execution is severely limited on iOS. Consider using a native
-    // BGTaskScheduler plugin for actual background downloads.
+    // iOS background execution is not supported by Flutter without a native
+    // BGTaskScheduler plugin. The FlutterBackgroundService plugin does not
+    // keep Dart isolates alive on iOS once the app is suspended. Without a
+    // BGTaskScheduler-based native plugin, background downloads on iOS
+    // cannot make progress. This callback returns true to acknowledge the
+    // wake but performs no work.
     return true;
   }
 

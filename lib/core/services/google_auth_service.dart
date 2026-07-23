@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'youtube_service.dart';
 
 /// Handles Google Sign-In and automatically authenticates YouTube.
@@ -21,16 +21,22 @@ class GoogleAuthService {
   static const _prefUserName = 'google_auth_user_name';
   static const _prefPhotoUrl = 'google_auth_photo_url';
 
+  static final _secureStorage = const FlutterSecureStorage();
+
   /// YouTube OAuth scope — required for InnerTube authenticated requests.
   static const _youtubeScope = 'https://www.googleapis.com/auth/youtube';
 
   /// Optional Server Client ID (Web Application Client ID from Google Cloud Console).
+  /// Override via --dart-define=GOOGLE_SERVER_CLIENT_ID=<your_id>
   static String? serverClientId =
-      '978586541696-qi3ggijiatj2baf3ib4eg25aedls9llv.apps.googleusercontent.com';
+      const String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID',
+          defaultValue: '978586541696-qi3ggijiatj2baf3ib4eg25aedls9llv.apps.googleusercontent.com');
 
   /// Optional Client ID.
+  /// Override via --dart-define=GOOGLE_CLIENT_ID=<your_id>
   static String? clientId =
-      '978586541696-qi3ggijiatj2baf3ib4eg25aedls9llv.apps.googleusercontent.com';
+      const String.fromEnvironment('GOOGLE_CLIENT_ID',
+          defaultValue: '978586541696-qi3ggijiatj2baf3ib4eg25aedls9llv.apps.googleusercontent.com');
 
   GoogleSignIn? _signInInstance;
   GoogleSignIn get _googleSignIn {
@@ -42,6 +48,7 @@ class GoogleAuthService {
         'profile',
         _youtubeScope,
       ],
+      forceCodeForRefreshToken: true,
     );
   }
 
@@ -187,12 +194,11 @@ class GoogleAuthService {
   Future<void> _onSignedIn(GoogleSignInAccount account) async {
     debugPrint('[GoogleAuth] Signed in as ${account.email}');
 
-    // Persist auth state
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefSignedIn, true);
-    await prefs.setString(_prefUserEmail, account.email);
-    await prefs.setString(_prefUserName, account.displayName ?? '');
-    await prefs.setString(_prefPhotoUrl, account.photoUrl ?? '');
+    // Persist auth state using flutter_secure_storage (encrypted, not plain text)
+    await _secureStorage.write(key: _prefSignedIn, value: 'true');
+    await _secureStorage.write(key: _prefUserEmail, value: account.email);
+    await _secureStorage.write(key: _prefUserName, value: account.displayName ?? '');
+    await _secureStorage.write(key: _prefPhotoUrl, value: account.photoUrl ?? '');
 
     // Get fresh access token
     final token = await getAccessToken();
@@ -208,11 +214,10 @@ class GoogleAuthService {
   Future<void> _onSignedOut() async {
     debugPrint('[GoogleAuth] Signed out');
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefSignedIn, false);
-    await prefs.remove(_prefUserEmail);
-    await prefs.remove(_prefUserName);
-    await prefs.remove(_prefPhotoUrl);
+    await _secureStorage.write(key: _prefSignedIn, value: 'false');
+    await _secureStorage.delete(key: _prefUserEmail);
+    await _secureStorage.delete(key: _prefUserName);
+    await _secureStorage.delete(key: _prefPhotoUrl);
 
     // Clear YouTube authentication
     YoutubeService.signOut();
@@ -222,11 +227,10 @@ class GoogleAuthService {
 
   /// Restores persisted auth state (called before silent sign-in).
   Future<Map<String, String?>> getPersistedUserInfo() async {
-    final prefs = await SharedPreferences.getInstance();
     return {
-      'email': prefs.getString(_prefUserEmail),
-      'name': prefs.getString(_prefUserName),
-      'photoUrl': prefs.getString(_prefPhotoUrl),
+      'email': await _secureStorage.read(key: _prefUserEmail),
+      'name': await _secureStorage.read(key: _prefUserName),
+      'photoUrl': await _secureStorage.read(key: _prefPhotoUrl),
     };
   }
 

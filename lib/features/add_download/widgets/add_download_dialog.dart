@@ -61,7 +61,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   bool _retry = true;
   bool _useProxy = false;
 
-  final bool _isScheduled = false;
+  bool _isScheduled = false;
   DateTime? _scheduledDateTime;
   String? _resolvedYoutubeQualityPreset;
   String? _resolvedAudioUrl;
@@ -77,7 +77,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   List<Map<String, dynamic>> _torrentFiles = [];
   String _lastCheckedUrl = '';
   Timer? _ytDebounceTimer;
-  String? _resolvedYoutubePageUrl;
 
   final List<String> _categories = [
     'Auto',
@@ -342,21 +341,55 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (mounted) {
         final title = stream['title'] as String? ?? 'YouTube Video';
         final ext = stream['ext'] as String? ?? 'mp4';
-        setState(() {
-          _resolvedYoutubePageUrl = url;
-          _urlController.text = stream['src'] as String;
-          _resolvedFileName = '$title.$ext';
-          _setNameAndExt(_resolvedFileName);
-          _resolvedFileSize = stream['size'] as int? ?? 0;
-          _resolvedAudioUrl = stream['audioSrc'] as String?;
-          _resolvedAudioSize = stream['audioSize'] as int?;
-          _resolvedCategory = (stream['type'] as String? ?? 'muxed') == 'audio'
-              ? 'Audio'
-              : 'Video';
-          _selectedCategory = _resolvedCategory;
-          _isMetadataResolved = true;
-          _resolvedYoutubeQualityPreset = (stream['type'] as String? ?? 'muxed') == 'audio' ? 'audio_only' : stream['quality'] as String?;
-        });
+        final streamUrl = stream['src'] as String;
+        final streamSize = stream['size'] as int? ?? 0;
+        final audioUrl = stream['audioSrc'] as String?;
+        final audioSize = stream['audioSize'] as int?;
+        final streamType = stream['type'] as String? ?? 'muxed';
+        final qualityPreset = streamType == 'audio' ? 'audio_only' : stream['quality'] as String?;
+        final category = streamType == 'audio' ? 'Audio' : 'Video';
+        final fileName = '$title.$ext';
+
+        final provider = context.read<DownloadProvider>();
+        final settings = context.read<SettingsProvider>();
+        final savePath = _pathController.text.trim().isNotEmpty
+            ? _pathController.text.trim()
+            : settings.customDownloadPath ?? '';
+        await provider.addDownload(
+          name: fileName,
+          url: streamUrl,
+          size: streamSize,
+          category: category,
+          savePath: savePath,
+          threadCount: _selectedThreads,
+          downloadPageUrl: url,
+          youtubeQualityPreset: qualityPreset,
+          mergedAudioUrl: audioUrl,
+          audioSize: audioSize ?? 0,
+        );
+        if (!mounted) return;
+        if (provider.lastError != null) {
+          final isDark = context.read<SettingsProvider>().isDarkMode;
+          ThemedSnackbar.show(
+            context,
+            message: provider.lastError!,
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+          return;
+        }
+        final isDark = context.read<SettingsProvider>().isDarkMode;
+        ThemedSnackbar.show(
+          context,
+          message: L10n.isRtl(context)
+              ? 'تم بدء التحميل'
+              : 'Download started',
+          color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+          icon: Icons.check_circle_outline,
+          isDarkMode: isDark,
+        );
+        Navigator.pop(context);
       }
       return;
     }
@@ -472,6 +505,74 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
+    // Split URLs for multi-URL support
+    final urls = _urlController.text
+        .split(RegExp(r'[\r\n]+'))
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+
+    if (urls.length > 1) {
+      // Multiple URLs: skip duplicate check, add each one
+      var addedCount = 0;
+      for (final singleUrl in urls) {
+        if (!isValidTransmissionUrl(singleUrl)) continue;
+        final enteredName = _nameController.text.trim();
+        final enteredExt = _extController.text.trim();
+        String fullName = enteredName;
+        if (enteredExt.isNotEmpty && !enteredName.endsWith(enteredExt)) {
+          fullName = '$enteredName.$enteredExt';
+        }
+        final suffix = addedCount + 1;
+        final singleName = fullName.isNotEmpty
+            ? '${safeFileName(fullName)}_$suffix'
+            : fileNameFromUrl(singleUrl);
+        try {
+          await provider.addDownload(
+            name: singleName,
+            url: singleUrl,
+            size: _isMetadataResolved ? _resolvedFileSize : 0,
+            category: _selectedCategory == 'Auto' ? '' : _selectedCategory,
+            savePath: _pathController.text.trim(),
+            threadCount: _selectedThreads,
+            scheduledAt: _isScheduled ? _scheduledDateTime : null,
+            torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
+            downloadPageUrl:
+                widget.downloadPageUrl ??
+                _referrerController.text.trim(),
+            youtubeQualityPreset: _resolvedYoutubeQualityPreset,
+            torrentId: _resolvedTorrentId,
+            mergedAudioUrl: _resolvedAudioUrl,
+            audioSize: _resolvedAudioSize ?? 0,
+          );
+          addedCount++;
+        } catch (e) {
+          if (!mounted) return;
+          ThemedSnackbar.show(
+            context,
+            message: '$singleUrl: $e',
+            color: redClr,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+        }
+      }
+      if (!mounted) return;
+      if (addedCount > 0) {
+        ThemedSnackbar.show(
+          context,
+          message: isRtl
+              ? 'تم إضافة $addedCount رابط'
+              : '$addedCount URLs added',
+          color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+          icon: Icons.check_circle_outline,
+          isDarkMode: isDark,
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+
     final enteredName = _nameController.text.trim();
     final enteredExt = _extController.text.trim();
     String fullEnteredName = enteredName;
@@ -479,9 +580,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       fullEnteredName = '$enteredName.$enteredExt';
     }
 
+    final singleUrl = urls.isNotEmpty ? urls.first : '';
     final finalFileName = fullEnteredName.isNotEmpty
         ? safeFileName(fullEnteredName)
-        : fileNameFromUrl(_urlController.text.trim());
+        : fileNameFromUrl(singleUrl);
     final int finalSize = _isMetadataResolved ? _resolvedFileSize : 0;
 
     DownloadTask? duplicateTask;
@@ -546,7 +648,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   try {
                     await provider.updateTaskUrlAndResume(
                       duplicateTask!.id,
-                      _urlController.text.trim(),
+                      singleUrl,
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;
@@ -601,7 +703,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   try {
                     await provider.startOverTask(
                       duplicateTask!.id,
-                      _urlController.text.trim(),
+                      singleUrl,
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;
@@ -674,7 +776,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   try {
                     await provider.addDownload(
                       name: numberedName,
-                      url: _urlController.text.trim(),
+                      url: singleUrl,
                       size: finalSize,
                       category: _selectedCategory == 'Auto'
                           ? ''
@@ -740,7 +842,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     } else {
       await provider.addDownload(
         name: finalFileName,
-        url: _urlController.text.trim(),
+        url: singleUrl,
         size: finalSize,
         category: _selectedCategory == 'Auto' ? '' : _selectedCategory,
         savePath: _pathController.text.trim(),
@@ -748,7 +850,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         scheduledAt: _isScheduled ? _scheduledDateTime : null,
         torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
         downloadPageUrl:
-            _resolvedYoutubePageUrl ??
             widget.downloadPageUrl ??
             _referrerController.text.trim(),
         youtubeQualityPreset: _resolvedYoutubeQualityPreset,
@@ -910,6 +1011,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               inputBorderColor: inputBorderColor,
                               textClr: textClr,
                               secClr: secClr,
+                              activeBorderColor: blueClr,
+                              maxLines: 3,
+                              minLines: 1,
                               validator: (val) {
                                 if (val == null || val.trim().isEmpty) {
                                   return L10n.of(context, 'url_empty_error');
@@ -931,8 +1035,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               },
                             ),
                             if (_urlController.text.trim().isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 12.0),
+                              Positioned(
+                                right: 12.0,
+                                top: 12.0,
                                 child: Icon(
                                   _urlController.text.trim().split(RegExp(r'[\r\n]+'))
                                       .where((l) => l.trim().isNotEmpty)
@@ -949,6 +1054,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ),
                           ],
                         ),
+
                         const SizedBox(height: 12),
 
                         // Referrer link field
@@ -961,7 +1067,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           inputBorderColor: inputBorderColor,
                           textClr: textClr,
                           secClr: secClr,
+                          activeBorderColor: blueClr,
                         ),
+
                         const SizedBox(height: 16),
 
                         // File name & Category labels
@@ -1010,6 +1118,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       inputBorderColor: inputBorderColor,
                                       textClr: textClr,
                                       secClr: secClr,
+                                      activeBorderColor: blueClr,
+                                      maxLines: 1,
                                       validator: (val) {
                                         if (val == null || val.trim().isEmpty) {
                                           return L10n.of(context, 'filename_empty_error');
@@ -1031,6 +1141,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       inputBorderColor: inputBorderColor,
                                       textClr: textClr,
                                       secClr: secClr,
+                                      activeBorderColor: blueClr,
+                                      maxLines: 1,
                                     ),
                                   ),
                                 ],
@@ -1158,6 +1270,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               (val) => setState(() => _useProxy = val ?? false),
                               orangeClr,
                             ),
+                            _buildCheckbox(
+                              L10n.isRtl(context) ? 'جدولة' : 'Schedule',
+                              _isScheduled,
+                              (val) => setState(() {
+                                _isScheduled = val ?? false;
+                                if (_isScheduled && _scheduledDateTime == null) {
+                                  _scheduledDateTime = DateTime.now().add(const Duration(hours: 1));
+                                }
+                              }),
+                              isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                            ),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1206,7 +1329,87 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                             ),
                           ],
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
+
+                        // Scheduled date/time picker
+                        if (_isScheduled)
+                          GestureDetector(
+                            onTap: () async {
+                              final now = DateTime.now();
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: _scheduledDateTime ?? now.add(const Duration(hours: 1)),
+                                firstDate: now,
+                                lastDate: now.add(const Duration(days: 365)),
+                                builder: (ctx, child) {
+                                  return Theme(
+                                    data: Theme.of(ctx).copyWith(
+                                      colorScheme: ColorScheme.dark(
+                                        primary: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                                      ),
+                                    ),
+                                    child: child!,
+                                  );
+                                },
+                              );
+                              if (date != null && mounted) {
+                                final time = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay.fromDateTime(
+                                    _scheduledDateTime ?? now.add(const Duration(hours: 1)),
+                                  ),
+                                  builder: (ctx, child) {
+                                    return Theme(
+                                      data: Theme.of(ctx).copyWith(
+                                        colorScheme: ColorScheme.dark(
+                                          primary: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                                        ),
+                                      ),
+                                      child: child!,
+                                    );
+                                  },
+                                );
+                                if (time != null && mounted) {
+                                  setState(() {
+                                    _scheduledDateTime = DateTime(
+                                      date.year, date.month, date.day,
+                                      time.hour, time.minute,
+                                    );
+                                  });
+                                }
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: inputBgColor,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule,
+                                    size: 16,
+                                    color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    _scheduledDateTime != null
+                                        ? '${_scheduledDateTime!.day}/${_scheduledDateTime!.month}/${_scheduledDateTime!.year} ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}'
+                                        : (L10n.isRtl(context) ? 'اختر الوقت' : 'Tap to set date & time'),
+                                    style: TextStyle(
+                                      color: textClr,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 16),
 
                         // Action Buttons
                         Row(
@@ -1290,38 +1493,71 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     required Color inputBorderColor,
     required Color textClr,
     required Color secClr,
+    Color? activeBorderColor,
     String? Function(String?)? validator,
+    int? maxLines = 1,
+    int? minLines = 1,
   }) {
+    final focusColor = activeBorderColor ??
+        (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
     return Container(
       decoration: BoxDecoration(
         color: inputBgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: inputBorderColor),
+        border: Border.all(color: inputBorderColor, width: 1.0),
       ),
       child: TextFormField(
         controller: controller,
-        style: TextStyle(color: textClr, fontSize: 13),
-        maxLines: null,
-        minLines: 1,
+        style: TextStyle(color: textClr, fontSize: 13, height: 1.3),
+        maxLines: maxLines,
+        minLines: minLines,
         validator: validator,
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-            color: secClr.withValues(alpha: 0.6),
+            color: secClr.withValues(alpha: 0.5),
             fontSize: 12,
           ),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: focusColor.withValues(alpha: 0.6),
+              width: 1.2,
+            ),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                  .withValues(alpha: 0.6),
+              width: 1.0,
+            ),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+              width: 1.2,
+            ),
+          ),
           errorStyle: const TextStyle(fontSize: 10, height: 0.8),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 14,
-            vertical: 12,
+            vertical: 10,
           ),
         ),
       ),
     );
   }
+
 
   Widget _buildCheckbox(
     String title,

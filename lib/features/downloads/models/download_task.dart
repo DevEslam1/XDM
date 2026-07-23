@@ -1,7 +1,19 @@
 import 'package:flutter/foundation.dart';
-
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
+
+/// Public status message constants used throughout the download pipeline.
+/// Extracted here for i18n readiness — replace with localized strings when
+/// internationalization is added.
+abstract final class DownloadStatusMessages {
+  static const merging = 'Merging video and audio...';
+  static const waitingWifi = 'Waiting for WiFi connection';
+  static const waitingNetwork = 'Waiting for network connection...';
+  static const pausedOrphaned =
+      'Paused because XDM was closed during a foreground download.';
+  static const ffmpegMergeFailed = 'FFmpeg merge failed: ';
+  static const forbidden = 'Forbidden';
+}
 
 enum DownloadStatus { queued, downloading, paused, completed, failed }
 
@@ -252,11 +264,13 @@ class DownloadTask {
     final status = matched.isNotEmpty
         ? matched.first
         : (() {
-            debugPrint(
-              'DownloadTask.fromMap: unknown status "$statusName" for task '
-              '${map['id']}; defaulting to paused to avoid silently resuming a '
-              'potentially corrupt task.',
-            );
+            if (kDebugMode) {
+              debugPrint(
+                'DownloadTask.fromMap: unknown status "$statusName" for task '
+                '${map['id']}; defaulting to paused to avoid silently resuming a '
+                'potentially corrupt task.',
+              );
+            }
             return DownloadStatus.paused;
           })();
     final rawChunks = (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
@@ -332,3 +346,11 @@ class DownloadTask {
   @override
   int get hashCode => id.hashCode;
 }
+
+// TODO: Add unit tests for DownloadTask
+//   - copyWith: each field, clearXxx flags, null preservation
+//   - toMap / fromMap: round-trip fidelity, corrupt/missing keys
+//   - Chunk resizing: too many, too few, exact match
+//   - Unknown status fallback to paused
+//   - Equality: same id equals, different id not equals
+//   - Getters: isTorrent, progress, speedFormatted, etaFormatted

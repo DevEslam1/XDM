@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -42,7 +41,9 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
       builder: (context, settingsState, _) {
         final isDark = settingsState.isDarkMode;
         final classicUi = settingsState.classicUi;
-        final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+        final textClr = isDark
+            ? AppTheme.textPrimary
+            : AppTheme.lightTextPrimary;
         final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
         final isRtl = L10n.isRtl(context);
 
@@ -52,272 +53,289 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
             extendBody: true,
             floatingActionButtonLocation:
                 FloatingActionButtonLocation.endDocked,
-        appBar: AppBar(
-          backgroundColor: classicUi
-              ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-              : Colors.transparent,
-          elevation: 0,
-          shape: classicUi
-              ? Border(
-                  bottom: BorderSide(
-                    color: isDark ? AppTheme.border : AppTheme.lightBorder,
-                    width: 1.0,
-                  ),
-                )
-              : null,
-          title: _isSearching
-              ? Container(
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF0F0F16)
-                        : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isDark
-                          ? const Color(0x15FFFFFF)
-                          : const Color(0x0D000000),
-                      width: 0.8,
-                    ),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: TextField(
-                    controller: _searchController,
-                    autofocus: true,
-                    style: TextStyle(color: textClr, fontSize: 16),
-                    decoration: InputDecoration(
-                      hintText: L10n.of(
-                        context,
-                        'search_placeholder',
-                      ).toUpperCase(),
-                      hintStyle: TextStyle(
-                        color: isDark
-                            ? AppTheme.textMuted
-                            : AppTheme.lightTextMuted,
-                        fontSize: 14,
+            appBar: AppBar(
+              backgroundColor: classicUi
+                  ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                  : Colors.transparent,
+              elevation: 0,
+              shape: classicUi
+                  ? Border(
+                      bottom: BorderSide(
+                        color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                        width: 1.0,
                       ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    )
+                  : null,
+              title: _isSearching
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF0F0F16)
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isDark
+                              ? const Color(0x15FFFFFF)
+                              : const Color(0x0D000000),
+                          width: 0.8,
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        style: TextStyle(color: textClr, fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: L10n.of(
+                            context,
+                            'search_placeholder',
+                          ).toUpperCase(),
+                          hintStyle: TextStyle(
+                            color: isDark
+                                ? AppTheme.textMuted
+                                : AppTheme.lightTextMuted,
+                            fontSize: 14,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                          ),
+                        ),
+                        onChanged: (val) => context
+                            .read<DownloadProvider>()
+                            .setSearchQuery(val),
+                      ),
+                    )
+                  : Text(
+                      'XDM',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: textClr,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            fontSize: 18,
+                          ),
                     ),
-                    onChanged: (val) =>
-                        context.read<DownloadProvider>().setSearchQuery(val),
+              actions: [
+                if (!_isSearching)
+                  IconButton(
+                    icon: Icon(
+                      _showAnalytics
+                          ? Icons.analytics
+                          : Icons.analytics_outlined,
+                      color: _showAnalytics ? accentClr : textClr,
+                    ),
+                    tooltip: isRtl ? 'تحليل التخزين' : 'STORAGE ANALYTICS',
+                    onPressed: () {
+                      triggerHaptic(context.read<SettingsProvider>());
+                      setState(() {
+                        _showAnalytics = !_showAnalytics;
+                      });
+                    },
                   ),
-                )
-              : Text(
-                  'XDM',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                IconButton(
+                  icon: Icon(
+                    _isSearching ? Icons.close : Icons.search,
                     color: textClr,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                    fontSize: 18,
                   ),
-                ),
-          actions: [
-            if (!_isSearching)
-              IconButton(
-                icon: Icon(
-                  _showAnalytics ? Icons.analytics : Icons.analytics_outlined,
-                  color: _showAnalytics ? accentClr : textClr,
-                ),
-                tooltip: isRtl ? 'تحليل التخزين' : 'STORAGE ANALYTICS',
-                onPressed: () {
-                  triggerHaptic(context.read<SettingsProvider>());
-                  setState(() {
-                    _showAnalytics = !_showAnalytics;
-                  });
-                },
-              ),
-            IconButton(
-              icon: Icon(
-                _isSearching ? Icons.close : Icons.search,
-                color: textClr,
-              ),
-              onPressed: () {
-                triggerHaptic(context.read<SettingsProvider>());
-                setState(() {
-                  if (_isSearching) {
-                    _isSearching = false;
-                    _searchController.clear();
-                    context.read<DownloadProvider>().setSearchQuery('');
-                  } else {
-                    _isSearching = true;
-                  }
-                });
-              },
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        body: SafeArea(
-          child: Center(
-            child: SizedBox(
-              width: contentMaxWidth(context),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Sliding Segmented Tab Selector
-                  _buildSegmentedControl(context, isDark, isRtl),
-
-                  // Storage & Category Analytics Panel
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOutCubic,
-                    child: _showAnalytics
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                              vertical: 8.0,
-                            ),
-                            child: Selector<DownloadProvider, Map<String, double>>(
-                              selector: (_, provider) => provider.categorySizes,
-                              shouldRebuild: (prev, next) {
-                                if (prev.length != next.length) return true;
-                                for (final key in prev.keys) {
-                                  if (prev[key] != next[key]) return true;
-                                }
-                                return false;
-                              },
-                              builder: (context, categorySizes, _) =>
-                                  _DonutChartPanel(
-                                    categorySizes: categorySizes,
-                                    settings: context.read<SettingsProvider>(),
-                                  ),
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-
-                  // Download Speed Statistics (only show for Active Downloads)
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeInOutCubic,
-                    child: _selectedTab == 0
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                              vertical: 8.0,
-                            ),
-                            child: DownloadStatsPanel(),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-
-                  // Filter Chips
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: FilterChipsBar(isHistory: _selectedTab == 1),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Title "DOWNLOADS OVERVIEW"
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text(
-                      _selectedTab == 0
-                          ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
-                          : (isRtl
-                                ? 'سجل التنزيلات المكتملة'
-                                : 'COMPLETED DOWNLOADS'),
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: isDark
-                            ? AppTheme.textSecondary
-                            : AppTheme.lightTextSecondary,
-                        fontSize: 10,
-                        letterSpacing: 1.0,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Controls Row: Sort Option on the Left, Delete Sweep/Task count on the Right
-                  _DownloadControlsRow(
-                    selectedTab: _selectedTab,
-                    isDark: isDark,
-                    isRtl: isRtl,
-                    settings: context.read<SettingsProvider>(),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Download Tasks list with Pull-to-Refresh
-                  Expanded(
-                    child: _DownloadTaskList(
-                      selectedTab: _selectedTab,
-                      isDark: isDark,
-                      isRtl: isRtl,
-                      settings: context.read<SettingsProvider>(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        floatingActionButton: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).padding.bottom + 76.0,
-          ),
-          child: classicUi
-              ? FloatingActionButton(
-                  heroTag: null,
-                  backgroundColor: isDark
-                      ? AppTheme.neonViolet
-                      : AppTheme.lightNeonViolet,
-                  foregroundColor: isDark
-                      ? AppTheme.background
-                      : AppTheme.lightBackground,
-                  shape: const CircleBorder(
-                    side: BorderSide(color: Colors.white24, width: 0.8),
-                  ),
-                  child: const Icon(Icons.add, size: 28),
                   onPressed: () {
                     triggerHaptic(context.read<SettingsProvider>());
-                    showDialog(
-                      context: context,
-                      builder: (_) => const AddDownloadDialog(),
-                    );
+                    setState(() {
+                      if (_isSearching) {
+                        _isSearching = false;
+                        _searchController.clear();
+                        context.read<DownloadProvider>().setSearchQuery('');
+                      } else {
+                        _isSearching = true;
+                      }
+                    });
                   },
-                )
-              : Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            (isDark
-                                    ? AppTheme.neonViolet
-                                    : AppTheme.lightNeonViolet)
-                                .withValues(alpha: 0.3),
-                        blurRadius: 16.0,
-                        spreadRadius: 0,
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+            body: SafeArea(
+              child: Center(
+                child: SizedBox(
+                  width: contentMaxWidth(context),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Sliding Segmented Tab Selector
+                      _buildSegmentedControl(context, isDark, isRtl),
+
+                      // Storage & Category Analytics Panel
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOutCubic,
+                        child: _showAnalytics
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                  vertical: 8.0,
+                                ),
+                                child:
+                                    Selector<
+                                      DownloadProvider,
+                                      Map<String, double>
+                                    >(
+                                      selector: (_, provider) =>
+                                          provider.categorySizes,
+                                      shouldRebuild: (prev, next) {
+                                        if (prev.length != next.length)
+                                          return true;
+                                        for (final key in prev.keys) {
+                                          if (prev[key] != next[key])
+                                            return true;
+                                        }
+                                        return false;
+                                      },
+                                      builder: (context, categorySizes, _) =>
+                                          _DonutChartPanel(
+                                            categorySizes: categorySizes,
+                                            settings: context
+                                                .read<SettingsProvider>(),
+                                          ),
+                                    ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+
+                      // Download Speed Statistics (only show for Active Downloads)
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOutCubic,
+                        child: _selectedTab == 0
+                            ? const Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 16.0,
+                                  vertical: 8.0,
+                                ),
+                                child: DownloadStatsPanel(),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+
+                      // Filter Chips
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: FilterChipsBar(isHistory: _selectedTab == 1),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Title "DOWNLOADS OVERVIEW"
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text(
+                          _selectedTab == 0
+                              ? (isRtl
+                                    ? 'التنزيلات النشطة'
+                                    : 'ACTIVE DOWNLOADS')
+                              : (isRtl
+                                    ? 'سجل التنزيلات المكتملة'
+                                    : 'COMPLETED DOWNLOADS'),
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: isDark
+                                    ? AppTheme.textSecondary
+                                    : AppTheme.lightTextSecondary,
+                                fontSize: 10,
+                                letterSpacing: 1.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Controls Row: Sort Option on the Left, Delete Sweep/Task count on the Right
+                      _DownloadControlsRow(
+                        selectedTab: _selectedTab,
+                        isDark: isDark,
+                        isRtl: isRtl,
+                        settings: context.read<SettingsProvider>(),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Download Tasks list with Pull-to-Refresh
+                      Expanded(
+                        child: _DownloadTaskList(
+                          selectedTab: _selectedTab,
+                          isDark: isDark,
+                          isRtl: isRtl,
+                          settings: context.read<SettingsProvider>(),
+                        ),
                       ),
                     ],
                   ),
-                  child: FloatingActionButton(
-                    heroTag: null,
-                    backgroundColor: isDark
-                        ? AppTheme.neonViolet
-                        : AppTheme.lightNeonViolet,
-                    foregroundColor: isDark
-                        ? AppTheme.background
-                        : AppTheme.lightBackground,
-                    shape: const CircleBorder(
-                      side: BorderSide(color: Colors.white24, width: 0.8),
-                    ),
-                    child: const Icon(Icons.add, size: 28),
-                    onPressed: () {
-                      triggerHaptic(context.read<SettingsProvider>());
-                      showDialog(
-                        context: context,
-                        builder: (_) => const AddDownloadDialog(),
-                      );
-                    },
-                  ),
                 ),
-        ),
-      ),
-    );
+              ),
+            ),
+            floatingActionButton: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom + 76.0,
+              ),
+              child: classicUi
+                  ? FloatingActionButton(
+                      heroTag: null,
+                      backgroundColor: isDark
+                          ? AppTheme.neonViolet
+                          : AppTheme.lightNeonViolet,
+                      foregroundColor: isDark
+                          ? AppTheme.background
+                          : AppTheme.lightBackground,
+                      shape: const CircleBorder(
+                        side: BorderSide(color: Colors.white24, width: 0.8),
+                      ),
+                      child: const Icon(Icons.add, size: 28),
+                      onPressed: () {
+                        triggerHaptic(context.read<SettingsProvider>());
+                        showDialog(
+                          context: context,
+                          builder: (_) => const AddDownloadDialog(),
+                        );
+                      },
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                (isDark
+                                        ? AppTheme.neonViolet
+                                        : AppTheme.lightNeonViolet)
+                                    .withValues(alpha: 0.3),
+                            blurRadius: 16.0,
+                            spreadRadius: 0,
+                          ),
+                        ],
+                      ),
+                      child: FloatingActionButton(
+                        heroTag: null,
+                        backgroundColor: isDark
+                            ? AppTheme.neonViolet
+                            : AppTheme.lightNeonViolet,
+                        foregroundColor: isDark
+                            ? AppTheme.background
+                            : AppTheme.lightBackground,
+                        shape: const CircleBorder(
+                          side: BorderSide(color: Colors.white24, width: 0.8),
+                        ),
+                        child: const Icon(Icons.add, size: 28),
+                        onPressed: () {
+                          triggerHaptic(context.read<SettingsProvider>());
+                          showDialog(
+                            context: context,
+                            builder: (_) => const AddDownloadDialog(),
+                          );
+                        },
+                      ),
+                    ),
+            ),
+          ),
+        );
       },
     );
   }
@@ -466,7 +484,8 @@ class _DownloadControlsRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Selector<DownloadProvider, ({SortOption option, bool ascending})>(
-            selector: (_, p) => (option: p.sortOption, ascending: p.sortAscending),
+            selector: (_, p) =>
+                (option: p.sortOption, ascending: p.sortAscending),
             builder: (context, sortState, _) {
               return PopupMenuButton<SortOption>(
                 tooltip: 'SORT CHANNELS',
@@ -519,7 +538,10 @@ class _DownloadControlsRow extends StatelessWidget {
                   ),
                 ],
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark
                         ? const Color(0x1F000000)
@@ -643,7 +665,7 @@ class _DownloadTaskList extends StatelessWidget {
               prev[i].downloadedBytes != next[i].downloadedBytes ||
               prev[i].speed != next[i].speed ||
               prev[i].eta != next[i].eta ||
-              !listEquals(prev[i].chunks, next[i].chunks)) {
+              !identical(prev[i].chunks, next[i].chunks)) {
             return true;
           }
         }
@@ -764,11 +786,20 @@ class _EmptyState extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.search_off_rounded, size: 48, color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+              Icon(
+                Icons.search_off_rounded,
+                size: 48,
+                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+              ),
               const SizedBox(height: 12),
               Text(
                 'No results for "$query"',
-                style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textPrimary
+                      : AppTheme.lightTextPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 16),
               TextButton.icon(
@@ -1017,57 +1048,57 @@ class _DonutChartPanel extends StatelessWidget {
                     ),
                   )
                 : isTabletDevice
-                    ? Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: categoryCards.take(3).map((card) {
-                                return _buildLegendItem(
-                                  card,
-                                  sizes,
-                                  totalSizeMb,
-                                  textClr,
-                                  isDark,
-                                  isRtl,
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: categoryCards.skip(3).map((card) {
-                                return _buildLegendItem(
-                                  card,
-                                  sizes,
-                                  totalSizeMb,
-                                  textClr,
-                                  isDark,
-                                  isRtl,
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: categoryCards.map((card) {
-                          return _buildLegendItem(
-                            card,
-                            sizes,
-                            totalSizeMb,
-                            textClr,
-                            isDark,
-                            isRtl,
-                          );
-                        }).toList(),
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: categoryCards.take(3).map((card) {
+                            return _buildLegendItem(
+                              card,
+                              sizes,
+                              totalSizeMb,
+                              textClr,
+                              isDark,
+                              isRtl,
+                            );
+                          }).toList(),
+                        ),
                       ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: categoryCards.skip(3).map((card) {
+                            return _buildLegendItem(
+                              card,
+                              sizes,
+                              totalSizeMb,
+                              textClr,
+                              isDark,
+                              isRtl,
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: categoryCards.map((card) {
+                      return _buildLegendItem(
+                        card,
+                        sizes,
+                        totalSizeMb,
+                        textClr,
+                        isDark,
+                        isRtl,
+                      );
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -1117,7 +1148,7 @@ class _DonutChartPanel extends StatelessWidget {
             ),
           ),
           Text(
-            '${percentage.toStringAsFixed(0)}%',
+            '$percentage%',
             style: TextStyle(
               color: card['color'] as Color,
               fontSize: 9,

@@ -919,7 +919,18 @@ class _CardSnapshot {
       other.downloadedBytes == downloadedBytes &&
       other.fileSize == fileSize &&
       other.isTorrent == isTorrent &&
-      other.seedingEnabled == seedingEnabled;
+      other.seedingEnabled == seedingEnabled &&
+      _listEquals(other.task.chunks, task.chunks);
+
+  static bool _listEquals(List<double>? a, List<double>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   @override
   int get hashCode => Object.hash(

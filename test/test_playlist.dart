@@ -16,13 +16,17 @@ void main() async {
 
   print('=== YoutubeService.getPlaylistVideos ===');
   final videos = await YoutubeService.getPlaylistVideos(url);
-  print('Total videos: ${videos.length}');
-  for (var i = 0; i < videos.length && i < 5; i++) {
-    final v = videos[i];
-    print('  ${i + 1}. [${v['id']}] "${v['title']}" - ${v['duration']}s');
-  }
-  if (videos.length > 5) {
-    print('  ... and ${videos.length - 5} more');
+  if (videos != null) {
+    print('Total videos: ${videos.length}');
+    for (var i = 0; i < videos.length && i < 5; i++) {
+      final v = videos[i];
+      print('  ${i + 1}. [${v['id']}] "${v['title']}" - ${v['duration']}s');
+    }
+    if (videos.length > 5) {
+      print('  ... and ${videos.length - 5} more');
+    }
+  } else {
+    print('No videos found.');
   }
 
   YoutubeService.close();

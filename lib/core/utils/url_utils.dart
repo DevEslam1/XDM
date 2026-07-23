@@ -276,7 +276,7 @@ String _punycodeEncode(String input) {
         int safety = 0;
         while (true) {
           safety++;
-          if (safety > 10000) {
+          if (safety > 1000) {
             throw FormatException('Punycode encode infinite loop guard triggered');
           }
           final t = k <= bias
@@ -306,3 +306,13 @@ int _punycodeDigit(int d) {
   if (d < 26) return d + 97; // a-z
   return d + 22; // 0-9
 }
+
+// TODO: Add unit tests for URL utilities
+//   - isHttpUrl: valid/invalid URLs, edge cases
+//   - isMagnetUrl: hex40, base32, hex64, invalid hashes
+//   - isTorrentUrl: magnet, .torrent file, file://
+//   - parseMagnetUrl: regex vs Uri fallback, edge cases
+//   - fileNameFromUrl: no path, special chars, empty segments
+//   - fileNameFromContentDisposition: RFC 5987, quoted, no match
+//   - convertIdnToPunycode: unicode host, ascii host, malformed
+//   - _base32ToHex: round-trip fidelity, padding edge cases

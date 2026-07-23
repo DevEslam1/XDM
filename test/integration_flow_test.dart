@@ -49,6 +49,7 @@ class FakeDownloadEngine extends DownloadEngine {
     String? proxyPassword,
     bool bypassSSL = false,
     String? cookies,
+    String? oauthToken,
   }) async {
     return DownloadMetadata(
       fileName: requestedFileName ?? 'file.zip',
@@ -73,6 +74,7 @@ class FakeDownloadEngine extends DownloadEngine {
     String? customUserAgent,
     String? referer,
     String? cookies,
+    String? oauthToken,
     bool enableProxy = false,
     String? proxyAddress,
     String? proxyHost,

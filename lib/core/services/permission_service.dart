@@ -98,28 +98,22 @@ class PermissionService {
     if (!kIsWeb && Platform.isAndroid) {
       final sdk = await _androidSdkLevel();
 
-      // On API 30+, try SAF-style public path via getExternalStorageDirectory,
-      // then fall back to app-specific directory. The getDownloadsDirectory()
-      // returns an app-private dir on API 30+ which users cannot browse.
+      // On API 30+, use Storage Access Framework via getExternalStorageDirectories.
+      // Direct dart:io writes to /storage/emulated/0/Download/ are forbidden;
+      // getExternalStorageDirectories returns a SAF-backed path that the system
+      // can broker writes for. If that fails, fall back to app-specific dirs.
       if (sdk >= 30) {
-        // Try public Downloads via external storage directory
         try {
-          final extDir = await getExternalStorageDirectory();
-          if (extDir != null) {
-            // Navigate up to the actual external storage root, then to Download/XDM
-            final root = extDir.path;
-            final parts = root.split('/');
-            final androidIndex = parts.indexOf('Android');
-            if (androidIndex > 0) {
-              final publicPath = p.join(
-                p.joinAll(parts.sublist(0, androidIndex)), 'Download', 'XDM',
-              );
-              final dir = Directory(publicPath);
-              if (!await dir.exists()) {
-                await dir.create(recursive: true);
-              }
-              return publicPath;
+          final extDirs = await getExternalStorageDirectories(
+            type: StorageDirectory.downloads,
+          );
+          if (extDirs != null && extDirs.isNotEmpty) {
+            final pth = p.join(extDirs.first.path, 'XDM');
+            final dir = Directory(pth);
+            if (!await dir.exists()) {
+              await dir.create(recursive: true);
             }
+            return pth;
           }
         } catch (_) {}
         // Fallback to app-specific directory
@@ -200,6 +194,9 @@ class PermissionService {
     } else if (sdk >= 29) {
       final status = await Permission.storage.status;
       if (!status.isGranted) {
+        if (status.isPermanentlyDenied) {
+          return false;
+        }
         final requestStatus = await Permission.storage.request();
         if (!requestStatus.isGranted) {
           return false;
@@ -208,6 +205,9 @@ class PermissionService {
     } else {
       final status = await Permission.storage.status;
       if (!status.isGranted) {
+        if (status.isPermanentlyDenied) {
+          return false;
+        }
         final requestStatus = await Permission.storage.request();
         if (!requestStatus.isGranted) {
           return false;
@@ -246,5 +246,17 @@ class PermissionService {
       } catch (_) {}
       return false;
     }
+  }
+
+  /// Returns `true` if storage permission was permanently denied by the user.
+  Future<bool> isStoragePermanentlyDenied() async {
+    if (kIsWeb || !Platform.isAndroid) return false;
+    final sdk = await _androidSdkLevel();
+    if (sdk >= 33) {
+      return (await Permission.photos.status.isPermanentlyDenied) ||
+          (await Permission.videos.status.isPermanentlyDenied) ||
+          (await Permission.audio.status.isPermanentlyDenied);
+    }
+    return (await Permission.storage.status).isPermanentlyDenied;
   }
 }

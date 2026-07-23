@@ -1290,8 +1290,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           padding: const EdgeInsets.all(20),
           decoration: AppTheme.glassDecoration(
             borderRadius: 24,
-            tintColor: accentClr,
-            tintOpacity: 0.04,
             isDark: isDark,
           ),
           child: Column(
@@ -2038,6 +2036,79 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     );
   }
 
+  /// Opens a real external browser / Custom Tab for Google sign-in.
+  /// Google blocks OAuth inside in-app WebViews, so this uses the system
+  /// browser which is treated as a real browser by Google's detection.
+  Future<bool> _openBrowserForSignIn(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          title: Text(
+            isRtl ? 'تسجيل الدخول إلى YouTube' : 'Sign in to YouTube',
+            style: TextStyle(
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          content: Text(
+            isRtl
+                ? 'سيتم فتح متصفح خارجي آمن. سجّل الدخول إلى Google هناك، ثم ارجع إلى التطبيق واضغط "التحقق من تسجيل الدخول".'
+                : 'A secure external browser will open. Sign in to Google there, then return to the app and tap "CHECK SIGN-IN".',
+            style: TextStyle(
+              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                isRtl ? 'إلغاء' : 'CANCEL',
+                style: TextStyle(
+                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                isRtl ? 'فتح المتصفح' : 'OPEN BROWSER',
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        await launchUrl(
+          Uri.parse('https://accounts.google.com/ServiceLogin?continue=https://www.youtube.com'),
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (e) {
+        debugPrint('Failed to open external browser: $e');
+      }
+    }
+    return false;
+  }
+
   Widget _buildGoogleSignInPanel(
     BuildContext context,
     SettingsProvider settings,
@@ -2289,9 +2360,12 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           var success =
                               await GoogleAuthService().signIn();
                           if (!success) {
-                            await YoutubeService.authenticateFromBrowser();
+                            await YoutubeService.fetchCookiesFromWebView();
                             if (YoutubeService.isSignedIn) {
                               success = true;
+                            } else {
+                              if (!context.mounted) return;
+                              await _openBrowserForSignIn(context, settings);
                             }
                           }
                           if (context.mounted) {
@@ -2310,7 +2384,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                                 context,
                                 message: isRtl
                                     ? 'فشل تسجيل الدخول. أضف SHA-1 في Google Cloud Console أو سجل الدخول من متصفح التطبيق.'
-                                    : 'Sign-in failed (ApiException 10). Add SHA-1 in Google Cloud Console or sign in via Browser.',
+                                    : 'Sign-in failed. Tap "CHECK SIGN-IN" after signing in via the browser.',
                                 color: redClr,
                                 icon: Icons.error_outline,
                                 isDarkMode: isDark,
@@ -2353,6 +2427,56 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           ),
                           padding: const EdgeInsets.symmetric(
                               vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          triggerHaptic(settings);
+                          await YoutubeService.fetchCookiesFromWebView();
+                          if (!context.mounted) return;
+                          final signedIn = YoutubeService.isSignedIn;
+                          ThemedSnackbar.show(
+                            context,
+                            message: signedIn
+                                ? (isRtl
+                                      ? 'تم اكتشاف جلسة يوتيوب!'
+                                      : 'YouTube session detected!')
+                                : (isRtl
+                                      ? 'لم يتم العثور على جلسة يوتيوب. سجّل الدخول في المتصفح أولاً.'
+                                      : 'No YouTube session found. Sign in via the browser first.'),
+                            color: signedIn ? greenClr : redClr,
+                            icon: signedIn
+                                ? Icons.check_circle_outline
+                                : Icons.error_outline,
+                            isDarkMode: isDark,
+                          );
+                        },
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          size: 16,
+                          color: blueClr,
+                        ),
+                        label: Text(
+                          isRtl ? 'التحقق من تسجيل الدخول' : 'CHECK SIGN-IN',
+                          style: TextStyle(
+                            color: blueClr,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: blueClr.withValues(alpha: 0.3),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12),
                         ),
                       ),
                     ),

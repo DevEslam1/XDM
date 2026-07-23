@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 class AdBlocker {
   static final Set<String> _blockedDomains = {};
+  static final List<RegExp> _blockedPatterns = [];
   static bool _initialized = false;
 
   static const List<String> _allowedDomains = [
@@ -113,7 +114,6 @@ class AdBlocker {
     'click.php',
   ];
 
-  static bool _initializing = false;
   static Future<void>? _initFuture;
 
   /// Asynchronously loads local hosts from cache file or triggers background download
@@ -124,7 +124,6 @@ class AdBlocker {
 
   static Future<void> _initializeInternal() async {
     if (_initialized) return;
-    _initializing = true;
     _invalidateCache();
 
     // Load defaults immediately as fallback
@@ -135,6 +134,7 @@ class AdBlocker {
       if (await file.exists()) {
         final content = await file.readAsString();
         final domains = _parseHostsContent(content);
+        _precomputeParentDomains(domains);
         _blockedDomains.addAll(domains);
         debugPrint('AdBlocker loaded ${domains.length} custom domains from local cache.');
       } else {
@@ -144,8 +144,6 @@ class AdBlocker {
       _initialized = true;
     } catch (e) {
       debugPrint('AdBlocker initialization error: $e');
-    } finally {
-      _initializing = false;
     }
   }
 
@@ -177,6 +175,7 @@ class AdBlocker {
 
     if (newDomains.isNotEmpty) {
       _invalidateCache();
+      _precomputeParentDomains(newDomains);
       final updated = <String>{..._fallbackDomains, ...newDomains};
       _blockedDomains
         ..clear()
@@ -230,6 +229,14 @@ class AdBlocker {
         continue;
       }
 
+      // Handle adblock-style regex rules: /pattern/
+      if (line.startsWith('/') && line.endsWith('/') && line.length > 2) {
+        try {
+          _blockedPatterns.add(RegExp(line.substring(1, line.length - 1)));
+        } catch (_) {}
+        continue;
+      }
+
       // Handle standard hosts layout (e.g. "0.0.0.0 ads.doubleclick.net") or raw domains
       final parts = line.split(RegExp(r'\s+'));
       if (parts.length >= 2) {
@@ -245,6 +252,20 @@ class AdBlocker {
       }
     }
     return domains;
+  }
+
+  /// Pre-computes parent domains so runtime lookup is O(1) per URL.
+  /// For example, if "sub.example.com" is blocked, also adds "example.com".
+  static void _precomputeParentDomains(Set<String> domains) {
+    final parents = <String>{};
+    for (final domain in domains) {
+      var parts = domain.split('.');
+      while (parts.length >= 3) {
+        parts.removeAt(0);
+        parents.add(parts.join('.'));
+      }
+    }
+    domains.addAll(parents);
   }
 
   static bool _isValidDomain(String domain) {
@@ -263,13 +284,11 @@ class AdBlocker {
   /// NOTE: [initialize] should be awaited before calling this. If not yet
   /// initialized, the check is skipped rather than mutating state.
   static bool shouldBlock(String url) {
-    if (!_initialized && !_initializing) {
+    if (!_initialized) {
       if (_blockedDomains.isEmpty) {
         _blockedDomains.addAll(_fallbackDomains);
       }
-      initialize();
     }
-    // Must be initialized: at minimum _fallbackDomains are loaded
 
     // 0. Always allow YouTube domains and API paths
     if (_isAllowedUrl(url)) return false;
@@ -291,18 +310,23 @@ class AdBlocker {
       return true;
     }
 
-    // 2. Extract host domain
+    // 2. Regex pattern check (for adblock-style patterns)
+    for (final pattern in _blockedPatterns) {
+      if (pattern.hasMatch(lower)) return true;
+    }
+
+    // 3. Extract host domain
     final host = _extractHost(lower);
     if (host.isEmpty) return false;
 
-    // 3. Domain suffix lookup check
+    // 4. O(1) direct domain lookup (parent domains are pre-computed)
+    if (_blockedDomains.contains(host)) return true;
+
+    // 5. Fallback: parent domain scan (for entries not yet pre-computed)
     var parts = host.split('.');
-    while (parts.length >= 2) {
-      final domainToCheck = parts.join('.');
-      if (_blockedDomains.contains(domainToCheck)) {
-        return true;
-      }
+    while (parts.length >= 3) {
       parts.removeAt(0);
+      if (_blockedDomains.contains(parts.join('.'))) return true;
     }
 
     return false;

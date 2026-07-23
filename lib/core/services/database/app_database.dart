@@ -68,7 +68,9 @@ class DownloadTasks extends Table {
   TextColumn get tempFilePath => text()();
   TextColumn get errorMessage => text().nullable()();
   IntColumn get threadCount => integer()();
-  TextColumn get chunks => text().map(const DoubleListConverter())();
+  TextColumn get chunks => text()
+      .map(NullAwareTypeConverter.wrap(const DoubleListConverter()))
+      .nullable()();
   TextColumn get createdAt => text()();
   TextColumn get updatedAt => text()();
   TextColumn get completedAt => text().nullable()();

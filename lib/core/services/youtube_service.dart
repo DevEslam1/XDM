@@ -1,135 +1,53 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:logging/logging.dart';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
-import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart' as io_client;
-
-import 'youtube/innertube_stream_client.dart';
-import 'youtube/youtube_exceptions.dart';
-
 class YoutubeService {
-  static String? _apiKey;
-  static String? _cachedPlaylistId;
-  static Map<String, dynamic>? _cachedPlaylistDetails;
-  static DateTime? _cacheTimestamp;
-
-  YoutubeService({String? apiKey}) {
-    if (apiKey != null) {
-      _apiKey = apiKey;
-    }
-  }
-
-  static String? get effectiveApiKey {
-    if (_innerTubeApiKeyOverride != null &&
-        _innerTubeApiKeyOverride!.isNotEmpty) {
-      return _innerTubeApiKeyOverride;
-    }
-    if (_apiKey != null && _apiKey!.isNotEmpty) {
-      return _apiKey;
-    }
-    const envKey = String.fromEnvironment('YOUTUBE_API_KEY');
-    if (envKey.isNotEmpty) return envKey;
-    try {
-      final sysEnvKey = Platform.environment['YOUTUBE_API_KEY'];
-      if (sysEnvKey != null && sysEnvKey.isNotEmpty) return sysEnvKey;
-    } catch (_) {}
-    return null;
-  }
-
-  static YoutubeExplode _yt = YoutubeExplode();
-
   static String? _cookies;
   static String? _oauthToken;
 
-  /// Layer 1: Pure-HTTP InnerTube client (primary stream engine).
-  static InnerTubeStreamClient? _innerTube;
-  static InnerTubeStreamClient get innerTube {
-    _innerTube ??= InnerTubeStreamClient();
-    if (_cookies != null) {
-      _innerTube!.setCookies(_cookies!);
-    }
-    if (_oauthToken != null) {
-      _innerTube!.setOAuthToken(_oauthToken!);
-    }
-    return _innerTube!;
-  }
-
-  static String innerTubeClientVersion = '2.20260708.00.00';
-
-  static Future<void>? _fetchMutex;
-  static Future<T> _synchronized<T>(Future<T> Function() action) async {
-    while (_fetchMutex != null) {
-      try {
-        await _fetchMutex;
-      } catch (_) {}
-    }
-    final completer = Completer<void>();
-    _fetchMutex = completer.future;
-    try {
-      return await action();
-    } finally {
-      completer.complete();
-      if (_fetchMutex == completer.future) {
-        _fetchMutex = null;
-      }
-    }
-  }
-
-  static YoutubeExplode _createYt() {
-    if (_cookies == null) return YoutubeExplode();
-    final cookieClient = _CookieClient(_cookies!);
-    final client = YoutubeHttpClient(cookieClient);
-    return YoutubeExplode(httpClient: client);
-  }
-
+  /// The OAuth access token if set via [signInWithOAuth], or null.
+  /// Can be used to add an `Authorization: Bearer` header on custom
+  /// InnerTube API requests that [youtube_explode_dart] does not
+  /// natively support.
+  static String? get oauthToken => _oauthToken;
   static final _authStateController = StreamController<bool>.broadcast();
+  static YoutubeExplode? _ytInstance;
 
-  /// Stream that emits `true` when signed in via OAuth or Browser cookies, `false` when signed out.
+  static YoutubeExplode get _yt {
+    _ytInstance ??= YoutubeExplode();
+    return _ytInstance!;
+  }
+
+  /// Stream that emits `true` when signed in, `false` when signed out.
   static Stream<bool> get onAuthStateChanged => _authStateController.stream;
 
   static void _notifyAuthState() {
     _authStateController.add(isSignedIn);
   }
 
-  /// Recreates the underlying [YoutubeExplode] with the given cookie string.
-  /// Call this before any stream fetch to access authenticated content.
-  ///
-  /// To get cookies: sign into YouTube in a browser, open DevTools →
-  /// Application → Cookies → copy the full cookie string and pass it here.
+  /// Signs into YouTube with browser cookies.
   static Future<void> signIn(String cookieString) async {
-    await _synchronized(() async {
-      _yt.close();
-      _cookies = cookieString;
-      _yt = _createYt();
-      innerTube.setCookies(cookieString);
-      _notifyAuthState();
-    });
+    _cookies = cookieString;
+    _notifyAuthState();
   }
 
   /// Signs in using an OAuth access token from Google Sign-In.
-  /// This authenticates InnerTube requests via `Authorization: Bearer`.
+  /// The token is stored as [oauthToken] and should be passed separately
+  /// as an `Authorization: Bearer` header (not stuffed into cookies).
   static Future<void> signInWithOAuth(String accessToken) async {
-    await _synchronized(() async {
-      _oauthToken = accessToken;
-      innerTube.setOAuthToken(accessToken);
-      debugPrint('[YoutubeService] OAuth token set for InnerTube');
-      _notifyAuthState();
-    });
+    _oauthToken = accessToken;
+    await resetClient();
+    _notifyAuthState();
   }
 
   /// Clears the OAuth token (called on Google sign-out).
   static Future<void> clearOAuth() async {
-    await _synchronized(() async {
-      _oauthToken = null;
-      innerTube.setOAuthToken(null);
-      _notifyAuthState();
-    });
+    _oauthToken = null;
+    _notifyAuthState();
   }
 
   /// Whether the service has an OAuth token set.
@@ -137,43 +55,27 @@ class YoutubeService {
 
   /// Signs out from all authentication methods (OAuth + cookies).
   static Future<void> signOut() async {
-    await _synchronized(() async {
-      _yt.close();
-      _cookies = null;
-      _oauthToken = null;
-      _yt = _createYt();
-      innerTube.setCookies(null);
-      innerTube.setOAuthToken(null);
-      try {
-        await WebviewCookieManager().clearCookies();
-      } catch (_) {}
-      _notifyAuthState();
-    });
+    _cookies = null;
+    _oauthToken = null;
+    await resetClient();
+    try {
+      await WebviewCookieManager().clearCookies();
+    } catch (_) {}
+    _notifyAuthState();
   }
 
-  /// Refreshes the OAuth token. Call this before stream fetches
-  /// if the token might have expired (tokens last ~1 hour).
+  /// Refreshes the OAuth token.
   static Future<void> refreshOAuthToken(String newToken) async {
-    await _synchronized(() async {
-      _oauthToken = newToken;
-      innerTube.setOAuthToken(newToken);
-      _notifyAuthState();
-    });
+    _oauthToken = newToken;
+    _notifyAuthState();
   }
 
-  static void _resetClientInternal() {
-    _yt.close();
-    _yt = _createYt();
-  }
-
-  /// Recreates the [YoutubeExplode] instance, busting any internal manifest
-  /// cache. Call this before refreshing an expired stream URL so that the
-  /// library fetches a fresh manifest from YouTube instead of returning a
-  /// cached (and still-expired) response.
+  /// Resets client state.
   static Future<void> resetClient() async {
-    await _synchronized(() async {
-      _resetClientInternal();
-    });
+    try {
+      _ytInstance?.close();
+    } catch (_) {}
+    _ytInstance = null;
   }
 
   /// Whether the service currently has authentication cookies or OAuth set.
@@ -181,55 +83,49 @@ class YoutubeService {
       (_cookies != null && _cookies!.isNotEmpty) ||
       (_oauthToken != null && _oauthToken!.isNotEmpty);
 
-  /// Extracts cookies directly from the native WebView cookie jar
-  /// using `webview_cookie_manager` and signs into YouTube. This handles
-  /// HttpOnly cookies like __Secure-3PSID successfully.
-  static Future<void> authenticateFromBrowser() async {
+  /// Extracts cookies directly from the native WebView cookie jar.
+  static Future<void> fetchCookiesFromWebView() async {
     try {
       final cookieManager = WebviewCookieManager();
-
-      // Collect cookies from ALL relevant Google/YouTube domains
-      final allCookies = <String, String>{}; // name → value (dedup)
-
-      for (final domain in [
+      final urls = [
         'https://www.youtube.com',
         'https://youtube.com',
         'https://accounts.google.com',
-        'https://www.google.com',
         'https://google.com',
-      ]) {
+      ];
+      final Map<String, String> allCookies = {};
+
+      for (final u in urls) {
         try {
-          final cookies = await cookieManager.getCookies(domain);
+          final cookies = await cookieManager.getCookies(u);
           for (final c in cookies) {
-            // Keep the first occurrence; prefer youtube.com cookies
-            allCookies.putIfAbsent(c.name, () => c.value);
+            if (c.name.isNotEmpty && c.value.isNotEmpty) {
+              allCookies[c.name] = c.value;
+            }
           }
         } catch (_) {}
       }
 
-      if (allCookies.isEmpty) return;
-
-      final cookieStr =
-          allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
-
-      // Only sign in if we have at least one critical auth cookie
-      final hasAuthCookie = allCookies.containsKey('__Secure-3PSID') ||
-          allCookies.containsKey('SID') ||
-          allCookies.containsKey('SAPISID');
-
-      if (hasAuthCookie && cookieStr.isNotEmpty) {
+      if (allCookies.isNotEmpty) {
+        final cookieStr =
+            allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
         await signIn(cookieStr);
-        debugPrint(
-            '[YoutubeService] Authenticated with ${allCookies.length} cookies '
-            '(hasAuth=$hasAuthCookie)');
       }
     } catch (e) {
       debugPrint('Failed to authenticate YouTube from browser cookies: $e');
     }
   }
 
-  /// Signs in using cookies from a proper cookie list (e.g. from CookieManager).
-  /// Use this instead of [signInFromBrowser] when you need HttpOnly cookies.
+  /// Signs in using cookies from a cookie list, or fetches from browser if null.
+  static Future<void> authenticateFromBrowser([List<Cookie>? cookies]) async {
+    if (cookies != null && cookies.isNotEmpty) {
+      await signInFromCookieManager(cookies);
+    } else {
+      await fetchCookiesFromWebView();
+    }
+  }
+
+  /// Signs in using cookies from a cookie list.
   static Future<void> signInFromCookieManager(List<Cookie> cookies) async {
     final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
     if (cookieStr.isNotEmpty) await signIn(cookieStr);
@@ -248,9 +144,6 @@ class YoutubeService {
     return extractVideoId(url) != null;
   }
 
-  /// Returns true when the URL contains a YouTube playlist ID (`list=` param).
-  /// This includes mixed watch+list URLs like `watch?v=xxx&list=PLyyy` that
-  /// are commonly encountered when browsing within a playlist.
   static bool isPlaylistUrl(String url) {
     try {
       final uri = Uri.parse(url);
@@ -264,8 +157,6 @@ class YoutubeService {
     }
   }
 
-  /// Returns true when the URL is a playlist-only page (no individual video
-  /// selected), e.g. `youtube.com/playlist?list=PLxxx`.
   static bool isPurePlaylistUrl(String url) {
     return extractPlaylistId(url) != null && extractVideoId(url) == null;
   }
@@ -287,928 +178,359 @@ class YoutubeService {
           return parts[shortsIdx + 1];
         }
       }
-      // Handle /embed/, /v/, /live/ path-based IDs
-      for (final prefix in ['/embed/', '/v/', '/live/']) {
-        final path = uri.path;
-        final idx = path.indexOf(prefix);
-        if (idx >= 0) {
-          final afterPrefix = path.substring(idx + prefix.length);
-          final slashIdx = afterPrefix.indexOf('/');
-          return slashIdx >= 0
-              ? afterPrefix.substring(0, slashIdx)
-              : afterPrefix;
-        }
+      if (uri.queryParameters.containsKey('v')) {
+        return uri.queryParameters['v'];
       }
-      final v = uri.queryParameters['v'];
-      if (v != null) return v;
+      if (uri.pathSegments.contains('watch')) {
+        return uri.queryParameters['v'];
+      }
     } catch (_) {}
-
-    // Fallback regex matching in case queries are structured differently
-    final regex = RegExp(
-      r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})',
-    );
-    final match = regex.firstMatch(url);
-    if (match != null && match.groupCount >= 1) {
-      return match.group(1);
-    }
     return null;
   }
 
   static String? extractPlaylistId(String url) {
     try {
       final uri = Uri.parse(url);
-      return uri.queryParameters['list'];
-    } catch (_) {
-      return null;
-    }
+      if (uri.queryParameters.containsKey('list')) {
+        final listId = uri.queryParameters['list'];
+        if (listId != null && listId.isNotEmpty) {
+          return listId;
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
-  /// Constructs a YouTube watch URL from a video ID.
   static String videoUrl(String videoId) =>
       'https://www.youtube.com/watch?v=$videoId';
 
-  // ───────────────────────── Quality Helpers ─────────────────────────
-
-  static String _formatQuality(VideoQuality q) {
-    // Use the library's canonical label so it stays consistent between
-    // getStreams (sheet options) and getStreamForVideo (resolution lookup).
-    return q.qualityString;
-  }
-
-  // ──────────────────────── Cleanup ─────────────────────────────────
-
-  /// Closes the underlying HTTP client. Call this when the service
-  /// is no longer needed to prevent the Dart process from hanging.
   static void close() {
-    _yt.close();
-    _innerTube?.close();
-    _innerTube = null;
-    _InnerTubeFallback.close();
+    resetClient();
   }
 
-  // ────────────────────── Logging / Troubleshooting ─────────────────
+  // ───────────────────── YouTube Explode Engine ──────────────────────
 
-  static bool _loggingEnabled = false;
-
-  /// Enables verbose logging from YoutubeExplode.
-  /// Call this before any other YoutubeService method.
-  static void enableLogging() {
-    if (_loggingEnabled) return;
-    _loggingEnabled = true;
-    Logger('YoutubeExplode').level = Level.FINER;
-    Logger('YoutubeExplode').onRecord.listen((e) {
-      // ignore: avoid_print
-      print(e);
-      if (e.error != null) {
-        // ignore: avoid_print
-        print(e.error);
-        // ignore: avoid_print
-        print(e.stackTrace);
-      }
-    });
-  }
-
-  // ──────────────────── Fallback & Refresh Helpers ──────────────────
-
-  static Future<({StreamManifest manifest, String title})> _fetchWithFallback(
-    String videoId,
-  ) async {
-    return _synchronized(() async {
-      // Retry up to 3 times on transient failures or HTTP 403/410
-      for (int attempt = 0; attempt < 3; attempt++) {
-        try {
-          return await _fetchWithFallbackInternal(videoId);
-        } catch (e) {
-          if (attempt == 2) rethrow;
-          final errStr = e.toString().toLowerCase();
-          final isRetryable =
-              errStr.contains('timeout') ||
-              errStr.contains('connection') ||
-              errStr.contains('socket') ||
-              errStr.contains('reset') ||
-              errStr.contains('403') ||
-              errStr.contains('410') ||
-              errStr.contains('429') ||
-              errStr.contains('500') ||
-              errStr.contains('502') ||
-              errStr.contains('503') ||
-              errStr.contains('rate limit') ||
-              errStr.contains('too many requests') ||
-              errStr.contains('httpstatuscodeexception');
-          if (isRetryable) {
-            // Reset client on auth/expiration errors
-            if (errStr.contains('403') || errStr.contains('410')) {
-              _resetClientInternal();
-            }
-            await Future.delayed(Duration(seconds: 2 + attempt));
-            continue;
-          }
-          rethrow;
-        }
-      }
-      throw Exception('Failed after retries');
-    });
-  }
-
-  static Future<({StreamManifest manifest, String title})>
-  _fetchWithFallbackInternal(String videoId) async {
-    StreamManifest? manifest;
-    const timeout = Duration(seconds: 8);
-    Object? lastError;
-
-    final clientsToTry = [
-      [YoutubeApiClient.android],
-      null, // default
-      [YoutubeApiClient.ios],
-    ];
-
-    for (final clients in clientsToTry) {
-      try {
-        if (clients == null) {
-          manifest = await _yt.videos.streamsClient
-              .getManifest(videoId)
-              .timeout(timeout);
-        } else {
-          manifest = await _yt.videos.streamsClient
-              .getManifest(videoId, ytClients: clients)
-              .timeout(timeout);
-        }
-        if (manifest.streams.isNotEmpty) {
-          break; // Found working manifest!
-        }
-      } catch (e) {
-        lastError = e;
-        Logger.root.warning(
-          'YoutubeService._fetchWithFallback: getManifest failed for client $clients: $e',
-        );
-      }
+  /// Formats all available streams for a given YouTube URL or Video ID into structured maps.
+  static Future<List<Map<String, dynamic>>> getStreams(String url) async {
+    final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
+    if (videoId == null) {
+      throw Exception('Invalid YouTube URL or Video ID.');
     }
 
-    // Last resort: require the watch page
-    if (manifest == null || manifest.streams.isEmpty) {
-      try {
-        manifest = await _yt.videos.streamsClient
-            .getManifest(videoId, requireWatchPage: true)
-            .timeout(const Duration(seconds: 30));
-      } catch (e) {
-        lastError = e;
-        Logger.root.warning(
-          'YoutubeService._fetchWithFallback: requireWatchPage fallback failed: $e',
-        );
-      }
-    }
-
-    if (manifest == null || manifest.streams.isEmpty) {
-      if (lastError != null) {
-        final errStr = lastError.toString().toLowerCase();
-        if (errStr.contains('age') ||
-            errStr.contains('restricted') ||
-            errStr.contains('agerecorded') ||
-            errStr.contains('signin') ||
-            errStr.contains('sign in')) {
-          throw Exception('This video is age-restricted and requires sign-in.');
-        } else if (errStr.contains('private')) {
-          throw Exception('This video is private.');
-        } else if (errStr.contains('geo') ||
-            errStr.contains('blocked') ||
-            errStr.contains('country')) {
-          throw Exception(
-            'This video is not available in your country/region.',
-          );
-        } else {
-          throw Exception('Failed to get manifest: $lastError');
-        }
-      }
-      throw Exception('No playable streams found.');
-    }
-
-    // Fetch Video Title
-    String title = 'YouTube Video';
     try {
-      final video = await _yt.videos
-          .get(videoId)
-          .timeout(const Duration(seconds: 15));
-      title = video.title;
-    } catch (_) {}
+      final video = await _yt.videos.get(videoId);
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+      final title = video.title;
 
-    return (manifest: manifest, title: title);
+      final results = <Map<String, dynamic>>[];
+
+      // 1. Group video-only streams by height and pair with best audio stream (combined)
+      final videoOnlyStreams = manifest.videoOnly.toList();
+      final audioOnlyStreams = manifest.audioOnly.toList();
+
+      if (videoOnlyStreams.isNotEmpty && audioOnlyStreams.isNotEmpty) {
+        // Find best audio stream (prefer M4A / AAC)
+        final bestAudio = audioOnlyStreams.where((a) => a.container.name == 'mp4').isNotEmpty
+            ? audioOnlyStreams.where((a) => a.container.name == 'mp4').withHighestBitrate()
+            : audioOnlyStreams.withHighestBitrate();
+
+        // Group video streams by quality height (descending)
+        final heightMap = <int, VideoOnlyStreamInfo>{};
+        for (final v in videoOnlyStreams) {
+          final h = v.videoResolution.height;
+          if (!heightMap.containsKey(h)) {
+            heightMap[h] = v;
+          } else {
+            // Prefer MP4 container if available for same height
+            if (v.container.name == 'mp4' && heightMap[h]!.container.name != 'mp4') {
+              heightMap[h] = v;
+            } else if (v.size.totalBytes > heightMap[h]!.size.totalBytes) {
+              heightMap[h] = v;
+            }
+          }
+        }
+
+        final sortedHeights = heightMap.keys.toList()..sort((a, b) => b.compareTo(a));
+
+        for (final h in sortedHeights) {
+          final vStream = heightMap[h]!;
+          final ext = 'mp4';
+          final qLabel = '${h}p';
+          final vSize = vStream.size.totalBytes;
+          final aSize = bestAudio.size.totalBytes;
+
+          results.add({
+            'type': 'combined',
+            'quality': qLabel,
+            'label': '$qLabel MP4 + M4A',
+            'src': vStream.url.toString(),
+            'audioSrc': bestAudio.url.toString(),
+            'videoSize': vSize,
+            'audioSize': aSize,
+            'size': vSize + aSize,
+            'ext': ext,
+            'title': title,
+          });
+        }
+      }
+
+      // 2. Muxed streams (video + audio together)
+      for (final m in manifest.muxed) {
+        final h = m.videoResolution.height;
+        final qLabel = '${h}p';
+        final ext = m.container.name;
+        results.add({
+          'type': 'muxed',
+          'quality': qLabel,
+          'label': '$qLabel ${ext.toUpperCase()}',
+          'src': m.url.toString(),
+          'size': m.size.totalBytes,
+          'ext': ext,
+          'title': title,
+        });
+      }
+
+      // 3. Audio-only streams
+      for (final a in audioOnlyStreams) {
+        final bitrateKbps = a.bitrate.kiloBitsPerSecond.round();
+        final ext = a.container.name == 'mp4' ? 'm4a' : a.container.name;
+        results.add({
+          'type': 'audio',
+          'quality': '${bitrateKbps}kbps',
+          'label': 'Audio Only ${ext.toUpperCase()}',
+          'src': a.url.toString(),
+          'size': a.size.totalBytes,
+          'ext': ext,
+          'title': title,
+        });
+      }
+
+      // 4. Video-only streams
+      for (final v in videoOnlyStreams) {
+        final h = v.videoResolution.height;
+        final qLabel = '${h}p';
+        final ext = v.container.name;
+        results.add({
+          'type': 'video_only',
+          'quality': qLabel,
+          'label': '$qLabel Video Only',
+          'src': v.url.toString(),
+          'size': v.size.totalBytes,
+          'ext': ext,
+          'title': title,
+        });
+      }
+
+      return results;
+    } catch (e) {
+      debugPrint('YoutubeService.getStreams error for $url: $e');
+      throw Exception(_parseErrorMessage(e));
+    }
   }
 
-  /// Refreshes an expired stream URL by fetching the latest manifest and matching the itag.
-  /// Refreshes an expired stream URL by fetching the latest manifest.
-  ///
-  /// First tries to match by `itag` query parameter. If that fails, falls
-  /// back to returning a fresh URL from a stream of the same type as
-  /// [oldStreamUrl] (muxed / video‑only / audio‑only). This avoids retrying
-  /// the same expired URL when the itag is absent from the URL format.
+  /// Selects a stream map for a specific video ID and quality preset/resolution.
+  static Future<Map<String, dynamic>?> getStreamForVideo(
+    String videoId, [
+    String? qualityPreset,
+  ]) async {
+    try {
+      final streams = await getStreams(videoId);
+      if (streams.isEmpty) return null;
+
+      final preset = (qualityPreset ?? 'best_combined').toLowerCase().trim();
+
+      if (preset == 'audio_only') {
+        final audioStreams = streams.where((s) => s['type'] == 'audio').toList();
+        if (audioStreams.isNotEmpty) return audioStreams.first;
+        return streams.first;
+      }
+
+      if (preset == 'best_muxed') {
+        final muxedStreams = streams.where((s) => s['type'] == 'muxed').toList();
+        if (muxedStreams.isNotEmpty) return muxedStreams.first;
+        final combinedStreams = streams.where((s) => s['type'] == 'combined').toList();
+        if (combinedStreams.isNotEmpty) return combinedStreams.first;
+        return streams.first;
+      }
+
+      if (preset == 'best_combined' || preset == 'best') {
+        final combinedStreams = streams.where((s) => s['type'] == 'combined').toList();
+        if (combinedStreams.isNotEmpty) return combinedStreams.first;
+        final muxedStreams = streams.where((s) => s['type'] == 'muxed').toList();
+        if (muxedStreams.isNotEmpty) return muxedStreams.first;
+        return streams.first;
+      }
+
+      // Exact quality matching (e.g. 2160p, 1080p, 720p, etc.)
+      final reqHeight = parseQualityHeight(preset);
+      if (reqHeight > 0) {
+        final combinedStreams = streams.where((s) => s['type'] == 'combined').toList();
+        final exactCombined = combinedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight);
+        if (exactCombined.isNotEmpty) return exactCombined.first;
+
+        final muxedStreams = streams.where((s) => s['type'] == 'muxed').toList();
+        final exactMuxed = muxedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight);
+        if (exactMuxed.isNotEmpty) return exactMuxed.first;
+
+        // Closest lower quality match among combined
+        final lowerCombined = combinedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList();
+        if (lowerCombined.isNotEmpty) return lowerCombined.first;
+
+        // Closest lower quality match among muxed
+        final lowerMuxed = muxedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList();
+        if (lowerMuxed.isNotEmpty) return lowerMuxed.first;
+      }
+
+      return streams.first;
+    } catch (e) {
+      debugPrint('YoutubeService.getStreamForVideo error for $videoId: $e');
+      throw Exception(_parseErrorMessage(e));
+    }
+  }
+
+  /// Fetches playlist info and video list for `YoutubePlaylistSheet`.
+  static Future<Map<String, dynamic>?> getPlaylistDetails(String url) async {
+    final playlistId = extractPlaylistId(url);
+    if (playlistId == null) {
+      throw Exception('Invalid YouTube playlist URL.');
+    }
+
+    try {
+      final playlist = await _yt.playlists.get(playlistId);
+      final videoList = <Map<String, dynamic>>[];
+
+      await for (final video in _yt.playlists.getVideos(playlistId)) {
+        final durationSec = video.duration?.inSeconds ?? 0;
+        String? thumbUrl;
+        if (video.thumbnails.mediumResUrl.isNotEmpty) {
+          thumbUrl = video.thumbnails.mediumResUrl;
+        } else if (video.thumbnails.highResUrl.isNotEmpty) {
+          thumbUrl = video.thumbnails.highResUrl;
+        } else if (video.thumbnails.standardResUrl.isNotEmpty) {
+          thumbUrl = video.thumbnails.standardResUrl;
+        } else if (video.thumbnails.lowResUrl.isNotEmpty) {
+          thumbUrl = video.thumbnails.lowResUrl;
+        }
+
+        videoList.add({
+          'id': video.id.value,
+          'title': video.title,
+          'duration': durationSec,
+          'author': video.author,
+          'thumbnailUrl': thumbUrl,
+          'selected': true,
+        });
+      }
+
+      return {
+        'info': {
+          'title': playlist.title,
+          'author': playlist.author,
+          'videoCount': playlist.videoCount ?? videoList.length,
+        },
+        'videos': videoList,
+      };
+    } catch (e) {
+      debugPrint('YoutubeService.getPlaylistDetails error for $url: $e');
+      throw Exception(_parseErrorMessage(e));
+    }
+  }
+
+  /// Fetches summary info for a playlist URL.
+  static Future<Map<String, dynamic>?> getPlaylistInfo(String url) async {
+    final details = await getPlaylistDetails(url);
+    return details?['info'] as Map<String, dynamic>?;
+  }
+
+  /// Fetches video items for a playlist ID.
+  static Future<List<Map<String, dynamic>>?> getPlaylistVideos(
+    String playlistId,
+  ) async {
+    final details = await getPlaylistDetails('https://www.youtube.com/playlist?list=$playlistId');
+    return (details?['videos'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Refreshes expired stream URLs for a given YouTube download page URL.
   static Future<Map<String, dynamic>?> refreshStreamUrl(
     String downloadPageUrl,
     String oldStreamUrl,
   ) async {
-    final videoId = extractVideoId(downloadPageUrl);
-    if (videoId == null) return null;
-
-    // ─── Layer 1: InnerTube refresh (fast, no library overhead) ───
-    try {
-      final freshStream = await innerTube.refreshStream(
-        videoId,
-        oldUrl: oldStreamUrl,
-      );
-      if (freshStream != null) {
-        return {'url': freshStream.url, 'size': freshStream.size};
-      }
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.refreshStreamUrl: InnerTube Layer 1 failed: $e',
-      );
-    }
-
-    // ─── Layer 2: youtube_explode_dart fallback ───
-    try {
-      final result = await _fetchWithFallback(videoId);
-      final manifest = result.manifest;
-
-      final oldUri = Uri.tryParse(oldStreamUrl);
-      if (oldUri == null) return null;
-
-      final oldItag = oldUri.queryParameters['itag'];
-      Logger.root.info(
-        'Refreshing stream URL for video $videoId, itag=$oldItag',
-      );
-
-      Map<String, dynamic>? candidate;
-      if (oldItag != null) {
-        for (final stream in manifest.streams) {
-          final newUri = Uri.tryParse(stream.url.toString());
-          if (newUri != null && newUri.queryParameters['itag'] == oldItag) {
-            candidate = {
-              'url': stream.url.toString(),
-              'size': stream.size.totalBytes,
-            };
-            break;
-          }
-        }
-      }
-
-      // Fallback: itag not found or absent. Return a fresh URL from the
-      // same stream type so the download never stalls on an expired URL.
-      if (candidate == null) {
-        final fallbackStream = _firstStreamByType(manifest, oldStreamUrl);
-        if (fallbackStream != null) {
-          candidate = {
-            'url': fallbackStream.url.toString(),
-            'size': fallbackStream.size.totalBytes,
-          };
-        }
-      }
-
-      // Guard: if the library returned the exact same URL, the manifest is
-      // stale / cached. Treat this as a failed refresh so the caller can
-      // stale / cached. Treat this as a failed refresh so the caller can
-      // escalate to getFreshStreams (which recreates the client).
-      if (candidate != null &&
-          _isUrlStale(candidate['url'] as String, oldStreamUrl)) {
-        Logger.root.warning(
-          'refreshStreamUrl: new URL is identical to old URL — manifest is stale. Returning null.',
-        );
-        return null;
-      }
-
-      return candidate;
-    } catch (e) {
-      Logger.root.severe('Failed to refresh YouTube stream URL: $e');
-    }
-    return null;
+    final fresh = await getFreshStreams(downloadPageUrl);
+    if (fresh == null || fresh['url'] == null) return null;
+    return {
+      'url': fresh['url'],
+      'audioUrl': fresh['audioUrl'],
+    };
   }
 
-  /// Returns true when two YouTube stream URLs share the same scheme, host,
-  /// path, expire, and sig — indicating they refer to the same underlying
-  /// resource and the manifest is likely stale.
-  ///
-  /// Uses a max‑age TTL (5 minutes) as additional guard: even if `expire` and
-  /// `sig` match, the URL is considered fresh if we last checked less than
-  /// 5 minutes ago.
-
-  static bool _isUrlStale(String a, String b) {
-    final ua = Uri.tryParse(a);
-    final ub = Uri.tryParse(b);
-    if (ua == null || ub == null) return a == b;
-
-    // Compare structural parts of the URL.
-    if (ua.scheme != ub.scheme || ua.host != ub.host || ua.path != ub.path) {
-      return false; // Not structurally the same, so not stale version of same url
-    }
-
-    final expireA = ua.queryParameters['expire'];
-    final expireB = ub.queryParameters['expire'];
-    final sigA = ua.queryParameters['sig'];
-    final sigB = ub.queryParameters['sig'];
-
-    if (expireA == null || expireB == null || sigA == null || sigB == null) {
-      return a == b; // Strict fallback
-    }
-
-    if (expireA != expireB || sigA != sigB) return false;
-
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final expire = int.tryParse(expireA);
-    if (expire != null) {
-      if (expire - now > 300) return false; // Fresh, do not refresh
-      // expire - now <= 300, near expiry or expired
-      return a == b; // Stale only if structurally identical
-    }
-    return a == b;
-  }
-
-  /// Fetches completely fresh stream URLs for a YouTube video, bypassing any
-  /// attempt to match the old URL. Used as a last‑resort fallback when
-  /// [refreshStreamUrl] fails so the download gets a working URL from scratch.
-  ///
-  /// Returns a map with `'url'` and optionally `'audioUrl'`, or `null` if no
-  /// streams are available.
+  /// Fetches fresh stream URLs (video and optional audio) for a YouTube page URL.
   static Future<Map<String, String?>?> getFreshStreams(
     String downloadPageUrl,
   ) async {
     final videoId = extractVideoId(downloadPageUrl);
     if (videoId == null) return null;
 
-    // ─── Layer 1: InnerTube (fresh fetch, bypasses cache) ───
     try {
-      final streams = await innerTube.getStreams(videoId);
-      if (streams != null && streams.isNotEmpty) {
-        // Prefer combined (video + audio)
-        final combined = streams.where((s) => s.type == 'combined');
-        if (combined.isNotEmpty) {
-          final best = combined.reduce((a, b) => a.size > b.size ? a : b);
-          return {'url': best.url, 'audioUrl': best.audioUrl};
-        }
-        // Prefer muxed
-        final muxed = streams.where((s) => s.type == 'muxed');
-        if (muxed.isNotEmpty) {
-          return {'url': muxed.first.url, 'audioUrl': null};
-        }
-        // Video-only + audio-only
-        final videoOnly = streams.where((s) => s.type == 'video_only');
-        final audioOnly = streams.where((s) => s.type == 'audio');
-        if (videoOnly.isNotEmpty && audioOnly.isNotEmpty) {
-          final bestAudio = audioOnly.reduce((a, b) => a.size > b.size ? a : b);
-          return {'url': videoOnly.first.url, 'audioUrl': bestAudio.url};
-        }
-        if (videoOnly.isNotEmpty) {
-          return {'url': videoOnly.first.url, 'audioUrl': null};
-        }
-        if (audioOnly.isNotEmpty) {
-          return {'url': audioOnly.first.url, 'audioUrl': null};
-        }
+      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
+      String? freshVideoUrl;
+      String? freshAudioUrl;
+
+      final videoOnlyStreams = manifest.videoOnly.toList();
+      final audioOnlyStreams = manifest.audioOnly.toList();
+
+      if (videoOnlyStreams.isNotEmpty && audioOnlyStreams.isNotEmpty) {
+        final bestVideo = videoOnlyStreams.where((v) => v.container.name == 'mp4').isNotEmpty
+            ? videoOnlyStreams.where((v) => v.container.name == 'mp4').first
+            : videoOnlyStreams.first;
+        final bestAudio = audioOnlyStreams.where((a) => a.container.name == 'mp4').isNotEmpty
+            ? audioOnlyStreams.where((a) => a.container.name == 'mp4').withHighestBitrate()
+            : audioOnlyStreams.withHighestBitrate();
+
+        freshVideoUrl = bestVideo.url.toString();
+        freshAudioUrl = bestAudio.url.toString();
+      } else if (manifest.muxed.isNotEmpty) {
+        freshVideoUrl = manifest.muxed.first.url.toString();
+      } else if (audioOnlyStreams.isNotEmpty) {
+        freshAudioUrl = audioOnlyStreams.withHighestBitrate().url.toString();
+        freshVideoUrl = freshAudioUrl;
       }
+
+      if (freshVideoUrl == null) return null;
+
+      return {
+        'url': freshVideoUrl,
+        'audioUrl': freshAudioUrl,
+      };
     } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getFreshStreams: InnerTube Layer 1 failed: $e',
-      );
-    }
-
-    // ─── Layer 2: youtube_explode_dart fallback ───
-    try {
-      final result = await _fetchWithFallback(videoId);
-      final manifest = result.manifest;
-
-      // Prefer muxed (simplest — single URL)
-      if (manifest.muxed.isNotEmpty) {
-        return {'url': manifest.muxed.first.url.toString(), 'audioUrl': null};
-      }
-
-      // Combined: best video-only + best audio
-      if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
-        final sorted = manifest.audioOnly.toList()
-          ..sort(
-            (a, b) =>
-                b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
-          );
-        return {
-          'url': manifest.videoOnly.first.url.toString(),
-          'audioUrl': sorted.first.url.toString(),
-        };
-      }
-
-      // Video-only (no audio available — rare)
-      if (manifest.videoOnly.isNotEmpty) {
-        return {
-          'url': manifest.videoOnly.first.url.toString(),
-          'audioUrl': null,
-        };
-      }
-
-      // Audio-only
-      if (manifest.audioOnly.isNotEmpty) {
-        return {
-          'url': manifest.audioOnly.first.url.toString(),
-          'audioUrl': null,
-        };
-      }
-    } catch (e) {
-      Logger.root.severe('Failed to get fresh YouTube streams: $e');
-    }
-    return null;
-  }
-
-  /// Returns the first URL from the manifest whose stream type matches the
-  /// nature of [oldStreamUrl] (muxed / video‑only / audio‑only).
-  static StreamInfo? _firstStreamByType(
-    StreamManifest manifest,
-    String oldStreamUrl,
-  ) {
-    final lower = oldStreamUrl.toLowerCase();
-
-    // Heuristic: audio-only stream URLs often contain "mime=audio".
-    final isAudio =
-        lower.contains('mime%3Daudio') || lower.contains('mime=audio');
-    if (isAudio) {
-      if (manifest.audioOnly.isNotEmpty) return manifest.audioOnly.first;
-      // Never fall back to a video stream for an audio download — that would
-      // corrupt the file. Signal failure instead.
+      debugPrint('YoutubeService.getFreshStreams error for $downloadPageUrl: $e');
       return null;
     }
-
-    // For non-audio downloads prefer video-only (used by combined downloads
-    // alongside a separate audio stream) before muxed, but never an audio-only
-    // stream which would swap the media type.
-    if (manifest.videoOnly.isNotEmpty) return manifest.videoOnly.first;
-    if (manifest.muxed.isNotEmpty) return manifest.muxed.first;
-    return null;
   }
 
-  // ──────────────────── Single Video Streams ────────────────────────
-
-  static Future<List<Map<String, dynamic>>> getStreams(String url) async {
-    final videoId = extractVideoId(url);
-    if (videoId == null) return [];
-
-    // ─── Layer 1: InnerTube (pure HTTP, primary engine) ───
-    YouTubeException? layer1Error;
-    List<Map<String, dynamic>>? layer1Streams;
-    try {
-      final innerTubeStreams = await innerTube.getStreams(videoId);
-      if (innerTubeStreams != null && innerTubeStreams.isNotEmpty) {
-        layer1Streams = innerTubeStreams.map((s) => s.toMap()).toList();
-        final hasHighQuality = innerTubeStreams.any((s) {
-          final h = s.height ?? 0;
-          return h >= 1080;
-        });
-        if (hasHighQuality) {
-          return layer1Streams;
-        }
-      }
-    } on YouTubeException catch (e) {
-      // Save error but still try Layer 2 — library might handle it
-      layer1Error = e;
-      Logger.root.warning(
-        'YoutubeService.getStreams: InnerTube Layer 1 error: ${e.message}',
-      );
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getStreams: InnerTube Layer 1 failed: $e',
-      );
+  static String _parseErrorMessage(Object error) {
+    final msg = error.toString();
+    if (msg.contains('VideoUnplayableException') ||
+        msg.contains('VideoRequiresPurchaseException') ||
+        msg.contains('VideoUnavailableException') ||
+        msg.contains('age-restricted') ||
+        msg.contains('private') ||
+        msg.contains('members-only')) {
+      return 'This video is unavailable, private, or age-restricted. Sign-in may be required.';
     }
-
-    // ─── Layer 2: youtube_explode_dart (library fallback) ───
-    try {
-      final result = await _fetchWithFallback(videoId);
-      final manifest = result.manifest;
-      final title = result.title;
-      final list = <Map<String, dynamic>>[];
-
-      // Muxed streams contain both video and audio
-      for (final stream in manifest.muxed) {
-        final qLabel = _formatQuality(stream.videoQuality);
-        list.add({
-          'src': stream.url.toString(),
-          'label': 'Video: $qLabel (Muxed)',
-          'size': stream.size.totalBytes,
-          'ext': stream.container.name,
-          'title': title,
-          'quality': qLabel,
-          'type': 'muxed',
-        });
-      }
-
-      // Audio only streams
-      for (final stream in manifest.audioOnly) {
-        final kbps = stream.bitrate.kiloBitsPerSecond.round();
-        list.add({
-          'src': stream.url.toString(),
-          'label': 'Audio Only: ($kbps Kbps)',
-          'size': stream.size.totalBytes,
-          'ext': stream.container.name,
-          'title': title,
-          'quality': '${kbps}kbps',
-          'type': 'audio',
-        });
-      }
-
-      // Video only streams
-      for (final stream in manifest.videoOnly) {
-        final qLabel = _formatQuality(stream.videoQuality);
-        list.add({
-          'src': stream.url.toString(),
-          'label': 'Video Only: ($qLabel)',
-          'size': stream.size.totalBytes,
-          'ext': stream.container.name,
-          'title': title,
-          'quality': qLabel,
-          'type': 'video_only',
-        });
-      }
-
-      // Combined streams (video-only + best audio-only) for higher qualities
-      if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
-        final sortedAudio = manifest.audioOnly.toList()
-          ..sort(
-            (a, b) =>
-                b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
-          );
-        final bestAudio = sortedAudio.first;
-        for (final stream in manifest.videoOnly) {
-          final qLabel = _formatQuality(stream.videoQuality);
-          list.add({
-            'src': stream.url.toString(),
-            'audioSrc': bestAudio.url.toString(),
-            'label': 'Video: $qLabel + Audio (Best)',
-            'size': stream.size.totalBytes + bestAudio.size.totalBytes,
-            'ext': stream.container.name,
-            'title': title,
-            'quality': qLabel,
-            'type': 'combined',
-            'videoSize': stream.size.totalBytes,
-            'audioSize': bestAudio.size.totalBytes,
-            'audioExt': bestAudio.container.name,
-          });
-        }
-      }
-
-      return list;
-    } catch (layer2Error) {
-      if (layer1Streams != null && layer1Streams.isNotEmpty) {
-        Logger.root.info(
-          'YoutubeService.getStreams: Layer 2 failed, falling back to Layer 1 streams.',
-        );
-        return layer1Streams;
-      }
-      // Layer 2 also failed — throw Layer 1 error if we have one (better message)
-      if (layer1Error != null) throw layer1Error;
-      rethrow;
+    if (msg.contains('PlaylistException')) {
+      return 'Playlist is private or unavailable.';
     }
-  }
-
-  // ───────────────────── Playlist Info ───────────────────────────────
-
-  /// Returns both playlist metadata and the list of videos in a single unified flow.
-  /// Result contains:
-  /// - 'info': basic metadata Map (id, title, author, videoCount, thumbnailUrl)
-  /// - 'videos': List of video maps (id, title, author, duration, thumbnailUrl, selected)
-  static Future<Map<String, dynamic>?> getPlaylistDetails(String url) async {
-    final playlistId = extractPlaylistId(url);
-    if (playlistId == null) return null;
-
-    final now = DateTime.now();
-    if (_cachedPlaylistId == playlistId &&
-        _cachedPlaylistDetails != null &&
-        _cacheTimestamp != null &&
-        now.difference(_cacheTimestamp!) < const Duration(seconds: 60)) {
-      return _cachedPlaylistDetails;
-    }
-
-    // Layer 1: InnerTube unified client (multi-client fallback)
-    try {
-      final playlist = await innerTube.getPlaylist(playlistId);
-      if (playlist != null && playlist.videos.isNotEmpty) {
-        final details = playlist.toDetailsMap();
-        _cachedPlaylistId = playlistId;
-        _cachedPlaylistDetails = details;
-        _cacheTimestamp = now;
-        return details;
-      }
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistDetails InnerTube failed: $e',
-      );
-    }
-
-    // Layer 2: Legacy InnerTube fallback (WEB-only, parses both formats)
-    try {
-      final details = await _InnerTubeFallback.getPlaylistDetails(playlistId);
-      if (details != null && (details['videos'] as List).isNotEmpty) {
-        _cachedPlaylistId = playlistId;
-        _cachedPlaylistDetails = details;
-        _cacheTimestamp = now;
-        return details;
-      }
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistDetails fallback failed: $e',
-      );
-    }
-
-    // Layer 3: youtube_explode_dart library (last resort)
-    try {
-      final playlist = await _yt.playlists
-          .get(playlistId)
-          .timeout(const Duration(seconds: 15));
-      if (playlist.title.isNotEmpty) {
-        final videos = <Map<String, dynamic>>[];
-        try {
-          final stream = _yt.playlists.getVideos(playlistId);
-          await for (final video in stream.timeout(
-            const Duration(seconds: 15),
-          )) {
-            videos.add({
-              'id': video.id.value,
-              'title': video.title,
-              'author': video.author,
-              'duration': video.duration?.inSeconds ?? 0,
-              'thumbnailUrl': video.thumbnails.highResUrl,
-              'selected': true,
-            });
-          }
-        } catch (_) {}
-
-        final details = {
-          'info': {
-            'id': playlist.id.value,
-            'title': playlist.title,
-            'author': playlist.author,
-            'videoCount': playlist.videoCount ?? 0,
-            'thumbnailUrl': playlist.thumbnails.highResUrl,
-          },
-          'videos': videos,
-        };
-
-        _cachedPlaylistId = playlistId;
-        _cachedPlaylistDetails = details;
-        _cacheTimestamp = now;
-        return details;
-      }
-    } catch (e) {
-      Logger.root.warning(
-        'YoutubeService.getPlaylistDetails library failed: $e',
-      );
-    }
-
-    return null;
-  }
-
-  /// Returns basic playlist metadata.
-  static Future<Map<String, dynamic>?> getPlaylistInfo(String url) async {
-    final details = await getPlaylistDetails(url);
-    return details?['info'] as Map<String, dynamic>?;
-  }
-
-  /// Returns all videos in a playlist as a lightweight list.
-  /// Each entry has: id, title, author, duration (seconds), thumbnailUrl.
-  static Future<List<Map<String, dynamic>>> getPlaylistVideos(
-    String url,
-  ) async {
-    final details = await getPlaylistDetails(url);
-    return (details?['videos'] as List<Map<String, dynamic>>?) ?? [];
+    return 'Failed to load YouTube content: $msg';
   }
 
   static int parseQualityHeight(String quality) {
-    final match = RegExp(r'(\d+)p?').firstMatch(quality);
+    final match = RegExp(r'(\d+)').firstMatch(quality);
     if (match != null) {
       return int.tryParse(match.group(1)!) ?? 0;
     }
     return 0;
   }
 
-  /// Fetches the best stream URL for a given video ID and quality preference.
-  /// [qualityPreset] can be: 'best_combined', 'best_muxed', '2160p', '1440p', '1080p', '720p', '480p', '360p', 'audio_only'.
-  static Future<Map<String, dynamic>?> getStreamForVideo(
-    String videoId,
-    String qualityPreset, {
-    bool forceMuxed = false,
-  }) async {
-    final url = 'https://www.youtube.com/watch?v=$videoId';
-    final allStreams = await getStreams(url);
-
-    if (allStreams.isEmpty) return null;
-
-    if (qualityPreset == 'audio_only') {
-      final audios = allStreams.where((s) => s['type'] == 'audio').toList();
-      if (audios.isEmpty) return null;
-      audios.sort((a, b) => (b['size'] as int).compareTo(a['size'] as int));
-      return audios.first;
-    }
-
-    final targetHeight = parseQualityHeight(qualityPreset);
-    final muxed = allStreams.where((s) => s['type'] == 'muxed').toList();
-    final combined = allStreams.where((s) => s['type'] == 'combined').toList();
-
-    Map<String, dynamic>? findBestMatch(List<Map<String, dynamic>> streams) {
-      if (streams.isEmpty) return null;
-      if (targetHeight == 0) {
-        streams.sort((a, b) {
-          final hA = parseQualityHeight(a['quality'] as String? ?? '');
-          final hB = parseQualityHeight(b['quality'] as String? ?? '');
-          if (hA != hB) return hB.compareTo(hA);
-          return ((b['size'] as int?) ?? 0).compareTo((a['size'] as int?) ?? 0);
-        });
-        return streams.first;
-      }
-
-      for (final s in streams) {
-        if (parseQualityHeight(s['quality'] as String? ?? '') == targetHeight) {
-          return s;
-        }
-      }
-
-      streams.sort((a, b) {
-        final hA = parseQualityHeight(a['quality'] as String? ?? '');
-        final hB = parseQualityHeight(b['quality'] as String? ?? '');
-        final diffA = (hA - targetHeight).abs();
-        final diffB = (hB - targetHeight).abs();
-        if (diffA != diffB) return diffA.compareTo(diffB);
-        return ((b['size'] as int?) ?? 0).compareTo((a['size'] as int?) ?? 0);
-      });
-      return streams.first;
-    }
-
-    if (qualityPreset == 'best_muxed') {
-      final match = findBestMatch(muxed);
-      if (match != null) return match;
-      if (forceMuxed) return null;
-      return findBestMatch(combined);
-    }
-
-    if (targetHeight > 0) {
-      final exactMuxed = muxed.firstWhere(
-        (s) =>
-            parseQualityHeight(s['quality'] as String? ?? '') == targetHeight,
-        orElse: () => <String, dynamic>{},
-      );
-      if (exactMuxed.isNotEmpty) return exactMuxed;
-
-      final bestCombined = findBestMatch(combined);
-      if (bestCombined != null) return bestCombined;
-
-      if (!forceMuxed) {
-        final bestMuxedFallback = findBestMatch(muxed);
-        if (bestMuxedFallback != null) return bestMuxedFallback;
-      }
-    } else {
-      final bestCombined = findBestMatch(combined);
-      if (bestCombined != null) return bestCombined;
-
-      final bestMuxed = findBestMatch(muxed);
-      if (bestMuxed != null) return bestMuxed;
-    }
-
-    // If no combined/muxed match found, try building one from video_only + audio
-    final videoOnly = allStreams
-        .where((s) => s['type'] == 'video_only')
-        .toList();
-    final audioOnly = allStreams
-        .where((s) => s['type'] == 'audio')
-        .toList();
-
-    if (videoOnly.isNotEmpty && audioOnly.isNotEmpty && !forceMuxed) {
-      // Sort video by quality descending
-      videoOnly.sort((a, b) {
-        final hA = parseQualityHeight(a['quality'] as String? ?? '');
-        final hB = parseQualityHeight(b['quality'] as String? ?? '');
-        return hB.compareTo(hA);
-      });
-      // Sort audio by size descending (best quality)
-      audioOnly.sort((a, b) =>
-          (b['size'] as int).compareTo(a['size'] as int));
-
-      final bestVideo = videoOnly.first;
-      final bestAudio = audioOnly.first;
-
-      return {
-        'src': bestVideo['src'],
-        'audioSrc': bestAudio['src'],
-        'label': '${bestVideo['quality']} + Best Audio',
-        'size': (bestVideo['size'] as int) + (bestAudio['size'] as int),
-        'videoSize': bestVideo['size'],
-        'audioSize': bestAudio['size'],
-        'ext': 'mp4',
-        'title': bestVideo['title'] ?? 'YouTube Video',
-        'quality': bestVideo['quality'],
-        'type': 'combined',
-      };
-    }
-
-    if (videoOnly.isNotEmpty && !forceMuxed) {
-      return findBestMatch(videoOnly);
-    }
-
-    return null;
-  }
-
-  // ──────────────────── Closed Captions ─────────────────────────────
-
-  /// Returns the closed caption manifest for a video.
-  /// Use [manifest.tracks] to list all available tracks,
-  /// or [manifest.getByLanguage(lang)] to filter.
-  static Future<ClosedCaptionManifest?> getClosedCaptionsManifest(
-    String url,
-  ) async {
-    final videoId = extractVideoId(url);
-    if (videoId == null) return null;
-    try {
-      return await _yt.videos.closedCaptions.getManifest(videoId);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Returns the actual closed caption track for the given [trackInfo].
-  /// Call [track.captions] to list captions, or [track.getByTime(duration)].
-  static Future<ClosedCaptionTrack?> getClosedCaptionsTrack(
-    ClosedCaptionTrackInfo trackInfo,
-  ) async {
-    try {
-      return await _yt.videos.closedCaptions.get(trackInfo);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Shorthand: get caption text at a specific time for a video and language.
-  /// Returns the caption text at [position] or null.
-  static Future<String?> getClosedCaptionAtTime(
-    String url,
-    String language,
-    Duration position,
-  ) async {
-    final manifest = await getClosedCaptionsManifest(url);
-    if (manifest == null) return null;
-    final tracks = manifest.getByLanguage(language);
-    if (tracks.isEmpty) return null;
-    final track = await getClosedCaptionsTrack(tracks.first);
-    return track?.getByTime(position)?.text;
-  }
-
-  /// Lists all available closed caption languages for a video.
-  static Future<List<Map<String, dynamic>>> getClosedCaptionLanguages(
-    String url,
-  ) async {
-    final manifest = await getClosedCaptionsManifest(url);
-    if (manifest == null) return [];
-    return manifest.tracks.map((t) {
-      return {
-        'language': t.language.name,
-        'languageCode': t.language.code,
-        'isAutoGenerated': t.isAutoGenerated,
-        'format': t.format.formatCode,
-      };
-    }).toList();
-  }
-
-  // ───────────────────── Related Videos ─────────────────────────────
-
-  /// Returns related videos for a given YouTube video URL.
-  /// Returns null if no related videos are available.
-  static Future<List<Map<String, dynamic>>?> getRelatedVideos(
-    String url,
-  ) async {
-    final videoId = extractVideoId(url);
-    if (videoId == null) return null;
-    try {
-      final video = await _yt.videos.get(videoId);
-      final related = await _yt.videos.getRelatedVideos(video);
-      if (related == null) return null;
-      return related.map((v) => _videoToMap(v)).toList();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Fetches the next page of related videos from a previous result list.
-  /// [currentList] is the raw map list returned by [getRelatedVideos].
-  /// Returns null if there are no more pages.
-  @Deprecated('Not supported by the current map-based API approach.')
-  static Future<List<Map<String, dynamic>>?> getRelatedVideosNextPage(
-    List<Map<String, dynamic>> currentList,
-  ) async {
-    // This requires holding the original RelatedVideosList reference,
-    // which isn't possible with the current map-based approach.
-    // Users should call getRelatedVideos() again for a fresh fetch.
-    return null;
-  }
-
-  // ──────────────────── Private Helpers ─────────────────────────────
-
-  static Map<String, dynamic> _videoToMap(Video v) {
-    return {
-      'id': v.id.value,
-      'title': v.title,
-      'author': v.author,
-      'duration': v.duration?.inSeconds ?? 0,
-      'thumbnailUrl': v.thumbnails.highResUrl,
-    };
-  }
-
-  /// Formats a duration in seconds to a readable string like "3:45" or "1:02:30".
   static String formatDuration(int totalSeconds) {
     if (totalSeconds <= 0) return '0:00';
     final hours = totalSeconds ~/ 3600;
@@ -1221,583 +543,3 @@ class YoutubeService {
   }
 }
 
-/// Internal HTTP client that injects custom cookies for authenticated requests.
-/// Uses [IOClient] internally so that redirects properly forward cookies.
-class _CookieClient extends http.BaseClient {
-  final String _cookie;
-  late final io_client.IOClient _inner;
-
-  _CookieClient(this._cookie) {
-    _inner = io_client.IOClient(
-      HttpClient()..connectionTimeout = const Duration(seconds: 30),
-    );
-  }
-
-  @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) {
-    request.headers['cookie'] = _cookie;
-    request.followRedirects = true;
-    // Avoid logging the cookie header — it contains authenticated session
-    // tokens (e.g. __Secure-3PSID) that must not leak into console output.
-    // Also redact signed URL query parameters (signature, s, sp) to avoid leaking tokens.
-    final redactedHeaders = Map<String, String>.from(request.headers)
-      ..remove('cookie');
-    final urlStr = request.url.toString().replaceAllMapped(
-      RegExp(r'([?&](?:s|sp|signature|expire)=[^&]+)'),
-      (m) => '=***REDACTED***',
-    );
-    debugPrint(
-      '[YoutubeService] Outgoing request to $urlStr with headers: $redactedHeaders',
-    );
-    return _inner.send(request);
-  }
-
-  @override
-  void close() {
-    _inner.close();
-    super.close();
-  }
-}
-
-String? _innerTubeApiKeyOverride;
-
-/// Override the default InnerTube API key. Call this to hot-patch if
-/// YouTube rotates the key without a full app release.
-void updateInnerTubeApiKey(String key) {
-  _innerTubeApiKeyOverride = key;
-  InnerTubeStreamClient.apiKeyOverride = key;
-}
-
-/// Direct InnerTube API fallback for when youtube_explode_dart's parsing
-/// is broken due to YouTube HTML/API changes.
-///
-/// YouTube migrated playlists to use `lockupViewModel` instead of
-/// `playlistVideoRenderer` for video items, which breaks the library.
-/// This fallback parses both formats.
-class _InnerTubeFallback {
-  static String? get _browseUrl {
-    final key =
-        YoutubeService.effectiveApiKey ??
-        'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
-    if (key.isEmpty) return null;
-    return 'https://www.youtube.com/youtubei/v1/browse?key=$key';
-  }
-
-  static final _log = Logger('YoutubeService._InnerTubeFallback');
-  static HttpClient? __client;
-  static bool __closed = false;
-  static HttpClient get _client {
-    if (__client == null || __closed) {
-      __client = HttpClient();
-      __closed = false;
-    }
-    return __client!;
-  }
-
-  static void close() {
-    __client?.close();
-    __closed = true;
-  }
-
-  static Map<String, dynamic> _clientContext() => {
-    'context': {
-      'client': {
-        'clientName': 'WEB',
-        'clientVersion': YoutubeService.innerTubeClientVersion,
-        'browserName': 'Chrome',
-        'browserVersion': '131.0.0.0',
-        'clientFormFactor': 'UNKNOWN_FORM_FACTOR',
-      },
-    },
-  };
-
-  /// Sends a POST to the InnerTube browse endpoint and returns the JSON body.
-  static Future<Map<String, dynamic>> _browse(
-    String browseId, {
-    String? continuationToken,
-  }) async {
-    final url = _browseUrl;
-    if (url == null) {
-      throw Exception('InnerTube API key not configured.');
-    }
-    final request = await _client.postUrl(Uri.parse(url));
-    request.headers.set('Content-Type', 'application/json');
-    request.headers.set(
-      'User-Agent',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-          'AppleWebKit/537.36 (KHTML, like Gecko) '
-          'Chrome/131.0.0.0 Safari/537.36',
-    );
-
-    // Inject authenticated cookies if available
-    if (YoutubeService.currentCookies != null) {
-      request.headers.set('cookie', YoutubeService.currentCookies!);
-    }
-
-    final body = <String, dynamic>{..._clientContext()};
-    if (continuationToken != null) {
-      body['continuation'] = continuationToken;
-    } else {
-      body['browseId'] = browseId;
-    }
-
-    request.write(jsonEncode(body));
-    final response = await request.close().timeout(const Duration(seconds: 30));
-    final raw = await response.transform(utf8.decoder).join();
-    return jsonDecode(raw) as Map<String, dynamic>;
-  }
-
-  /// Fetches basic metadata and all videos in a single unified flow.
-  static Future<Map<String, dynamic>?> getPlaylistDetails(
-    String playlistId,
-  ) async {
-    final key = YoutubeService.effectiveApiKey;
-    if (key == null || key.isEmpty) {
-      _log.warning('No InnerTube API key provided, skipping fallback.');
-      return null;
-    }
-    // First request
-    Map<String, dynamic> data;
-    try {
-      data = await _browse('VL$playlistId');
-    } catch (e) {
-      _log.warning('InnerTube fallback browse failed: $e');
-      return null;
-    }
-
-    // Check for error alerts (e.g. "The playlist does not exist.")
-    final alerts = data['alerts'] as List?;
-    if (alerts != null && alerts.isNotEmpty) {
-      final alertType =
-          (alerts[0] as Map?)?['alertRenderer']?['type'] as String?;
-      if (alertType == 'ERROR') {
-        _log.warning('Playlist $playlistId: alert ERROR');
-        return null;
-      }
-    }
-
-    // Extract title from metadata
-    final title =
-        _extractString(data, 'metadata/playlistMetadataRenderer/title') ?? '';
-
-    // Extract author from header or sidebar
-    String author = '';
-    final header = data['header'] as Map?;
-    if (header != null) {
-      if (header.containsKey('playlistHeaderRenderer')) {
-        final ownerRuns = _extractList(
-          header['playlistHeaderRenderer'] as Map,
-          'ownerText/runs',
-        );
-        if (ownerRuns != null && ownerRuns.isNotEmpty) {
-          author = (ownerRuns[0] as Map?)?['text'] as String? ?? '';
-        }
-      }
-    }
-    if (author.isEmpty) {
-      // Try sidebar secondary info
-      final sidebarItems = _extractList(
-        data,
-        'sidebar/playlistSidebarRenderer/items',
-      );
-      if (sidebarItems != null && sidebarItems.length > 1) {
-        final ownerRuns = _extractList(
-          sidebarItems[1] as Map,
-          'playlistSidebarSecondaryInfoRenderer/videoOwner/videoOwnerRenderer/title/runs',
-        );
-        if (ownerRuns != null && ownerRuns.isNotEmpty) {
-          author = (ownerRuns[0] as Map?)?['text'] as String? ?? '';
-        }
-      }
-    }
-
-    // Extract video count from header or sidebar stats
-    int videoCount = 0;
-    if (header != null && header.containsKey('playlistHeaderRenderer')) {
-      final numRuns = _extractList(
-        header['playlistHeaderRenderer'] as Map,
-        'numVideosText/runs',
-      );
-      if (numRuns != null && numRuns.isNotEmpty) {
-        videoCount =
-            int.tryParse(
-              (numRuns[0] as Map?)?['text']?.toString().replaceAll(',', '') ??
-                  '',
-            ) ??
-            0;
-      }
-    }
-    if (videoCount == 0) {
-      final sidebarItems = _extractList(
-        data,
-        'sidebar/playlistSidebarRenderer/items',
-      );
-      if (sidebarItems != null && sidebarItems.isNotEmpty) {
-        final stats = _extractList(
-          sidebarItems[0] as Map,
-          'playlistSidebarPrimaryInfoRenderer/stats',
-        );
-        if (stats != null && stats.isNotEmpty) {
-          final firstStatRuns = _extractList(stats[0] as Map, 'runs');
-          if (firstStatRuns != null && firstStatRuns.isNotEmpty) {
-            videoCount =
-                int.tryParse(
-                  (firstStatRuns[0] as Map?)?['text']?.toString().replaceAll(
-                        ',',
-                        '',
-                      ) ??
-                      '',
-                ) ??
-                0;
-          }
-        }
-      }
-    }
-
-    // Get thumbnail from first video
-    final videoItems = _extractVideoItems(data);
-    String thumbnailUrl = '';
-    if (videoItems.isNotEmpty) {
-      thumbnailUrl = _extractThumbnailUrl(videoItems.first);
-    }
-
-    final info = {
-      'id': playlistId,
-      'title': title,
-      'author': author,
-      'videoCount': videoCount,
-      'thumbnailUrl': thumbnailUrl,
-    };
-
-    final allVideos = <Map<String, dynamic>>[];
-    final seenVideoIds = <String>{};
-    String? continuationToken;
-    var pageNum = 0;
-    const maxPages = 50; // Safety limit (~5000 videos)
-
-    while (pageNum < maxPages) {
-      List<Map<String, dynamic>> items;
-      if (pageNum == 0) {
-        items = videoItems;
-        continuationToken = _extractContinuationToken(
-          data,
-          isContinuation: false,
-        );
-      } else {
-        items = _extractVideoItems(data);
-        continuationToken = _extractContinuationToken(
-          data,
-          isContinuation: true,
-        );
-      }
-
-      for (final item in items) {
-        final video = _parseVideoItem(item, author);
-        if (video == null) continue;
-        final id = video['id'] as String? ?? '';
-        if (id.isNotEmpty && !seenVideoIds.add(id)) continue;
-        allVideos.add(video);
-      }
-
-      if (continuationToken == null || continuationToken.isEmpty) break;
-
-      pageNum++;
-      try {
-        await Future.delayed(const Duration(milliseconds: 250));
-        data = await _browse(
-          'VL$playlistId',
-          continuationToken: continuationToken,
-        );
-      } catch (e) {
-        _log.warning(
-          'InnerTube fallback browse continuation failed at page $pageNum: $e',
-        );
-        break;
-      }
-    }
-
-    return {'info': info, 'videos': allVideos};
-  }
-
-  // ──────────────── Parsing helpers ──────────────────
-
-  /// Extracts the flat list of video items from a browse response,
-  /// handling both initial and continuation formats.
-  static List<Map<String, dynamic>> _extractVideoItems(
-    Map<String, dynamic> data,
-  ) {
-    // Continuation responses
-    final actions =
-        (data['onResponseReceivedActions'] as List?) ??
-        (data['onResponseReceivedCommands'] as List?);
-    if (actions != null) {
-      for (final action in actions) {
-        final actionMap = action as Map?;
-        final items =
-            actionMap?['appendContinuationItemsAction']?['continuationItems']
-                as List? ??
-            actionMap?['reloadContinuationItemsCommand']?['continuationItems']
-                as List?;
-        if (items != null) {
-          return items.whereType<Map<String, dynamic>>().toList();
-        }
-      }
-    }
-
-    // Initial page: tabs → sectionList → itemSection
-    final tabs = _extractList(
-      data,
-      'contents/twoColumnBrowseResultsRenderer/tabs',
-    );
-    if (tabs == null) return [];
-
-    for (final tab in tabs) {
-      final sections = _extractList(
-        tab as Map,
-        'tabRenderer/content/sectionListRenderer/contents',
-      );
-      if (sections == null) continue;
-
-      for (final section in sections) {
-        final itemContents = _extractList(
-          section as Map,
-          'itemSectionRenderer/contents',
-        );
-        if (itemContents == null) continue;
-
-        // Old format: playlistVideoListRenderer/contents
-        for (final item in itemContents) {
-          final pvlContents = _extractList(
-            item as Map,
-            'playlistVideoListRenderer/contents',
-          );
-          if (pvlContents != null) {
-            return pvlContents.whereType<Map<String, dynamic>>().toList();
-          }
-        }
-
-        // New format: items are directly lockupViewModels in itemSectionRenderer/contents
-        if (itemContents.isNotEmpty &&
-            itemContents.first is Map &&
-            (itemContents.first as Map).containsKey('lockupViewModel')) {
-          return itemContents.whereType<Map<String, dynamic>>().toList();
-        }
-      }
-    }
-    return [];
-  }
-
-  /// Parses a single video item from either `playlistVideoRenderer` (old)
-  /// or `lockupViewModel` (new) format.
-  static Map<String, dynamic>? _parseVideoItem(
-    Map<String, dynamic> item,
-    String fallbackAuthor,
-  ) {
-    // Old format: playlistVideoRenderer
-    final pvr = item['playlistVideoRenderer'] as Map?;
-    if (pvr != null) {
-      final id = pvr['videoId'] as String? ?? '';
-      if (id.isEmpty) return null;
-      final title = _parseRuns(pvr['title']?['runs'] as List?);
-      final author =
-          _parseRuns(pvr['ownerText']?['runs'] as List?) ??
-          _parseRuns(pvr['shortBylineText']?['runs'] as List?) ??
-          fallbackAuthor;
-      final durationText = pvr['lengthText']?['simpleText'] as String?;
-      final duration = _parseDuration(durationText);
-      final thumbnailUrl = _extractThumbnailUrl(item);
-      return {
-        'id': id,
-        'title': title ?? 'Video',
-        'author': author,
-        'duration': duration,
-        'thumbnailUrl': thumbnailUrl,
-        'selected': true,
-      };
-    }
-
-    // New format: lockupViewModel
-    final lockup = item['lockupViewModel'] as Map?;
-    if (lockup != null) {
-      final id = lockup['contentId'] as String? ?? '';
-      if (id.isEmpty) return null;
-
-      final metaVM =
-          (lockup['metadata'] as Map?)?['lockupMetadataViewModel'] as Map?;
-      final titleMap = metaVM?['title'] as Map?;
-      final title = titleMap?['content'] as String? ?? 'Video';
-
-      // Duration from thumbnail overlay
-      int duration = 0;
-      final overlays =
-          (lockup['contentImage'] as Map?)?['thumbnailViewModel']?['overlays']
-              as List?;
-      if (overlays != null) {
-        for (final overlay in overlays) {
-          final bottomOverlay =
-              (overlay as Map?)?['thumbnailBottomOverlayViewModel'] as Map?;
-          if (bottomOverlay != null) {
-            final badges = bottomOverlay['badges'] as List?;
-            if (badges != null && badges.isNotEmpty) {
-              final durationText =
-                  (badges[0] as Map?)?['thumbnailBadgeViewModel']?['text']
-                      as String?;
-              duration = _parseDuration(durationText);
-            }
-          }
-        }
-      }
-
-      // Thumbnail URL
-      final thumbnailUrl = _extractThumbnailUrl(item);
-
-      return {
-        'id': id,
-        'title': title,
-        'author': fallbackAuthor,
-        'duration': duration,
-        'thumbnailUrl': thumbnailUrl,
-        'selected': true,
-      };
-    }
-
-    return null; // continuationItemRenderer or unknown format
-  }
-
-  /// Extracts the continuation token from the video items list.
-  static String? _extractContinuationToken(
-    Map<String, dynamic> data, {
-    required bool isContinuation,
-  }) {
-    List<dynamic>? items;
-
-    if (isContinuation) {
-      final actions =
-          (data['onResponseReceivedActions'] as List?) ??
-          (data['onResponseReceivedCommands'] as List?);
-      if (actions != null) {
-        for (final action in actions) {
-          final actionMap = action as Map?;
-          items =
-              actionMap?['appendContinuationItemsAction']?['continuationItems']
-                  as List? ??
-              actionMap?['reloadContinuationItemsCommand']?['continuationItems']
-                  as List?;
-          if (items != null) break;
-        }
-      }
-    } else {
-      // Initial page — find in the video list
-      final videoItems = _extractVideoItems(data);
-      items = videoItems;
-    }
-
-    if (items == null) return null;
-
-    for (final item in items) {
-      final cont = (item as Map?)?['continuationItemRenderer'] as Map?;
-      if (cont != null) {
-        final endpoint = cont['continuationEndpoint'] as Map?;
-        if (endpoint != null) {
-          // Direct token
-          final token = endpoint['continuationCommand']?['token'] as String?;
-          if (token != null) return token;
-          // Nested inside commandExecutorCommand
-          final commands =
-              endpoint['commandExecutorCommand']?['commands'] as List?;
-          if (commands != null) {
-            for (final cmd in commands) {
-              final t =
-                  (cmd as Map?)?['continuationCommand']?['token'] as String?;
-              if (t != null) return t;
-            }
-          }
-        }
-      }
-    }
-    return null;
-  }
-
-  // ──────────────── Utility helpers ──────────────────
-
-  /// Navigates a nested JSON path like "a/b/c" and returns the value.
-  static dynamic _navigate(Map data, String path) {
-    dynamic current = data;
-    for (final key in path.split('/')) {
-      if (current is Map) {
-        current = current[key];
-      } else if (current is List) {
-        final idx = int.tryParse(key);
-        if (idx != null && idx < current.length) {
-          current = current[idx];
-        } else {
-          return null;
-        }
-      } else {
-        return null;
-      }
-    }
-    return current;
-  }
-
-  static String? _extractString(Map data, String path) {
-    final value = _navigate(data, path);
-    return value is String ? value : null;
-  }
-
-  static List? _extractList(Map data, String path) {
-    final value = _navigate(data, path);
-    return value is List ? value : null;
-  }
-
-  /// Joins text from a "runs" array.
-  static String? _parseRuns(List? runs) {
-    if (runs == null || runs.isEmpty) return null;
-    return runs.map((r) => (r as Map?)?['text'] as String? ?? '').join();
-  }
-
-  /// Parses a duration string like "4:00" or "1:23:45" into seconds.
-  static int _parseDuration(String? text) {
-    if (text == null || text.isEmpty) return 0;
-    final parts = text.split(':').map((p) => int.tryParse(p) ?? 0).toList();
-    if (parts.length == 3) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    } else if (parts.length == 2) {
-      return parts[0] * 60 + parts[1];
-    } else if (parts.length == 1) {
-      return parts[0];
-    }
-    return 0;
-  }
-
-  /// Extracts the best thumbnail URL from a video item.
-  static String _extractThumbnailUrl(Map<String, dynamic> item) {
-    // lockupViewModel format
-    final lockup = item['lockupViewModel'] as Map?;
-    if (lockup != null) {
-      final sources =
-          (lockup['contentImage']
-                  as Map?)?['thumbnailViewModel']?['image']?['sources']
-              as List?;
-      if (sources != null && sources.isNotEmpty) {
-        return (sources.last as Map?)?['url'] as String? ?? '';
-      }
-      // Fallback: construct from video ID
-      final id = lockup['contentId'] as String?;
-      if (id != null) return 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
-    }
-
-    // playlistVideoRenderer format
-    final pvr = item['playlistVideoRenderer'] as Map?;
-    if (pvr != null) {
-      final thumbnails = (pvr['thumbnail'] as Map?)?['thumbnails'] as List?;
-      if (thumbnails != null && thumbnails.isNotEmpty) {
-        return (thumbnails.last as Map?)?['url'] as String? ?? '';
-      }
-      final id = pvr['videoId'] as String?;
-      if (id != null) return 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
-    }
-
-    return '';
-  }
-}

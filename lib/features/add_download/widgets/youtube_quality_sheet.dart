@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/services/google_auth_service.dart';
-import '../../../core/services/youtube/youtube_exceptions.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -79,29 +78,9 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        if (e is AgeRestrictedException) {
-          _errorMessage = L10n.isRtl(context)
-              ? 'هذا الفيديو مقيد بالفئة العمرية. سجّل الدخول إلى يوتيوب من الإعدادات أولاً.'
-              : 'This video is age-restricted. Sign in to YouTube from Settings first.';
-        } else if (e is LoginRequiredException) {
-          _errorMessage = L10n.isRtl(context)
-              ? 'يتطلب يوتيوب تسجيل الدخول. سجّل الدخول بحساب Google من الإعدادات.'
-              : 'YouTube requires sign-in. Sign in with Google from Settings.';
-        } else if (e is GeoBlockedException) {
-          _errorMessage = L10n.isRtl(context)
-              ? 'هذا الفيديو غير متاح في بلدك/منطقتك.'
-              : 'This video is not available in your country/region.';
-        } else if (e is PrivateVideoException) {
-          _errorMessage = L10n.isRtl(context)
-              ? 'هذا الفيديو خاص.'
-              : 'This video is private.';
-        } else if (e is YouTubeException) {
-          _errorMessage = e.message;
-        } else {
-          _errorMessage = L10n.isRtl(context)
-              ? 'فشل جلب البث: $e'
-              : 'Failed to fetch streams: $e';
-        }
+        _errorMessage = L10n.isRtl(context)
+            ? 'فشل جلب البث: $e'
+            : 'Failed to fetch streams: $e';
       });
     }
   }
@@ -270,7 +249,35 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                     ),
                   ),
 
-                  const SizedBox(height: 8),
+                  // Legal Warning Banner
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 0.8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.gavel_rounded, size: 14, color: Colors.amber),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              L10n.of(context, 'yt_legal_warning'),
+                              style: TextStyle(
+                                color: secClr,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
 
                   // Tabs
                   Padding(

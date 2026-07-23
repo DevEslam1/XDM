@@ -1,68 +1,42 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:share_plus/share_plus.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:async';
-import 'package:path/path.dart' as p;
 
-import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/utils/file_utils.dart';
+import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/url_utils.dart';
-import '../../../core/utils/file_utils.dart';
-import '../../../shared/widgets/themed_snackbar.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
-import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/glass_card.dart';
-import '../../settings/provider/settings_provider.dart';
-import '../../downloads/provider/download_provider.dart';
+import '../../../shared/widgets/neon_glow_button.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
+import '../../add_download/widgets/youtube_playlist_sheet.dart';
+import '../../add_download/widgets/youtube_quality_sheet.dart';
 import '../../downloads/models/download_task.dart';
-import '../../../core/utils/haptic_helper.dart';
+import '../../downloads/provider/download_provider.dart';
+import '../../settings/provider/settings_provider.dart';
 import '../models/bookmark.dart';
-import '../widgets/browser_download_sheet.dart';
-import '../widgets/bookmark_manager_screen.dart';
-import '../widgets/browser_history_sheet.dart';
+import '../models/browser_tab.dart';
 import '../services/ad_blocker.dart';
 import '../services/browser_detector.dart';
-import '../../add_download/widgets/youtube_quality_sheet.dart';
-import '../../add_download/widgets/youtube_playlist_sheet.dart';
-
-class BrowserTab {
-  final String id;
-  late final WebViewController controller;
-  String url;
-  String title;
-  bool isIncognito;
-  bool isLoading;
-  final ValueNotifier<double> progressNotifier;
-  bool isHome;
-  bool canGoBack;
-  bool canGoForward;
-
-  BrowserTab({
-    required this.id,
-    required this.controller,
-    required this.url,
-    required this.title,
-    this.isIncognito = false,
-    this.isLoading = false,
-    double progress = 0.0,
-    this.isHome = true,
-    this.canGoBack = false,
-    this.canGoForward = false,
-  }) : progressNotifier = ValueNotifier<double>(progress);
-
-  double get progress => progressNotifier.value;
-  set progress(double val) => progressNotifier.value = val;
-}
+import '../widgets/bookmark_manager_screen.dart';
+import '../widgets/browser_download_sheet.dart';
+import '../widgets/browser_history_sheet.dart';
+import '../widgets/browser_home_page.dart';
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -92,7 +66,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       {}; // tab.id -> sources
   final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
   final Set<String> _ytDetectionFailed = {}; // tab.url -> yt fetch failed
-  final Set<String> _recordedHistoryThisSession = {};
+
   DateTime? _lastYoutubeAuthTime;
   static const _youtubeAuthCooldown = Duration(seconds: 30);
   final Map<String, Timer> _mediaScanTimers = {};
@@ -193,6 +167,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
         if (i == _currentTabIndex) {
           savedIndex = normalTabCount;
+        } else if (savedIndex >= normalTabCount) {
+          // Current tab is incognito; track fallback index for non-incognito
+          savedIndex = normalTabCount;
         }
         tabList.add({
           'url': tab.url,
@@ -200,6 +177,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           'isIncognito': false,
         });
         normalTabCount++;
+      }
+      // Clamp savedIndex to valid range in case all tabs were incognito
+      if (normalTabCount > 0) {
+        savedIndex = savedIndex.clamp(0, normalTabCount - 1);
       }
 
       await prefs.setString('persisted_browser_tabs', jsonEncode(tabList));
@@ -361,8 +342,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 url.contains('google.com/ServiceLogin') ||
                 url.contains('google.com/accounts')) {
               tab.controller.setUserAgent(
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
               );
+              _hideWebViewFingerprints(tab);
             }
             if (mounted) {
               final downloadProvider = Provider.of<DownloadProvider>(
@@ -415,6 +397,46 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 }
               });
             }
+
+            // Inject CSS + JS on Google sign-in pages to ensure the
+            // form/Next button is not hidden behind the on-screen keyboard.
+            if (url.contains('accounts.google.com') ||
+                url.contains('google.com/ServiceLogin') ||
+                url.contains('google.com/accounts')) {
+              tab.controller.runJavaScript('''
+                (function() {
+                  // Add generous bottom padding so the page can scroll
+                  // past the area the keyboard will cover.
+                  var style = document.createElement('style');
+                  style.textContent = 'body, html { padding-bottom: 350px !important; }';
+                  document.head.appendChild(style);
+
+                  // When any input/button gets focus, scroll it into view
+                  // after a short delay (keyboard animation takes ~250ms).
+                  document.addEventListener('focusin', function(e) {
+                    if (e.target && e.target.scrollIntoView) {
+                      setTimeout(function() {
+                        e.target.scrollIntoView({behavior:'smooth', block:'center'});
+                      }, 350);
+                    }
+                  });
+
+                  // Also watch for the visual viewport resize (keyboard
+                  // opening) and re-scroll the active element into view.
+                  if (window.visualViewport) {
+                    window.visualViewport.addEventListener('resize', function() {
+                      var el = document.activeElement;
+                      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+                        setTimeout(function() {
+                          el.scrollIntoView({behavior:'smooth', block:'center'});
+                        }, 100);
+                      }
+                    });
+                  }
+                })();
+              ''');
+            }
+
 
             if (!tab.isIncognito && !settings.incognitoEnabled) {
               final isYoutubeDomain = url.contains('youtube.com') ||
@@ -667,7 +689,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _detectedMediaSources.clear();
     _detectedPlaylistUrls.clear();
     _ytDetectionFailed.clear();
-    _recordedHistoryThisSession.clear();
     for (final timer in _mediaScanTimers.values) {
       timer.cancel();
     }
@@ -770,10 +791,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme) return url;
     var clean = uri.toString();
-    if (uri.path == '/' &&
-        uri.query.isEmpty &&
-        uri.fragment.isEmpty &&
-        clean.endsWith('/')) {
+    // Remove trailing slash for any path, not just root, to ensure
+    // consistent history deduplication (https://example.com/path/ ->
+    // https://example.com/path).
+    if (clean.endsWith('/') && clean.length > uri.scheme.length + 3) {
       clean = clean.substring(0, clean.length - 1);
     }
     return clean;
@@ -914,8 +935,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             ),
           );
           if (settings.incognitoEnabled) {
-            _recordedHistoryThisSession.clear();
-
             // Clear current tabs cookies, cache, local storage
             final cookieManager = WebViewCookieManager();
             await cookieManager.clearCookies();
@@ -1186,7 +1205,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _detectedDownloadUrls[tab.id] = tab.url;
           });
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('YouTube playlist scan error: $e');
+      }
       // If it also has a video ID (e.g. watch?v=xxx&list=yyy),
       // still try to fetch the single video streams too
       if (YoutubeService.isYoutubeVideoUrl(tab.url)) {
@@ -1197,7 +1218,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               _detectedMediaSources[tab.id] = youtubeStreams;
             });
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('YouTube single stream scan error after playlist: $e');
+        }
       }
       return;
     }
@@ -1216,8 +1239,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           });
           return; // Skip normal DOM scanning since we retrieved streams via YouTube API
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('YouTube stream detection error: $e');
+      }
       if (mounted) {
+        if (_ytDetectionFailed.length > 100) {
+          _ytDetectionFailed.remove(_ytDetectionFailed.first);
+        }
         setState(() {
           _ytDetectionFailed.add(tab.url);
         });
@@ -1621,6 +1649,31 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         );
       },
     );
+  }
+
+  Future<void> _hideWebViewFingerprints(BrowserTab tab) async {
+    const js = r'''
+      (function() {
+        try {
+          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+          delete window.WebViewJavascriptBridge;
+          delete window.flutter_inappwebview;
+          Object.defineProperty(navigator, 'plugins', {
+            get: () => [
+              { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+              { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+              { name: 'Native Client', filename: 'internal-nacl-plugin' },
+            ],
+          });
+          Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        } catch(e) {}
+      })();
+    ''';
+    try {
+      await tab.controller.runJavaScript(js);
+    } catch (e) {
+      debugPrint('Failed to inject anti-detection JS: $e');
+    }
   }
 
   Future<void> _injectCustomJsCss(BrowserTab tab) async {
@@ -2055,48 +2108,22 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 24),
-          Center(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: accentColor.withValues(alpha: 0.3),
-                      width: 2,
-                    ),
-                  ),
-                  child: Icon(Icons.language, size: 48, color: accentColor),
+          BrowserHomePage(
+            onSearchTap: () {
+              _focusNode.requestFocus();
+            },
+            onBookmarksTap: () async {
+              final cleared = await Navigator.push<bool>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BookmarkManagerScreen(),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'XDM WEB ',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2.0,
-                    fontSize: 18,
-                    color: isDark
-                        ? AppTheme.textPrimary
-                        : AppTheme.lightTextPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isRtl
-                      ? 'متصفح آمن لاعتراض وتنزيل الوسائط والملفات'
-                      : 'Secure environment for stream interception & download capture',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isDark
-                        ? AppTheme.textSecondary
-                        : AppTheme.lightTextSecondary,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
+              );
+              if (cleared == true && mounted) setState(() {});
+            },
+            onHistoryTap: () {
+              _openHistory();
+            },
           ),
           const SizedBox(height: 24),
 
@@ -2423,7 +2450,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // Reactively ensure zoom configuration matches settings changes
     if (settings.pinchToZoom != _lastZoomEnabled) {
       _lastZoomEnabled = settings.pinchToZoom;
-      activeTab.controller.enableZoom(settings.pinchToZoom);
+      for (final tab in _tabs) {
+        tab.controller.enableZoom(settings.pinchToZoom);
+      }
     }
 
     return PopScope(
@@ -2446,6 +2475,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       child: GeometricGridBackground(
         child: Scaffold(
           backgroundColor: Colors.transparent,
+          // Let the WebView's native Android view handle keyboard
+          // scrolling. If Flutter resizes the Scaffold body when the
+          // keyboard appears, the platform view re-layouts and loses
+          // focus, causing an infinite show/hide keyboard cycle.
+          resizeToAvoidBottomInset: false,
+
           floatingActionButton: showFab
               ? _buildDownloadFab(context, settings)
               : null,
@@ -2656,11 +2691,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                                 ),
                                           ),
                                           onSubmitted: (val) {
-                                            _navDebounce?.cancel();
-                                            _navDebounce = Timer(
-                                              const Duration(milliseconds: 300),
-                                              () => _navigateToUrl(val),
-                                            );
+                                            _navigateToUrl(val);
                                           },
                                         );
                                       },

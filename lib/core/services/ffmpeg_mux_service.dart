@@ -19,8 +19,8 @@ class FFmpegMuxService {
       final name = p.basename(path).toLowerCase();
       return name.endsWith('.tmp') ||
           name.endsWith('.audio') ||
-          name.contains('.dmxpart') ||
-          name.contains('temp');
+          name.endsWith('.dmxpart') ||
+          name.endsWith('.temp');
     }
 
     try {

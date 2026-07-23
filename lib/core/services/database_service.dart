@@ -91,7 +91,8 @@ class DatabaseService {
               try {
                 failedItems.addAll(box.values.where((v) => !tasks.any((t) =>
                     v is Map && t.id.value == DownloadTask.fromMap(Map<String, dynamic>.from(v)).id)));
-              } catch (_) {
+              } catch (innerErr) {
+                debugPrint('Failed to re-derive migration failed items: $innerErr');
                 failedItems.addAll(box.values);
               }
             }

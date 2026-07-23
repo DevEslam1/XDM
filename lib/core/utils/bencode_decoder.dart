@@ -217,3 +217,10 @@ class BencodeDecoder {
     }
   }
 }
+
+// TODO: Add unit tests for BencodeDecoder
+//   - decodeInt: valid, negative zero, leading zero, out of range
+//   - decodeBytes: zero-length, exceed data
+//   - decodeList/decodeDict: nesting depth limit, unterminated
+//   - parseTorrentBytes: single-file, multi-file, corrupt data
+//   - toNormalTypes: binary keys preserved, utf8 conversion

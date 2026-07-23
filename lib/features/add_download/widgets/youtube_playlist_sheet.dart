@@ -224,6 +224,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
           _currentVideoTitle = videoTitle;
         });
       }
+
+      // Small delay between enqueues to avoid YouTube API rate limiting
+      if (i < selectedVideos.length - 1) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
     }
 
     if (mounted) {
@@ -356,6 +361,34 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+
+                  // Legal Warning Banner
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 0.8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.gavel_rounded, size: 14, color: Colors.amber),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              L10n.of(context, 'yt_legal_warning'),
+                              style: TextStyle(
+                                color: secClr,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 

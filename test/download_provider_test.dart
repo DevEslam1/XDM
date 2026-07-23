@@ -42,6 +42,7 @@ class FakeDownloadEngine extends DownloadEngine {
     String? proxyPassword,
     bool bypassSSL = false,
     String? cookies,
+    String? oauthToken,
   }) async {
     return DownloadMetadata(
       fileName: requestedFileName ?? 'file.zip',
@@ -66,6 +67,7 @@ class FakeDownloadEngine extends DownloadEngine {
     String? referer,
     String? customUserAgent,
     String? cookies,
+    String? oauthToken,
     bool enableProxy = false,
     String? proxyAddress,
     String? proxyHost,
@@ -214,10 +216,13 @@ void main() {
       savePath: '',
     );
 
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
     expect(provider.downloadingTasksCount, 1);
     expect(provider.queuedTasksCount, 1);
     expect(engine.startedUrls, ['https://example.com/one.zip']);
   });
+
 
   test('updateTaskThreadCount on task with zero progress only resizes chunks', () async {
     final (database, settings) = await _setupServices();
@@ -511,7 +516,7 @@ void main() {
     final errorResponse = Response(
       requestOptions: RequestOptions(path: 'https://example.com/403.zip'),
       statusCode: 403,
-      statusMessage: 'Forbidden',
+      statusMessage: DownloadStatusMessages.forbidden,
     );
     
     final badEngine = FakeDownloadEngine403(errorResponse);
@@ -612,6 +617,7 @@ class FakeDownloadEngine403 extends DownloadEngine {
     String? proxyPassword,
     bool bypassSSL = false,
     String? cookies,
+    String? oauthToken,
   }) async {
     return DownloadMetadata(
       fileName: '403.zip',
@@ -636,6 +642,7 @@ class FakeDownloadEngine403 extends DownloadEngine {
     String? customUserAgent,
     String? referer,
     String? cookies,
+    String? oauthToken,
     bool enableProxy = false,
     String? proxyAddress,
     String? proxyHost,

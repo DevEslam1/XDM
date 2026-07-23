@@ -223,6 +223,7 @@ class L10n {
       'video_label': 'VIDEO',
       'audio_label': 'AUDIO',
       'quality_label': 'QUALITY',
+      'yt_legal_warning': 'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
     },
     'ar': {
       'app_title': 'XDM',
@@ -441,6 +442,7 @@ class L10n {
       'video_label': 'فيديو',
       'audio_label': 'صوت',
       'quality_label': 'الجودة',
+      'yt_legal_warning': 'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
     },
   };
 

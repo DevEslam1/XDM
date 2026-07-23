@@ -14,7 +14,6 @@ import 'package:logging/logging.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/services/google_auth_service.dart';
-import '../../../core/services/youtube/youtube_exceptions.dart';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -35,6 +34,29 @@ import 'mixins/download_queue_mixin.dart';
 import 'mixins/download_torrent_mixin.dart';
 import 'mixins/download_backup_mixin.dart';
 
+/// The central [ChangeNotifier] that owns the download task list and
+/// orchestrates all state mutations.
+///
+/// ## Mixin Architecture
+///
+/// This class uses several mixins to keep concerns separated:
+///
+///   - **[DownloadFilterMixin]**  — filtering, sorting, and search of the
+///     task list. Requires `providerTasks`, `findTaskById` and the
+///     `filteredTasksDirty` flag.
+///   - **[DownloadQueueMixin]**  — concurrency-limit logic and queue
+///     pumping. Requires `startTaskFromQueue`, `findTaskById`,
+///     `isTaskWaitingForRetry`, and `pendingStartCount`.
+///   - **[DownloadTorrentMixin]**  — torrent seeding resume/update logic.
+///     Requires `providerTorrentIds`, `providerLatestTorrentStats`,
+///     `providerSettingsProvider`, `findTaskById`, `notifyListeners`.
+///   - **[DownloadBackupMixin]**  — backup export/import and encryption.
+///     Requires `providerTasks`, `providerDatabaseService`, `notifyListeners`,
+///     `filteredTasksDirty`, `updateTelemetryWidget`.
+///
+/// Each mixin declares an abstract contract that must be fulfilled by the
+/// host class. The relevant property/method implementations are grouped
+/// in the "Mixin contract implementations" section below.
 class DownloadProvider extends ChangeNotifier
     with
         DownloadFilterMixin,
@@ -42,6 +64,10 @@ class DownloadProvider extends ChangeNotifier
         DownloadTorrentMixin,
         DownloadBackupMixin {
   static const _mediaChannel = MethodChannel('com.example.dmx/media');
+
+  // ---------------------------------------------------------------------------
+  // Status message constants (public in DownloadTask for i18n)
+  // ---------------------------------------------------------------------------
 
   DownloadProvider({
     required DatabaseService databaseService,
@@ -81,6 +107,7 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, ({String cookie, DateTime timestamp})> _cookieCache = {};
+  static const int _cookieCacheMaxSize = 50;
   final Map<String, Future<void>> _dbSaveQueues = {};
   final Map<String, int> _lastProgressUpdateTimes = {};
   final Map<String, int> _lastDbSaveTimes = {};
@@ -194,7 +221,7 @@ class DownloadProvider extends ChangeNotifier
 
     final targetFile = File(task.tempFilePath);
     if (!await targetFile.exists()) {
-      return 0;
+      return task.downloadedBytes;
     }
     final targetSize = await targetFile.length();
 
@@ -267,8 +294,7 @@ class DownloadProvider extends ChangeNotifier
               status: DownloadStatus.paused,
               speed: 0,
               clearEta: true,
-              errorMessage:
-                  'Paused because XDM was closed during a foreground download.',
+              errorMessage: DownloadStatusMessages.pausedOrphaned,
             );
           }
           return task.copyWith(
@@ -353,7 +379,7 @@ class DownloadProvider extends ChangeNotifier
             (t) =>
                 t.status == DownloadStatus.paused &&
                 !t.pausedByUser &&
-                t.errorMessage != 'Waiting for WiFi connection' &&
+                t.errorMessage != DownloadStatusMessages.waitingWifi &&
                 (t.scheduledAt == null ||
                     t.scheduledAt!.isBefore(DateTime.now())),
           )
@@ -423,8 +449,9 @@ class DownloadProvider extends ChangeNotifier
     if (!hasStorageAccess) {
       _lastError = 'Storage permission was denied.';
       notifyListeners();
-      return;
+      throw Exception('Storage permission was denied.');
     }
+
 
     final resolvedThreadCount =
         threadCount ?? _settingsProvider.defaultThreadCount;
@@ -503,15 +530,23 @@ class DownloadProvider extends ChangeNotifier
     String? youtubeQualityPreset,
     int? torrentId,
   }) async {
-    final exists = _tasks.any(
-      (t) =>
-          t.url == url &&
-          t.status != DownloadStatus.failed &&
-          t.status != DownloadStatus.completed &&
-          t.status != DownloadStatus.paused,
-    );
+    final exists = _tasks.any((t) {
+      if (t.status == DownloadStatus.failed ||
+          t.status == DownloadStatus.completed ||
+          t.status == DownloadStatus.paused) {
+        return false;
+      }
+      if (downloadPageUrl != null &&
+          downloadPageUrl.isNotEmpty &&
+          youtubeQualityPreset != null &&
+          t.downloadPageUrl == downloadPageUrl &&
+          t.youtubeQualityPreset == youtubeQualityPreset) {
+        return true;
+      }
+      return t.url == url;
+    });
     if (exists) {
-      throw Exception('This URL is already active in the download queue.');
+      throw Exception('This download is already active in the queue.');
     }
 
     final defaultDirectory =
@@ -575,6 +610,16 @@ class DownloadProvider extends ChangeNotifier
 
     final isScheduled = scheduledAt != null && scheduledAt.isAfter(now);
 
+    final bool isYoutube = youtubeQualityPreset != null ||
+        (downloadPageUrl != null &&
+            (downloadPageUrl.contains('youtube.com/') ||
+                downloadPageUrl.contains('youtu.be/'))) ||
+        url.contains('.googlevideo.com/') ||
+        url.contains('youtube.com/') ||
+        url.contains('youtu.be/');
+
+    final effectiveThreadCount = isYoutube ? 1 : threadCount;
+
     final task = DownloadTask(
       id: '${now.microsecondsSinceEpoch}_${Random.secure().nextInt(1000000000)}',
       fileName: fileName,
@@ -586,10 +631,11 @@ class DownloadProvider extends ChangeNotifier
       savePath: directory,
       localFilePath: localFilePath,
       tempFilePath: tempFilePath,
-      threadCount: threadCount,
-      chunks: List<double>.filled(threadCount, 0.0),
+      threadCount: effectiveThreadCount,
+      chunks: List<double>.filled(effectiveThreadCount, 0.0),
       createdAt: now,
       updatedAt: now,
+
       scheduledAt: scheduledAt,
       supportsResume: supportsResume,
       // Apply the user's global torrent seeding preference.
@@ -834,6 +880,7 @@ class DownloadProvider extends ChangeNotifier
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
+    _lastDbSaveBytes.remove(id);
     _pendingProgressUpdates.remove(id);
     _retryCounts.remove(id);
     _retryTimers[id]?.cancel();
@@ -867,7 +914,11 @@ class DownloadProvider extends ChangeNotifier
             final relPath = f['name'] as String?;
             if (relPath != null && relPath.isNotEmpty) {
               try {
-                final fullPath = p.join(task.savePath, relPath);
+                final fullPath = p.normalize(p.join(task.savePath, relPath));
+                if (!fullPath.startsWith(task.savePath)) {
+                  debugPrint('[DMX] Blocked path traversal attempt: $relPath');
+                  continue;
+                }
                 final file = File(fullPath);
                 if (await file.exists()) {
                   await file.delete();
@@ -1042,7 +1093,14 @@ class DownloadProvider extends ChangeNotifier
     if (_cancelTokens.containsKey(task.id)) return;
     if (_startingTaskIds.contains(task.id)) return;
     _startingTaskIds.add(task.id);
+    try {
+      await _startTaskBody(task);
+    } finally {
+      _startingTaskIds.remove(task.id);
+    }
+  }
 
+  Future<void> _startTaskBody(DownloadTask task) async {
     final hasWifiOrEthernet =
         _currentConnectivity.contains(ConnectivityResult.wifi) ||
         _currentConnectivity.contains(ConnectivityResult.ethernet);
@@ -1050,10 +1108,9 @@ class DownloadProvider extends ChangeNotifier
       await _setTask(
         task.copyWith(
           status: DownloadStatus.paused,
-          errorMessage: 'Waiting for WiFi connection',
+          errorMessage: DownloadStatusMessages.waitingWifi,
         ),
       );
-      _startingTaskIds.remove(task.id);
       return;
     }
 
@@ -1079,6 +1136,12 @@ class DownloadProvider extends ChangeNotifier
           final cookies = await WebviewCookieManager().getCookies(origin);
           cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
           _cookieCache[origin] = (cookie: cookieString, timestamp: now);
+          if (_cookieCache.length > _cookieCacheMaxSize) {
+            final oldest = _cookieCache.entries
+                .reduce((a, b) => a.value.timestamp.isBefore(b.value.timestamp) ? a : b)
+                .key;
+            _cookieCache.remove(oldest);
+          }
         }
       }
     } catch (_) {}
@@ -1160,58 +1223,63 @@ class DownloadProvider extends ChangeNotifier
               );
             }
             await _setTask(task);
+          } else if (task.url.isNotEmpty && !task.url.contains('youtube.com/')) {
+            debugPrint('[DMX] YoutubeService.getStreamForVideo returned null; proceeding with pre-resolved stream URL.');
           } else {
             throw Exception('Stream not available');
           }
         }
       } catch (e) {
-        final isRetryable = _isRetryableError(e);
-        final maxRetries = _settingsProvider.autoRetryEnabled && isRetryable
-            ? _settingsProvider.maxRetries
-            : 0;
-        final currentRetry = _retryCounts[task.id] ?? 0;
+        if (task.url.isNotEmpty && !task.url.contains('youtube.com/')) {
+          debugPrint('[DMX] YoutubeService stream resolution error ($e); proceeding with pre-resolved stream URL.');
+        } else {
+          final isRetryable = _isRetryableError(e);
+          final maxRetries = _settingsProvider.autoRetryEnabled && isRetryable
+              ? _settingsProvider.maxRetries
+              : 0;
+          final currentRetry = _retryCounts[task.id] ?? 0;
 
-        if (currentRetry < maxRetries) {
-          _retryCounts[task.id] = currentRetry + 1;
-          final delaySeconds = _settingsProvider.retryDelaySeconds;
-          debugPrint(
-            'Transient error resolving stream for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
-          );
+          if (currentRetry < maxRetries) {
+            _retryCounts[task.id] = currentRetry + 1;
+            final delaySeconds = _settingsProvider.retryDelaySeconds;
+            debugPrint(
+              'Transient error resolving stream for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
+            );
 
+            await _setTask(
+              task.copyWith(
+                status: DownloadStatus.queued,
+                speed: 0,
+                errorMessage:
+                    'Retrying in $delaySeconds seconds: ${_errorMessage(e)}',
+              ),
+            );
+
+            _retryTimers[task.id]?.cancel();
+            _retryTimers[task.id] = Timer(Duration(seconds: delaySeconds), () {
+              _retryTimers.remove(task.id);
+              final checkedTask = _findTask(task.id);
+              if (checkedTask != null &&
+                  checkedTask.status == DownloadStatus.queued) {
+                pumpQueue();
+              }
+            });
+            return;
+          }
+
+          _retryCounts.remove(task.id);
           await _setTask(
             task.copyWith(
-              status: DownloadStatus.queued,
-              speed: 0,
-              errorMessage:
-                  'Retrying in $delaySeconds seconds: ${_errorMessage(e)}',
+              status: DownloadStatus.failed,
+              errorMessage: 'Failed to resolve YouTube stream: ${_errorMessage(e)}',
             ),
           );
-
-          _retryTimers[task.id]?.cancel();
-          _retryTimers[task.id] = Timer(Duration(seconds: delaySeconds), () {
-            _retryTimers.remove(task.id);
-            final checkedTask = _findTask(task.id);
-            if (checkedTask != null &&
-                checkedTask.status == DownloadStatus.queued) {
-              pumpQueue();
-            }
-          });
-          _startingTaskIds.remove(task.id);
+          pumpQueue();
+          _updateTelemetryWidget();
           return;
         }
-
-        _retryCounts.remove(task.id);
-        await _setTask(
-          task.copyWith(
-            status: DownloadStatus.failed,
-            errorMessage: 'Failed to resolve YouTube stream: ${_errorMessage(e)}',
-          ),
-        );
-        pumpQueue();
-        _updateTelemetryWidget();
-        _startingTaskIds.remove(task.id);
-        return;
       }
+
     }
 
     final cancelToken = CancelToken();
@@ -1256,7 +1324,6 @@ class DownloadProvider extends ChangeNotifier
         );
         pumpQueue();
         _updateTelemetryWidget();
-        _startingTaskIds.remove(task.id);
         return;
       }
     }
@@ -1310,6 +1377,7 @@ class DownloadProvider extends ChangeNotifier
           proxyPort: _settingsProvider.proxyPort,
           bypassSSL: _settingsProvider.bypassSSL,
           cookies: cookieString,
+          oauthToken: YoutubeService.oauthToken,
         );
         if (meta.fileSize > 0) {
           final idx = _tasks.indexWhere((t) => t.id == task.id);
@@ -1328,7 +1396,6 @@ class DownloadProvider extends ChangeNotifier
         ? (task.fileSize - task.audioSize).clamp(0, task.fileSize)
         : task.fileSize;
 
-    // YouTube CDN requires a Referer header matching the watch page URL.
     final isYoutube = task.downloadPageUrl != null &&
         (task.downloadPageUrl!.contains('youtube.com/') ||
             task.downloadPageUrl!.contains('youtu.be/'));
@@ -1368,6 +1435,7 @@ class DownloadProvider extends ChangeNotifier
                       supportsResume: true,
                       cancelToken: audioCancelToken,
                       cookies: cookieString,
+                      oauthToken: YoutubeService.oauthToken,
                       onProgress: (progress) {
                         final t = _findTask(task.id);
                         if (t == null || t.status != DownloadStatus.downloading) return;
@@ -1415,8 +1483,12 @@ class DownloadProvider extends ChangeNotifier
                       activeDownloadCount: () => downloadingTasksCount,
                       threadCount: streamThreadCount,
                       customUserAgent: _settingsProvider.customUserAgent,
-                      referer: isYoutube ? task.downloadPageUrl : null,
+                      referer: isYoutube
+                          ? (task.downloadPageUrl ?? 'https://www.youtube.com/')
+                          : null,
                       enableProxy: _settingsProvider.enableProxy,
+
+
                       proxyAddress: _settingsProvider.proxyAddress,
                       proxyHost: _settingsProvider.proxyHost,
                       proxyPort: _settingsProvider.proxyPort,
@@ -1457,6 +1529,7 @@ class DownloadProvider extends ChangeNotifier
                     referer: isYoutube ? task.downloadPageUrl : null,
                     getTorrentFiles: () => _findTask(task.id)?.torrentFiles ?? task.torrentFiles,
                     cookies: cookieString,
+                    oauthToken: YoutubeService.oauthToken,
                     onProgress: (progress) {
                       final current = _findTask(task.id);
                       if (current == null || current.status != DownloadStatus.downloading) {
@@ -1573,9 +1646,10 @@ class DownloadProvider extends ChangeNotifier
                       return _settingsProvider.speedLimitBytesPerSecond;
                     },
                     activeDownloadCount: () => downloadingTasksCount,
-                    threadCount: streamThreadCount,
                     customUserAgent: _settingsProvider.customUserAgent,
                     enableProxy: _settingsProvider.enableProxy,
+
+
                     proxyAddress: _settingsProvider.proxyAddress,
                     proxyHost: _settingsProvider.proxyHost,
                     proxyPort: _settingsProvider.proxyPort,
@@ -1586,12 +1660,20 @@ class DownloadProvider extends ChangeNotifier
           }();
           return;
         } catch (error) {
-          final isYoutubeDownload = task.downloadPageUrl != null &&
-              YoutubeService.extractVideoId(task.downloadPageUrl!) != null;
+          final isYoutubeDownload = (task.downloadPageUrl != null &&
+                  YoutubeService.extractVideoId(task.downloadPageUrl!) != null) ||
+              task.url.contains('.googlevideo.com/') ||
+              task.youtubeQualityPreset != null;
           bool shouldRefreshYoutube = false;
-          if (error is DioException && isYoutubeDownload) {
-            final statusCode = error.response?.statusCode;
-            if (statusCode == 403 || statusCode == 410) {
+          if (isYoutubeDownload) {
+            final errStr = error.toString();
+            final statusCode =
+                error is DioException ? error.response?.statusCode : null;
+            if (statusCode == 403 ||
+                statusCode == 410 ||
+                errStr.contains('403') ||
+                errStr.contains('410') ||
+                errStr.contains('Forbidden')) {
               shouldRefreshYoutube = true;
             }
           }
@@ -1603,13 +1685,18 @@ class DownloadProvider extends ChangeNotifier
             try {
               YoutubeService.resetClient();
 
+              final pageUrl =
+                  (task.downloadPageUrl != null && task.downloadPageUrl!.isNotEmpty)
+                      ? task.downloadPageUrl!
+                      : task.url;
+
               // For combined downloads (audio+video), use getFreshStreams
               // which returns both URLs. refreshStreamUrl only returns the
               // video URL, leaving the audio URL expired.
               Map<String, dynamic>? newUrlInfo;
               if (hasAudio) {
                 final freshStreams = await YoutubeService.getFreshStreams(
-                  task.downloadPageUrl!,
+                  pageUrl,
                 );
                 if (freshStreams != null && freshStreams['url'] != null) {
                   newUrlInfo = {
@@ -1619,10 +1706,11 @@ class DownloadProvider extends ChangeNotifier
                 }
               } else {
                 newUrlInfo = await _refreshYoutubeStreamUrlSafe(
-                  task.downloadPageUrl!,
+                  pageUrl,
                   task.url,
                 );
               }
+
               if (newUrlInfo != null && newUrlInfo['url'] != null) {
                 final refreshedUrl = newUrlInfo['url'] as String;
                 final refreshedAudioUrl = newUrlInfo['audioUrl'] as String?;
@@ -1659,11 +1747,14 @@ class DownloadProvider extends ChangeNotifier
             if (currentForMerge == null) return;
 
             await _setTask(currentForMerge.copyWith(
-                statusMessage: 'Merging video and audio...'));
+                statusMessage: DownloadStatusMessages.merging));
 
             // Re-derive the actual video file path from the CURRENT task state
             // (the engine may have auto-resolved a different filename)
-            final actualVideoPath = currentForMerge.localFilePath;
+            var actualVideoPath = currentForMerge.localFilePath;
+            if (!await File(actualVideoPath).exists() && await File(currentForMerge.tempFilePath).exists()) {
+              actualVideoPath = currentForMerge.tempFilePath;
+            }
             final actualAudioPath = audioTempPath!;
             final mergedPath = '$actualVideoPath.merged.mp4';
 
@@ -1900,7 +1991,6 @@ class DownloadProvider extends ChangeNotifier
           }
           _updateTelemetryWidget();
         });
-    _startingTaskIds.remove(task.id);
     _activeFutures[task.id] = downloadFuture;
   }
 
@@ -1908,8 +1998,18 @@ class DownloadProvider extends ChangeNotifier
     final index = _tasks.indexWhere((task) => task.id == updated.id);
     if (index == -1) return;
 
+    final prev = _tasks[index];
     _tasks[index] = updated;
-    filteredTasksDirty = true;
+    // Only invalidate the filter/sort cache when a "structural" field changes
+    // (status, category, name, URL, or fileSize). Progress-only updates (speed,
+    // downloadedBytes, chunks, eta) must NOT set filteredTasksDirty to true,
+    // otherwise the filtered list would be recomputed on every tick, wasting CPU
+    // and causing unnecessary widget rebuilds.
+    if (prev.status != updated.status || prev.category != updated.category ||
+        prev.fileName != updated.fileName || prev.url != updated.url ||
+        prev.fileSize != updated.fileSize) {
+      filteredTasksDirty = true;
+    }
 
     final previousSave = _dbSaveQueues[updated.id] ?? Future.value();
     final completer = Completer<void>();
@@ -1990,18 +2090,6 @@ class DownloadProvider extends ChangeNotifier
   }
 
   String _errorMessage(Object error) {
-    if (error is AgeRestrictedException) {
-      return 'This video is age-restricted. Please sign into YouTube in the browser tab first.';
-    }
-    if (error is PrivateVideoException) {
-      return 'This video is private.';
-    }
-    if (error is GeoBlockedException) {
-      return 'This video is not available in your country/region.';
-    }
-    if (error is YouTubeException) {
-      return error.message;
-    }
     if (error is DioException) {
       if (error.response?.statusCode != null) {
         final code = error.response!.statusCode;
@@ -2028,11 +2116,8 @@ class DownloadProvider extends ChangeNotifier
   }
 
   bool _isRetryableError(Object error) {
-    if (error is YouTubeException) {
-      return false;
-    }
     final msg = error.toString().toLowerCase();
-    if (msg.contains('merge') || msg.contains('ffmpeg')) {
+    if (msg.contains('merge') || msg.contains('ffmpeg') || msg.contains('missing') || msg.contains('not found')) {
       return false;
     }
     if (error is DioException) {
@@ -2139,7 +2224,7 @@ class DownloadProvider extends ChangeNotifier
           status: DownloadStatus.paused,
           speed: 0,
           clearEta: true,
-          errorMessage: 'Waiting for network connection...',
+          errorMessage: DownloadStatusMessages.waitingNetwork,
         ),
       );
     }
@@ -2186,7 +2271,7 @@ class DownloadProvider extends ChangeNotifier
           status: DownloadStatus.paused,
           speed: 0,
           clearEta: true,
-          errorMessage: 'Waiting for WiFi connection',
+          errorMessage: DownloadStatusMessages.waitingWifi,
         ),
       );
     }
@@ -2196,7 +2281,7 @@ class DownloadProvider extends ChangeNotifier
     final waiting = _tasks.where(
       (task) =>
           task.status == DownloadStatus.paused &&
-          task.errorMessage == 'Waiting for WiFi connection',
+          task.errorMessage == DownloadStatusMessages.waitingWifi,
     );
     for (final task in waiting.toList()) {
       await _setTask(
@@ -2320,7 +2405,19 @@ class DownloadProvider extends ChangeNotifier
     if (taskIndex == -1) return;
 
     var task = _tasks[taskIndex];
-    if (task.threadCount == threadCount) return;
+
+    final isYoutube = task.youtubeQualityPreset != null ||
+        (task.downloadPageUrl != null &&
+            (task.downloadPageUrl!.contains('youtube.com/') ||
+                task.downloadPageUrl!.contains('youtu.be/'))) ||
+        task.url.contains('.googlevideo.com/') ||
+        task.url.contains('youtube.com/') ||
+        task.url.contains('youtu.be/');
+
+    final targetThreadCount = isYoutube ? 1 : threadCount;
+    if (task.threadCount == targetThreadCount) return;
+
+
 
     var activeIdx = taskIndex;
     final wasDownloading = task.status == DownloadStatus.downloading;

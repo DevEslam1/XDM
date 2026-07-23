@@ -211,3 +211,9 @@ mixin DownloadBackupMixin {
     }
   }
 }
+
+// TODO: Add unit tests for DownloadBackupMixin
+//   - encryptBackup/decryptBackup: round-trip, wrong password, tampered data
+//   - exportBackupJson/importBackupJson: with/without password, replace mode
+//   - Legacy XDMCRYPT v1 format decryption
+//   - Constant-time comparison correctness
