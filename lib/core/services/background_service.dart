@@ -37,7 +37,7 @@ class BackgroundService {
   /// auto-stops itself. If no download progress is received within this
   /// window the service is considered stale and killed to save battery.
   /// Increased from 15s to 60s to avoid premature shutdown on slow networks.
-  static const _heartbeatTimeout = Duration(seconds: 60);
+  static const _heartbeatTimeout = Duration(minutes: 5);
 
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {

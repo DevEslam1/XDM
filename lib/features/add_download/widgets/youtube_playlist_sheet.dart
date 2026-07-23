@@ -32,22 +32,31 @@ class YoutubePlaylistSheet extends StatefulWidget {
   final String playlistUrl;
   const YoutubePlaylistSheet({super.key, required this.playlistUrl});
 
+  static bool _isShowing = false;
+
   /// Shows the sheet and returns the result, or null if dismissed.
   static Future<PlaylistDownloadResult?> show(
     BuildContext context,
     String playlistUrl,
-  ) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    runHaptic(settings);
-    return showModalBottomSheet<PlaylistDownloadResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (_) => YoutubePlaylistSheet(playlistUrl: playlistUrl),
-    );
+  ) async {
+    if (_isShowing) return null;
+    _isShowing = true;
+
+    try {
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      runHaptic(settings);
+      return await showModalBottomSheet<PlaylistDownloadResult>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        builder: (_) => YoutubePlaylistSheet(playlistUrl: playlistUrl),
+      );
+    } finally {
+      _isShowing = false;
+    }
   }
 
   @override
@@ -321,7 +330,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'YOUTUBE PLAYLIST',
+                                L10n.of(context, 'yt_playlist'),
                                 style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(
                                       color: accent,
@@ -352,22 +361,22 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
                   // Loading / Error / Content
                   if (_isLoading)
-                    const Expanded(
+                    Expanded(
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
+                            const SizedBox(
                               width: 28,
                               height: 28,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
                               ),
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             Text(
-                              'Loading playlist...',
-                              style: TextStyle(fontSize: 12),
+                              L10n.of(context, 'loading_playlist'),
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ],
                         ),
@@ -409,7 +418,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                   color: accent,
                                 ),
                                 label: Text(
-                                  'RETRY',
+                                  L10n.of(context, 'retry_btn'),
                                   style: TextStyle(
                                     color: accent,
                                     fontSize: 12,
@@ -471,8 +480,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             ),
                             label: Text(
                               _selectedCount == _filteredVideos.length && _filteredVideos.isNotEmpty
-                                  ? 'DESELECT ALL'
-                                  : 'SELECT ALL',
+                                  ? L10n.of(context, 'deselect_all')
+                                  : L10n.of(context, 'select_all'),
                               style: TextStyle(
                                 color: accent,
                                 fontSize: 10,
@@ -490,7 +499,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                       child: TextField(
                         onChanged: (val) => setState(() => _searchQuery = val),
                         decoration: InputDecoration(
-                          hintText: 'Search videos...',
+                          hintText: L10n.of(context, 'search_videos'),
                           hintStyle: TextStyle(color: mutedClr, fontSize: 13),
                           prefixIcon: Icon(Icons.search, size: 16, color: mutedClr),
                           suffixIcon: _searchQuery.isNotEmpty
@@ -606,6 +615,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                                 ? Image.network(
                                                     thumbnailUrl,
                                                     fit: BoxFit.cover,
+                                                    cacheWidth: 144,
+                                                    cacheHeight: 84,
                                                     errorBuilder: (context, error, stackTrace) => Container(
                                                       color:
                                                           (isDark
@@ -745,7 +756,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             Row(
                               children: [
                                 Text(
-                                  'QUALITY',
+                                  L10n.of(context, 'quality_label'),
                                   style: TextStyle(
                                     color: secClr,
                                     fontSize: 10,

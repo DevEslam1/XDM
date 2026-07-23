@@ -21,6 +21,8 @@ import '../provider/settings_provider.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../browser/services/ad_blocker.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/services/google_auth_service.dart';
+import '../../../core/services/youtube_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -411,6 +413,10 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                 children: [
                   // About / Branding header panel
                   _buildBrandingPanel(context, settings),
+                  const SizedBox(height: 20),
+
+                  // Google / YouTube Sign-In Panel
+                  _buildGoogleSignInPanel(context, settings),
                   const SizedBox(height: 20),
 
                   // 1. General Settings Group
@@ -2029,6 +2035,334 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildGoogleSignInPanel(
+    BuildContext context,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    return StreamBuilder<bool>(
+      stream: YoutubeService.onAuthStateChanged,
+      initialData: GoogleAuthService().isSignedIn || YoutubeService.isSignedIn,
+      builder: (context, snapshot) {
+        final isSignedIn =
+            GoogleAuthService().isSignedIn || YoutubeService.isSignedIn;
+        final authService = GoogleAuthService();
+
+        final displayName = authService.userName ??
+            (YoutubeService.isSignedIn
+                ? (isRtl ? 'حساب يوتيوب (المتصفح)' : 'YouTube Browser Account')
+                : (isRtl ? 'مستخدم' : 'User'));
+        final displayEmail = authService.userEmail ??
+            (YoutubeService.isSignedIn
+                ? (isRtl ? 'متصل عبر جلسة المتصفح' : 'Connected via Browser Session')
+                : '');
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: DmxBackdropFilter(
+            sigmaX: 10,
+            sigmaY: 10,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: AppTheme.glassDecoration(
+                borderRadius: 20,
+                tintColor: isSignedIn ? greenClr : blueClr,
+                tintOpacity: 0.04,
+                isDark: isDark,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Section header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: (isSignedIn ? greenClr : blueClr)
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          isSignedIn
+                              ? Icons.verified_user_rounded
+                              : Icons.login_rounded,
+                          color: isSignedIn ? greenClr : blueClr,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          isRtl
+                              ? 'تسجيل الدخول إلى يوتيوب'
+                              : 'YOUTUBE SIGN-IN',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelMedium
+                              ?.copyWith(
+                                color: isSignedIn ? greenClr : blueClr,
+                                fontSize: 11,
+                                letterSpacing: 1.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ),
+                      // Status badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (isSignedIn ? greenClr : redClr)
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (isSignedIn ? greenClr : redClr)
+                                .withValues(alpha: 0.3),
+                            width: 0.6,
+                          ),
+                        ),
+                        child: Text(
+                          isSignedIn
+                              ? (isRtl ? 'متصل' : 'CONNECTED')
+                              : (isRtl ? 'غير متصل' : 'NOT SIGNED IN'),
+                          style: TextStyle(
+                            color: isSignedIn ? greenClr : redClr,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (isSignedIn) ...[
+                    // User info card
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: (isDark
+                                ? AppTheme.background
+                                : AppTheme.lightBackground)
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark
+                              ? AppTheme.glassBorder
+                              : AppTheme.lightGlassBorder,
+                          width: 0.6,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          // Avatar
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor:
+                                blueClr.withValues(alpha: 0.1),
+                            backgroundImage:
+                                authService.userPhotoUrl != null
+                                    ? NetworkImage(
+                                        authService.userPhotoUrl!,
+                                      )
+                                    : null,
+                            child: authService.userPhotoUrl == null
+                                ? Icon(
+                                    Icons.person,
+                                    color: blueClr,
+                                    size: 20,
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  displayName,
+                                  style: TextStyle(
+                                    color: textClr,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (displayEmail.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    displayEmail,
+                                    style: TextStyle(
+                                      color: mutedClr,
+                                      fontSize: 11,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Sign out button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          triggerHaptic(settings);
+                          await GoogleAuthService().signOut();
+                          if (context.mounted) {
+                            ThemedSnackbar.show(
+                              context,
+                              message: isRtl
+                                  ? 'تم تسجيل الخروج من يوتيوب'
+                                  : 'Signed out from YouTube',
+                              color: redClr,
+                              icon: Icons.logout_rounded,
+                              isDarkMode: isDark,
+                            );
+                          }
+                        },
+                        icon: Icon(Icons.logout_rounded,
+                            size: 16, color: redClr),
+                        label: Text(
+                          isRtl ? 'تسجيل الخروج' : 'SIGN OUT',
+                          style: TextStyle(
+                            color: redClr,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                              color: redClr.withValues(alpha: 0.3)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    // Description
+                    Text(
+                      isRtl
+                          ? 'سجّل الدخول بحساب Google للوصول إلى الفيديوهات المقيدة بالعمر والجودات العالية.'
+                          : 'Sign in with your Google account to access age-restricted videos and higher quality streams.',
+                      style: TextStyle(
+                        color: secClr,
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    // Google Sign-In button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          triggerHaptic(settings);
+                          var success =
+                              await GoogleAuthService().signIn();
+                          if (!success) {
+                            await YoutubeService.authenticateFromBrowser();
+                            if (YoutubeService.isSignedIn) {
+                              success = true;
+                            }
+                          }
+                          if (context.mounted) {
+                            if (success) {
+                              ThemedSnackbar.show(
+                                context,
+                                message: isRtl
+                                    ? 'تم تسجيل الدخول إلى يوتيوب بنجاح!'
+                                    : 'YouTube sign-in successful!',
+                                color: greenClr,
+                                icon: Icons.check_circle_outline,
+                                isDarkMode: isDark,
+                              );
+                            } else {
+                              ThemedSnackbar.show(
+                                context,
+                                message: isRtl
+                                    ? 'فشل تسجيل الدخول. أضف SHA-1 في Google Cloud Console أو سجل الدخول من متصفح التطبيق.'
+                                    : 'Sign-in failed (ApiException 10). Add SHA-1 in Google Cloud Console or sign in via Browser.',
+                                color: redClr,
+                                icon: Icons.error_outline,
+                                isDarkMode: isDark,
+                              );
+                            }
+                          }
+                        },
+                        icon: FaIcon(
+                          FontAwesomeIcons.google,
+                          size: 16,
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                        ),
+                        label: Text(
+                          isRtl
+                              ? 'تسجيل الدخول بواسطة Google'
+                              : 'SIGN IN WITH GOOGLE',
+                          style: TextStyle(
+                            color: isDark
+                                ? AppTheme.textPrimary
+                                : AppTheme.lightTextPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isDark
+                              ? const Color(0xFF2A2A3A)
+                              : Colors.white,
+                          elevation: 0,
+                          side: BorderSide(
+                            color: isDark
+                                ? AppTheme.glassBorder
+                                : AppTheme.lightGlassBorder,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

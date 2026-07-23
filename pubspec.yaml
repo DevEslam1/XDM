@@ -51,6 +51,8 @@ dependencies:
   disk_space_2: ^1.0.12
   wakelock_plus: ^1.2.10
   uuid: ^4.6.0
+  google_sign_in: ^6.2.2
+  googleapis_auth: ^1.6.0
 
 dependency_overrides:
   webview_cookie_manager:

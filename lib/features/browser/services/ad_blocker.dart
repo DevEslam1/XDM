@@ -114,10 +114,16 @@ class AdBlocker {
   ];
 
   static bool _initializing = false;
+  static Future<void>? _initFuture;
 
   /// Asynchronously loads local hosts from cache file or triggers background download
-  static Future<void> initialize() async {
-    if (_initialized || _initializing) return;
+  static Future<void> initialize() {
+    _initFuture ??= _initializeInternal();
+    return _initFuture!;
+  }
+
+  static Future<void> _initializeInternal() async {
+    if (_initialized) return;
     _initializing = true;
     _invalidateCache();
 
@@ -132,14 +138,13 @@ class AdBlocker {
         _blockedDomains.addAll(domains);
         debugPrint('AdBlocker loaded ${domains.length} custom domains from local cache.');
       } else {
-        // Trigger non-blocking background download
+        // Trigger background download
         updateHosts();
       }
       _initialized = true;
     } catch (e) {
       debugPrint('AdBlocker initialization error: $e');
     } finally {
-      // Issue 6 Fix: Always clear _initializing flag in finally block
       _initializing = false;
     }
   }
@@ -258,7 +263,7 @@ class AdBlocker {
   /// NOTE: [initialize] should be awaited before calling this. If not yet
   /// initialized, the check is skipped rather than mutating state.
   static bool shouldBlock(String url) {
-    if (!_initialized) {
+    if (!_initialized && !_initializing) {
       if (_blockedDomains.isEmpty) {
         _blockedDomains.addAll(_fallbackDomains);
       }

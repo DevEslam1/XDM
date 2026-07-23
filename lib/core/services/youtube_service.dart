@@ -10,6 +10,9 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart' as io_client;
 
+import 'youtube/innertube_stream_client.dart';
+import 'youtube/youtube_exceptions.dart';
+
 class YoutubeService {
   static String? _apiKey;
   static String? _cachedPlaylistId;
@@ -23,7 +26,8 @@ class YoutubeService {
   }
 
   static String? get effectiveApiKey {
-    if (_innerTubeApiKeyOverride != null && _innerTubeApiKeyOverride!.isNotEmpty) {
+    if (_innerTubeApiKeyOverride != null &&
+        _innerTubeApiKeyOverride!.isNotEmpty) {
       return _innerTubeApiKeyOverride;
     }
     if (_apiKey != null && _apiKey!.isNotEmpty) {
@@ -40,7 +44,23 @@ class YoutubeService {
 
   static YoutubeExplode _yt = YoutubeExplode();
 
-  static String innerTubeClientVersion = '2.20240327.01.00';
+  static String? _cookies;
+  static String? _oauthToken;
+
+  /// Layer 1: Pure-HTTP InnerTube client (primary stream engine).
+  static InnerTubeStreamClient? _innerTube;
+  static InnerTubeStreamClient get innerTube {
+    _innerTube ??= InnerTubeStreamClient();
+    if (_cookies != null) {
+      _innerTube!.setCookies(_cookies!);
+    }
+    if (_oauthToken != null) {
+      _innerTube!.setOAuthToken(_oauthToken!);
+    }
+    return _innerTube!;
+  }
+
+  static String innerTubeClientVersion = '2.20260708.00.00';
 
   static Future<void>? _fetchMutex;
   static Future<T> _synchronized<T>(Future<T> Function() action) async {
@@ -61,13 +81,20 @@ class YoutubeService {
     }
   }
 
-  static String? _cookies;
-
   static YoutubeExplode _createYt() {
     if (_cookies == null) return YoutubeExplode();
     final cookieClient = _CookieClient(_cookies!);
     final client = YoutubeHttpClient(cookieClient);
     return YoutubeExplode(httpClient: client);
+  }
+
+  static final _authStateController = StreamController<bool>.broadcast();
+
+  /// Stream that emits `true` when signed in via OAuth or Browser cookies, `false` when signed out.
+  static Stream<bool> get onAuthStateChanged => _authStateController.stream;
+
+  static void _notifyAuthState() {
+    _authStateController.add(isSignedIn);
   }
 
   /// Recreates the underlying [YoutubeExplode] with the given cookie string.
@@ -80,16 +107,63 @@ class YoutubeService {
       _yt.close();
       _cookies = cookieString;
       _yt = _createYt();
+      innerTube.setCookies(cookieString);
+      _notifyAuthState();
     });
   }
 
-  /// Clears any stored cookies and resets to the default unauthenticated client.
+  /// Signs in using an OAuth access token from Google Sign-In.
+  /// This authenticates InnerTube requests via `Authorization: Bearer`.
+  static Future<void> signInWithOAuth(String accessToken) async {
+    await _synchronized(() async {
+      _oauthToken = accessToken;
+      innerTube.setOAuthToken(accessToken);
+      debugPrint('[YoutubeService] OAuth token set for InnerTube');
+      _notifyAuthState();
+    });
+  }
+
+  /// Clears the OAuth token (called on Google sign-out).
+  static Future<void> clearOAuth() async {
+    await _synchronized(() async {
+      _oauthToken = null;
+      innerTube.setOAuthToken(null);
+      _notifyAuthState();
+    });
+  }
+
+  /// Whether the service has an OAuth token set.
+  static bool get hasOAuth => _oauthToken != null && _oauthToken!.isNotEmpty;
+
+  /// Signs out from all authentication methods (OAuth + cookies).
   static Future<void> signOut() async {
     await _synchronized(() async {
       _yt.close();
       _cookies = null;
+      _oauthToken = null;
       _yt = _createYt();
+      innerTube.setCookies(null);
+      innerTube.setOAuthToken(null);
+      try {
+        await WebviewCookieManager().clearCookies();
+      } catch (_) {}
+      _notifyAuthState();
     });
+  }
+
+  /// Refreshes the OAuth token. Call this before stream fetches
+  /// if the token might have expired (tokens last ~1 hour).
+  static Future<void> refreshOAuthToken(String newToken) async {
+    await _synchronized(() async {
+      _oauthToken = newToken;
+      innerTube.setOAuthToken(newToken);
+      _notifyAuthState();
+    });
+  }
+
+  static void _resetClientInternal() {
+    _yt.close();
+    _yt = _createYt();
   }
 
   /// Recreates the [YoutubeExplode] instance, busting any internal manifest
@@ -98,13 +172,14 @@ class YoutubeService {
   /// cached (and still-expired) response.
   static Future<void> resetClient() async {
     await _synchronized(() async {
-      _yt.close();
-      _yt = _createYt();
+      _resetClientInternal();
     });
   }
 
-  /// Whether the service currently has authentication cookies set.
-  static bool get isSignedIn => _cookies != null;
+  /// Whether the service currently has authentication cookies or OAuth set.
+  static bool get isSignedIn =>
+      (_cookies != null && _cookies!.isNotEmpty) ||
+      (_oauthToken != null && _oauthToken!.isNotEmpty);
 
   /// Extracts cookies directly from the native WebView cookie jar
   /// using `webview_cookie_manager` and signs into YouTube. This handles
@@ -112,10 +187,41 @@ class YoutubeService {
   static Future<void> authenticateFromBrowser() async {
     try {
       final cookieManager = WebviewCookieManager();
-      final cookies = await cookieManager.getCookies('https://youtube.com');
-      final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
-      if (cookieStr.isNotEmpty) {
+
+      // Collect cookies from ALL relevant Google/YouTube domains
+      final allCookies = <String, String>{}; // name → value (dedup)
+
+      for (final domain in [
+        'https://www.youtube.com',
+        'https://youtube.com',
+        'https://accounts.google.com',
+        'https://www.google.com',
+        'https://google.com',
+      ]) {
+        try {
+          final cookies = await cookieManager.getCookies(domain);
+          for (final c in cookies) {
+            // Keep the first occurrence; prefer youtube.com cookies
+            allCookies.putIfAbsent(c.name, () => c.value);
+          }
+        } catch (_) {}
+      }
+
+      if (allCookies.isEmpty) return;
+
+      final cookieStr =
+          allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+
+      // Only sign in if we have at least one critical auth cookie
+      final hasAuthCookie = allCookies.containsKey('__Secure-3PSID') ||
+          allCookies.containsKey('SID') ||
+          allCookies.containsKey('SAPISID');
+
+      if (hasAuthCookie && cookieStr.isNotEmpty) {
         await signIn(cookieStr);
+        debugPrint(
+            '[YoutubeService] Authenticated with ${allCookies.length} cookies '
+            '(hasAuth=$hasAuthCookie)');
       }
     } catch (e) {
       debugPrint('Failed to authenticate YouTube from browser cookies: $e');
@@ -235,6 +341,8 @@ class YoutubeService {
   /// is no longer needed to prevent the Dart process from hanging.
   static void close() {
     _yt.close();
+    _innerTube?.close();
+    _innerTube = null;
     _InnerTubeFallback.close();
   }
 
@@ -286,12 +394,11 @@ class YoutubeService {
               errStr.contains('503') ||
               errStr.contains('rate limit') ||
               errStr.contains('too many requests') ||
-              errStr.contains('httpstatuscodeexception') ||
-              errStr.contains('youtubeexplodeexception');
+              errStr.contains('httpstatuscodeexception');
           if (isRetryable) {
             // Reset client on auth/expiration errors
             if (errStr.contains('403') || errStr.contains('410')) {
-              resetClient();
+              _resetClientInternal();
             }
             await Future.delayed(Duration(seconds: 2 + attempt));
             continue;
@@ -313,9 +420,6 @@ class YoutubeService {
       [YoutubeApiClient.android],
       null, // default
       [YoutubeApiClient.ios],
-      [YoutubeApiClient.safari],
-      [YoutubeApiClient.tv],
-      [YoutubeApiClient.mweb],
     ];
 
     for (final clients in clientsToTry) {
@@ -404,6 +508,22 @@ class YoutubeService {
     final videoId = extractVideoId(downloadPageUrl);
     if (videoId == null) return null;
 
+    // ─── Layer 1: InnerTube refresh (fast, no library overhead) ───
+    try {
+      final freshStream = await innerTube.refreshStream(
+        videoId,
+        oldUrl: oldStreamUrl,
+      );
+      if (freshStream != null) {
+        return {'url': freshStream.url, 'size': freshStream.size};
+      }
+    } catch (e) {
+      Logger.root.warning(
+        'YoutubeService.refreshStreamUrl: InnerTube Layer 1 failed: $e',
+      );
+    }
+
+    // ─── Layer 2: youtube_explode_dart fallback ───
     try {
       final result = await _fetchWithFallback(videoId);
       final manifest = result.manifest;
@@ -446,7 +566,8 @@ class YoutubeService {
       // stale / cached. Treat this as a failed refresh so the caller can
       // stale / cached. Treat this as a failed refresh so the caller can
       // escalate to getFreshStreams (which recreates the client).
-      if (candidate != null && _isUrlStale(candidate['url'] as String, oldStreamUrl)) {
+      if (candidate != null &&
+          _isUrlStale(candidate['url'] as String, oldStreamUrl)) {
         Logger.root.warning(
           'refreshStreamUrl: new URL is identical to old URL — manifest is stale. Returning null.',
         );
@@ -474,9 +595,7 @@ class YoutubeService {
     if (ua == null || ub == null) return a == b;
 
     // Compare structural parts of the URL.
-    if (ua.scheme != ub.scheme ||
-        ua.host != ub.host ||
-        ua.path != ub.path) {
+    if (ua.scheme != ub.scheme || ua.host != ub.host || ua.path != ub.path) {
       return false; // Not structurally the same, so not stale version of same url
     }
 
@@ -513,6 +632,42 @@ class YoutubeService {
     final videoId = extractVideoId(downloadPageUrl);
     if (videoId == null) return null;
 
+    // ─── Layer 1: InnerTube (fresh fetch, bypasses cache) ───
+    try {
+      final streams = await innerTube.getStreams(videoId);
+      if (streams != null && streams.isNotEmpty) {
+        // Prefer combined (video + audio)
+        final combined = streams.where((s) => s.type == 'combined');
+        if (combined.isNotEmpty) {
+          final best = combined.reduce((a, b) => a.size > b.size ? a : b);
+          return {'url': best.url, 'audioUrl': best.audioUrl};
+        }
+        // Prefer muxed
+        final muxed = streams.where((s) => s.type == 'muxed');
+        if (muxed.isNotEmpty) {
+          return {'url': muxed.first.url, 'audioUrl': null};
+        }
+        // Video-only + audio-only
+        final videoOnly = streams.where((s) => s.type == 'video_only');
+        final audioOnly = streams.where((s) => s.type == 'audio');
+        if (videoOnly.isNotEmpty && audioOnly.isNotEmpty) {
+          final bestAudio = audioOnly.reduce((a, b) => a.size > b.size ? a : b);
+          return {'url': videoOnly.first.url, 'audioUrl': bestAudio.url};
+        }
+        if (videoOnly.isNotEmpty) {
+          return {'url': videoOnly.first.url, 'audioUrl': null};
+        }
+        if (audioOnly.isNotEmpty) {
+          return {'url': audioOnly.first.url, 'audioUrl': null};
+        }
+      }
+    } catch (e) {
+      Logger.root.warning(
+        'YoutubeService.getFreshStreams: InnerTube Layer 1 failed: $e',
+      );
+    }
+
+    // ─── Layer 2: youtube_explode_dart fallback ───
     try {
       final result = await _fetchWithFallback(videoId);
       final manifest = result.manifest;
@@ -525,7 +680,10 @@ class YoutubeService {
       // Combined: best video-only + best audio
       if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
         final sorted = manifest.audioOnly.toList()
-          ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+          ..sort(
+            (a, b) =>
+                b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
+          );
         return {
           'url': manifest.videoOnly.first.url.toString(),
           'audioUrl': sorted.first.url.toString(),
@@ -534,12 +692,18 @@ class YoutubeService {
 
       // Video-only (no audio available — rare)
       if (manifest.videoOnly.isNotEmpty) {
-        return {'url': manifest.videoOnly.first.url.toString(), 'audioUrl': null};
+        return {
+          'url': manifest.videoOnly.first.url.toString(),
+          'audioUrl': null,
+        };
       }
 
       // Audio-only
       if (manifest.audioOnly.isNotEmpty) {
-        return {'url': manifest.audioOnly.first.url.toString(), 'audioUrl': null};
+        return {
+          'url': manifest.audioOnly.first.url.toString(),
+          'audioUrl': null,
+        };
       }
     } catch (e) {
       Logger.root.severe('Failed to get fresh YouTube streams: $e');
@@ -579,79 +743,120 @@ class YoutubeService {
     final videoId = extractVideoId(url);
     if (videoId == null) return [];
 
-    final result = await _fetchWithFallback(videoId);
-    final manifest = result.manifest;
-    final title = result.title;
-    final list = <Map<String, dynamic>>[];
-
-    // Muxed streams contain both video and audio
-    for (final stream in manifest.muxed) {
-      final qLabel = _formatQuality(stream.videoQuality);
-      list.add({
-        'src': stream.url.toString(),
-        'label': 'Video: $qLabel (Muxed)',
-        'size': stream.size.totalBytes,
-        'ext': stream.container.name,
-        'title': title,
-        'quality': qLabel,
-        'type': 'muxed',
-      });
+    // ─── Layer 1: InnerTube (pure HTTP, primary engine) ───
+    YouTubeException? layer1Error;
+    List<Map<String, dynamic>>? layer1Streams;
+    try {
+      final innerTubeStreams = await innerTube.getStreams(videoId);
+      if (innerTubeStreams != null && innerTubeStreams.isNotEmpty) {
+        layer1Streams = innerTubeStreams.map((s) => s.toMap()).toList();
+        final hasHighQuality = innerTubeStreams.any((s) {
+          final h = s.height ?? 0;
+          return h >= 1080;
+        });
+        if (hasHighQuality) {
+          return layer1Streams;
+        }
+      }
+    } on YouTubeException catch (e) {
+      // Save error but still try Layer 2 — library might handle it
+      layer1Error = e;
+      Logger.root.warning(
+        'YoutubeService.getStreams: InnerTube Layer 1 error: ${e.message}',
+      );
+    } catch (e) {
+      Logger.root.warning(
+        'YoutubeService.getStreams: InnerTube Layer 1 failed: $e',
+      );
     }
 
-    // Audio only streams
-    for (final stream in manifest.audioOnly) {
-      final kbps = stream.bitrate.kiloBitsPerSecond.round();
-      list.add({
-        'src': stream.url.toString(),
-        'label': 'Audio Only: ($kbps Kbps)',
-        'size': stream.size.totalBytes,
-        'ext': stream.container.name,
-        'title': title,
-        'quality': '${kbps}kbps',
-        'type': 'audio',
-      });
-    }
+    // ─── Layer 2: youtube_explode_dart (library fallback) ───
+    try {
+      final result = await _fetchWithFallback(videoId);
+      final manifest = result.manifest;
+      final title = result.title;
+      final list = <Map<String, dynamic>>[];
 
-    // Video only streams
-    for (final stream in manifest.videoOnly) {
-      final qLabel = _formatQuality(stream.videoQuality);
-      list.add({
-        'src': stream.url.toString(),
-        'label': 'Video Only: ($qLabel)',
-        'size': stream.size.totalBytes,
-        'ext': stream.container.name,
-        'title': title,
-        'quality': qLabel,
-        'type': 'video_only',
-      });
-    }
+      // Muxed streams contain both video and audio
+      for (final stream in manifest.muxed) {
+        final qLabel = _formatQuality(stream.videoQuality);
+        list.add({
+          'src': stream.url.toString(),
+          'label': 'Video: $qLabel (Muxed)',
+          'size': stream.size.totalBytes,
+          'ext': stream.container.name,
+          'title': title,
+          'quality': qLabel,
+          'type': 'muxed',
+        });
+      }
 
-    // Combined streams (video-only + best audio-only) for higher qualities
-    if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
-      final sortedAudio = manifest.audioOnly.toList()
-        ..sort(
-          (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
-        );
-      final bestAudio = sortedAudio.first;
+      // Audio only streams
+      for (final stream in manifest.audioOnly) {
+        final kbps = stream.bitrate.kiloBitsPerSecond.round();
+        list.add({
+          'src': stream.url.toString(),
+          'label': 'Audio Only: ($kbps Kbps)',
+          'size': stream.size.totalBytes,
+          'ext': stream.container.name,
+          'title': title,
+          'quality': '${kbps}kbps',
+          'type': 'audio',
+        });
+      }
+
+      // Video only streams
       for (final stream in manifest.videoOnly) {
         final qLabel = _formatQuality(stream.videoQuality);
         list.add({
           'src': stream.url.toString(),
-          'audioSrc': bestAudio.url.toString(),
-          'label': 'Video: $qLabel + Audio (Best)',
-          'size': stream.size.totalBytes + bestAudio.size.totalBytes,
+          'label': 'Video Only: ($qLabel)',
+          'size': stream.size.totalBytes,
           'ext': stream.container.name,
           'title': title,
           'quality': qLabel,
-          'type': 'combined',
-          'videoSize': stream.size.totalBytes,
-          'audioSize': bestAudio.size.totalBytes,
-          'audioExt': bestAudio.container.name,
+          'type': 'video_only',
         });
       }
-    }
 
-    return list;
+      // Combined streams (video-only + best audio-only) for higher qualities
+      if (manifest.videoOnly.isNotEmpty && manifest.audioOnly.isNotEmpty) {
+        final sortedAudio = manifest.audioOnly.toList()
+          ..sort(
+            (a, b) =>
+                b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond),
+          );
+        final bestAudio = sortedAudio.first;
+        for (final stream in manifest.videoOnly) {
+          final qLabel = _formatQuality(stream.videoQuality);
+          list.add({
+            'src': stream.url.toString(),
+            'audioSrc': bestAudio.url.toString(),
+            'label': 'Video: $qLabel + Audio (Best)',
+            'size': stream.size.totalBytes + bestAudio.size.totalBytes,
+            'ext': stream.container.name,
+            'title': title,
+            'quality': qLabel,
+            'type': 'combined',
+            'videoSize': stream.size.totalBytes,
+            'audioSize': bestAudio.size.totalBytes,
+            'audioExt': bestAudio.container.name,
+          });
+        }
+      }
+
+      return list;
+    } catch (layer2Error) {
+      if (layer1Streams != null && layer1Streams.isNotEmpty) {
+        Logger.root.info(
+          'YoutubeService.getStreams: Layer 2 failed, falling back to Layer 1 streams.',
+        );
+        return layer1Streams;
+      }
+      // Layer 2 also failed — throw Layer 1 error if we have one (better message)
+      if (layer1Error != null) throw layer1Error;
+      rethrow;
+    }
   }
 
   // ───────────────────── Playlist Info ───────────────────────────────
@@ -672,7 +877,23 @@ class YoutubeService {
       return _cachedPlaylistDetails;
     }
 
-    // Try InnerTube fallback first (more reliable, faster, and consolidated)
+    // Layer 1: InnerTube unified client (multi-client fallback)
+    try {
+      final playlist = await innerTube.getPlaylist(playlistId);
+      if (playlist != null && playlist.videos.isNotEmpty) {
+        final details = playlist.toDetailsMap();
+        _cachedPlaylistId = playlistId;
+        _cachedPlaylistDetails = details;
+        _cacheTimestamp = now;
+        return details;
+      }
+    } catch (e) {
+      Logger.root.warning(
+        'YoutubeService.getPlaylistDetails InnerTube failed: $e',
+      );
+    }
+
+    // Layer 2: Legacy InnerTube fallback (WEB-only, parses both formats)
     try {
       final details = await _InnerTubeFallback.getPlaylistDetails(playlistId);
       if (details != null && (details['videos'] as List).isNotEmpty) {
@@ -687,7 +908,7 @@ class YoutubeService {
       );
     }
 
-    // Library fallback (last resort backup)
+    // Layer 3: youtube_explode_dart library (last resort)
     try {
       final playlist = await _yt.playlists
           .get(playlistId)
@@ -720,7 +941,7 @@ class YoutubeService {
           },
           'videos': videos,
         };
-        
+
         _cachedPlaylistId = playlistId;
         _cachedPlaylistDetails = details;
         _cacheTimestamp = now;
@@ -759,7 +980,7 @@ class YoutubeService {
   }
 
   /// Fetches the best stream URL for a given video ID and quality preference.
-  /// [qualityPreset] can be: 'best_combined', 'best_muxed', '1080p', '720p', '480p', '360p', 'audio_only'.
+  /// [qualityPreset] can be: 'best_combined', 'best_muxed', '2160p', '1440p', '1080p', '720p', '480p', '360p', 'audio_only'.
   static Future<Map<String, dynamic>?> getStreamForVideo(
     String videoId,
     String qualityPreset, {
@@ -819,7 +1040,8 @@ class YoutubeService {
 
     if (targetHeight > 0) {
       final exactMuxed = muxed.firstWhere(
-        (s) => parseQualityHeight(s['quality'] as String? ?? '') == targetHeight,
+        (s) =>
+            parseQualityHeight(s['quality'] as String? ?? '') == targetHeight,
         orElse: () => <String, dynamic>{},
       );
       if (exactMuxed.isNotEmpty) return exactMuxed;
@@ -839,7 +1061,42 @@ class YoutubeService {
       if (bestMuxed != null) return bestMuxed;
     }
 
-    final videoOnly = allStreams.where((s) => s['type'] == 'video_only').toList();
+    // If no combined/muxed match found, try building one from video_only + audio
+    final videoOnly = allStreams
+        .where((s) => s['type'] == 'video_only')
+        .toList();
+    final audioOnly = allStreams
+        .where((s) => s['type'] == 'audio')
+        .toList();
+
+    if (videoOnly.isNotEmpty && audioOnly.isNotEmpty && !forceMuxed) {
+      // Sort video by quality descending
+      videoOnly.sort((a, b) {
+        final hA = parseQualityHeight(a['quality'] as String? ?? '');
+        final hB = parseQualityHeight(b['quality'] as String? ?? '');
+        return hB.compareTo(hA);
+      });
+      // Sort audio by size descending (best quality)
+      audioOnly.sort((a, b) =>
+          (b['size'] as int).compareTo(a['size'] as int));
+
+      final bestVideo = videoOnly.first;
+      final bestAudio = audioOnly.first;
+
+      return {
+        'src': bestVideo['src'],
+        'audioSrc': bestAudio['src'],
+        'label': '${bestVideo['quality']} + Best Audio',
+        'size': (bestVideo['size'] as int) + (bestAudio['size'] as int),
+        'videoSize': bestVideo['size'],
+        'audioSize': bestAudio['size'],
+        'ext': 'mp4',
+        'title': bestVideo['title'] ?? 'YouTube Video',
+        'quality': bestVideo['quality'],
+        'type': 'combined',
+      };
+    }
+
     if (videoOnly.isNotEmpty && !forceMuxed) {
       return findBestMatch(videoOnly);
     }
@@ -989,7 +1246,9 @@ class _CookieClient extends http.BaseClient {
       RegExp(r'([?&](?:s|sp|signature|expire)=[^&]+)'),
       (m) => '=***REDACTED***',
     );
-    debugPrint('[YoutubeService] Outgoing request to $urlStr with headers: $redactedHeaders');
+    debugPrint(
+      '[YoutubeService] Outgoing request to $urlStr with headers: $redactedHeaders',
+    );
     return _inner.send(request);
   }
 
@@ -1006,6 +1265,7 @@ String? _innerTubeApiKeyOverride;
 /// YouTube rotates the key without a full app release.
 void updateInnerTubeApiKey(String key) {
   _innerTubeApiKeyOverride = key;
+  InnerTubeStreamClient.apiKeyOverride = key;
 }
 
 /// Direct InnerTube API fallback for when youtube_explode_dart's parsing
@@ -1016,7 +1276,9 @@ void updateInnerTubeApiKey(String key) {
 /// This fallback parses both formats.
 class _InnerTubeFallback {
   static String? get _browseUrl {
-    final key = YoutubeService.effectiveApiKey ?? 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+    final key =
+        YoutubeService.effectiveApiKey ??
+        'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
     if (key.isEmpty) return null;
     return 'https://www.youtube.com/youtubei/v1/browse?key=$key';
   }

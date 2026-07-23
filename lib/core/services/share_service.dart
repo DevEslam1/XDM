@@ -56,7 +56,6 @@ class ShareService {
     _intentSub?.cancel();
     _intentSub = null;
     _initialized = false;
-    _initialMediaConsumed = false; // Issue 3 Fix: reset on dispose so shared URLs aren't lost after re-init
     _lastReceivedUrl = null;
   }
 

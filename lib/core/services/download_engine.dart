@@ -712,7 +712,7 @@ class DownloadEngine {
     bool isCancelledEarly = false;
 
     Timer? isolateWatchdog;
-    isolateWatchdog = Timer(const Duration(seconds: 5), () {
+    isolateWatchdog = Timer(const Duration(seconds: 30), () {
       if (cancelToken.isCancelled && isolateCommandPort == null) {
         isolate.kill(priority: Isolate.immediate);
         if (!completer.isCompleted) {

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/services/google_auth_service.dart';
+import '../../../core/services/youtube/youtube_exceptions.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -17,22 +19,31 @@ class YoutubeQualitySheet extends StatefulWidget {
   final String videoUrl;
   const YoutubeQualitySheet({super.key, required this.videoUrl});
 
+  static bool _isShowing = false;
+
   /// Shows the sheet and returns the chosen stream map, or null if dismissed.
   static Future<Map<String, dynamic>?> show(
     BuildContext context,
     String videoUrl,
-  ) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    runHaptic(settings);
-    return showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (_) => YoutubeQualitySheet(videoUrl: videoUrl),
-    );
+  ) async {
+    if (_isShowing) return null;
+    _isShowing = true;
+
+    try {
+      final settings = Provider.of<SettingsProvider>(context, listen: false);
+      runHaptic(settings);
+      return await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        builder: (_) => YoutubeQualitySheet(videoUrl: videoUrl),
+      );
+    } finally {
+      _isShowing = false;
+    }
   }
 
   @override
@@ -59,14 +70,38 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
         _streams = streams;
         _isLoading = false;
         if (streams.isEmpty) {
-          _errorMessage = 'No streams found for this video.';
+          _errorMessage = L10n.isRtl(context)
+              ? 'لم يتم العثور على بث لهذا الفيديو.'
+              : 'No streams found for this video.';
         }
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to fetch streams: $e';
+        if (e is AgeRestrictedException) {
+          _errorMessage = L10n.isRtl(context)
+              ? 'هذا الفيديو مقيد بالفئة العمرية. سجّل الدخول إلى يوتيوب من الإعدادات أولاً.'
+              : 'This video is age-restricted. Sign in to YouTube from Settings first.';
+        } else if (e is LoginRequiredException) {
+          _errorMessage = L10n.isRtl(context)
+              ? 'يتطلب يوتيوب تسجيل الدخول. سجّل الدخول بحساب Google من الإعدادات.'
+              : 'YouTube requires sign-in. Sign in with Google from Settings.';
+        } else if (e is GeoBlockedException) {
+          _errorMessage = L10n.isRtl(context)
+              ? 'هذا الفيديو غير متاح في بلدك/منطقتك.'
+              : 'This video is not available in your country/region.';
+        } else if (e is PrivateVideoException) {
+          _errorMessage = L10n.isRtl(context)
+              ? 'هذا الفيديو خاص.'
+              : 'This video is private.';
+        } else if (e is YouTubeException) {
+          _errorMessage = e.message;
+        } else {
+          _errorMessage = L10n.isRtl(context)
+              ? 'فشل جلب البث: $e'
+              : 'Failed to fetch streams: $e';
+        }
       });
     }
   }
@@ -206,7 +241,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'YOUTUBE VIDEO QUALITY',
+                                L10n.of(context, 'yt_video_quality'),
                                 style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(
                                       color: accent,
@@ -265,7 +300,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                               ),
                               alignment: Alignment.center,
                               child: Text(
-                                'VIDEO',
+                                L10n.of(context, 'video_label'),
                                 style: TextStyle(
                                   color: _selectedTabIndex == 0
                                       ? accent
@@ -304,7 +339,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                               ),
                               alignment: Alignment.center,
                               child: Text(
-                                'AUDIO',
+                                L10n.of(context, 'audio_label'),
                                 style: TextStyle(
                                   color: _selectedTabIndex == 1
                                       ? (isDark
@@ -327,22 +362,22 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
 
                   // Content
                   if (_isLoading)
-                    const Expanded(
+                    Expanded(
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
+                            const SizedBox(
                               width: 28,
                               height: 28,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
                               ),
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             Text(
-                              'Fetching available streams...',
-                              style: TextStyle(fontSize: 12),
+                              L10n.of(context, 'fetching_streams'),
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ],
                         ),
@@ -370,6 +405,55 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                                 style: TextStyle(color: secClr, fontSize: 12),
                               ),
                               const SizedBox(height: 20),
+
+                              // Google Sign-In button when auth error
+                              if (_errorMessage!.contains('age-restricted') ||
+                                  _errorMessage!.contains('sign-in') ||
+                                  _errorMessage!.contains('Sign in') ||
+                                  _errorMessage!.contains('تسجيل الدخول')) ...[
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    var success =
+                                        await GoogleAuthService().signIn();
+                                    if (!success) {
+                                      await YoutubeService.authenticateFromBrowser();
+                                      if (YoutubeService.isSignedIn) {
+                                        success = true;
+                                      }
+                                    }
+                                    if (success && mounted) {
+                                      setState(() {
+                                        _isLoading = true;
+                                        _errorMessage = null;
+                                        _streams = [];
+                                      });
+                                      _fetchStreams(); // Retry with auth
+                                    }
+                                  },
+                                  icon: const Icon(Icons.login_rounded,
+                                      size: 16),
+                                  label: Text(
+                                    L10n.isRtl(context)
+                                        ? 'تسجيل الدخول بحساب Google'
+                                        : 'SIGN IN WITH GOOGLE',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        accent.withValues(alpha: 0.1),
+                                    foregroundColor: accent,
+                                    side: BorderSide(color: accent),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+
                               TextButton.icon(
                                 onPressed: () {
                                   setState(() {
@@ -385,7 +469,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                                   color: accent,
                                 ),
                                 label: Text(
-                                  'RETRY',
+                                  L10n.of(context, 'retry_btn'),
                                   style: TextStyle(
                                     color: accent,
                                     fontSize: 12,
@@ -409,7 +493,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             if (combined.isNotEmpty) ...[
                               _sectionHeader(
                                 context,
-                                'VIDEO',
+                                L10n.of(context, 'video_label'),
                                 Icons.video_file_outlined,
                                 isDark
                                     ? AppTheme.neonBlue
@@ -454,7 +538,7 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                             if (audio.isNotEmpty) ...[
                               _sectionHeader(
                                 context,
-                                'AUDIO',
+                                L10n.of(context, 'audio_label'),
                                 Icons.audiotrack_outlined,
                                 isDark
                                     ? AppTheme.neonGreen

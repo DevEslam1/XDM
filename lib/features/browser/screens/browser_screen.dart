@@ -94,7 +94,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Set<String> _ytDetectionFailed = {}; // tab.url -> yt fetch failed
   final Set<String> _recordedHistoryThisSession = {};
   DateTime? _lastYoutubeAuthTime;
-  static const _youtubeAuthCooldown = Duration(minutes: 5);
+  static const _youtubeAuthCooldown = Duration(seconds: 30);
   final Map<String, Timer> _mediaScanTimers = {};
   DownloadProvider? _downloadProvider;
   String? _lastHistoryEntryUrl;
@@ -325,12 +325,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       )
       ..addJavaScriptChannel(
         'AdBlockerChannel',
-        onMessageReceived: (msg) {
+        onMessageReceived: (msg) async {
           try {
             final data = jsonDecode(msg.message);
             final requestId = data['id'];
             final url = data['url'];
             if (requestId != null && url != null) {
+              await AdBlocker.initialize();
               final shouldBlock = AdBlocker.shouldBlock(url);
               final jsToRun =
                   "if (window._adBlockPromiseResolvers && window._adBlockPromiseResolvers['$requestId']) { window._adBlockPromiseResolvers['$requestId']($shouldBlock); delete window._adBlockPromiseResolvers['$requestId']; }";
@@ -345,17 +346,24 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         tab.isIncognito
             ? (settings.desktopMode
                   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                  : 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1')
+                  : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')
             : (settings.desktopMode
                   ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                   : (settings.customUserAgent.isNotEmpty
                         ? settings.customUserAgent
-                        : null)),
+                        : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')),
       )
       ..enableZoom(settings.pinchToZoom)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
+            if (url.contains('accounts.google.com') ||
+                url.contains('google.com/ServiceLogin') ||
+                url.contains('google.com/accounts')) {
+              tab.controller.setUserAgent(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              );
+            }
             if (mounted) {
               final downloadProvider = Provider.of<DownloadProvider>(
                 context,
@@ -408,14 +416,19 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               });
             }
 
-            if (url.contains('youtube.com') &&
-                !tab.isIncognito &&
-                !settings.incognitoEnabled) {
-              final now = DateTime.now();
-              if (_lastYoutubeAuthTime == null ||
-                  now.difference(_lastYoutubeAuthTime!) > _youtubeAuthCooldown) {
-                _lastYoutubeAuthTime = now;
-                YoutubeService.authenticateFromBrowser();
+            if (!tab.isIncognito && !settings.incognitoEnabled) {
+              final isYoutubeDomain = url.contains('youtube.com') ||
+                  url.contains('accounts.google.com') ||
+                  url.contains('google.com');
+              if (isYoutubeDomain) {
+                final now = DateTime.now();
+                // Short cooldown (30s) so sign-in retries work quickly
+                if (_lastYoutubeAuthTime == null ||
+                    now.difference(_lastYoutubeAuthTime!) >
+                        _youtubeAuthCooldown) {
+                  _lastYoutubeAuthTime = now;
+                  YoutubeService.authenticateFromBrowser();
+                }
               }
             }
 
@@ -1790,7 +1803,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               child: Row(
                                 children: [
                                   Text(
-                                    'ACTIVE TABS',
+                                    L10n.of(context, 'active_tabs'),
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium

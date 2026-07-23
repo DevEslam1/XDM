@@ -54,3 +54,6 @@ dependencies {
     implementation("com.github.teamnewpipe:newpipeextractor:v0.26.3")
 }
 
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
