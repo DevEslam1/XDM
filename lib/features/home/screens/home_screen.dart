@@ -1092,7 +1092,7 @@ class _DonutChartPanel extends StatelessWidget {
         : '${sizeMb.toStringAsFixed(0)}M';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.5),
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(
         children: [
           Container(
