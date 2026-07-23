@@ -1229,8 +1229,7 @@ class DownloadProvider extends ChangeNotifier
     final hasAudio = !task.isTorrent &&
         task.mergedAudioUrl != null &&
         task.mergedAudioUrl!.isNotEmpty;
-    final audioTempPath = hasAudio ? '${task.localFilePath}.audio.dmxpart' : null;
-    final videoTempPath = hasAudio ? '${task.localFilePath}.video.dmxpart' : task.tempFilePath;
+    final audioTempPath = hasAudio ? '${task.tempFilePath}.audio' : null;
     // A combined YouTube task stores the total output size, but this request
     // transfers only its video stream. Passing the total makes byte ranges
     // exceed the video resource and causes an immediate 416/failed retry.
@@ -1260,26 +1259,6 @@ class DownloadProvider extends ChangeNotifier
     final downloadFuture = () async {
       final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
       int attempt = 0;
-
-      if (isYoutube && task.downloadPageUrl != null) {
-        try {
-          final preRefreshed = await YoutubeService.refreshStreamUrl(
-            task.downloadPageUrl!,
-            task.url,
-          );
-          if (preRefreshed != null && preRefreshed['url'] != null) {
-            final idx = _tasks.indexWhere((x) => x.id == task.id);
-            if (idx != -1) {
-              _tasks[idx] = _tasks[idx].copyWith(
-                url: preRefreshed['url'],
-                mergedAudioUrl: preRefreshed['audioUrl'] ?? task.mergedAudioUrl,
-              );
-              task = _tasks[idx];
-            }
-          }
-        } catch (_) {}
-      }
-
       while (true) {
         attempt++;
         try {
@@ -1362,15 +1341,20 @@ class DownloadProvider extends ChangeNotifier
                       throw Exception('Audio file is empty: $audioTempPath');
                     }
                     final idx = _tasks.indexWhere((x) => x.id == task.id);
+                    if (idx != -1) {
+                      _tasks[idx] = _tasks[idx].copyWith(
+                        audioProgress: 1.0,
+                        downloadedBytes: task.audioSize,
+                      );
+                    }
                   }
-                }
-          
+            
                   // Step 2: Download Video
                   debugPrint('[DMX] Sequential download: Starting video second.');
                   await _downloadEngine.download(
                     url: task.url,
-                    tempFilePath: videoTempPath,
-                    localFilePath: hasAudio ? videoTempPath : task.localFilePath,
+                    tempFilePath: task.tempFilePath,
+                    localFilePath: task.localFilePath,
                     knownFileSize: videoTransferSize,
                     supportsResume: task.supportsResume,
                     cancelToken: videoCancelToken,
@@ -1383,45 +1367,45 @@ class DownloadProvider extends ChangeNotifier
                       if (current == null || current.status != DownloadStatus.downloading) {
                         return;
                       }
-
+            
                       final index = _tasks.indexWhere((t) => t.id == task.id);
                       if (index == -1) return;
-
+            
                       final now = DateTime.now().millisecondsSinceEpoch;
                       final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
-
+            
                       final speedList = _speedHistories[task.id] ??= [];
                       speedList.add(progress.speed);
                       if (speedList.length > 20) {
                         speedList.removeAt(0);
                       }
-
+            
                       // Re-read the freshest task from the list right before mutating so
                       // that any concurrent update (e.g. a YouTube URL refresh) is not
                       // clobbered by this progress write.
                       final latest = _tasks[index];
                       final base = latest.status == DownloadStatus.downloading ? latest : current;
-
+            
                       final newFileName = isAutoName && progress.fileName != null
                           ? progress.fileName!
                           : base.fileName;
-
+            
                       final newLocalPath = newFileName != base.fileName
                           ? p.join(p.dirname(base.localFilePath), safeFileName(newFileName))
                           : base.localFilePath;
-
+            
                       final newTempPath = newFileName != base.fileName
                           ? p.join(p.dirname(base.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
                           : base.tempFilePath;
-
+            
                       final newCategory = newFileName != base.fileName && base.category == 'Other'
                           ? categoryFromFileName(newFileName)
                           : base.category;
-
+            
                       final resolvedVideoSize = progress.fileSize > 0 ? progress.fileSize : videoTransferSize;
                       final resolvedTotalSize = hasAudio ? resolvedVideoSize + base.audioSize : resolvedVideoSize;
                       final currentDownloadedBytes = (hasAudio ? base.audioSize : 0) + progress.downloadedBytes;
-
+            
                       final updatedTask = base.copyWith(
                         fileName: newFileName,
                         localFilePath: newLocalPath,
@@ -1439,12 +1423,12 @@ class DownloadProvider extends ChangeNotifier
                             ),
                         supportsResume: progress.supportsResume ?? base.supportsResume,
                       );
-
+            
                       if (now - lastUpdate >= 250) {
                         _lastProgressUpdateTimes[task.id] = now;
                         _tasks[index] = updatedTask;
                         notifyListeners();
-
+            
                         if (_settingsProvider.notificationsEnabled) {
                           final progressPercent = resolvedTotalSize > 0
                               ? ((currentDownloadedBytes / resolvedTotalSize) * 100).round().clamp(0, 100)
@@ -1459,7 +1443,7 @@ class DownloadProvider extends ChangeNotifier
                             payload: task.id,
                           );
                         }
-
+            
                         // Keep the foreground service alive directly from the active
                         // download path so it never self-stops while bytes are flowing
                         BackgroundService.sendHeartbeat();
@@ -1486,6 +1470,103 @@ class DownloadProvider extends ChangeNotifier
                     proxyPassword: _settingsProvider.proxyPassword,
                     bypassSSL: _settingsProvider.bypassSSL,
                   );
+          }();
+          return;
+        } catch (error) {
+          final isYoutubeDownload = task.downloadPageUrl != null &&
+              YoutubeService.extractVideoId(task.downloadPageUrl!) != null;
+          bool shouldRefreshYoutube = false;
+          if (error is DioException && isYoutubeDownload) {
+            final statusCode = error.response?.statusCode;
+            if (statusCode == 403 || statusCode == 410) {
+              shouldRefreshYoutube = true;
+            }
+          }
+          if (shouldRefreshYoutube) {
+            final ytMaxRetries = maxRetries > 0 ? maxRetries : 3;
+            if (attempt > ytMaxRetries) {
+              rethrow;
+            }
+            try {
+              YoutubeService.resetClient();
+              final newUrlInfo = await YoutubeService.refreshStreamUrl(
+                task.downloadPageUrl!,
+                task.url,
+              );
+              if (newUrlInfo != null && newUrlInfo['url'] != null) {
+                final idx = _tasks.indexWhere((x) => x.id == task.id);
+                if (idx != -1) {
+                  _tasks[idx] = _tasks[idx].copyWith(
+                    url: newUrlInfo['url'],
+                    mergedAudioUrl: newUrlInfo['audioUrl'] ?? task.mergedAudioUrl,
+                  );
+                  task = _tasks[idx]; 
+                }
+                await _databaseService.saveTask(task);
+                await Future.delayed(const Duration(seconds: 2));
+                continue;
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+          rethrow;
+        }
+      }
+    }().then((_) async {
+
+          // Phase 3: Merge (only if audio was downloaded)
+          if (hasAudio) {
+            final currentForMerge = _findTask(task.id);
+            if (currentForMerge == null) return;
+
+            await _setTask(currentForMerge.copyWith(errorMessage: 'Merging video and audio...'));
+
+            final mergedPath = '${currentForMerge.localFilePath}.merged.mp4';
+            debugPrint('[DMX] Phase 3 — Merge starting:');
+            debugPrint('[DMX]   Video: ${currentForMerge.localFilePath}');
+            debugPrint('[DMX]   Audio: $audioTempPath');
+            debugPrint('[DMX]   Output: $mergedPath');
+
+            final videoFile = File(currentForMerge.localFilePath);
+            if (await videoFile.exists()) {
+              debugPrint('[DMX]   Video size: ${await videoFile.length()} bytes');
+            } else {
+              debugPrint('[DMX]   WARNING: Video file missing: ${currentForMerge.localFilePath}');
+            }
+            final af = File(audioTempPath!);
+            if (await af.exists()) {
+              debugPrint('[DMX]   Audio size: ${await af.length()} bytes');
+            } else {
+              debugPrint('[DMX]   WARNING: Audio file missing: $audioTempPath');
+            }
+
+            final success = await FFmpegMuxService.mergeVideoAudio(
+              currentForMerge.localFilePath, audioTempPath, mergedPath);
+
+            if (success) {
+              final mergedFile = File(mergedPath);
+              if (await mergedFile.exists()) {
+                final mergedLen = await mergedFile.length();
+                debugPrint('[DMX] Phase 3 — Merge successful: $mergedPath ($mergedLen bytes)');
+                if (await videoFile.exists()) await videoFile.delete();
+                await mergedFile.rename(currentForMerge.localFilePath);
+                debugPrint('[DMX] Original video replaced with merged file');
+              } else {
+                debugPrint('[DMX] WARNING: Merged file not found at $mergedPath');
+                throw Exception('Merged output file not found after successful FFmpeg run');
+              }
+              if (await af.exists()) await af.delete();
+            } else {
+              debugPrint('[DMX] Phase 3 — Merge FAILED — keeping original video file');
+              if (await af.exists()) await af.delete();
+              throw Exception('FFmpeg merge failed.');
+            }
+          }
+
+          await _flushPendingProgress(task.id);
+          var current = _findTask(task.id);
+          if (current == null) return;
           if (current.status != DownloadStatus.downloading) return;
           
           final now = DateTime.now();
@@ -1702,27 +1783,25 @@ class DownloadProvider extends ChangeNotifier
       if (error.response?.statusCode != null) {
         final code = error.response!.statusCode;
         return switch (code) {
-          403 => '403 Forbidden: Access denied by server.',
-          401 => '401 Unauthorized: Authentication required.',
-          404 => '404 Not Found: File no longer exists on server.',
-          410 => '410 Gone: The file has been permanently removed.',
-          416 => '416 Range Not Satisfiable: Server rejected byte range.',
-          500 => '500 Internal Server Error.',
-          503 => '503 Service Unavailable: Server is busy or overloaded.',
-          _ => 'HTTP Error $code: ${error.message ?? "Server returned error."}',
+          403 =>
+            '403 Forbidden: Access denied. (Raw: ${error.message})',
+          401 =>
+            '401 Unauthorized: Authentication is required. (Raw: ${error.message})',
+          404 => '404 Not Found: The file was not found. (Raw: ${error.message})',
+          410 =>
+            '410 Gone: The file has been permanently removed. (Raw: ${error.message})',
+          416 =>
+            '416 Range Not Satisfiable: Invalid byte range. (Raw: ${error.message})',
+          500 => '500 Internal Server Error. (Raw: ${error.message})',
+          503 =>
+            '503 Service Unavailable: Server is overloaded. (Raw: ${error.message})',
+          _ =>
+            'HTTP Error $code: ${error.message ?? "Server returned invalid response."}',
         };
       }
-      return switch (error.type) {
-        DioExceptionType.connectionTimeout => 'Connection timed out.',
-        DioExceptionType.sendTimeout => 'Send timed out.',
-        DioExceptionType.receiveTimeout => 'Receive timed out.',
-        DioExceptionType.badResponse => 'Server returned invalid response.',
-        DioExceptionType.connectionError => 'Network connection failed.',
-        DioExceptionType.cancel => 'Download cancelled.',
-        _ => 'Network Error: ${error.message ?? "Unknown error."}',
-      };
+      return 'Dio Error: ${error.message ?? error.type.name}';
     }
-    return error.toString().replaceFirst('Exception: ', '');
+    return 'Error: ${error.toString()}';
   }
 
   bool _isRetryableError(Object error) {
