@@ -119,14 +119,14 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
 
     // Group streams by type
     final muxed = _streams
-        .where((s) => s['type'] == 'muxed' && s['ext'] == 'mp4')
+        .where((s) => s['type'] == 'muxed')
         .toList();
     final audio = _streams
-        .where((s) => s['type'] == 'audio' && s['ext'] != 'webm')
+        .where((s) => s['type'] == 'audio')
         .toList();
     final combined =
         _streams
-            .where((s) => s['type'] == 'combined' && s['ext'] == 'mp4')
+            .where((s) => s['type'] == 'combined')
             .toList()
           ..sort((a, b) {
             final aQuality = _parseQuality(a['quality'] as String? ?? '');
@@ -683,7 +683,9 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
               ),
             ),
             subtitle: Text(
-              '${formatBytes(size)} • .$ext',
+              type == 'combined' && (stream['videoSize'] as int? ?? 0) > 0 && (stream['audioSize'] as int? ?? 0) > 0
+                  ? 'Video: ${formatBytes(stream['videoSize'] as int)} + Audio: ${formatBytes(stream['audioSize'] as int)} = ${formatBytes(size)} • .$ext'
+                  : '${formatBytes(size)} • .$ext',
               style: TextStyle(color: secClr, fontSize: 10),
             ),
             trailing: Icon(Icons.download_rounded, color: color, size: 20),

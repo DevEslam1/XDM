@@ -31,7 +31,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         return _CardSnapshot.fromTask(t);
       },
       builder: (context, snapshot, child) {
-        final task = this.task;
+        final task = snapshot.task;
 
     // Determine status colors
     Color statusColor;
@@ -888,49 +888,27 @@ class _ProgressBar extends StatelessWidget {
 /// Value-type snapshot used with [Selector] to detect task changes
 /// despite [DownloadTask] using id-based equality.
 class _CardSnapshot {
-  final DownloadStatus status;
-  final String category;
-  final String? errorMessage;
-  final double progress;
-  final double audioProgress;
-  final double speed;
-  final int? eta;
-  final int downloadedBytes;
-  final int fileSize;
-  final bool isTorrent;
-  final bool seedingEnabled;
+  final DownloadTask task;
 
-  const _CardSnapshot({
-    required this.status,
-    required this.category,
-    required this.errorMessage,
-    required this.progress,
-    required this.audioProgress,
-    required this.speed,
-    required this.eta,
-    required this.downloadedBytes,
-    required this.fileSize,
-    required this.isTorrent,
-    required this.seedingEnabled,
-  });
+  const _CardSnapshot({required this.task});
 
-  factory _CardSnapshot.fromTask(DownloadTask t) => _CardSnapshot(
-        status: t.status,
-        category: t.category,
-        errorMessage: t.errorMessage,
-        progress: t.progress,
-        audioProgress: t.audioProgress,
-        speed: t.speed,
-        eta: t.eta,
-        downloadedBytes: t.downloadedBytes,
-        fileSize: t.fileSize,
-        isTorrent: t.isTorrent,
-        seedingEnabled: t.seedingEnabled,
-      );
+  factory _CardSnapshot.fromTask(DownloadTask t) => _CardSnapshot(task: t);
+
+  DownloadStatus get status => task.status;
+  String get category => task.category;
+  String? get errorMessage => task.errorMessage;
+  double get progress => task.progress;
+  double get audioProgress => task.audioProgress;
+  double get speed => task.speed;
+  int? get eta => task.eta;
+  int get downloadedBytes => task.downloadedBytes;
+  int get fileSize => task.fileSize;
+  bool get isTorrent => task.isTorrent;
+  bool get seedingEnabled => task.seedingEnabled;
 
   @override
   bool operator ==(Object other) =>
-      other is _CardSnapshot &&
+      other is _CardSnapshot && other.task.id == task.id &&
       other.status == status &&
       other.category == category &&
       other.errorMessage == errorMessage &&
@@ -945,7 +923,7 @@ class _CardSnapshot {
 
   @override
   int get hashCode => Object.hash(
-        status, category, errorMessage, progress, audioProgress,
+        task.id, status, category, errorMessage, progress, audioProgress,
         speed, eta, downloadedBytes, fileSize, isTorrent, seedingEnabled,
       );
 }

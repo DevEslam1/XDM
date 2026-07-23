@@ -109,7 +109,7 @@ class _DownloadIsolateArgs {
 void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) async {
   final sendPort = args.sendPort;
   final commandPort = ReceivePort();
-  final engine = DownloadEngine();
+  final engine = DownloadEngine(enableCleanupTimer: false);
   final cancelToken = CancelToken();
 
   int currentSpeedLimit = args.speedLimit;
@@ -191,6 +191,7 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) async {
     });
   } finally {
     commandPort.close();
+    engine.close();
   }
 }
 
@@ -199,9 +200,32 @@ class DownloadEngine {
   final List<SendPort> _activeIsolateCommandPorts = [];
   final List<Isolate> _activeIsolates = [];
   final Dio _sharedDio;
-  final List<Dio> _activeDioClients = [];
+  final Set<Dio> _activeDioClients = {};
+  final Map<Dio, DateTime> _dioClientCreationTimes = {};
+  Timer? _cleanupTimer;
 
-  DownloadEngine({Dio? dio}) : _sharedDio = dio ?? Dio();
+  DownloadEngine({Dio? dio, bool enableCleanupTimer = true})
+      : _sharedDio = dio ?? Dio() {
+    if (enableCleanupTimer) {
+      _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
+        final now = DateTime.now();
+        _activeDioClients.removeWhere((client) {
+          final createdAt = _dioClientCreationTimes[client];
+          final age = createdAt != null ? now.difference(createdAt) : Duration.zero;
+          // Only clean up clients older than 5 minutes with no active isolates
+          if (_activeIsolates.isEmpty && age > const Duration(minutes: 5)) {
+            debugPrint('[DMX] Cleanup timer: closing orphaned Dio client (${age.inSeconds}s old)');
+            try {
+              client.close(force: true);
+            } catch (_) {}
+            _dioClientCreationTimes.remove(client);
+            return true;
+          }
+          return false;
+        });
+      });
+    }
+  }
 
   /// Builds an isolated Dio instance configured with per-call options.
   /// Using a fresh client per request prevents the shared [_dio] instance
@@ -287,6 +311,7 @@ class DownloadEngine {
       };
     }
     _activeDioClients.add(client);
+    _dioClientCreationTimes[client] = DateTime.now();
     return client;
   }
 
@@ -521,6 +546,7 @@ class DownloadEngine {
       debugPrint('HEAD request failed for $punyUrl: $e');
     } finally {
       _activeDioClients.remove(isolatedDio);
+      _dioClientCreationTimes.remove(isolatedDio);
       isolatedDio.close(force: true);
     }
 
@@ -666,13 +692,20 @@ class DownloadEngine {
       activeCount: activeDownloadCount(),
     );
 
+    final exitPort = ReceivePort();
     final isolate = await Isolate.spawn(
       _isolateHttpDownloadEntryPoint,
       args,
       debugName: 'DownloadIsolate_${finalUrl.hashCode}',
       onError: errorPort.sendPort,
     );
+    isolate.addOnExitListener(exitPort.sendPort);
     _activeIsolates.add(isolate);
+
+    exitPort.listen((_) {
+      _activeIsolates.remove(isolate);
+      exitPort.close();
+    });
 
     final completer = Completer<void>();
     SendPort? isolateCommandPort;
@@ -694,19 +727,30 @@ class DownloadEngine {
       }
     });
 
-    cancelToken.whenCancel.then((_) {
+    void handleEarlyCancel() {
       if (isolateCommandPort != null) {
-        isolateCommandPort?.send({'type': 'cancel'});
+        isolateCommandPort!.send({'type': 'cancel'});
       } else {
         isCancelledEarly = true;
       }
-    });
+    }
+
+    cancelToken.whenCancel.then((_) => handleEarlyCancel());
+    if (cancelToken.isCancelled) {
+      handleEarlyCancel();
+    }
 
     errorPort.listen((message) {
-      final errorData = message as List<dynamic>;
-      final exception = Exception(errorData[0].toString());
-      if (!completer.isCompleted) {
-        completer.completeError(exception, StackTrace.fromString(errorData[1].toString()));
+      if (message is List && message.isNotEmpty) {
+        final exception = Exception(message[0].toString());
+        final stack = message.length > 1 ? StackTrace.fromString(message[1].toString()) : StackTrace.current;
+        if (!completer.isCompleted) {
+          completer.completeError(exception, stack);
+        }
+      } else {
+        if (!completer.isCompleted) {
+          completer.completeError(Exception('Isolate exited unexpectedly without payload.'));
+        }
       }
     });
 
@@ -760,7 +804,7 @@ class DownloadEngine {
     try {
       await completer.future;
     } finally {
-      isolateWatchdog?.cancel();
+      isolateWatchdog.cancel();
       if (isolateCommandPort != null) {
         _activeIsolateCommandPorts.remove(isolateCommandPort);
       }
@@ -921,7 +965,7 @@ class DownloadEngine {
                 stateLabel == 'finished');
 
         final nowMs = DateTime.now().millisecondsSinceEpoch;
-        if (!isCompleted && nowMs - lastTorrentReportTime < 500) return;
+        if (!isCompleted && (nowMs - lastTorrentReportTime < 500)) return;
         lastTorrentReportTime = nowMs;
 
         final speed = torrent.downloadRate.toDouble();
@@ -1056,6 +1100,7 @@ class DownloadEngine {
       } else {
         // Real Multi-Thread segment downloading
         final futures = <Future<void>>[];
+        final chunkCancelTokens = List<CancelToken>.filled(threadCount, CancelToken());
         final chunkProgress = List<int>.filled(threadCount, 0);
         final chunkSizes = List<int>.filled(threadCount, 0);
 
@@ -1066,37 +1111,45 @@ class DownloadEngine {
         await targetFile.parent.create(recursive: true);
         final stateFile = File('$currentTempFilePath.dmxstate');
 
-        // Pre-allocate file if it doesn't exist or is the wrong size
-        final exists = await targetFile.exists();
-        final actualLen = exists ? await targetFile.length() : 0;
-        if (actualLen != totalSize) {
+        // Read resume state BEFORE opening the file
+        final fileExists = await targetFile.exists();
+        bool needPreallocate = true;
+        if (fileExists) {
+          final actualLen = await targetFile.length();
+          needPreallocate = actualLen != totalSize;
+        }
+        List<int>? loadedState;
+        if (!needPreallocate && await stateFile.exists()) {
+          try {
+            final content = await stateFile.readAsString();
+            final stateList = jsonDecode(content) as List;
+            if (stateList.length == threadCount) {
+              loadedState = stateList.cast<int>();
+              for (int i = 0; i < threadCount; i++) {
+                chunkProgress[i] = loadedState[i];
+              }
+            }
+          } catch (e) {
+            // state corrupt, will reset below
+          }
+        }
+        if (needPreallocate || loadedState == null) {
           if (await stateFile.exists()) await stateFile.delete();
           for (int i = 0; i < threadCount; i++) {
             chunkProgress[i] = 0;
           }
         }
-        final sharedRaf = await targetFile.open(mode: FileMode.append);
-        await sharedRaf.truncate(totalSize);
+        // Open file: only truncate when pre-allocating; otherwise open read-write without truncation
+        late RandomAccessFile sharedRaf;
+        if (needPreallocate) {
+          sharedRaf = await targetFile.open(mode: FileMode.write);
+          await sharedRaf.truncate(totalSize);
+        } else {
+          sharedRaf = await targetFile.open(mode: FileMode.append);
+        }
         bool isRafClosed = false;
 
         final lock = Lock();
-
-        // Initialize state
-        if (await stateFile.exists()) {
-          try {
-            final content = await stateFile.readAsString();
-            final stateList = jsonDecode(content) as List;
-            if (stateList.length == threadCount) {
-              for (int i = 0; i < threadCount; i++) {
-                chunkProgress[i] = stateList[i] as int;
-              }
-            } else {
-              await stateFile.delete(); // reset if thread count changed
-            }
-          } catch (e) {
-            await stateFile.delete();
-          }
-        }
 
         // Calculate start/end boundaries
         for (int i = 0; i < threadCount; i++) {
@@ -1201,10 +1254,9 @@ class DownloadEngine {
                 : (start + partSize - 1);
 
             futures.add(() async {
-              final chunkCancelToken = CancelToken();
               cancelToken.whenCancel.then((_) {
-                if (!chunkCancelToken.isCancelled) {
-                  chunkCancelToken.cancel();
+                for (final ct in chunkCancelTokens) {
+                  if (!ct.isCancelled) ct.cancel();
                 }
               });
 
@@ -1227,7 +1279,7 @@ class DownloadEngine {
 
                   final chunkResponse = await isolatedDio.get<ResponseBody>(
                     punyUrl,
-                    cancelToken: chunkCancelToken,
+                    cancelToken: chunkCancelTokens[idx],
                     options: Options(
                       responseType: ResponseType.stream,
                       followRedirects: true,
@@ -1267,7 +1319,7 @@ class DownloadEngine {
 
                     try {
                       await for (final chunk in stream) {
-                        if (cancelToken.isCancelled || chunkCancelToken.isCancelled) {
+                        if (cancelToken.isCancelled || chunkCancelTokens[idx].isCancelled) {
                           throw DioException(
                             requestOptions: RequestOptions(path: punyUrl),
                             type: DioExceptionType.cancel,
@@ -1293,10 +1345,10 @@ class DownloadEngine {
                         final limit = speedLimitBytesPerSecond();
                         if (limit > 0) {
                           final activeCount = activeDownloadCount().clamp(1, 1000);
-                          final perTaskLimit = limit / activeCount;
-                          final limitPerChunk = perTaskLimit / threadCount;
+                          final perTaskLimit = limit / activeCount.toDouble();
+                          final limitPerChunk = perTaskLimit / threadCount.toDouble();
                           if (limitPerChunk > 0) {
-                            final expectedElapsedMs = (chunkDownloadedThisSession / limitPerChunk * 1000).round();
+                            final expectedElapsedMs = (chunkDownloadedThisSession / limitPerChunk * 1000.0).round();
                             final actualElapsedMs = chunkStopwatch.elapsedMilliseconds;
                             if (expectedElapsedMs > actualElapsedMs) {
                               final sleepTimeMs = (expectedElapsedMs - actualElapsedMs).clamp(0, 2000);
@@ -1339,11 +1391,13 @@ class DownloadEngine {
                     // Nothing to close here, sharedRaf is closed later
                   }
                 } catch (e) {
-                  if (cancelToken.isCancelled || chunkCancelToken.isCancelled) {
+                  if (cancelToken.isCancelled || chunkCancelTokens[idx].isCancelled) {
                     rethrow;
                   }
                   if (attempts >= maxAttempts) {
-                    if (!chunkCancelToken.isCancelled) chunkCancelToken.cancel();
+                    for (final ct in chunkCancelTokens) {
+                      if (!ct.isCancelled) ct.cancel();
+                    }
                     chunkError ??= e;
                     rethrow;
                   }
@@ -1473,6 +1527,7 @@ class DownloadEngine {
       }
     } finally {
       _activeDioClients.remove(isolatedDio);
+      _dioClientCreationTimes.remove(isolatedDio);
       isolatedDio.close(force: true);
     }
   }
@@ -1610,7 +1665,18 @@ class DownloadEngine {
             message: 'Download cancelled.',
           );
         }
-        sink.add(chunk);
+        try {
+          sink.add(chunk);
+        } catch (_) {
+          if (cancelToken.isCancelled) {
+            throw DioException(
+              requestOptions: RequestOptions(path: punyUrl),
+              type: DioExceptionType.cancel,
+              message: 'Download cancelled.',
+            );
+          }
+          rethrow;
+        }
         downloadedThisSession += chunk.length;
         downloadedTotal += chunk.length;
 
@@ -1657,15 +1723,20 @@ class DownloadEngine {
         final limit = speedLimitBytesPerSecond();
         if (limit > 0) {
           final activeCount = activeDownloadCount().clamp(1, 1000);
-          final perTaskLimit = limit / activeCount;
+          final perTaskLimit = limit / activeCount.toDouble();
           final expectedElapsedMs =
-              (downloadedThisSession / perTaskLimit * 1000).round();
+              (downloadedThisSession / perTaskLimit * 1000.0).round();
           final actualElapsedMs = stopwatch.elapsedMilliseconds;
           if (expectedElapsedMs > actualElapsedMs) {
-            await Future<void>.delayed(
-              Duration(milliseconds: expectedElapsedMs - actualElapsedMs),
-            );
+            final sleepTimeMs = (expectedElapsedMs - actualElapsedMs).clamp(0, 2000);
+            if (sleepTimeMs > 0) {
+              await Future<void>.delayed(
+                Duration(milliseconds: sleepTimeMs),
+              );
+            }
           }
+          stopwatch.reset();
+          downloadedThisSession = 0;
         }
       }
     } finally {
@@ -1771,6 +1842,8 @@ class DownloadEngine {
   }
 
   void close() {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = null;
     for (final token in List<CancelToken>.from(_activeCancelTokens)) {
       try {
         token.cancel('Engine closing');
@@ -1778,12 +1851,13 @@ class DownloadEngine {
     }
     _activeCancelTokens.clear();
     _sharedDio.close(force: true);
-    for (final client in List<Dio>.from(_activeDioClients)) {
+    for (final client in _activeDioClients) {
       try {
         client.close(force: true);
       } catch (_) {}
     }
     _activeDioClients.clear();
+    _dioClientCreationTimes.clear();
     for (final isolate in _activeIsolates) {
       try {
         isolate.kill(priority: Isolate.immediate);

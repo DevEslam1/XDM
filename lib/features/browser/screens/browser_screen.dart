@@ -93,6 +93,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
   final Set<String> _ytDetectionFailed = {}; // tab.url -> yt fetch failed
   final Set<String> _recordedHistoryThisSession = {};
+  DateTime? _lastYoutubeAuthTime;
+  static const _youtubeAuthCooldown = Duration(minutes: 5);
   final Map<String, Timer> _mediaScanTimers = {};
   DownloadProvider? _downloadProvider;
   String? _lastHistoryEntryUrl;
@@ -178,34 +180,33 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 })();
 ''';
 
-  void _saveTabs() {
-    SharedPreferences.getInstance()
-        .then((prefs) {
-          final List<Map<String, dynamic>> tabList = [];
-          int savedIndex = 0;
-          int normalTabCount = 0;
+  Future<void> _saveTabs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<Map<String, dynamic>> tabList = [];
+      int savedIndex = 0;
+      int normalTabCount = 0;
 
-          for (int i = 0; i < _tabs.length; i++) {
-            final tab = _tabs[i];
-            if (tab.isIncognito) continue;
+      for (int i = 0; i < _tabs.length; i++) {
+        final tab = _tabs[i];
+        if (tab.isIncognito) continue;
 
-            if (i == _currentTabIndex) {
-              savedIndex = normalTabCount;
-            }
-            tabList.add({
-              'url': tab.url,
-              'title': tab.title,
-              'isIncognito': false,
-            });
-            normalTabCount++;
-          }
-
-          prefs.setString('persisted_browser_tabs', jsonEncode(tabList));
-          prefs.setInt('persisted_browser_tab_index', savedIndex);
-        })
-        .catchError((e) {
-          debugPrint('Error saving tabs: $e');
+        if (i == _currentTabIndex) {
+          savedIndex = normalTabCount;
+        }
+        tabList.add({
+          'url': tab.url,
+          'title': tab.title,
+          'isIncognito': false,
         });
+        normalTabCount++;
+      }
+
+      await prefs.setString('persisted_browser_tabs', jsonEncode(tabList));
+      await prefs.setInt('persisted_browser_tab_index', savedIndex);
+    } catch (e) {
+      debugPrint('Error saving tabs: $e');
+    }
   }
 
   Future<void> _restoreTabs() async {
@@ -407,8 +408,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               });
             }
 
-            if (url.contains('youtube.com')) {
-              YoutubeService.authenticateFromBrowser();
+            if (url.contains('youtube.com') &&
+                !tab.isIncognito &&
+                !settings.incognitoEnabled) {
+              final now = DateTime.now();
+              if (_lastYoutubeAuthTime == null ||
+                  now.difference(_lastYoutubeAuthTime!) > _youtubeAuthCooldown) {
+                _lastYoutubeAuthTime = now;
+                YoutubeService.authenticateFromBrowser();
+              }
             }
 
             _updateNavState();
@@ -611,7 +619,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         downloadProvider.setNavbarVisible(true);
       }
       _lastScrollY = y;
-    } else if (y - _lastScrollY > 15) {
+    } else if (y - _lastScrollY > 40) {
       if (_showBars) {
         setState(() {
           _showBars = false;
@@ -619,7 +627,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         downloadProvider.setNavbarVisible(false);
       }
       _lastScrollY = y;
-    } else if (_lastScrollY - y > 15) {
+    } else if (_lastScrollY - y > 40) {
       if (!_showBars) {
         setState(() {
           _showBars = true;
@@ -917,7 +925,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   void _showLongPressSheet(BuildContext context, String url, String type) {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
-    final hasMultipleQualities = _detectedMediaSources[url]?.isNotEmpty ?? false;
+    final hasMultipleQualities = _detectedMediaSources[activeTab.id]?.isNotEmpty ?? false;
     BrowserDownloadSheet.show(
       context,
       url,
@@ -1292,7 +1300,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final detectedSources = _detectedMediaSources[tabId] ?? [];
-    final downloadUrl = fallbackUrl ?? '';
 
     showModalBottomSheet(
       context: context,
@@ -1368,33 +1375,18 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           );
                         }),
                       ] else ...[
-                        _buildQualityTile(
-                          context,
-                          '1080p (FHD)',
-                          downloadUrl,
-                          isDark,
-                          settings,
-                        ),
-                        _buildQualityTile(
-                          context,
-                          '720p (HD)',
-                          downloadUrl,
-                          isDark,
-                          settings,
-                        ),
-                        _buildQualityTile(
-                          context,
-                          '480p (SD)',
-                          downloadUrl,
-                          isDark,
-                          settings,
-                        ),
-                        _buildQualityTile(
-                          context,
-                          '360p (Low)',
-                          downloadUrl,
-                          isDark,
-                          settings,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Text(
+                            L10n.isRtl(context)
+                                ? 'لم يتم اكتشاف تدفقات بديلة'
+                                : 'No alternative streams detected',
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
                         ),
                       ],
                     ],
@@ -1572,7 +1564,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   type: label.toLowerCase().contains('audio')
                                       ? 'audio'
                                       : 'video',
-                                  onQuality: () => _showQualityPicker(srcUrl),
+                                  onQuality: () => _showQualityPicker(tabId, fallbackUrl: srcUrl),
                                   downloadPageUrl: downloadPageUrl,
                                 );
                               },
@@ -1699,7 +1691,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
       // Create a finished DownloadTask in local Hive database
       final id = DateTime.now().millisecondsSinceEpoch.toString();
-      final size = rawHtml.codeUnits.length;
+      final size = utf8.encode(rawHtml).length;
 
       final task = DownloadTask(
         id: id,
@@ -2993,27 +2985,24 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   ? _currentTabIndex
                                   : 0,
                               children: _tabs.map((tab) {
-                                final isActive = _currentTabIndex >= 0 &&
-                                    _currentTabIndex < _tabs.length &&
-                                    _tabs[_currentTabIndex].id == tab.id;
                                 if (tab.isHome) {
-                                  return Offstage(
-                                    offstage: !isActive,
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      child: _buildHomeDashboard(context, settings),
-                                    ),
+                                  return SizedBox(
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    child: _buildHomeDashboard(context, settings),
                                   );
                                 } else {
-                                  return Offstage(
-                                    offstage: !isActive,
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      child: RepaintBoundary(
-                                    child: WebViewWidget(controller: tab.controller),
-                                  ),
+                                  return SizedBox(
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    child: RepaintBoundary(
+                                      child: RefreshIndicator(
+                                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                        onRefresh: () async {
+                                          await tab.controller.reload();
+                                        },
+                                        child: WebViewWidget(controller: tab.controller),
+                                      ),
                                     ),
                                   );
                                 }
@@ -3244,7 +3233,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             context,
             url,
             suggestedName: filename,
-            onQuality: () => _showQualityPicker(url),
+            onQuality: () => _showQualityPicker(activeTab.id, fallbackUrl: url),
             downloadPageUrl: activeTab.isHome ? null : activeTab.url,
           );
         }
@@ -3465,6 +3454,35 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
         height: 280,
         child: Column(
           children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      L10n.isRtl(context)
+                          ? 'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.'
+                          : 'WARNING: Code runs on web pages. Do not enter sensitive data.',
+                      style: TextStyle(
+                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(child: _tabHeader(0, 'JavaScript')),

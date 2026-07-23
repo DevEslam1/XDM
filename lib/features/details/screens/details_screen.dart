@@ -325,10 +325,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
     final speedHistory = provider.getSpeedHistory(task.id);
     final isDownloading = task.status == DownloadStatus.downloading;
 
-    // Map speed records to fl_chart points
+    // Map speed records to fl_chart points (in bytes/s)
     final List<FlSpot> spots = List.generate(speedHistory.length, (i) {
-      // Map to MB/s
-      return FlSpot(i.toDouble(), speedHistory[i] / (1024 * 1024));
+      return FlSpot(i.toDouble(), speedHistory[i]);
     });
     if (spots.length == 1) {
       spots.add(FlSpot(1.0, spots[0].y));
@@ -377,7 +376,27 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
               child: LineChart(
                 LineChartData(
                   gridData: const FlGridData(show: false),
-                  titlesData: const FlTitlesData(show: false),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 45,
+                        getTitlesWidget: (value, meta) {
+                          if (value == meta.max && meta.max > 0) {
+                            return Text(
+                              '${formatBytes(meta.max.round())}/s',
+                              style: TextStyle(color: secClr, fontSize: 8, fontWeight: FontWeight.bold),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                  ),
                   borderData: FlBorderData(show: false),
                   lineTouchData: const LineTouchData(enabled: false),
                   minX: 0,
@@ -835,6 +854,13 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             value: L10n.translateCategory(context, task.category).toUpperCase(),
             settings: settings,
           ),
+          if (task.statusMessage != null && task.statusMessage!.isNotEmpty)
+            _buildMetaRow(
+              context,
+              label: L10n.of(context, 'details_status'),
+              value: task.statusMessage!,
+              settings: settings,
+            ),
           if (task.errorMessage != null)
             _buildMetaRow(
               context,
@@ -1865,7 +1891,7 @@ class _TorrentFilesPanel extends StatefulWidget {
 }
 
 class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
-    with HapticHelper {
+    with HapticHelper, WidgetsBindingObserver {
   /// Actual bytes confirmed on disk for each file (parallel to torrentFiles list).
   List<int> _diskBytes = [];
   Timer? _refreshTimer;
@@ -1874,8 +1900,19 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refresh();
     _scheduleRefresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    } else if (state == AppLifecycleState.resumed) {
+      _scheduleRefresh();
+    }
   }
 
   @override
@@ -1899,6 +1936,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
 
   void _scheduleRefresh() {
     if (widget.task.status != DownloadStatus.downloading) return;
+    _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _refresh(),
@@ -1919,6 +1957,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
   }

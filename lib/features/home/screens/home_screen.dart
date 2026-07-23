@@ -754,6 +754,34 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<DownloadProvider>();
+    final query = provider.searchQuery;
+
+    if (query.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.search_off_rounded, size: 48, color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+              const SizedBox(height: 12),
+              Text(
+                'No results for "$query"',
+                style: TextStyle(color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () => provider.setSearchQuery(''),
+                icon: const Icon(Icons.clear, size: 16),
+                label: const Text('CLEAR SEARCH'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final icon = selectedTab == 1
         ? Icons.history_toggle_off_outlined
         : Icons.portable_wifi_off_outlined;

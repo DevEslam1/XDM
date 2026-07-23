@@ -35,7 +35,7 @@ jobs:
         run: flutter analyze
 
       - name: Run Unit & Utility Tests
-        run: flutter test test/url_file_utils_test.dart test/database_converters_test.dart test/download_task_test.dart test/download_engine_fallback_test.dart test/youtube_service_test.dart test/403_mitigation_test.dart
+        run: flutter test test/url_file_utils_test.dart test/database_converters_test.dart test/download_task_test.dart test/download_engine_fallback_test.dart test/youtube_service_test.dart test/forbidden_403_mitigation_test.dart
 
   build_android:
     name: Build Android APK

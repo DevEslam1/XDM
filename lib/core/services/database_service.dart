@@ -53,12 +53,14 @@ class DatabaseService {
     
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('hive_migrated') != true) {
-      await _migrateFromHive();
-      await prefs.setBool('hive_migrated', true);
+      final success = await _migrateFromHive();
+      if (success) {
+        await prefs.setBool('hive_migrated', true);
+      }
     }
   }
 
-  Future<void> _migrateFromHive() async {
+  Future<bool> _migrateFromHive() async {
     // Check if hive boxes exist, migrate, and delete
     try {
       if (await Hive.boxExists(downloadsBoxName)) {
@@ -186,8 +188,10 @@ class DatabaseService {
           await box.deleteFromDisk();
         }
       }
+      return true; // All boxes migrated successfully
     } catch (e) {
       debugPrint('Hive to Drift migration error: $e');
+      return false;
     }
   }
 

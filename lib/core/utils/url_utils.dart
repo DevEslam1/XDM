@@ -19,9 +19,9 @@ bool isMagnetUrl(String value) {
   // - 40 character hex string (SHA-1)
   // - 32 character base32 string
   // - 64 character hex string (SHA-256 for BitTorrent v2)
-  final isHex40 = RegExp(r'^[A-F0-9]{40}$').hasMatch(infoHash);
+  final isHex40 = RegExp(r'^[A-Fa-f0-9]{40}$').hasMatch(infoHash);
   final isBase32 = RegExp(r'^[A-Z2-7]{32}$').hasMatch(infoHash);
-  final isHex64 = RegExp(r'^[A-F0-9]{64}$').hasMatch(infoHash);
+  final isHex64 = RegExp(r'^[A-Fa-f0-9]{64}$').hasMatch(infoHash);
   return isHex40 || isBase32 || isHex64;
 }
 
@@ -121,21 +121,23 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
 String _base32ToHex(String base32) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   var bits = 0;
-  var value = 0;
+  var value = BigInt.zero;
   final hex = StringBuffer();
 
   for (var i = 0; i < base32.length; i++) {
     final idx = alphabet.indexOf(base32[i].toUpperCase());
     if (idx == -1) continue;
-    value = (value << 5) | idx;
+    value = (value << 5) | BigInt.from(idx);
     bits += 5;
     while (bits >= 4) {
       bits -= 4;
-      final hexDigit = (value >> bits) & 0x0F;
-      hex.write(hexDigit.toRadixString(16).toUpperCase());
+      final hexDigit = (value >> bits) & BigInt.from(0x0F);
+      hex.write(hexDigit.toInt().toRadixString(16));
     }
   }
-  return hex.toString();
+  // Pad to 40 hex characters for 160-bit SHA-1 hash
+  final result = hex.toString();
+  return result.length < 40 ? result.padLeft(40, '0') : result;
 }
 
 String fileNameFromUrl(String url) {

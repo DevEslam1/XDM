@@ -72,6 +72,7 @@ mixin DownloadBackupMixin {
       }
 
       if (isLegacy) {
+        debugPrint('[XDM Security Warning] Decrypting legacy insecure XDMCRYPT v1 backup format using XOR cipher. Please re-export your backup to update to AES-GCM format.');
         final cipherBytes = bytes.sublist(legacyMagic.length);
         final keyBytes = sha256.convert(utf8.encode(password)).bytes;
         final dataBytes = _xorCipher(cipherBytes, keyBytes);

@@ -26,28 +26,34 @@ class TorrentService {
     if (_disposed || !isInitialized) return;
     if (_updatesSub != null || _isStartingTracking) return;
     _isStartingTracking = true;
-    final controller =
-        StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
-    final sub = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
-      _activeTorrentIds = Set<int>.from(torrents.keys);
-      final mapped = torrents.map((key, value) => MapEntry(key, TorrentUpdateInfo(
-        id: value.id,
-        name: value.name,
-        progress: value.progress,
-        downloadRate: value.downloadRate,
-        uploadRate: value.uploadRate,
-        totalDone: value.totalDone,
-        totalWanted: value.totalWanted,
-        hasMetadata: value.hasMetadata,
-        stateLabel: value.state.label,
-        numSeeds: value.numSeeds,
-        numPeers: value.numPeers,
-      )));
-      controller.add(mapped);
-    });
-    _updateController = controller;
-    _updatesSub = sub;
-    _isStartingTracking = false;
+    try {
+      final controller =
+          StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
+      final sub = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
+        _activeTorrentIds = Set<int>.from(torrents.keys);
+        final mapped = torrents.map((key, value) => MapEntry(key, TorrentUpdateInfo(
+          id: value.id,
+          name: value.name,
+          progress: value.progress,
+          downloadRate: value.downloadRate,
+          uploadRate: value.uploadRate,
+          totalDone: value.totalDone,
+          totalWanted: value.totalWanted,
+          hasMetadata: value.hasMetadata,
+          stateLabel: value.state.label,
+          numSeeds: value.numSeeds,
+          numPeers: value.numPeers,
+        )));
+        controller.add(mapped);
+      });
+      _updateController = controller;
+      _updatesSub = sub;
+    } catch (e) {
+      _log.warning('Failed to start torrent tracking: $e');
+      rethrow;
+    } finally {
+      _isStartingTracking = false;
+    }
   }
 
   static void setDownloadLimit(int bytesPerSecond) {

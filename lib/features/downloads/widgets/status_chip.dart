@@ -93,7 +93,13 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
           break;
         case DownloadStatus.paused:
           color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-          label = 'PAUSED';
+          if (task.errorMessage != null && task.errorMessage!.contains('WiFi')) {
+            label = 'PAUSED (WIFI)';
+          } else if (task.errorMessage != null && task.errorMessage!.contains('Network')) {
+            label = 'PAUSED (OFFLINE)';
+          } else {
+            label = 'PAUSED';
+          }
           break;
         case DownloadStatus.completed:
           color = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;

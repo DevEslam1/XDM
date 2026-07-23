@@ -8,7 +8,6 @@ import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import android.view.WindowManager
 import java.util.concurrent.Executors
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine

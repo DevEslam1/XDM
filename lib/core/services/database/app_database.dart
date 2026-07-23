@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 
 part 'app_database.g.dart';
 
@@ -135,7 +136,10 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
         onUpgrade: (m, from, to) async {
-          // Migration logic for future schemaVersion updates
+          debugPrint('AppDatabase: Upgrading schema from $from to $to');
+          if (from < to) {
+            // Add future step migrations here
+          }
         },
       );
 }

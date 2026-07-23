@@ -63,6 +63,17 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   String? _errorMessage;
   String _qualityPreset = 'best_combined';
   int _downloadProgress = 0;
+  String _currentVideoTitle = '';
+  String _searchQuery = '';
+
+  List<Map<String, dynamic>> get _filteredVideos {
+    if (_searchQuery.isEmpty) return _videos;
+    final query = _searchQuery.toLowerCase();
+    return _videos.where((v) {
+      final title = (v['title'] as String? ?? '').toLowerCase();
+      return title.contains(query);
+    }).toList();
+  }
 
   static const List<Map<String, String>> _qualityOptions = [
     {'value': 'best_combined', 'label': 'Best Quality (Auto Merge)'},
@@ -112,12 +123,15 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     }
   }
 
-  int get _selectedCount => _videos.where((v) => v['selected'] == true).length;
+  int get _selectedCount => _filteredVideos.where((v) => v['selected'] == true).length;
 
   void _toggleAll(bool selected) {
     setState(() {
-      for (int i = 0; i < _videos.length; i++) {
-        _videos[i] = {..._videos[i], 'selected': selected};
+      for (int i = 0; i < _filteredVideos.length; i++) {
+        final idx = _videos.indexOf(_filteredVideos[i]);
+        if (idx != -1) {
+          _videos[idx] = {..._videos[idx], 'selected': selected};
+        }
       }
     });
   }
@@ -196,7 +210,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       }
 
       if (mounted) {
-        setState(() => _downloadProgress = completed);
+        setState(() {
+          _downloadProgress = completed;
+          _currentVideoTitle = videoTitle;
+        });
       }
     }
 
@@ -435,7 +452,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${_videos.length} videos',
+                            '${_filteredVideos.length}${_searchQuery.isNotEmpty ? ' / ${_videos.length}' : ''} videos',
                             style: TextStyle(color: mutedClr, fontSize: 10),
                           ),
                           const Spacer(),
@@ -443,17 +460,17 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           TextButton.icon(
                             onPressed: () {
                               runHaptic(settings);
-                              _toggleAll(_selectedCount < _videos.length);
+                              _toggleAll(_selectedCount < _filteredVideos.length);
                             },
                             icon: Icon(
-                              _selectedCount == _videos.length
+                              _selectedCount == _filteredVideos.length && _filteredVideos.isNotEmpty
                                   ? Icons.deselect
                                   : Icons.select_all,
                               size: 14,
                               color: accent,
                             ),
                             label: Text(
-                              _selectedCount == _videos.length
+                              _selectedCount == _filteredVideos.length && _filteredVideos.isNotEmpty
                                   ? 'DESELECT ALL'
                                   : 'SELECT ALL',
                               style: TextStyle(
@@ -467,6 +484,37 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                       ),
                     ),
 
+                    // Search field
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: TextField(
+                        onChanged: (val) => setState(() => _searchQuery = val),
+                        decoration: InputDecoration(
+                          hintText: 'Search videos...',
+                          hintStyle: TextStyle(color: mutedClr, fontSize: 13),
+                          prefixIcon: Icon(Icons.search, size: 16, color: mutedClr),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(Icons.clear, size: 16, color: mutedClr),
+                                  onPressed: () => setState(() => _searchQuery = ''),
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.6),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: glassBorder),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: glassBorder),
+                          ),
+                        ),
+                        style: TextStyle(color: textClr, fontSize: 13),
+                      ),
+                    ),
+
                     const Divider(height: 1, thickness: 0.5),
 
                     // Video list
@@ -477,9 +525,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        itemCount: _videos.length,
+                        itemCount: _filteredVideos.length,
                         itemBuilder: (context, index) {
-                          final video = _videos[index];
+                          final video = _filteredVideos[index];
                           final isSelected = video['selected'] as bool? ?? true;
                           final title =
                               video['title'] as String? ?? 'Video ${index + 1}';
@@ -501,12 +549,15 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                   borderRadius: BorderRadius.circular(14),
                                   onTap: () {
                                     runHaptic(settings);
-                                    setState(() {
-                                      _videos[index] = {
-                                        ...video,
-                                        'selected': !isSelected,
-                                      };
-                                    });
+                                    final originalIndex = _videos.indexOf(video);
+                                    if (originalIndex != -1) {
+                                      setState(() {
+                                        _videos[originalIndex] = {
+                                          ...video,
+                                          'selected': !isSelected,
+                                        };
+                                      });
+                                    }
                                   },
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
@@ -528,12 +579,15 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                             ),
                                             onChanged: (val) {
                                               if (val != null) {
-                                                setState(() {
-                                                  _videos[index] = {
-                                                    ...video,
-                                                    'selected': val,
-                                                  };
-                                                });
+                                                final originalIndex = _videos.indexOf(video);
+                                                if (originalIndex != -1) {
+                                                  setState(() {
+                                                    _videos[originalIndex] = {
+                                                      ...video,
+                                                      'selected': val,
+                                                    };
+                                                  });
+                                                }
                                               }
                                             },
                                           ),
@@ -810,14 +864,33 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                   Row(
                                     children: [
                                       Expanded(
-                                        child: Text(
-                                          L10n.isRtl(context)
-                                              ? 'جاري إضافة $_downloadProgress من $_selectedCount فيديو...'
-                                              : 'Enqueuing $_downloadProgress of $_selectedCount videos...',
-                                          style: TextStyle(
-                                            color: secClr,
-                                            fontSize: 11,
-                                          ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              L10n.isRtl(context)
+                                                  ? 'جاري إضافة $_downloadProgress من $_selectedCount فيديو...'
+                                                  : 'Enqueuing $_downloadProgress of $_selectedCount videos...',
+                                              style: TextStyle(
+                                                color: secClr,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (_currentVideoTitle.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(top: 2),
+                                                child: Text(
+                                                  _currentVideoTitle,
+                                                  style: TextStyle(
+                                                    color: mutedClr,
+                                                    fontSize: 10,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                       ),
                                       TextButton(

@@ -21,6 +21,7 @@ class DownloadTask {
   final String localFilePath;
   final String tempFilePath;
   final String? errorMessage;
+  final String? statusMessage;
   final int threadCount;
   final List<double> chunks;
   final DateTime createdAt;
@@ -56,6 +57,7 @@ class DownloadTask {
     required this.localFilePath,
     required this.tempFilePath,
     this.errorMessage,
+    this.statusMessage,
     required this.threadCount,
     required this.chunks,
     required this.createdAt,
@@ -146,6 +148,8 @@ class DownloadTask {
     String? tempFilePath,
     String? errorMessage,
     bool clearError = false,
+    String? statusMessage,
+    bool clearStatusMessage = false,
     int? threadCount,
     List<double>? chunks,
     DateTime? updatedAt,
@@ -183,6 +187,7 @@ class DownloadTask {
       localFilePath: localFilePath ?? this.localFilePath,
       tempFilePath: tempFilePath ?? this.tempFilePath,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      statusMessage: clearStatusMessage ? null : statusMessage ?? this.statusMessage,
       threadCount: threadCount ?? this.threadCount,
       chunks: chunks != null ? List.of(chunks) : List.of(this.chunks),
       createdAt: createdAt,
@@ -219,6 +224,7 @@ class DownloadTask {
       'localFilePath': localFilePath,
       'tempFilePath': tempFilePath,
       'errorMessage': errorMessage,
+      'statusMessage': statusMessage,
       'threadCount': threadCount,
       'chunks': chunks,
       'createdAt': createdAt.toIso8601String(),
@@ -285,6 +291,7 @@ class DownloadTask {
       localFilePath: map['localFilePath'] as String? ?? '',
       tempFilePath: map['tempFilePath'] as String? ?? '',
       errorMessage: map['errorMessage'] as String?,
+      statusMessage: map['statusMessage'] as String?,
       threadCount: threadCount,
       chunks: chunks,
       createdAt:

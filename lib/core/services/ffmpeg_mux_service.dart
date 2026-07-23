@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:logging/logging.dart';
@@ -15,11 +16,11 @@ class FFmpegMuxService {
       String videoPath, String audioPath, String outputPath,
       {bool deleteInputsIfTemp = true}) async {
     bool isTempFile(String path) {
-      final lower = path.toLowerCase();
-      return lower.endsWith('.tmp') ||
-          lower.endsWith('.audio') ||
-          lower.contains('.dmxpart') ||
-          lower.contains('temp');
+      final name = p.basename(path).toLowerCase();
+      return name.endsWith('.tmp') ||
+          name.endsWith('.audio') ||
+          name.contains('.dmxpart') ||
+          name.contains('temp');
     }
 
     try {
@@ -69,7 +70,7 @@ class FFmpegMuxService {
           .timeout(const Duration(minutes: 60));
       final returnCode = await session.getReturnCode();
 
-      void cleanUpInputs() async {
+      Future<void> cleanUpInputs() async {
         if (deleteInputsIfTemp) {
           if (isTempFile(videoPath)) {
             try { await videoFile.delete(); } catch (_) {}
@@ -85,7 +86,7 @@ class FFmpegMuxService {
         if (await outputFile.exists()) {
           final outputSize = await outputFile.length();
           _log.info('Merge successful: $outputPath ($outputSize bytes)');
-          cleanUpInputs();
+          await cleanUpInputs();
           return true;
         } else {
           _log.warning('Merge reported success but output file not found: $outputPath');
@@ -118,7 +119,7 @@ class FFmpegMuxService {
           if (await outputFile.exists()) {
             final outputSize = await outputFile.length();
             _log.info('Fallback merge successful: $outputPath ($outputSize bytes)');
-            cleanUpInputs();
+            await cleanUpInputs();
             return true;
           }
         }

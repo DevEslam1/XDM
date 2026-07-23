@@ -57,7 +57,13 @@ class NotificationService {
     // Guard against concurrent re-entrancy: if an init is already in
     // progress (or completed), reuse its future instead of re-running
     // setup, which would re-create the ReceivePort and leak the old one.
-    if (_initFuture != null) return _initFuture!;
+    if (_initFuture != null) {
+      if (_receivePort == null || IsolateNameServer.lookupPortByName('dmx_notification_port') == null) {
+        _initFuture = null;
+      } else {
+        return _initFuture!;
+      }
+    }
     final completer = Completer<void>();
     _initFuture = completer.future;
     try {
@@ -198,7 +204,7 @@ class NotificationService {
     await _plugin.show(
       id: notificationId,
       title: title,
-      body: '$speed • $eta',
+      body: eta.isNotEmpty ? '$speed | $eta' : speed,
       notificationDetails: details,
       payload: payload,
     );

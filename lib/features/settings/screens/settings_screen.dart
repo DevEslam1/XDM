@@ -433,10 +433,14 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       _buildDropdownTile<int>(
                         settings: settings,
                         title: L10n.of(context, 'settings_max_channels'),
-                        subtitle: L10n.of(context, 'settings_max_channels_sub'),
+                        subtitle: settings.batterySaverMode
+                            ? (L10n.isRtl(context)
+                                ? 'محدود بـ ${settings.effectiveMaxDownloads} بسبب موفر البطارية'
+                                : 'Limited to ${settings.effectiveMaxDownloads} by Battery Saver')
+                            : L10n.of(context, 'settings_max_channels_sub'),
                         value: settings.maxDownloads,
                         items: [1, 2, 3, 5, 8],
-                        onChanged: (val) {
+                        onChanged: settings.batterySaverMode ? null : (val) {
                           if (val != null) {
                             settings.setMaxDownloads(val);
                             triggerHaptic(settings);
@@ -447,13 +451,17 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       _buildDropdownTile<int>(
                         settings: settings,
                         title: L10n.of(context, 'settings_default_threads'),
-                        subtitle: L10n.of(
-                          context,
-                          'settings_default_threads_sub',
-                        ),
+                        subtitle: settings.batterySaverMode
+                            ? (L10n.isRtl(context)
+                                ? 'محدود بـ ${settings.effectiveDefaultThreadCount} بسبب موفر البطارية'
+                                : 'Limited to ${settings.effectiveDefaultThreadCount} by Battery Saver')
+                            : L10n.of(
+                                context,
+                                'settings_default_threads_sub',
+                              ),
                         value: settings.defaultThreadCount,
                         items: kAvailableThreadOptions,
-                        onChanged: (val) {
+                        onChanged: settings.batterySaverMode ? null : (val) {
                           if (val != null) {
                             settings.setDefaultThreadCount(val);
                             triggerHaptic(settings);
@@ -578,7 +586,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                                 ? 'سرعة الرفع القصوى'
                                 : 'Maximum Upload Speed',
                             subtitle:
-                                '${settings.globalTorrentSeedingLimitKbps} kbps (${(settings.globalTorrentSeedingLimitKbps / 8).toStringAsFixed(1)} KB/s)',
+                                '${settings.globalTorrentSeedingLimitKbps} kbps (${(settings.globalTorrentSeedingLimitKbps / 8).toStringAsFixed(1)} KB/s upload)',
                             value: settings.globalTorrentSeedingLimitKbps
                                 .toDouble(),
                             min: 100.0,
@@ -729,9 +737,13 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                       _buildSwitchTile(
                         settings: settings,
                         title: L10n.of(context, 'settings_classic_ui'),
-                        subtitle: L10n.of(context, 'settings_classic_ui_sub'),
+                        subtitle: settings.batterySaverMode
+                            ? (L10n.isRtl(context)
+                                ? 'مفعل بواسطة موفر البطارية'
+                                : 'Forced ON by Battery Saver')
+                            : L10n.of(context, 'settings_classic_ui_sub'),
                         value: settings.classicUi,
-                        onChanged: (val) {
+                        onChanged: settings.batterySaverMode ? null : (val) {
                           settings.setClassicUi(val);
                           triggerHaptic(settings);
                         },
@@ -1466,7 +1478,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     required String title,
     required List<Widget> children,
   }) {
-    final isExpanded = _expandedSections[title] ?? false;
+    final isDefaultExpanded = title == L10n.of(context, 'settings_engine_status');
+    final isExpanded = _expandedSections[title] ?? isDefaultExpanded;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -1610,7 +1623,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     required String title,
     required String subtitle,
     required bool value,
-    required ValueChanged<bool> onChanged,
+    ValueChanged<bool>? onChanged,
   }) {
     final isDark = settings.isDarkMode;
     final primaryClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
@@ -1711,7 +1724,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     required T value,
     required List<T> items,
     Map<T, String>? itemLabels,
-    required ValueChanged<T?> onChanged,
+    ValueChanged<T?>? onChanged,
   }) {
     final isDark = settings.isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;

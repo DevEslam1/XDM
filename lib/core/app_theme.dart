@@ -103,7 +103,6 @@ class AppTheme {
     double borderRadius = 24.0,
     double bgOpacity = 0.08,
     double borderOpacity = 0.2,
-    double glowOpacity = 0.08,
     bool isDark = true,
   }) {
     return BoxDecoration(

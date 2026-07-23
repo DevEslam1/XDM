@@ -66,7 +66,11 @@ mixin DownloadFilterMixin {
 
   int get downloadingTasksCount =>
       providerTasks
-          .where((task) => task.status == DownloadStatus.downloading)
+          .where((task) =>
+              task.status == DownloadStatus.downloading ||
+              (task.status == DownloadStatus.completed &&
+                  task.isTorrent &&
+                  task.seedingEnabled))
           .length;
 
   int get queuedTasksCount =>

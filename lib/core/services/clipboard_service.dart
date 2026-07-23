@@ -8,7 +8,7 @@ class ClipboardService {
   ClipboardService._internal();
 
   String? _lastCheckedUrl;
-  DateTime? _lastCheckedAt;
+  DateTime? _lastCheckedTime;
   static const Duration _urlTtl = Duration(minutes: 30);
 
   /// Checks if there is a new valid HTTP/HTTPS URL on the clipboard.
@@ -19,11 +19,15 @@ class ClipboardService {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
       if (text != null && isHttpUrl(text)) {
-        final isExpired = _lastCheckedAt == null ||
-            DateTime.now().difference(_lastCheckedAt!) > _urlTtl;
-        if (text != _lastCheckedUrl || isExpired) {
+        if (text != _lastCheckedUrl) {
           _lastCheckedUrl = text;
-          _lastCheckedAt = DateTime.now();
+          _lastCheckedTime = DateTime.now();
+          return text;
+        }
+        final now = DateTime.now();
+        if (_lastCheckedTime == null ||
+            now.difference(_lastCheckedTime!) > _urlTtl) {
+          _lastCheckedTime = now;
           return text;
         }
       }
@@ -36,6 +40,6 @@ class ClipboardService {
   /// Sets the last checked URL so we don't prompt for it again.
   void markAsChecked(String url) {
     _lastCheckedUrl = url;
-    _lastCheckedAt = DateTime.now();
+    _lastCheckedTime = DateTime.now();
   }
 }

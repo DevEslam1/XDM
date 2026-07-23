@@ -17,6 +17,7 @@ mixin DownloadQueueMixin {
   List<DownloadTask> get providerTasks;
   SettingsProvider get providerSettingsProvider;
   int get downloadingTasksCount;
+  int get pendingStartCount;
   void startTaskFromQueue(DownloadTask task);
   bool isTaskWaitingForRetry(String taskId);
 
@@ -77,7 +78,7 @@ mixin DownloadQueueMixin {
           .toList();
       var startedThisPass = 0;
       for (final task in queued) {
-        final availableSlots = maxSlots - downloadingTasksCount - startedThisPass;
+        final availableSlots = maxSlots - downloadingTasksCount - pendingStartCount - startedThisPass;
         if (availableSlots <= 0) break;
         startTaskFromQueue(task);
         startedThisPass++;

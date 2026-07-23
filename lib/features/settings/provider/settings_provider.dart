@@ -107,7 +107,15 @@ class SettingsProvider extends ChangeNotifier {
   bool forceEncrypt = false;
   int torrentConnectionsLimit = 200;
 
-  // Connection settings
+  int get configuredMaxDownloads => _maxDownloads;
+  bool get configuredClassicUi => _classicUi;
+  int get configuredDefaultThreadCount => _defaultThreadCount;
+
+  // Issue 5 Fix: Effective getters for battery saver mode overrides
+  int get effectiveMaxDownloads => batterySaverMode ? 1 : _maxDownloads;
+  bool get effectiveClassicUi => batterySaverMode ? true : _classicUi;
+  int get effectiveDefaultThreadCount => batterySaverMode ? 2 : _defaultThreadCount;
+
   int _defaultThreadCount = 5;
   int get defaultThreadCount => batterySaverMode ? 2 : _defaultThreadCount;
 
@@ -165,7 +173,7 @@ class SettingsProvider extends ChangeNotifier {
     reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
     customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
-    if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 7;
+    if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
     categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
 
     globalTorrentSeeding = _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
@@ -174,9 +182,9 @@ class SettingsProvider extends ChangeNotifier {
     enableDht = _prefs.getBool(_enableDhtKey) ?? enableDht;
     enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
     forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
-    torrentConnectionsLimit = _prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit;
+    torrentConnectionsLimit = (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit).clamp(10, 1000);
     _defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
-    if (![1, 2, 4, 5, 6, 8, 16].contains(_defaultThreadCount)) _defaultThreadCount = 5;
+    if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) _defaultThreadCount = 5;
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
     incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
     desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
@@ -474,12 +482,20 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setProxyHost(String value) async {
     proxyHost = value;
     await _prefs.setString(_proxyHostKey, value);
+    if (proxyHost.isNotEmpty) {
+      proxyAddress = '$proxyHost:$proxyPort';
+      await _prefs.setString(_proxyAddressKey, proxyAddress);
+    }
     notifyListeners();
   }
 
   Future<void> setProxyPort(int value) async {
     proxyPort = value;
     await _prefs.setInt(_proxyPortKey, value);
+    if (proxyHost.isNotEmpty) {
+      proxyAddress = '$proxyHost:$proxyPort';
+      await _prefs.setString(_proxyAddressKey, proxyAddress);
+    }
     notifyListeners();
   }
 

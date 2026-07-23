@@ -74,6 +74,7 @@ class DownloadProvider extends ChangeNotifier
   final PermissionService _permissionService;
   final NotificationService _notificationService;
   final List<DownloadTask> _tasks = [];
+  bool _progressLock = false;
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, List<double>> _speedHistories = {};
   final Map<String, int> _lastProgressUpdateTimes = {};
@@ -186,6 +187,12 @@ class DownloadProvider extends ChangeNotifier
   Future<int?> _actualPartialBytes(DownloadTask task) async {
     if (task.tempFilePath.trim().isEmpty) return null;
 
+    final targetFile = File(task.tempFilePath);
+    if (!await targetFile.exists()) {
+      return 0;
+    }
+    final targetSize = await targetFile.length();
+
     if (task.threadCount > 1) {
       final stateFile = File('${task.tempFilePath}.dmxstate');
       if (await stateFile.exists()) {
@@ -196,25 +203,26 @@ class DownloadProvider extends ChangeNotifier
           for (final chunk in stateList) {
             total += (chunk as num).toInt();
           }
-          return total;
+          // Verify that state sum does not exceed actual file size on disk
+          return total > targetSize ? targetSize : total;
         } catch (e) {
           debugPrint('Failed to parse .dmxstate: $e');
-          return null;
+          return targetSize;
         }
       }
     }
 
-    final partial = File(task.tempFilePath);
-    if (!await partial.exists()) return null;
-    if (task.downloadedBytes > 0) return task.downloadedBytes;
-    return await partial.length();
+    if (task.downloadedBytes > 0 && task.downloadedBytes <= targetSize) {
+      return task.downloadedBytes;
+    }
+    return targetSize;
   }
 
   Future<DownloadTask> _reconcilePartialProgress(DownloadTask task) async {
     if (task.status == DownloadStatus.completed) return task;
     
     // Do not reconcile progress for active downloads (their memory state is accurate)
-    if (_cancelTokens.containsKey(task.id)) return task;
+    if (_cancelTokens.containsKey(task.id) || task.status == DownloadStatus.downloading) return task;
     
     // Torrents manage their own fastresume data and piece maps.
     // Reading .part files will break torrent progress.
@@ -636,6 +644,7 @@ class DownloadProvider extends ChangeNotifier
         speed: 0,
         clearEta: true,
         clearError: true,
+        clearStatusMessage: true,
         clearScheduledAt: true,
         pausedByUser: true,
       ),
@@ -671,6 +680,7 @@ class DownloadProvider extends ChangeNotifier
         speed: 0,
         clearEta: true,
         clearError: true,
+        clearStatusMessage: true,
         clearCompletedAt: true,
         pausedByUser: false,
       ),
@@ -792,6 +802,7 @@ class DownloadProvider extends ChangeNotifier
         speed: 0,
         clearEta: true,
         clearError: true,
+        clearStatusMessage: true,
         clearCompletedAt: true,
       ),
     );
@@ -822,6 +833,7 @@ class DownloadProvider extends ChangeNotifier
     _retryCounts.remove(id);
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
+    final savedNotificationId = _notificationIds[id];
     _activeFutures.remove(id);
     _notificationIds.remove(id);
     _tasks.removeWhere((task) => task.id == id);
@@ -866,7 +878,9 @@ class DownloadProvider extends ChangeNotifier
       }
     }
     await _databaseService.deleteTask(id);
-    _notificationService.cancelNotification(_getNotificationId(id));
+    if (savedNotificationId != null) {
+      _notificationService.cancelNotification(savedNotificationId);
+    }
     updateActualTorrentUploadLimit();
     notifyListeners();
     pumpQueue();
@@ -888,6 +902,7 @@ class DownloadProvider extends ChangeNotifier
       _retryTimers[id]?.cancel();
       _retryTimers.remove(id);
       _activeFutures.remove(id);
+      final savedNotificationId = _notificationIds[id];
       _notificationIds.remove(id);
       _tasks.removeWhere((task) => task.id == id);
 
@@ -896,7 +911,9 @@ class DownloadProvider extends ChangeNotifier
         TorrentService.removeTorrent(torrentId, deleteFiles: false);
         _torrentIds.remove(id);
       }
-      _notificationService.cancelNotification(_getNotificationId(id));
+      if (savedNotificationId != null) {
+        _notificationService.cancelNotification(savedNotificationId);
+      }
     }
     filteredTasksDirty = true;
     await _databaseService.deleteTasks(ids);
@@ -1011,8 +1028,29 @@ class DownloadProvider extends ChangeNotifier
   // Download engine orchestration
   // ---------------------------------------------------------------------------
 
+  final Set<String> _startingTaskIds = {};
+
+  @override
+  int get pendingStartCount => _startingTaskIds.length;
+
   Future<void> _startTask(DownloadTask task) async {
     if (_cancelTokens.containsKey(task.id)) return;
+    if (_startingTaskIds.contains(task.id)) return;
+    _startingTaskIds.add(task.id);
+
+    final hasWifiOrEthernet =
+        _currentConnectivity.contains(ConnectivityResult.wifi) ||
+        _currentConnectivity.contains(ConnectivityResult.ethernet);
+    if (_settingsProvider.wifiOnly && !hasWifiOrEthernet) {
+      await _setTask(
+        task.copyWith(
+          status: DownloadStatus.paused,
+          errorMessage: 'Waiting for WiFi connection',
+        ),
+      );
+      _startingTaskIds.remove(task.id);
+      return;
+    }
 
     if (downloadingTasksCount == 0) {
       BackgroundService.start();
@@ -1141,6 +1179,7 @@ class DownloadProvider extends ChangeNotifier
               pumpQueue();
             }
           });
+          _startingTaskIds.remove(task.id);
           return;
         }
 
@@ -1153,6 +1192,7 @@ class DownloadProvider extends ChangeNotifier
         );
         pumpQueue();
         _updateTelemetryWidget();
+        _startingTaskIds.remove(task.id);
         return;
       }
     }
@@ -1165,8 +1205,15 @@ class DownloadProvider extends ChangeNotifier
       try {
         final existingTorrentId = _torrentIds[task.id];
         if (existingTorrentId != null) {
-          torrentId = existingTorrentId;
-        } else {
+          // Validate torrent still exists; if the engine removed it, re-add
+          try {
+            TorrentService.getFiles(existingTorrentId);
+            torrentId = existingTorrentId;
+          } catch (_) {
+            _torrentIds.remove(task.id);
+          }
+        }
+        if (torrentId == null) {
           final saveDir = task.savePath;
           if (task.url.startsWith('magnet:')) {
             torrentId = TorrentService.addMagnet(task.url, saveDir);
@@ -1192,6 +1239,7 @@ class DownloadProvider extends ChangeNotifier
         );
         pumpQueue();
         _updateTelemetryWidget();
+        _startingTaskIds.remove(task.id);
         return;
       }
     }
@@ -1213,6 +1261,7 @@ class DownloadProvider extends ChangeNotifier
       task.copyWith(
         status: DownloadStatus.downloading,
         clearError: true,
+        clearStatusMessage: true,
         clearCompletedAt: true,
         torrentFiles: resetTorrentFiles ?? task.torrentFiles,
         audioProgress: 0.0,
@@ -1257,6 +1306,10 @@ class DownloadProvider extends ChangeNotifier
 
     // Run video and audio sequentially (audio first, then video)
     final downloadFuture = () async {
+      // Re-fetch current task state by ID to prevent using stale parameters if mutated during async gap
+      final currentTask = _findTask(task.id);
+      if (currentTask == null) return;
+      task = currentTask;
       final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
       int attempt = 0;
       while (true) {
@@ -1367,89 +1420,103 @@ class DownloadProvider extends ChangeNotifier
                       if (current == null || current.status != DownloadStatus.downloading) {
                         return;
                       }
-            
-                      final index = _tasks.indexWhere((t) => t.id == task.id);
-                      if (index == -1) return;
-            
-                      final now = DateTime.now().millisecondsSinceEpoch;
-                      final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
-            
-                      final speedList = _speedHistories[task.id] ??= [];
-                      speedList.add(progress.speed);
-                      if (speedList.length > 20) {
-                        speedList.removeAt(0);
-                      }
-            
-                      // Re-read the freshest task from the list right before mutating so
-                      // that any concurrent update (e.g. a YouTube URL refresh) is not
-                      // clobbered by this progress write.
-                      final latest = _tasks[index];
-                      final base = latest.status == DownloadStatus.downloading ? latest : current;
-            
-                      final newFileName = isAutoName && progress.fileName != null
-                          ? progress.fileName!
-                          : base.fileName;
-            
-                      final newLocalPath = newFileName != base.fileName
-                          ? p.join(p.dirname(base.localFilePath), safeFileName(newFileName))
-                          : base.localFilePath;
-            
-                      final newTempPath = newFileName != base.fileName
-                          ? p.join(p.dirname(base.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
-                          : base.tempFilePath;
-            
-                      final newCategory = newFileName != base.fileName && base.category == 'Other'
-                          ? categoryFromFileName(newFileName)
-                          : base.category;
-            
-                      final resolvedVideoSize = progress.fileSize > 0 ? progress.fileSize : videoTransferSize;
-                      final resolvedTotalSize = hasAudio ? resolvedVideoSize + base.audioSize : resolvedVideoSize;
-                      final currentDownloadedBytes = (hasAudio ? base.audioSize : 0) + progress.downloadedBytes;
-            
-                      final updatedTask = base.copyWith(
-                        fileName: newFileName,
-                        localFilePath: newLocalPath,
-                        tempFilePath: newTempPath,
-                        category: newCategory,
-                        fileSize: resolvedTotalSize,
-                        downloadedBytes: currentDownloadedBytes,
-                        speed: progress.speed,
-                        eta: progress.eta,
-                        chunks: progress.chunks ??
-                            _buildChunks(
-                              base.threadCount,
-                              resolvedVideoSize,
-                              progress.downloadedBytes,
-                            ),
-                        supportsResume: progress.supportsResume ?? base.supportsResume,
-                      );
-            
-                      if (now - lastUpdate >= 250) {
-                        _lastProgressUpdateTimes[task.id] = now;
-                        _tasks[index] = updatedTask;
-                        notifyListeners();
-            
-                        if (_settingsProvider.notificationsEnabled) {
-                          final progressPercent = resolvedTotalSize > 0
-                              ? ((currentDownloadedBytes / resolvedTotalSize) * 100).round().clamp(0, 100)
-                              : 0;
-                          _notificationService.showDownloadProgress(
-                            notificationId: notificationId,
-                            title: task.fileName,
-                            progressPercent: progressPercent,
-                            speed: updatedTask.speedFormatted,
-                            eta: updatedTask.etaFormatted,
-                            languageCode: _settingsProvider.languageCode,
-                            payload: task.id,
-                          );
+
+                      // Issue 2 Fix: Lock progress updates to prevent race conditions during async state changes
+                      if (_progressLock) return;
+                      _progressLock = true;
+                      try {
+                        final index = _tasks.indexWhere((t) => t.id == task.id);
+                        if (index == -1) return;
+
+                        final now = DateTime.now().millisecondsSinceEpoch;
+                        final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
+
+                        final speedList = _speedHistories[task.id] ??= [];
+                        speedList.add(progress.speed);
+                        if (speedList.length > 20) {
+                          speedList.removeAt(0);
                         }
-            
-                        // Keep the foreground service alive directly from the active
-                        // download path so it never self-stops while bytes are flowing
-                        BackgroundService.sendHeartbeat();
-                      } else {
-                        _tasks[index] = updatedTask;
-                        _pendingProgressUpdates.add(task.id);
+
+                        // FIX #2: Re-read immediately before mutating and keep the read-modify-write
+                        // synchronous so a concurrent update (e.g. YouTube URL refresh) is not clobbered.
+                        final freshIndex = _tasks.indexWhere((t) => t.id == task.id);
+                        if (freshIndex == -1) return;
+                        final latest = _tasks[freshIndex];
+                        if (latest.status != DownloadStatus.downloading) return;
+                        final base = latest;
+
+                        final newFileName = isAutoName && progress.fileName != null
+                            ? progress.fileName!
+                            : base.fileName;
+
+                        final newLocalPath = newFileName != base.fileName
+                            ? p.join(p.dirname(base.localFilePath), safeFileName(newFileName))
+                            : base.localFilePath;
+
+                        final newTempPath = newFileName != base.fileName
+                            ? p.join(p.dirname(base.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
+                            : base.tempFilePath;
+
+                        final newCategory = newFileName != base.fileName && base.category == 'Other'
+                            ? categoryFromFileName(newFileName)
+                            : base.category;
+
+                        final resolvedVideoSize = progress.fileSize > 0 ? progress.fileSize : videoTransferSize;
+                        final resolvedTotalSize = hasAudio ? resolvedVideoSize + base.audioSize : resolvedVideoSize;
+                        final currentDownloadedBytes = (hasAudio ? base.audioSize : 0) + progress.downloadedBytes;
+
+                        final updatedTask = base.copyWith(
+                          fileName: newFileName,
+                          localFilePath: newLocalPath,
+                          tempFilePath: newTempPath,
+                          category: newCategory,
+                          fileSize: resolvedTotalSize,
+                          downloadedBytes: currentDownloadedBytes,
+                          speed: progress.speed,
+                          eta: progress.eta,
+                          chunks: progress.chunks ??
+                              _buildChunks(
+                                base.threadCount,
+                                resolvedVideoSize,
+                                progress.downloadedBytes,
+                              ),
+                          supportsResume: progress.supportsResume ?? base.supportsResume,
+                          torrentFiles: progress.torrentFiles ?? base.torrentFiles,
+                        );
+
+                        if (now - lastUpdate >= 250) {
+                          _lastProgressUpdateTimes[task.id] = now;
+                          final freshIndex = _tasks.indexWhere((t) => t.id == task.id);
+                          if (freshIndex != -1 && _tasks[freshIndex].status == DownloadStatus.downloading) {
+                            _tasks[freshIndex] = updatedTask;
+                          }
+                          notifyListeners();
+
+                          if (_settingsProvider.notificationsEnabled) {
+                            final progressPercent = resolvedTotalSize > 0
+                                ? ((currentDownloadedBytes / resolvedTotalSize) * 100).round().clamp(0, 100)
+                                : 0;
+                            _notificationService.showDownloadProgress(
+                              notificationId: notificationId,
+                              title: task.fileName,
+                              progressPercent: progressPercent,
+                              speed: updatedTask.speedFormatted,
+                              eta: updatedTask.etaFormatted,
+                              languageCode: _settingsProvider.languageCode,
+                              payload: task.id,
+                            );
+                          }
+
+                          // Keep the foreground service alive directly from the active
+                          // download path so it never self-stops while bytes are flowing
+                          BackgroundService.sendHeartbeat();
+                        } else {
+                          final freshIndex = _tasks.indexWhere((t) => t.id == task.id);
+                          if (freshIndex != -1) _tasks[freshIndex] = updatedTask;
+                          _pendingProgressUpdates.add(task.id);
+                        }
+                      } finally {
+                        _progressLock = false;
                       }
                     },
                     speedLimitBytesPerSecond: () {
@@ -1489,18 +1556,43 @@ class DownloadProvider extends ChangeNotifier
             }
             try {
               YoutubeService.resetClient();
-              final newUrlInfo = await YoutubeService.refreshStreamUrl(
-                task.downloadPageUrl!,
-                task.url,
-              );
+
+              // For combined downloads (audio+video), use getFreshStreams
+              // which returns both URLs. refreshStreamUrl only returns the
+              // video URL, leaving the audio URL expired.
+              Map<String, dynamic>? newUrlInfo;
+              if (hasAudio) {
+                final freshStreams = await YoutubeService.getFreshStreams(
+                  task.downloadPageUrl!,
+                );
+                if (freshStreams != null && freshStreams['url'] != null) {
+                  newUrlInfo = {
+                    'url': freshStreams['url'],
+                    'audioUrl': freshStreams['audioUrl'],
+                  };
+                }
+              } else {
+                newUrlInfo = await _refreshYoutubeStreamUrlSafe(
+                  task.downloadPageUrl!,
+                  task.url,
+                );
+              }
               if (newUrlInfo != null && newUrlInfo['url'] != null) {
+                final refreshedUrl = newUrlInfo['url'] as String;
+                final refreshedAudioUrl = newUrlInfo['audioUrl'] as String?;
+
+                // Reject MIME type changes
+                if (!_youtubeMimeCompatible(task.url, refreshedUrl)) {
+                  rethrow;
+                }
+
                 final idx = _tasks.indexWhere((x) => x.id == task.id);
                 if (idx != -1) {
                   _tasks[idx] = _tasks[idx].copyWith(
-                    url: newUrlInfo['url'],
-                    mergedAudioUrl: newUrlInfo['audioUrl'] ?? task.mergedAudioUrl,
+                    url: refreshedUrl,
+                    mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
                   );
-                  task = _tasks[idx]; 
+                  task = _tasks[idx];
                 }
                 await _databaseService.saveTask(task);
                 await Future.delayed(const Duration(seconds: 2));
@@ -1520,7 +1612,7 @@ class DownloadProvider extends ChangeNotifier
             final currentForMerge = _findTask(task.id);
             if (currentForMerge == null) return;
 
-            await _setTask(currentForMerge.copyWith(errorMessage: 'Merging video and audio...'));
+            await _setTask(currentForMerge.copyWith(statusMessage: 'Merging video and audio...'));
 
             final mergedPath = '${currentForMerge.localFilePath}.merged.mp4';
             debugPrint('[DMX] Phase 3 — Merge starting:');
@@ -1565,14 +1657,30 @@ class DownloadProvider extends ChangeNotifier
           }
 
           await _flushPendingProgress(task.id);
+          _speedHistories.remove(task.id);
+          _lastProgressUpdateTimes.remove(task.id);
+          _lastDbSaveTimes.remove(task.id);
+
           var current = _findTask(task.id);
           if (current == null) return;
           if (current.status != DownloadStatus.downloading) return;
           
           final now = DateTime.now();
+          final isSeedingTorrent = current.isTorrent &&
+              current.seedingEnabled;
+          if (!isSeedingTorrent && current.isTorrent) {
+            // Torrent completed but seeding disabled: remove from engine
+            final tid = _torrentIds[current.id];
+            if (tid != null) {
+              TorrentService.removeTorrent(tid);
+              _torrentIds.remove(current.id);
+            }
+          }
+
           await _setTask(
             current.copyWith(
               clearError: true,
+              clearStatusMessage: true,
               status: DownloadStatus.completed,
               downloadedBytes:
                   (current.isTorrent || hasAudio) && current.fileSize > 0
@@ -1588,6 +1696,10 @@ class DownloadProvider extends ChangeNotifier
                   : null,
             ),
           );
+
+          if (_settingsProvider.vibration) {
+            HapticFeedback.vibrate();
+          }
 
           final finalPath = p.join(current.savePath, current.fileName);
           if (Platform.isAndroid && finalPath.isNotEmpty) {
@@ -1685,6 +1797,7 @@ class DownloadProvider extends ChangeNotifier
               status: DownloadStatus.failed,
               speed: 0,
               clearEta: true,
+              clearStatusMessage: true,
               errorMessage: _errorMessage(realError),
             ),
           );
@@ -1716,6 +1829,7 @@ class DownloadProvider extends ChangeNotifier
           }
           _updateTelemetryWidget();
         });
+    _startingTaskIds.remove(task.id);
     _activeFutures[task.id] = downloadFuture;
   }
 
@@ -1723,15 +1837,8 @@ class DownloadProvider extends ChangeNotifier
     final index = _tasks.indexWhere((task) => task.id == updated.id);
     if (index == -1) return;
 
-    final oldTask = _tasks[index];
     _tasks[index] = updated;
-
-    if (oldTask.status != updated.status ||
-        oldTask.category != updated.category ||
-        oldTask.fileName != updated.fileName ||
-        oldTask.fileSize != updated.fileSize) {
-      filteredTasksDirty = true;
-    }
+    filteredTasksDirty = true;
 
     try {
       await _databaseService.saveTask(updated);
@@ -1758,8 +1865,7 @@ class DownloadProvider extends ChangeNotifier
     return _tasks[index];
   }
 
-  /// Build per-thread chunk progress that visually approximates the overall
-  /// progress.
+  /// Build per-thread chunk progress reflecting parallel progress.
   List<double> _buildChunks(
     int threadCount,
     int fileSize,
@@ -1769,13 +1875,36 @@ class DownloadProvider extends ChangeNotifier
       return List<double>.filled(threadCount, 0.0);
     }
     final progress = (downloadedBytes / fileSize).clamp(0.0, 1.0);
-    return List<double>.generate(threadCount, (index) {
-      final start = index / threadCount;
-      final end = (index + 1) / threadCount;
-      if (progress >= end) return 1.0;
-      if (progress <= start) return 0.0;
-      return ((progress - start) * threadCount).clamp(0.0, 1.0);
-    });
+    return List<double>.filled(threadCount, progress);
+  }
+
+  // FIX #4: Prevent YouTube refresh from swapping video/audio MIME type.
+  bool _youtubeMimeCompatible(String oldUrl, String newUrl) {
+    final oldMime = Uri.tryParse(oldUrl)?.queryParameters['mime']?.split('/').first;
+    final newMime = Uri.tryParse(newUrl)?.queryParameters['mime']?.split('/').first;
+    if (oldMime == null || newMime == null) return true;
+    return oldMime == newMime;
+  }
+
+  Future<Map<String, dynamic>?> _refreshYoutubeStreamUrlSafe(
+    String pageUrl,
+    String oldStreamUrl,
+  ) async {
+    final refreshed = await YoutubeService.refreshStreamUrl(
+      pageUrl,
+      oldStreamUrl,
+    );
+    if (refreshed == null || refreshed.isEmpty) return refreshed;
+
+    final refreshedUrl = refreshed['url'] as String?;
+    if (refreshedUrl != null &&
+        !_youtubeMimeCompatible(oldStreamUrl, refreshedUrl)) {
+      throw Exception(
+        'YouTube stream type changed during URL refresh. Please re-add the download.',
+      );
+    }
+
+    return refreshed;
   }
 
   String _errorMessage(Object error) {
@@ -1833,11 +1962,19 @@ class DownloadProvider extends ChangeNotifier
   // Connectivity & scheduling
   // ---------------------------------------------------------------------------
 
+  int? _lastCleanupDays;
+
   void _onSettingsChanged() {
     _checkNetworkConnectivity();
     _downloadEngine.updateSpeedLimit(_settingsProvider.speedLimitBytesPerSecond, downloadingTasksCount);
     updateActualTorrentUploadLimit();
     TorrentService.applyAdvancedSettings(_settingsProvider);
+    if (_lastCleanupDays == null) {
+      _lastCleanupDays = _settingsProvider.cleanupDays;
+    } else if (_lastCleanupDays != _settingsProvider.cleanupDays) {
+      _lastCleanupDays = _settingsProvider.cleanupDays;
+      load(pauseOrphanDownloads: false);
+    }
     pumpQueue();
   }
 
@@ -2048,13 +2185,14 @@ class DownloadProvider extends ChangeNotifier
         final saves = <Future<void>>[];
         for (var i = 0; i < _tasks.length; i++) {
           final t = _tasks[i];
-          if (t.status == DownloadStatus.downloading || t.status == DownloadStatus.queued) {
+          if (t.status == DownloadStatus.downloading) {
             final lastBytes = _lastDbSaveBytes[t.id] ?? -1;
-            if (t.downloadedBytes != lastBytes || t.status == DownloadStatus.queued) {
+            if (t.downloadedBytes != lastBytes) {
               _lastDbSaveBytes[t.id] = t.downloadedBytes;
               saves.add(_databaseService.saveTask(t));
             }
           }
+          // Do NOT save queued tasks here — they have no meaningful progress
         }
         Future.wait(saves).catchError((e) {
           debugPrint('Batch DB save failed: $e');
@@ -2095,6 +2233,15 @@ class DownloadProvider extends ChangeNotifier
 
     if (task.downloadedBytes > 0) {
       try {
+        // Clean up temp file, state file, and all part files
+        final tempFile = File(task.tempFilePath);
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+        final stateFile = File('${task.tempFilePath}.dmxstate');
+        if (await stateFile.exists()) {
+          await stateFile.delete();
+        }
         for (int i = 0; i < task.threadCount; i++) {
           final partFile = File('${task.tempFilePath}.part$i');
           if (await partFile.exists()) {
@@ -2179,8 +2326,8 @@ class DownloadProvider extends ChangeNotifier
       throw Exception('Invalid URL/Magnet');
     }
 
-    final wasDownloading = task.status == DownloadStatus.downloading || isRefresh;
-    if (wasDownloading && !isRefresh) {
+    final wasDownloading = task.status == DownloadStatus.downloading;
+    if (wasDownloading) {
       await pauseTask(taskId);
       final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
       if (updatedIdx != -1) {
@@ -2432,6 +2579,7 @@ class DownloadProvider extends ChangeNotifier
       token.cancel('provider disposed');
     }
     _cancelTokens.clear();
+    _activeFutures.clear();
     _downloadEngine.close();
     super.dispose();
   }

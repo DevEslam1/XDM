@@ -501,6 +501,40 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
   }
 
   Widget _emptySurfingState(BuildContext context, bool isDark) {
+    if (_searchQuery.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.search_off_rounded,
+                size: 56,
+                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'No results for "$_searchQuery"',
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textPrimary
+                      : AppTheme.lightTextPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () => _searchController.clear(),
+                icon: const Icon(Icons.clear, size: 16),
+                label: const Text('CLEAR SEARCH'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),

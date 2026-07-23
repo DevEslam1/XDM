@@ -113,9 +113,12 @@ class AdBlocker {
     'click.php',
   ];
 
+  static bool _initializing = false;
+
   /// Asynchronously loads local hosts from cache file or triggers background download
   static Future<void> initialize() async {
-    if (_initialized) return;
+    if (_initialized || _initializing) return;
+    _initializing = true;
     _invalidateCache();
 
     // Load defaults immediately as fallback
@@ -132,11 +135,13 @@ class AdBlocker {
         // Trigger non-blocking background download
         updateHosts();
       }
+      _initialized = true;
     } catch (e) {
       debugPrint('AdBlocker initialization error: $e');
+    } finally {
+      // Issue 6 Fix: Always clear _initializing flag in finally block
+      _initializing = false;
     }
-
-    _initialized = true;
   }
 
   /// Downloads fresh lists, parses domains, updates memory list, and caches to disk
@@ -253,7 +258,12 @@ class AdBlocker {
   /// NOTE: [initialize] should be awaited before calling this. If not yet
   /// initialized, the check is skipped rather than mutating state.
   static bool shouldBlock(String url) {
-    if (!_initialized) return false;
+    if (!_initialized) {
+      if (_blockedDomains.isEmpty) {
+        _blockedDomains.addAll(_fallbackDomains);
+      }
+      initialize();
+    }
     // Must be initialized: at minimum _fallbackDomains are loaded
 
     // 0. Always allow YouTube domains and API paths

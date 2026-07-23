@@ -146,7 +146,16 @@ class YoutubeService {
   /// This includes mixed watch+list URLs like `watch?v=xxx&list=PLyyy` that
   /// are commonly encountered when browsing within a playlist.
   static bool isPlaylistUrl(String url) {
-    return extractPlaylistId(url) != null;
+    try {
+      final uri = Uri.parse(url);
+      final host = uri.host.toLowerCase();
+      if (!host.contains('youtube.com') && !host.contains('youtu.be')) {
+        return false;
+      }
+      return extractPlaylistId(url) != null;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Returns true when the URL is a playlist-only page (no individual video
@@ -271,8 +280,14 @@ class YoutubeService {
               errStr.contains('reset') ||
               errStr.contains('403') ||
               errStr.contains('410') ||
-              errStr.contains('http status 403') ||
-              errStr.contains('http status 410');
+              errStr.contains('429') ||
+              errStr.contains('500') ||
+              errStr.contains('502') ||
+              errStr.contains('503') ||
+              errStr.contains('rate limit') ||
+              errStr.contains('too many requests') ||
+              errStr.contains('httpstatuscodeexception') ||
+              errStr.contains('youtubeexplodeexception');
           if (isRetryable) {
             // Reset client on auth/expiration errors
             if (errStr.contains('403') || errStr.contains('410')) {
@@ -476,11 +491,14 @@ class YoutubeService {
 
     if (expireA != expireB || sigA != sigB) return false;
 
-    // TTL guard: if we've seen this URL within 5 minutes, it's still fresh, so NOT stale.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final expire = int.tryParse(expireA);
-    if (expire != null && (expire - now) > 300) return false; // Fresh
-    return true; // Equivalent and stale
+    if (expire != null) {
+      if (expire - now > 300) return false; // Fresh, do not refresh
+      // expire - now <= 300, near expiry or expired
+      return a == b; // Stale only if structurally identical
+    }
+    return a == b;
   }
 
   /// Fetches completely fresh stream URLs for a YouTube video, bypassing any
@@ -964,9 +982,14 @@ class _CookieClient extends http.BaseClient {
     request.followRedirects = true;
     // Avoid logging the cookie header — it contains authenticated session
     // tokens (e.g. __Secure-3PSID) that must not leak into console output.
+    // Also redact signed URL query parameters (signature, s, sp) to avoid leaking tokens.
     final redactedHeaders = Map<String, String>.from(request.headers)
       ..remove('cookie');
-    debugPrint('[YoutubeService] Outgoing request to ${request.url} with headers: $redactedHeaders');
+    final urlStr = request.url.toString().replaceAllMapped(
+      RegExp(r'([?&](?:s|sp|signature|expire)=[^&]+)'),
+      (m) => '=***REDACTED***',
+    );
+    debugPrint('[YoutubeService] Outgoing request to $urlStr with headers: $redactedHeaders');
     return _inner.send(request);
   }
 
@@ -1218,6 +1241,7 @@ class _InnerTubeFallback {
 
       pageNum++;
       try {
+        await Future.delayed(const Duration(milliseconds: 250));
         data = await _browse(
           'VL$playlistId',
           continuationToken: continuationToken,

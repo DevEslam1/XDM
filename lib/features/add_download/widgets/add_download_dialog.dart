@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:disk_space_2/disk_space_2.dart';
 
 import 'package:path/path.dart' as p;
 
@@ -54,37 +53,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _extController = TextEditingController();
   final TextEditingController _pathController = TextEditingController();
-  double _freeDiskSpaceMB = 0.0;
-  double _totalDiskSpaceMB = 0.0;
-
-  Future<void> _updateDiskSpace() async {
-    try {
-      double? freeMB;
-      double? totalMB;
-      if (!kIsWeb && Platform.isAndroid) {
-        final path = _pathController.text.trim();
-        if (path.isNotEmpty && await Directory(path).exists()) {
-          freeMB = await DiskSpace.getFreeDiskSpaceForPath(path);
-        }
-      }
-      freeMB ??= await DiskSpace.getFreeDiskSpace;
-      totalMB ??= await DiskSpace.getTotalDiskSpace;
-
-      if (freeMB != null && totalMB != null && mounted) {
-        setState(() {
-          _freeDiskSpaceMB = freeMB!;
-          _totalDiskSpaceMB = totalMB!;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error getting disk space: $e');
-    }
-  }
-
-  String _formatMB(double mb) {
-    return formatBytes((mb * 1024 * 1024).round());
-  }
-
   String _selectedCategory = 'Auto';
   int _selectedThreads = 5;
 
@@ -92,9 +60,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   bool _wifiOnly = false;
   bool _retry = true;
   bool _useProxy = false;
-  bool _hiddenFile = false;
-  bool _useAdvanceDownloadMethod = true;
-  bool _advanceOption = false;
 
   final bool _isScheduled = false;
   DateTime? _scheduledDateTime;
@@ -135,11 +100,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _wifiOnly = settings.wifiOnly;
     _useProxy = settings.enableProxy;
 
-    _loadDefaultPath().then((_) {
-      _updateDiskSpace();
-    });
+    _loadDefaultPath();
     _urlController.addListener(_onUrlChanged);
-    _pathController.addListener(_updateDiskSpace);
 
     if (widget.prefilledUrl != null) {
       _urlController.text = widget.prefilledUrl!;
@@ -235,9 +197,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
   @override
   void dispose() {
-    _ytDebounceTimer?.cancel();
     _urlController.removeListener(_onUrlChanged);
-    _pathController.removeListener(_updateDiskSpace);
     _urlController.dispose();
     _referrerController.dispose();
     _nameController.dispose();
@@ -457,18 +417,23 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       final nameForReq = _nameController.text.trim().isNotEmpty
           ? '${_nameController.text}.${_extController.text}'
           : null;
-      final meta = await engine.resolveMetadata(
-        url: url,
-        requestedFileName: nameForReq,
-        customUserAgent: settings.customUserAgent,
-        enableProxy: settings.enableProxy,
-        proxyAddress: settings.proxyAddress,
-        proxyHost: settings.proxyHost,
-        proxyPort: settings.proxyPort,
-        proxyUsername: settings.proxyUsername,
-        proxyPassword: settings.proxyPassword,
-        bypassSSL: settings.bypassSSL,
-      );
+      DownloadMetadata meta;
+      try {
+        meta = await engine.resolveMetadata(
+          url: url,
+          requestedFileName: nameForReq,
+          customUserAgent: settings.customUserAgent,
+          enableProxy: settings.enableProxy,
+          proxyAddress: settings.proxyAddress,
+          proxyHost: settings.proxyHost,
+          proxyPort: settings.proxyPort,
+          proxyUsername: settings.proxyUsername,
+          proxyPassword: settings.proxyPassword,
+          bypassSSL: settings.bypassSSL,
+        );
+      } finally {
+        engine.close();
+      }
 
       if (!mounted) return;
       setState(() {
@@ -825,6 +790,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         : AppTheme.lightTextSecondary;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     final orangeClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     final inputBgColor =
         (isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9)).withValues(
@@ -843,428 +809,474 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         isDarkMode: isDark,
         borderRadius: 20,
         padding: EdgeInsets.zero,
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 20.0,
-              right: 20.0,
-              top: 20.0,
-              bottom: 20.0 + MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: blueClr.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: blueClr.withValues(alpha: 0.25),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.download_rounded,
-                          color: blueClr,
-                          size: 16,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        L10n.of(context, 'download_file_title'),
-                        style: TextStyle(
-                          color: textClr,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: Icon(Icons.paste, color: secClr, size: 20),
-                        onPressed: _pasteFromClipboard,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                      const SizedBox(width: 16),
-                      IconButton(
-                        icon: Icon(Icons.language, color: secClr, size: 20),
-                        onPressed: () {
-                          final settings = context.read<SettingsProvider>();
-                          final nextLang = settings.languageCode == 'en' ? 'ar' : 'en';
-                          settings.setLanguageCode(nextLang);
-                        },
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
+        child: Stack(
+          children: [
+            AbsorbPointer(
+              absorbing: _isResolvingLink,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: 20.0,
+                    right: 20.0,
+                    top: 20.0,
+                    bottom: 20.0 + MediaQuery.of(context).viewInsets.bottom,
                   ),
-                  const SizedBox(height: 24),
-
-                  // Link labels
-                  Row(
-                    children: [
-                      Text(
-                        L10n.of(context, 'link_label'),
-                        style: TextStyle(
-                          color: secClr,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(Icons.copy, color: secClr, size: 14),
-                      const SizedBox(width: 8),
-                      Icon(Icons.share, color: secClr, size: 14),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Download link field
-                  _buildTextField(
-                    controller: _urlController,
-                    hint: L10n.of(context, 'add_download_url'),
-                    isDark: isDark,
-                    inputBgColor: inputBgColor,
-                    inputBorderColor: inputBorderColor,
-                    textClr: textClr,
-                    secClr: secClr,
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) {
-                        return L10n.of(context, 'url_empty_error');
-                      }
-                      if (!isValidTransmissionUrl(val.trim())) {
-                        return L10n.of(context, 'url_invalid_error');
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Referrer link field
-                  _buildTextField(
-                    controller: _referrerController,
-                    hint:
-                        'Download/Referrer page link (leave empty if not sure)',
-                    isDark: isDark,
-                    inputBgColor: inputBgColor,
-                    inputBorderColor: inputBorderColor,
-                    textClr: textClr,
-                    secClr: secClr,
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Save as
-                  Text(
-                    L10n.of(context, 'save_as_label'),
-                    style: TextStyle(
-                      color: secClr,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: _buildTextField(
-                          controller: _nameController,
-                          hint: 'File name',
-                          isDark: isDark,
-                          inputBgColor: inputBgColor,
-                          inputBorderColor: inputBorderColor,
-                          textClr: textClr,
-                          secClr: secClr,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 1,
-                        child: _buildTextField(
-                          controller: _extController,
-                          hint: 'Ext',
-                          isDark: isDark,
-                          inputBgColor: inputBgColor,
-                          inputBorderColor: inputBorderColor,
-                          textClr: textClr,
-                          secClr: secClr,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Size & Storage
-                  Row(
-                    children: [
-                      Text(
-                        L10n.of(context, 'size_label'),
-                        style: TextStyle(color: secClr, fontSize: 12),
-                      ),
-                      Text(
-                        _resolvedFileSize > 0
-                            ? formatBytes(_resolvedFileSize)
-                            : L10n.of(context, 'unknown_label'),
-                        style: TextStyle(
-                          color: textClr,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  RichText(
-                    text: TextSpan(
-                      style: TextStyle(fontSize: 12, color: secClr),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextSpan(text: L10n.of(context, 'storage_label')),
-                        TextSpan(
-                          text: _formatMB(_freeDiskSpaceMB),
-                          style: TextStyle(
-                            color: orangeClr,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        TextSpan(text: ' / ${_formatMB(_totalDiskSpaceMB)}, '),
-                        TextSpan(
-                          text: '${(_totalDiskSpaceMB > 0 ? (_freeDiskSpaceMB / _totalDiskSpaceMB) * 100 : 0.0).toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            color: orangeClr,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        TextSpan(text: ' ${L10n.of(context, 'free_label')}'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Path Selector
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: inputBgColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: inputBorderColor),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.history, color: blueClr, size: 18),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () async {
-                              final String? selectedPath =
-                                  await FilePicker.getDirectoryPath();
-                              if (selectedPath != null && mounted) {
-                                setState(() {
-                                  _pathController.text = selectedPath;
-                                });
-                              }
-                            },
-                            child: Text(
-                              _pathController.text,
-                              style: TextStyle(color: textClr, fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        // Header
+                        Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: blueClr.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: blueClr.withValues(alpha: 0.25),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.download_rounded,
+                                color: blueClr,
+                                size: 16,
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 12),
+                            Text(
+                              L10n.of(context, 'download_file_title'),
+                              style: TextStyle(
+                                color: textClr,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: Icon(Icons.paste, color: secClr, size: 20),
+                              onPressed: _pasteFromClipboard,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                            const SizedBox(width: 16),
+                            IconButton(
+                              icon: Icon(Icons.language, color: secClr, size: 20),
+                              onPressed: () {
+                                final settings = context.read<SettingsProvider>();
+                                final nextLang = settings.languageCode == 'en' ? 'ar' : 'en';
+                                settings.setLanguageCode(nextLang);
+                              },
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Icon(
-                          Icons.create_new_folder_outlined,
-                          color: blueClr,
-                          size: 18,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                  // Checkboxes
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 12,
-                    children: [
-                      _buildCheckbox(
-                        L10n.of(context, 'wifi_only_label'),
-                        _wifiOnly,
-                        (v) => setState(() => _wifiOnly = v!),
-                        orangeClr,
-                      ),
-                      _buildCheckbox(
-                        L10n.of(context, 'retry_label'),
-                        _retry,
-                        (v) => setState(() => _retry = v!),
-                        textClr,
-                      ),
-                      _buildCheckbox(
-                        L10n.of(context, 'use_proxy_label'),
-                        _useProxy,
-                        (v) => setState(() => _useProxy = v!),
-                        textClr,
-                      ),
-                      _buildCheckbox(
-                        L10n.of(context, 'hidden_file_label'),
-                        _hiddenFile,
-                        (v) => setState(() => _hiddenFile = v!),
-                        textClr,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _buildCheckbox(
-                    L10n.of(context, 'use_advance_download_label'),
-                    _useAdvanceDownloadMethod,
-                    (v) => setState(() => _useAdvanceDownloadMethod = v!),
-                    textClr,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildCheckbox(
-                    L10n.of(context, 'advance_option_label'),
-                    _advanceOption,
-                    (v) => setState(() => _advanceOption = v!),
-                    blueClr,
-                  ),
-
-                  if (_advanceOption) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            L10n.of(context, 'category_label'),
-                            style: TextStyle(color: secClr, fontSize: 12),
-                          ),
+                        // Link labels
+                        Row(
+                          children: [
+                            Text(
+                              L10n.of(context, 'link_label'),
+                              style: TextStyle(
+                                color: secClr,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.copy, color: secClr, size: 14),
+                            const SizedBox(width: 8),
+                            Icon(Icons.share, color: secClr, size: 14),
+                          ],
                         ),
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButton<String>(
-                            value: _selectedCategory,
-                            dropdownColor: isDark
-                                ? AppTheme.surface
-                                : AppTheme.lightSurface,
-                            isExpanded: true,
-                            style: TextStyle(color: textClr, fontSize: 13),
-                            items: _categories
-                                .map(
-                                  (c) => DropdownMenuItem(
-                                    value: c,
-                                    child: Text(c),
+                        const SizedBox(height: 8),
+
+                        // Download link field
+                        Stack(
+                          alignment: Alignment.centerRight,
+                          children: [
+                            _buildTextField(
+                              controller: _urlController,
+                              hint: L10n.of(context, 'add_download_url'),
+                              isDark: isDark,
+                              inputBgColor: inputBgColor,
+                              inputBorderColor: inputBorderColor,
+                              textClr: textClr,
+                              secClr: secClr,
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return L10n.of(context, 'url_empty_error');
+                                }
+                                // Validate each line separately for multi-URL support
+                                final lines = val.split(RegExp(r'[\r\n]+'))
+                                    .map((l) => l.trim())
+                                    .where((l) => l.isNotEmpty)
+                                    .toList();
+                                if (lines.isEmpty) {
+                                  return L10n.of(context, 'url_empty_error');
+                                }
+                                for (final line in lines) {
+                                  if (!isValidTransmissionUrl(line)) {
+                                    return L10n.of(context, 'url_invalid_error');
+                                  }
+                                }
+                                return null;
+                              },
+                            ),
+                            if (_urlController.text.trim().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 12.0),
+                                child: Icon(
+                                  _urlController.text.trim().split(RegExp(r'[\r\n]+'))
+                                      .where((l) => l.trim().isNotEmpty)
+                                      .every((l) => isValidTransmissionUrl(l.trim()))
+                                      ? Icons.check_circle_rounded
+                                      : Icons.cancel_rounded,
+                                  color: _urlController.text.trim().split(RegExp(r'[\r\n]+'))
+                                      .where((l) => l.trim().isNotEmpty)
+                                      .every((l) => isValidTransmissionUrl(l.trim()))
+                                      ? greenClr
+                                      : redClr,
+                                  size: 18,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Referrer link field
+                        _buildTextField(
+                          controller: _referrerController,
+                          hint:
+                              'Download/Referrer page link (leave empty if not sure)',
+                          isDark: isDark,
+                          inputBgColor: inputBgColor,
+                          inputBorderColor: inputBorderColor,
+                          textClr: textClr,
+                          secClr: secClr,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // File name & Category labels
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                L10n.of(context, 'file_name_label'),
+                                style: TextStyle(
+                                  color: secClr,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                L10n.of(context, 'category_label'),
+                                style: TextStyle(
+                                  color: secClr,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // File name & Category inputs
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildTextField(
+                                      controller: _nameController,
+                                      hint: 'Filename',
+                                      isDark: isDark,
+                                      inputBgColor: inputBgColor,
+                                      inputBorderColor: inputBorderColor,
+                                      textClr: textClr,
+                                      secClr: secClr,
+                                      validator: (val) {
+                                        if (val == null || val.trim().isEmpty) {
+                                          return L10n.of(context, 'filename_empty_error');
+                                        }
+                                        return null;
+                                      },
+                                    ),
                                   ),
-                                )
-                                .toList(),
-                            onChanged: (v) =>
-                                setState(() => _selectedCategory = v!),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            L10n.of(context, 'threads_label'),
-                            style: TextStyle(color: secClr, fontSize: 12),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButton<int>(
-                            value: _selectedThreads,
-                            dropdownColor: isDark
-                                ? AppTheme.surface
-                                : AppTheme.lightSurface,
-                            isExpanded: true,
-                            style: TextStyle(color: textClr, fontSize: 13),
-                            items: _threadsList
-                                .map(
-                                  (t) => DropdownMenuItem(
-                                    value: t,
-                                    child: Text('$t'),
+                                  const SizedBox(width: 6),
+                                  Text('.', style: TextStyle(color: secClr, fontWeight: FontWeight.bold)),
+                                  const SizedBox(width: 6),
+                                  SizedBox(
+                                    width: 60,
+                                    child: _buildTextField(
+                                      controller: _extController,
+                                      hint: 'ext',
+                                      isDark: isDark,
+                                      inputBgColor: inputBgColor,
+                                      inputBorderColor: inputBorderColor,
+                                      textClr: textClr,
+                                      secClr: secClr,
+                                    ),
                                   ),
-                                )
-                                .toList(),
-                            onChanged: (v) =>
-                                setState(() => _selectedThreads = v!),
-                          ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: inputBgColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: inputBorderColor),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    dropdownColor: isDark
+                                        ? AppTheme.surface
+                                        : AppTheme.lightSurface,
+                                    value: _selectedCategory,
+                                    isExpanded: true,
+                                    icon: Icon(
+                                      Icons.arrow_drop_down,
+                                      color: secClr,
+                                    ),
+                                    style: TextStyle(
+                                      color: textClr,
+                                      fontSize: 13,
+                                    ),
+                                    items: _categories.map((cat) {
+                                      return DropdownMenuItem<String>(
+                                        value: cat,
+                                        child: Text(
+                                          L10n.translateCategory(context, cat),
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        runHaptic(settings);
+                                        setState(() => _selectedCategory = val);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
+                        const SizedBox(height: 16),
 
-                  const SizedBox(height: 32),
-
-                  // Action Buttons
-                  Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          L10n.of(context, 'cancel_btn_uppercase'),
+                        // Save path section
+                        Text(
+                          L10n.of(context, 'save_path_label'),
                           style: TextStyle(
                             color: secClr,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
                           ),
                         ),
-                      ),
-                      if (_isResolvingLink)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16),
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      else
-                        TextButton(
-                          onPressed: _resolveLinkMetadata,
-                          child: Text(
-                            L10n.of(context, 'connect_btn'),
-                            style: TextStyle(
-                              color: blueClr,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildTextField(
+                                controller: _pathController,
+                                hint: 'Save path',
+                                isDark: isDark,
+                                inputBgColor: inputBgColor,
+                                inputBorderColor: inputBorderColor,
+                                textClr: textClr,
+                                secClr: secClr,
+                                validator: (val) {
+                                  if (val == null || val.trim().isEmpty) {
+                                    return 'Save path cannot be empty';
+                                  }
+                                  return null;
+                                },
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () async {
+                                runHaptic(settings);
+                                final result = await FilePicker.getDirectoryPath();
+                                if (result != null) {
+                                  setState(() {
+                                    _pathController.text = result;
+                                  });
+                                }
+                              },
+                              icon: Icon(Icons.folder_open, color: blueClr),
+                              style: IconButton.styleFrom(
+                                backgroundColor: blueClr.withValues(alpha: 0.1),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      NeonGlowButton(
-                        onPressed: () {
-                          if (_formKey.currentState!.validate()) {
-                            _handleDuplicateOrSubmit();
-                          }
-                        },
-                        text: L10n.of(context, 'add_btn'),
-                        icon: Icons.add_circle_outline,
-                        color: greenClr,
-                        glowColor: greenClr,
-                        isExpanded: false,
-                        isFilled: true,
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+
+                        // Download options checkboxes & thread dropdown
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 12,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _buildCheckbox(
+                              L10n.of(context, 'wifi_only_label'),
+                              _wifiOnly,
+                              (val) => setState(() => _wifiOnly = val ?? false),
+                              blueClr,
+                            ),
+                            _buildCheckbox(
+                              L10n.of(context, 'auto_retry_label'),
+                              _retry,
+                              (val) => setState(() => _retry = val ?? true),
+                              greenClr,
+                            ),
+                            _buildCheckbox(
+                              L10n.of(context, 'use_proxy_label'),
+                              _useProxy,
+                              (val) => setState(() => _useProxy = val ?? false),
+                              orangeClr,
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  L10n.of(context, 'threads_label'),
+                                  style: TextStyle(
+                                    color: secClr,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  decoration: BoxDecoration(
+                                    color: inputBgColor,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: inputBorderColor),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<int>(
+                                      dropdownColor: isDark
+                                          ? AppTheme.surface
+                                          : AppTheme.lightSurface,
+                                      value: _selectedThreads,
+                                      style: TextStyle(
+                                        color: textClr,
+                                        fontSize: 12,
+                                      ),
+                                      items: _threadsList.map((t) {
+                                        return DropdownMenuItem<int>(
+                                          value: t,
+                                          child: Text('$t'),
+                                        );
+                                      }).toList(),
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          runHaptic(settings);
+                                          setState(() => _selectedThreads = val);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Action Buttons
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: Text(
+                                L10n.of(context, 'cancel_btn'),
+                                style: TextStyle(
+                                  color: secClr,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            if (_isResolvingLink)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            else
+                              TextButton(
+                                onPressed: _resolveLinkMetadata,
+                                child: Text(
+                                  L10n.of(context, 'connect_btn'),
+                                  style: TextStyle(
+                                    color: blueClr,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                            NeonGlowButton(
+                              onPressed: () {
+                                if (_formKey.currentState!.validate()) {
+                                  _handleDuplicateOrSubmit();
+                                }
+                              },
+                              text: L10n.of(context, 'add_btn'),
+                              icon: Icons.add_circle_outline,
+                              color: greenClr,
+                              glowColor: greenClr,
+                              isExpanded: false,
+                              isFilled: true,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
+              ),
+            ),
+            if (_isResolvingLink)
+          Positioned.fill(
+            child: Container(
+              color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.3),
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: blueClr,
+                ),
               ),
             ),
           ),
+          ],
         ),
       ),
     );

@@ -21,7 +21,7 @@ void main() {
       final detected = BrowserDetector.detect('https://example.com/download?id=456');
       expect(detected, isNotNull);
       expect(detected!.kind, DetectedMediaKind.unknown);
-      expect(BrowserDetector.isAutoDownloadable('https://example.com/download?id=456'), isTrue);
+      expect(BrowserDetector.isAutoDownloadable('https://example.com/download?id=456'), isFalse);
     });
 
     test('Images are detected but not auto-downloaded', () {
