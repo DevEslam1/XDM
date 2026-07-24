@@ -126,7 +126,7 @@ class SettingsProvider extends ChangeNotifier {
   bool get effectiveClassicUi => batterySaverMode ? true : _classicUi;
   int get effectiveDefaultThreadCount => batterySaverMode ? 2 : _defaultThreadCount;
 
-  int _defaultThreadCount = 5;
+  int _defaultThreadCount = 16;
   int get defaultThreadCount => batterySaverMode ? 2 : _defaultThreadCount;
 
   // Browser settings
@@ -200,7 +200,7 @@ class SettingsProvider extends ChangeNotifier {
     forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
     torrentConnectionsLimit = (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit).clamp(10, 1000);
     _defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
-    if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) _defaultThreadCount = 5;
+    if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) _defaultThreadCount = 16;
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
     incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
     desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
@@ -640,7 +640,7 @@ class SettingsProvider extends ChangeNotifier {
     _isDarkMode = true;
     _classicUi = true;
     _maxDownloads = 3;
-    _defaultThreadCount = 5;
+    _defaultThreadCount = 16;
     autoStart = true;
     customDownloadPath = null;
     speedLimitMb = 0.0;

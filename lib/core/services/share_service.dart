@@ -12,16 +12,27 @@ class ShareService {
   bool _initialMediaConsumed = false;
   String? _lastReceivedUrl;
 
-  void init({required void Function(String url) onUrlReceived}) {
+  void init({required void Function(String url, {bool isInitial}) onUrlReceived}) {
     dispose();
 
-    void handleUrl(String? raw) {
-      final trimmed = (raw ?? '').trim();
-      if (trimmed.isEmpty) return;
-      if ((isHttpUrl(trimmed) || isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed)) &&
-          trimmed != _lastReceivedUrl) {
-        _lastReceivedUrl = trimmed;
-        onUrlReceived(trimmed);
+    void handleUrl(String? raw, {bool isInitial = false}) {
+      final text = (raw ?? '').trim();
+      if (text.isEmpty) return;
+
+      // Extract URL from shared text (apps like TikTok/X/FB share text like "Check out this video: https://...")
+      final extractedUrl = extractUrlFromText(text) ?? text;
+
+      if ((isHttpUrl(extractedUrl) ||
+              isMagnetUrl(extractedUrl) ||
+              isTorrentFileUrl(extractedUrl)) &&
+          extractedUrl != _lastReceivedUrl) {
+        _lastReceivedUrl = extractedUrl;
+        onUrlReceived(extractedUrl, isInitial: isInitial);
+        Timer(const Duration(seconds: 2), () {
+          if (_lastReceivedUrl == extractedUrl) {
+            _lastReceivedUrl = null;
+          }
+        });
       }
     }
 
@@ -34,9 +45,9 @@ class ShareService {
         if (type == SharedMediaType.text ||
             type == SharedMediaType.url ||
             type == SharedMediaType.file) {
-          handleUrl(file.path);
+          handleUrl(file.path, isInitial: false);
         } else {
-          handleUrl(file.path);
+          handleUrl(file.path, isInitial: false);
         }
       }
     }, onError: (err) {
@@ -47,7 +58,7 @@ class ShareService {
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {
         if (!_initialized) return;
         for (final file in value) {
-          handleUrl(file.path);
+          handleUrl(file.path, isInitial: true);
         }
       });
     }

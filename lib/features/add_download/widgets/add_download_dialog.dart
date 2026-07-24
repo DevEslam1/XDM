@@ -33,12 +33,14 @@ class AddDownloadDialog extends StatefulWidget {
   final String? prefilledUrl;
   final String? prefilledName;
   final String? downloadPageUrl;
+  final bool isShareLaunch;
 
   const AddDownloadDialog({
     super.key,
     this.prefilledUrl,
     this.prefilledName,
     this.downloadPageUrl,
+    this.isShareLaunch = false,
   });
 
   @override
@@ -102,15 +104,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _loadDefaultPath();
     _urlController.addListener(_onUrlChanged);
 
-    if (widget.prefilledUrl != null) {
+    if (widget.prefilledUrl != null && widget.prefilledUrl!.trim().isNotEmpty) {
       _urlController.text = widget.prefilledUrl!;
-      final url = widget.prefilledUrl!;
-      if (YoutubeService.isYoutubeVideoUrl(url) ||
-          YoutubeService.isPlaylistUrl(url)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _resolveLinkMetadata();
-        });
-      } else if (url.trim().toLowerCase().startsWith('magnet:')) {
+      final url = widget.prefilledUrl!.trim();
+      if (url.toLowerCase().startsWith('magnet:')) {
         final parsed = parseMagnetUrl(url);
         final dnName = parsed['name'] ?? 'Torrent Download';
         _setNameAndExt(dnName);
@@ -119,8 +116,13 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         _selectedCategory = 'Archive';
         _isMetadataResolved = true;
       }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _resolveLinkMetadata();
+        }
+      });
     }
-    if (widget.prefilledName != null) {
+    if (widget.prefilledName != null && widget.prefilledName!.trim().isNotEmpty) {
       _setNameAndExt(widget.prefilledName!);
       _resolvedFileName = widget.prefilledName!;
       _isMetadataResolved = true;
@@ -414,9 +416,35 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
     try {
       final settings = context.read<SettingsProvider>();
-      if (url.startsWith('file://')) {
-        final filePath = Uri.parse(url).toFilePath();
-        final file = File(filePath);
+
+      if (url.toLowerCase().startsWith('magnet:')) {
+        final parsed = parseMagnetUrl(url);
+        final dnName = parsed['name'] ?? 'Torrent Download';
+        if (mounted) {
+          setState(() {
+            _setNameAndExt(dnName);
+            _resolvedFileName = dnName;
+            _resolvedCategory = 'Archive';
+            _selectedCategory = 'Archive';
+            _isMetadataResolved = true;
+          });
+        }
+        return;
+      }
+
+      String? localFilePath;
+      if (url.toLowerCase().startsWith('file://')) {
+        try {
+          localFilePath = Uri.parse(url).toFilePath();
+        } catch (_) {
+          localFilePath = url.replaceFirst(RegExp(r'^file://', caseSensitive: false), '');
+        }
+      } else if (url.toLowerCase().endsWith('.torrent') || File(url).existsSync()) {
+        localFilePath = url;
+      }
+
+      if (localFilePath != null) {
+        final file = File(localFilePath);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
           final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);

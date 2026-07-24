@@ -10,12 +10,13 @@ import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
 import 'core/services/google_auth_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/single_instance_service.dart';
 import 'features/downloads/provider/download_provider.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/browser/services/ad_blocker.dart';
 import 'features/onboarding/screens/splash_screen.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,12 @@ Future<void> main() async {
         return true;
       };
       try {
+        final isPrimary = await SingleInstanceService().initialize(args);
+        if (!isPrimary) {
+          // A running primary instance was notified, exit this process cleanly.
+          return;
+        }
+
         await AdBlocker.initialize();
         if (TorrentService.isSupported) {
           await TorrentService.init();
@@ -62,6 +69,7 @@ Future<void> main() async {
             databaseService: databaseService,
             settingsProvider: settingsProvider,
             downloadProvider: downloadProvider,
+            initialUrl: SingleInstanceService().initialUrl,
           ),
         );
       } catch (e, stack) {
@@ -122,11 +130,13 @@ class DmxApp extends StatelessWidget {
     required this.databaseService,
     required this.settingsProvider,
     required this.downloadProvider,
+    this.initialUrl,
   });
 
   final DatabaseService databaseService;
   final SettingsProvider settingsProvider;
   final DownloadProvider downloadProvider;
+  final String? initialUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +156,7 @@ class DmxApp extends StatelessWidget {
             darkTheme: AppTheme.darkTheme,
             themeMode: settings.currentThemeMode,
             locale: Locale(settings.languageCode),
-            home: const SplashScreen(),
+            home: SplashScreen(initialUrl: initialUrl),
             builder: (context, child) {
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(

@@ -1972,7 +1972,7 @@ class DownloadProvider extends ChangeNotifier
     return _tasks[index];
   }
 
-  /// Build per-thread chunk progress reflecting parallel progress.
+  /// Build per-thread chunk progress reflecting accurate chunk distribution.
   List<double> _buildChunks(
     int threadCount,
     int fileSize,
@@ -1981,8 +1981,25 @@ class DownloadProvider extends ChangeNotifier
     if (fileSize <= 0 || threadCount <= 0) {
       return List<double>.filled(threadCount, 0.0);
     }
-    final progress = (downloadedBytes / fileSize).clamp(0.0, 1.0);
-    return List<double>.filled(threadCount, progress);
+    if (downloadedBytes >= fileSize) {
+      return List<double>.filled(threadCount, 1.0);
+    }
+    final partSize = fileSize / threadCount;
+    final chunks = List<double>.generate(threadCount, (i) {
+      final chunkStart = i * partSize;
+      final chunkEnd = (i == threadCount - 1) ? fileSize.toDouble() : (i + 1) * partSize;
+      final chunkSize = chunkEnd - chunkStart;
+      if (chunkSize <= 0) return 1.0;
+
+      if (downloadedBytes <= chunkStart) {
+        return 0.0;
+      } else if (downloadedBytes >= chunkEnd) {
+        return 1.0;
+      } else {
+        return ((downloadedBytes - chunkStart) / chunkSize).clamp(0.0, 1.0);
+      }
+    });
+    return chunks;
   }
 
   // FIX #4: Prevent YouTube refresh from swapping video/audio MIME type.

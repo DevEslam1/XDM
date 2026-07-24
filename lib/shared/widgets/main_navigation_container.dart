@@ -16,11 +16,18 @@ import '../../features/home/screens/home_screen.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/downloads/provider/download_provider.dart';
+import '../../core/services/single_instance_service.dart';
 import 'clipboard_detection_sheet.dart';
 import 'dmx_backdrop_filter.dart';
 
 class MainNavigationContainer extends StatefulWidget {
-  const MainNavigationContainer({super.key});
+  final String? initialUrl;
+  final bool isShareLaunch;
+  const MainNavigationContainer({
+    super.key,
+    this.initialUrl,
+    this.isShareLaunch = false,
+  });
 
   @override
   State<MainNavigationContainer> createState() =>
@@ -42,7 +49,22 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    ShareService().init(onUrlReceived: _onUrlReceived);
+    ShareService().init(
+      onUrlReceived: (url, {bool isInitial = false}) =>
+          _onUrlReceived(url, isShareLaunch: widget.isShareLaunch || isInitial),
+    );
+    SingleInstanceService().setListener(
+      (url) => _onUrlReceived(url, isShareLaunch: false),
+    );
+
+    if (widget.initialUrl != null && widget.initialUrl!.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _onUrlReceived(widget.initialUrl!, isShareLaunch: widget.isShareLaunch);
+        }
+      });
+    }
+
     _checkClipboard();
   }
 
@@ -50,6 +72,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     ShareService().dispose();
+    SingleInstanceService().clearListener();
     super.dispose();
   }
 
@@ -60,21 +83,29 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     }
   }
 
-  void _onUrlReceived(String url) async {
+  void _onUrlReceived(String url, {bool isShareLaunch = false}) async {
     // The share-intent callback fires on isolate-level events that can land
     // after this widget is unmounted (background → resume). Guard against
     // using a deactivated context.
     if (!mounted) return;
 
     if (YoutubeService.isPlaylistUrl(url)) {
-      YoutubePlaylistSheet.show(context, url);
+      await YoutubePlaylistSheet.show(context, url);
     } else if (YoutubeService.isYoutubeVideoUrl(url)) {
-      YoutubeQualitySheet.show(context, url);
+      await YoutubeQualitySheet.show(context, url);
     } else {
-      showDialog(
+      await showDialog(
         context: context,
-        builder: (_) => AddDownloadDialog(prefilledUrl: url),
+        builder: (_) => AddDownloadDialog(
+          prefilledUrl: url,
+          isShareLaunch: isShareLaunch,
+        ),
       );
+    }
+
+    if (isShareLaunch && mounted) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      SystemNavigator.pop();
     }
   }
 

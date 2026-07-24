@@ -8,6 +8,26 @@ bool isHttpUrl(String value) {
       uri.host.isNotEmpty;
 }
 
+String? extractUrlFromText(String text) {
+  final trimmed = text.trim();
+  if (isHttpUrl(trimmed) || isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed)) {
+    return trimmed;
+  }
+  // Matches http(s) or magnet links inside a shared message string
+  final regExp = RegExp(
+    r'(https?:\/\/[^\s<">]+|magnet:\?[^\s<">]+)',
+    caseSensitive: false,
+  );
+  final match = regExp.firstMatch(trimmed);
+  if (match != null) {
+    var rawUrl = match.group(0)!;
+    // Strip trailing punctuation often appended by user messages or apps
+    rawUrl = rawUrl.replaceAll(RegExp(r'[.,;!)]+$'), '');
+    return rawUrl;
+  }
+  return null;
+}
+
 bool isMagnetUrl(String value) {
   final clean = value.trim();
   if (!clean.toLowerCase().startsWith('magnet:')) return false;
@@ -27,28 +47,36 @@ bool isMagnetUrl(String value) {
 
 bool isTorrentFileUrl(String value) {
   final clean = value.trim().toLowerCase();
-  return clean.startsWith('file://') || clean.endsWith('.torrent') || clean.contains('.torrent?');
+  return clean.startsWith('file://') ||
+      clean.startsWith('content://') ||
+      clean.endsWith('.torrent') ||
+      clean.contains('.torrent?') ||
+      clean.contains('.torrent');
 }
 
 bool isTorrentUrl(String url, {String? fileName}) {
   final urlLower = url.trim().toLowerCase();
   if (urlLower.startsWith('magnet:')) return true;
   if (isTorrentFileUrl(urlLower)) return true;
-  
+
   if (fileName != null && fileName.trim().toLowerCase().endsWith('.torrent')) {
     return true;
   }
-  
+
   try {
     final uri = Uri.parse(urlLower);
     if (uri.path.toLowerCase().endsWith('.torrent')) return true;
   } catch (_) {}
-  
+
   return false;
 }
 
 bool isValidTransmissionUrl(String value) {
-  return isHttpUrl(value) || isMagnetUrl(value) || isTorrentFileUrl(value);
+  final trimmed = value.trim();
+  return isHttpUrl(trimmed) ||
+      isMagnetUrl(trimmed) ||
+      isTorrentFileUrl(trimmed) ||
+      trimmed.toLowerCase().endsWith('.torrent');
 }
 
 Map<String, String> parseMagnetUrl(String magnetUrl) {

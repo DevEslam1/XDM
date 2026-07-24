@@ -17,7 +17,8 @@ import '../../../core/utils/premium_route.dart';
 import '../../../core/utils/constants.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final String? initialUrl;
+  const SplashScreen({super.key, this.initialUrl});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -52,10 +53,11 @@ class _SplashScreenState extends State<SplashScreen>
 
     _loadAppVersion();
 
-    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+    final isShareLaunch = widget.initialUrl != null && widget.initialUrl!.trim().isNotEmpty;
+    if (Platform.environment.containsKey('FLUTTER_TEST') || isShareLaunch) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _navigateToNext();
+          _navigateToNext(isShareLaunch: isShareLaunch);
         }
       });
     } else {
@@ -106,14 +108,17 @@ class _SplashScreenState extends State<SplashScreen>
 
 
 
-  void _navigateToNext() {
+  void _navigateToNext({bool isShareLaunch = false}) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     Navigator.of(context).pushReplacement(
       PremiumPageRoute(
         type: PageTransitionType.slideUp,
         child: settings.showOnboarding
             ? const OnboardingScreen()
-            : const MainNavigationContainer(),
+            : MainNavigationContainer(
+                initialUrl: widget.initialUrl,
+                isShareLaunch: isShareLaunch,
+              ),
       ),
     );
   }
