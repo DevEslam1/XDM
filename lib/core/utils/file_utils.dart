@@ -72,7 +72,13 @@ String safeFileName(String value) {
       .trim();
   if (sanitized.isEmpty) return 'download.bin';
   if (sanitized.length > 120) {
-    sanitized = sanitized.substring(0, 120).trim();
+    final ext = p.extension(sanitized);
+    final baseWithoutExt = ext.isNotEmpty && sanitized.endsWith(ext)
+        ? sanitized.substring(0, sanitized.length - ext.length)
+        : sanitized;
+    final maxBaseLength = (120 - ext.length).clamp(0, 120);
+    final truncatedBase = baseWithoutExt.substring(0, baseWithoutExt.length.clamp(0, maxBaseLength));
+    sanitized = '$truncatedBase$ext'.trim();
     if (sanitized.isEmpty) return 'download.bin';
   }
   final baseName = sanitized.split('.').first.toUpperCase();

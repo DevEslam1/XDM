@@ -33,7 +33,7 @@ class PermissionService {
         if (match != null) {
           final val = int.tryParse(match.group(1)!);
           if (val != null) {
-            if (val >= 21 && val <= 35) return val;
+            if (val >= 21 && val <= 50) return val;
             return switch (val) {
               14 => 34,
               13 => 33,
@@ -98,10 +98,10 @@ class PermissionService {
     if (!kIsWeb && Platform.isAndroid) {
       final sdk = await _androidSdkLevel();
 
-      // On API 30+, use Storage Access Framework via getExternalStorageDirectories.
-      // Direct dart:io writes to /storage/emulated/0/Download/ are forbidden;
-      // getExternalStorageDirectories returns a SAF-backed path that the system
-      // can broker writes for. If that fails, fall back to app-specific dirs.
+      // On API 30+ (Android 11+), direct write to the public Downloads folder (/storage/emulated/0/Download)
+      // is restricted without MediaStore API or Manage External Storage permission.
+      // Therefore, we default to the app-specific external directory, which is deleted
+      // when the app is uninstalled. Users should be aware of this location.
       if (sdk >= 30) {
         try {
           final extDirs = await getExternalStorageDirectories(

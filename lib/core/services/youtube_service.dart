@@ -476,12 +476,68 @@ class YoutubeService {
     String downloadPageUrl,
     String oldStreamUrl,
   ) async {
-    final fresh = await getFreshStreams(downloadPageUrl);
-    if (fresh == null || fresh['url'] == null) return null;
-    return {
-      'url': fresh['url'],
-      'audioUrl': fresh['audioUrl'],
-    };
+    final videoId = extractVideoId(downloadPageUrl);
+    if (videoId == null) return null;
+
+    try {
+      final streams = await getStreams(downloadPageUrl);
+      if (streams.isNotEmpty) {
+        // Try to match by itag parameter in old stream url vs new streams
+        Uri? oldUri;
+        try {
+          oldUri = Uri.parse(oldStreamUrl);
+        } catch (_) {}
+
+        final oldItag = oldUri?.queryParameters['itag'];
+        
+        if (oldItag != null) {
+          final matched = streams.firstWhere(
+            (s) => s['itag']?.toString() == oldItag || 
+                   (s['src'] != null && Uri.tryParse(s['src'].toString())?.queryParameters['itag'] == oldItag),
+            orElse: () => <String, dynamic>{},
+          );
+          if (matched.isNotEmpty) {
+            return {
+              'url': matched['src'] as String?,
+              'audioUrl': matched['audioSrc'] as String?,
+            };
+          }
+        }
+
+        // If itag match failed, match by quality/type/ext/height
+        final oldQuality = oldUri?.queryParameters['quality'] ?? oldUri?.queryParameters['height'];
+        
+        // Find best fallback match
+        Map<String, dynamic>? bestMatch;
+        for (final s in streams) {
+          final sUrl = s['src']?.toString() ?? '';
+          final sUri = Uri.tryParse(sUrl);
+          final sQuality = s['quality']?.toString() ?? sUri?.queryParameters['quality'] ?? sUri?.queryParameters['height'];
+          
+          if (oldQuality != null && sQuality == oldQuality) {
+            bestMatch = s;
+            break;
+          }
+        }
+        
+        if (bestMatch != null) {
+          return {
+            'url': bestMatch['src'] as String?,
+            'audioUrl': bestMatch['audioSrc'] as String?,
+          };
+        }
+
+        // Default fallback to first stream
+        final first = streams.first;
+        return {
+          'url': first['src'] as String?,
+          'audioUrl': first['audioSrc'] as String?,
+        };
+      }
+    } catch (e) {
+      debugPrint('[YoutubeService] refreshStreamUrl error ($e).');
+    }
+    return null;
   }
 
   /// Fetches fresh stream URLs (video and optional audio) for a YouTube page URL.
