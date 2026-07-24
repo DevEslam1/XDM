@@ -10,6 +10,17 @@ class AdBlocker {
   static bool _initialized = false;
 
   static const List<String> _allowedDomains = [
+    'google.com',
+    'www.google.com',
+    'accounts.google.com',
+    'gstatic.com',
+    'www.gstatic.com',
+    'googleapis.com',
+    'googleusercontent.com',
+    'google-analytics.com',
+    'drive.google.com',
+    'docs.google.com',
+    'play.google.com',
     'youtube.com',
     'www.youtube.com',
     'm.youtube.com',
@@ -25,6 +36,9 @@ class AdBlocker {
     '/player?',
     '/watch?v=',
     '/embed/',
+    'accounts.google.com',
+    'gstatic.com',
+    'googleapis.com',
   ];
 
   // Well-known, high-quality, mobile-optimized hosts lists
@@ -35,6 +49,10 @@ class AdBlocker {
   ];
 
   static const List<String> _allowedDomainSuffixes = [
+    '.google.com',
+    '.gstatic.com',
+    '.googleapis.com',
+    '.googleusercontent.com',
     '.googlevideo.com',
     '.ytimg.com',
     '.ggpht.com',
@@ -132,9 +150,8 @@ class AdBlocker {
     try {
       final file = await _getHostsFile();
       if (await file.exists()) {
-        final content = await file.readAsString();
-        final domains = _parseHostsContent(content);
-        _precomputeParentDomains(domains);
+        final filePath = file.path;
+        final domains = await compute(_loadAndParseHostsFile, filePath);
         _blockedDomains.addAll(domains);
         debugPrint('AdBlocker loaded ${domains.length} custom domains from local cache.');
       } else {
@@ -144,6 +161,19 @@ class AdBlocker {
       _initialized = true;
     } catch (e) {
       debugPrint('AdBlocker initialization error: $e');
+    }
+  }
+
+  static Set<String> _loadAndParseHostsFile(String filePath) {
+    try {
+      final file = File(filePath);
+      if (!file.existsSync()) return {};
+      final content = file.readAsStringSync();
+      final domains = _parseHostsContent(content);
+      _precomputeParentDomains(domains);
+      return domains;
+    } catch (_) {
+      return {};
     }
   }
 
@@ -417,7 +447,7 @@ class AdBlocker {
   } catch(e) {}
 
   // 3. Synchronous check for blocking script injections instantly
-  const ytPattern = /youtube\\.com|youtu\\.be|googlevideo\\.com|ytimg\\.com|ggpht\\.com/i;
+  const ytPattern = /google\\.com|gstatic\\.com|googleapis\\.com|googleusercontent\\.com|youtube\\.com|youtu\\.be|googlevideo\\.com|ytimg\\.com|ggpht\\.com/i;
   const adPattern = /([/.])ads?([/._?=-]|\\d)|adsbygoogle|banner|popup|affiliate|tracker\\.php|tracking\\.php|click\\.php/i;
 
   function shouldBlockDomainSync(url) {

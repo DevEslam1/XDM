@@ -1,9 +1,79 @@
+// ignore_for_file: implementation_imports
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_js/flutter_js.dart';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+import 'package:youtube_explode_dart/src/reverse_engineering/challenges/ejs/base_ejs_solver.dart';
+import 'package:youtube_explode_dart/src/reverse_engineering/challenges/ejs/ejs.dart';
+
+class FlutterJsSolver extends BaseEJSSolver {
+  JavascriptRuntime? _jsRuntime;
+  bool _initialized = false;
+  final _initLock = SynchronizedLock();
+
+  Future<JavascriptRuntime> _getRuntime() async {
+    if (_initialized && _jsRuntime != null) {
+      return _jsRuntime!;
+    }
+    return await _initLock.synchronized(() async {
+      if (_initialized && _jsRuntime != null) {
+        return _jsRuntime!;
+      }
+      final runtime = getJavascriptRuntime();
+      final initScript = await EJSBuilder.getJSModules();
+      final evalResult = runtime.evaluate(initScript);
+      if (evalResult.isError) {
+        throw Exception('Failed to initialize JS runtime for YoutubeExplode: ${evalResult.stringResult}');
+      }
+      _jsRuntime = runtime;
+      _initialized = true;
+      return _jsRuntime!;
+    });
+  }
+
+  @override
+  Future<String> executeJavaScript(String jsCode) async {
+    return await _initLock.synchronized(() async {
+      final runtime = await _getRuntime();
+      final evalResult = runtime.evaluate(jsCode);
+      if (evalResult.isError) {
+        throw Exception('JS Solver evaluation error: ${evalResult.stringResult}');
+      }
+      return evalResult.stringResult;
+    });
+  }
+
+  @override
+  void dispose() {
+    try {
+      _jsRuntime?.dispose();
+    } catch (_) {}
+    _jsRuntime = null;
+    _initialized = false;
+    super.dispose();
+  }
+}
+
+class SynchronizedLock {
+  Completer<void>? _completer;
+
+  Future<T> synchronized<T>(Future<T> Function() action) async {
+    while (_completer != null) {
+      await _completer!.future;
+    }
+    final completer = Completer<void>();
+    _completer = completer;
+    try {
+      return await action();
+    } finally {
+      _completer = null;
+      completer.complete();
+    }
+  }
+}
 
 class YoutubeService {
   static String? _cookies;
@@ -16,9 +86,11 @@ class YoutubeService {
   static String? get oauthToken => _oauthToken;
   static final _authStateController = StreamController<bool>.broadcast();
   static YoutubeExplode? _ytInstance;
+  static FlutterJsSolver? _jsSolverInstance;
 
   static YoutubeExplode get _yt {
-    _ytInstance ??= YoutubeExplode();
+    _jsSolverInstance ??= FlutterJsSolver();
+    _ytInstance ??= YoutubeExplode(jsSolver: _jsSolverInstance);
     return _ytInstance!;
   }
 
@@ -72,11 +144,17 @@ class YoutubeService {
 
   /// Resets client state.
   static Future<void> resetClient() async {
+    _streamsCache.clear();
     try {
       _ytInstance?.close();
     } catch (_) {}
     _ytInstance = null;
+    try {
+      _jsSolverInstance?.dispose();
+    } catch (_) {}
+    _jsSolverInstance = null;
   }
+
 
   /// Whether the service currently has authentication cookies or OAuth set.
   static bool get isSignedIn =>
@@ -208,13 +286,19 @@ class YoutubeService {
     resetClient();
   }
 
-  // ───────────────────── YouTube Explode Engine ──────────────────────
+  static final Map<String, (DateTime, List<Map<String, dynamic>>)> _streamsCache = {};
+  static const _cacheDuration = Duration(minutes: 5);
 
   /// Formats all available streams for a given YouTube URL or Video ID into structured maps.
   static Future<List<Map<String, dynamic>>> getStreams(String url) async {
     final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
     if (videoId == null) {
       throw Exception('Invalid YouTube URL or Video ID.');
+    }
+
+    final cached = _streamsCache[videoId];
+    if (cached != null && DateTime.now().difference(cached.$1) < _cacheDuration) {
+      return cached.$2;
     }
 
     try {
@@ -321,6 +405,12 @@ class YoutubeService {
         });
       }
 
+      if (results.isEmpty) {
+        throw Exception(
+            'YouTube requires an updated resolver — some videos may be temporarily unavailable');
+      }
+
+      _streamsCache[videoId] = (DateTime.now(), results);
       return results;
     } catch (e) {
       debugPrint('YoutubeService.getStreams error for $url: $e');

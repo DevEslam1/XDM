@@ -109,6 +109,8 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, ({String cookie, DateTime timestamp})> _cookieCache = {};
   static const int _cookieCacheMaxSize = 50;
   final Map<String, Future<void>> _dbSaveQueues = {};
+  final Map<String, int> _ytLowSpeedCounts = {};
+  final Map<String, bool> _ytThrottlingRefreshing = {};
   final Map<String, int> _lastProgressUpdateTimes = {};
   final Map<String, int> _lastDbSaveTimes = {};
   final Map<String, int> _lastDbSaveBytes = {};
@@ -180,6 +182,12 @@ class DownloadProvider extends ChangeNotifier
   /// Called by [DownloadQueueMixin.pumpQueue] to check if a task is waiting for a retry delay.
   @override
   bool isTaskWaitingForRetry(String taskId) => _retryTimers.containsKey(taskId);
+
+  @override
+  void providerNotifyListeners() => notifyListeners();
+
+  @override
+  void providerStartWidgetTimer() => _startWidgetTimer();
 
   // ---------------------------------------------------------------------------
   // Public getters (delegated to [DownloadFilterMixin])
@@ -601,11 +609,12 @@ class DownloadProvider extends ChangeNotifier
       }
       directory = p.join(directory, subFolder);
     }
-    final localFilePath = _downloadEngine.buildLocalFilePath(
+    final localFilePath = await getUniqueFilePath(
       directory,
       fileName,
     );
-    final tempFilePath = _downloadEngine.buildTempFilePath(directory, fileName);
+    final uniqueName = p.basename(localFilePath);
+    final tempFilePath = _downloadEngine.buildTempFilePath(directory, uniqueName);
     final now = DateTime.now();
 
     final isScheduled = scheduledAt != null && scheduledAt.isAfter(now);
@@ -662,6 +671,7 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
+  @override
   Future<void> pauseTask(String id) async {
     final task = _findTask(id);
     if (task == null) return;
@@ -719,6 +729,7 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
+  @override
   Future<void> resumeTask(String id) async {
     final task = _findTask(id);
     if (task == null || task.status == DownloadStatus.completed) return;
@@ -740,59 +751,11 @@ class DownloadProvider extends ChangeNotifier
     _updateTelemetryWidget();
   }
 
-  Future<void> pauseAllTasks() async {
-    startBatch();
-    try {
-      final active = _tasks
-          .where(
-            (task) =>
-                task.status == DownloadStatus.downloading ||
-                task.status == DownloadStatus.queued,
-          )
-          .toList();
-      await Future.wait(active.map((task) async {
-        try {
-          await pauseTask(task.id);
-        } catch (e) {
-          debugPrint('Error pausing task: $e');
-        }
-      }));
-      pumpQueue();
-    } finally {
-      endBatch(super.notifyListeners);
-    }
-  }
+  Future<void> pauseAllTasks() => mixinPauseAllTasks(notifyListeners);
 
-  Future<void> resumeAllTasks() async {
-    startBatch();
-    try {
-      final resumable = _tasks
-          .where(
-            (task) =>
-                task.status == DownloadStatus.paused ||
-                task.status == DownloadStatus.failed,
-          )
-          .toList();
-      await Future.wait(resumable.map((task) async {
-        try {
-          await resumeTask(task.id);
-        } catch (e) {
-          debugPrint('Error resuming task: $e');
-        }
-      }));
-    } finally {
-      endBatch(super.notifyListeners);
-    }
-  }
+  Future<void> resumeAllTasks() => mixinResumeAllTasks(notifyListeners);
 
-  Future<void> toggleStartStopAll() async {
-    final activeCount = downloadingTasksCount + queuedTasksCount;
-    if (activeCount > 0) {
-      await pauseAllTasks();
-    } else {
-      await resumeAllTasks();
-    }
-  }
+  Future<void> toggleStartStopAll() => mixinToggleStartStopAll(notifyListeners);
 
   Future<void> cancelTask(String id) async {
     final task = _findTask(id);
@@ -1019,62 +982,7 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> updateTaskSeeding(
-    String taskId, {
-    bool? enabled,
-    bool? limited,
-    int? limitKbps,
-  }) async {
-    final index = _tasks.indexWhere((t) => t.id == taskId);
-    if (index == -1) return;
 
-    final oldTask = _tasks[index];
-    final newEnabled = enabled ?? oldTask.seedingEnabled;
-
-    _tasks[index] = oldTask.copyWith(
-      seedingEnabled: newEnabled,
-      seedingLimited: limited,
-      seedingLimitKbps: limitKbps,
-    );
-    await _databaseService.saveTask(_tasks[index]);
-
-    if (oldTask.isTorrent) {
-      final torrentId = _torrentIds[taskId];
-      if (newEnabled) {
-        if (torrentId != null) {
-          TorrentService.resumeTorrent(torrentId);
-        } else {
-          startSeedingTorrent(_tasks[index]);
-        }
-      } else {
-        // Only pause/remove the torrent session if the task has already
-        // finished downloading (status == completed).  Calling pauseTorrent
-        // while still downloading would abort the in-progress transfer.
-        if (torrentId != null && oldTask.status == DownloadStatus.completed) {
-          TorrentService.pauseTorrent(torrentId);
-          _torrentIds.remove(taskId);
-        }
-        // Snap downloadedBytes to fileSize so the Completed tab shows 100%.
-        final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
-        if (updatedIdx != -1) {
-          final t = _tasks[updatedIdx];
-          if (t.status == DownloadStatus.completed &&
-              t.fileSize > 0 &&
-              t.downloadedBytes < t.fileSize) {
-            _tasks[updatedIdx] = t.copyWith(
-              downloadedBytes: t.fileSize,
-              chunks: List<double>.filled(t.threadCount, 1.0),
-            );
-            await _databaseService.saveTask(_tasks[updatedIdx]);
-          }
-        }
-      }
-    }
-
-    updateActualTorrentUploadLimit();
-    notifyListeners();
-    _startWidgetTimer();
-  }
 
   DownloadTask? taskById(String id) {
     return _findTask(id);
@@ -1539,15 +1447,40 @@ class DownloadProvider extends ChangeNotifier
                       final index = _tasks.indexWhere((t) => t.id == task.id);
                       if (index == -1) return;
 
-                      // Check for suspiciously low YouTube download speeds (< 120 KB/s) to log warnings
+                      // Check for suspiciously low YouTube download speeds (< 120 KB/s)
                       if (isYoutube &&
                           progress.downloadedBytes > 1024 * 1024 &&
                           progress.speed > 0 &&
                           progress.speed < 120 * 1024) {
+                        final lowSpeedCount = (_ytLowSpeedCounts[task.id] ?? 0) + 1;
+                        _ytLowSpeedCounts[task.id] = lowSpeedCount;
+
                         Logger.root.warning(
-                          'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id}. '
+                          'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id} (sample $lowSpeedCount). '
                           'The stream URL may be throttled due to n-parameter descrambling.'
                         );
+
+                        // If low speed persists for 10 consecutive progress ticks (> 5s), trigger an automatic stream refresh
+                        if (lowSpeedCount >= 10 && !(_ytThrottlingRefreshing[task.id] ?? false)) {
+                          _ytThrottlingRefreshing[task.id] = true;
+                          _ytLowSpeedCounts[task.id] = 0;
+                          Logger.root.info('Persistent YouTube throttling detected for ${task.id}. Attempting automatic stream refresh...');
+                          Future.microtask(() async {
+                            try {
+                              final pageUrl = task.downloadPageUrl ?? task.url;
+                              final fresh = await YoutubeService.getFreshStreams(pageUrl);
+                              if (fresh != null && fresh['url'] != null) {
+                                await updateTaskUrlAndResume(task.id, fresh['url']!, newAudioUrl: fresh['audioUrl']);
+                              }
+                            } catch (err) {
+                              debugPrint('Auto YouTube stream refresh failed: $err');
+                            } finally {
+                              _ytThrottlingRefreshing[task.id] = false;
+                            }
+                          });
+                        }
+                      } else if (isYoutube && progress.speed >= 120 * 1024) {
+                        _ytLowSpeedCounts[task.id] = 0;
                       }
 
                       final now = DateTime.now().millisecondsSinceEpoch;
@@ -2091,9 +2024,9 @@ class DownloadProvider extends ChangeNotifier
 
   String _errorMessage(Object error) {
     if (error is DioException) {
-      if (error.response?.statusCode != null) {
-        final code = error.response!.statusCode;
-        return switch (code) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode != null) {
+        return switch (statusCode) {
           403 =>
             '403 Forbidden: Access denied. (Raw: ${error.message})',
           401 =>
@@ -2107,7 +2040,7 @@ class DownloadProvider extends ChangeNotifier
           503 =>
             '503 Service Unavailable: Server is overloaded. (Raw: ${error.message})',
           _ =>
-            'HTTP Error $code: ${error.message ?? "Server returned invalid response."}',
+            'HTTP Error $statusCode: ${error.message ?? "Server returned invalid response."}',
         };
       }
       return 'Dio Error: ${error.message ?? error.type.name}';
@@ -2124,15 +2057,15 @@ class DownloadProvider extends ChangeNotifier
       if (error.type == DioExceptionType.cancel) {
         return false;
       }
-      if (error.response?.statusCode != null) {
-        final code = error.response!.statusCode;
+      final statusCode = error.response?.statusCode;
+      if (statusCode != null) {
         // Do not retry client errors (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 410 Gone, 416 Range Not Satisfiable)
-        if (code == 400 ||
-            code == 401 ||
-            code == 403 ||
-            code == 404 ||
-            code == 410 ||
-            code == 416) {
+        if (statusCode == 400 ||
+            statusCode == 401 ||
+            statusCode == 403 ||
+            statusCode == 404 ||
+            statusCode == 410 ||
+            statusCode == 416) {
           return false;
         }
       }
@@ -2468,41 +2401,7 @@ class DownloadProvider extends ChangeNotifier
     _updateTelemetryWidget();
   }
 
-  Future<void> updateTorrentTaskFiles(
-    String taskId,
-    List<Map<String, dynamic>> files,
-  ) async {
-    final index = _tasks.indexWhere((t) => t.id == taskId);
-    if (index == -1) return;
 
-    final task = _tasks[index];
-
-    // Calculate new total size of selected files
-    final selectedSize = files
-        .where((f) => f['selected'] == true)
-        .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-
-    final updated = task.copyWith(
-      torrentFiles: files,
-      fileSize: selectedSize > 0 ? selectedSize : task.fileSize,
-    );
-
-    _tasks[index] = updated;
-    await _databaseService.saveTask(updated);
-
-    // Propagate priority changes to the live torrent engine.
-    final torrentId = _torrentIds[taskId];
-    if (torrentId != null) {
-      final priorities = files.map((f) {
-        final selected = f['selected'] as bool? ?? true;
-        if (!selected) return 0;
-        return f['priority'] as int? ?? 4;
-      }).toList();
-      TorrentService.setFilePriorities(torrentId, priorities);
-    }
-
-    notifyListeners();
-  }
 
   Future<void> updateTaskUrl(
     String taskId,

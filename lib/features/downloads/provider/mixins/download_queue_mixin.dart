@@ -20,6 +20,9 @@ mixin DownloadQueueMixin {
   int get pendingStartCount;
   void startTaskFromQueue(DownloadTask task);
   bool isTaskWaitingForRetry(String taskId);
+  Future<void> pauseTask(String id);
+  Future<void> resumeTask(String id);
+  int get queuedTasksCount;
 
   // ---------------------------------------------------------------------------
   // State
@@ -91,6 +94,62 @@ mixin DownloadQueueMixin {
         _needsRePump = false;
         pumpQueue();
       }
+    }
+  }
+
+  Future<void> mixinPauseAllTasks(void Function() superNotify) async {
+    startBatch();
+    try {
+      final active = providerTasks
+          .where(
+            (task) =>
+                task.status == DownloadStatus.downloading ||
+                task.status == DownloadStatus.queued,
+          )
+          .toList();
+      await Future.wait(active.map((task) async {
+        try {
+          await pauseTask(task.id);
+        } catch (e) {
+          debugPrint('Error pausing task: $e');
+        }
+      }));
+      pumpQueue();
+    } finally {
+      endBatch(superNotify);
+    }
+  }
+
+  Future<void> mixinResumeAllTasks(void Function() superNotify) async {
+    startBatch();
+    try {
+      final resumable = providerTasks
+          .where(
+            (task) =>
+                task.status == DownloadStatus.paused ||
+                task.status == DownloadStatus.failed,
+          )
+          .toList();
+      await Future.wait(resumable.map((task) async {
+        try {
+          await resumeTask(task.id);
+        } catch (e) {
+          debugPrint('Error resuming task: $e');
+        }
+      }));
+    } finally {
+      endBatch(superNotify);
+    }
+  }
+
+  Future<void> mixinToggleStartStopAll(
+    void Function() superNotify,
+  ) async {
+    final activeCount = downloadingTasksCount + queuedTasksCount;
+    if (activeCount > 0) {
+      await mixinPauseAllTasks(superNotify);
+    } else {
+      await mixinResumeAllTasks(superNotify);
     }
   }
 }

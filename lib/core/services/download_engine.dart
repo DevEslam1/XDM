@@ -232,7 +232,8 @@ class DownloadEngine {
             debugPrint('[DMX] Cleanup timer: closing orphaned Dio client (${age.inSeconds}s old)');
             try {
               client.close(force: true);
-            } catch (_) {}
+            } // Safe cleanup: Swallow exception during client cleanup to avoid interrupting loop.
+            catch (_) {}
             _dioClientCreationTimes.remove(client);
             return true;
           }
@@ -420,7 +421,8 @@ class DownloadEngine {
               try {
                 TorrentService.pauseTorrent(torrentId);
                 TorrentService.removeTorrent(torrentId);
-              } catch (_) {}
+              } // Safe cleanup: Swallow exception during best-effort torrent engine cleanup.
+              catch (_) {}
               completer.complete(
                 DownloadMetadata(
                   fileName: torrent.name,
@@ -442,7 +444,8 @@ class DownloadEngine {
             try {
               TorrentService.pauseTorrent(torrentId);
               TorrentService.removeTorrent(torrentId);
-            } catch (_) {}
+            } // Safe cleanup: Swallow exception during best-effort torrent engine cleanup on timeout.
+            catch (_) {}
             completer.complete(
               DownloadMetadata(
                 fileName: resolvedName,
@@ -570,7 +573,9 @@ class DownloadEngine {
             }
             supportsResume = isYoutube || getResponse.statusCode == 206 || getResponse.headers.value('accept-ranges') == 'bytes';
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[DownloadEngine] resolveMetadata ranged GET probe failed: $e');
+        }
       }
     } catch (e) {
       debugPrint('HEAD request failed for $punyUrl: $e');
@@ -648,7 +653,9 @@ class DownloadEngine {
         resolvedFileSize = meta.fileSize;
         resolvedSupportsResume = meta.supportsResume;
         resolvedFileName = meta.fileName;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[DownloadEngine] resolveMetadata failed in startDownload: $e');
+      }
 
       if (resolvedFileName != null) {
         final saveDir = File(localFilePath).parent.path;
@@ -919,7 +926,8 @@ class DownloadEngine {
           // Metadata not yet received → remove (metadata phase, nothing to resume)
           try {
             TorrentService.removeTorrent(id);
-          } catch (_) {}
+          } // Safe cleanup: Swallow exception when removing torrent during cancellation.
+          catch (_) {}
         }
         await metadataSub?.cancel();
         metadataTimer?.cancel();
@@ -954,7 +962,8 @@ class DownloadEngine {
         try {
           TorrentService.pauseTorrent(id);
           TorrentService.removeTorrent(id);
-        } catch (_) {}
+        } // Safe cleanup: Swallow exception when pausing/removing torrent during metadata timeout.
+        catch (_) {}
         if (!metadataCompleter.isCompleted) {
           metadataCompleter.completeError(
             DioException(
@@ -1041,7 +1050,9 @@ class DownloadEngine {
                   },
                 )
                 .toList();
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('[DownloadEngine] TorrentService.getFiles failed: $e');
+          }
         }
 
         onProgress(
@@ -1512,7 +1523,8 @@ class DownloadEngine {
               await sharedRaf.close();
               isRafClosed = true;
             }
-          } catch (_) {}
+          } // Safe cleanup: Swallow exception when closing random access file inside catch.
+          catch (_) {}
 
           if (cancelToken.isCancelled) {
             await saveState(); // Save state on cancel
@@ -1733,7 +1745,8 @@ class DownloadEngine {
         }
         try {
           sink.add(chunk);
-        } catch (_) {
+        } catch (e) {
+          debugPrint('[DownloadEngine] Failed to write chunk to sink: $e');
           if (cancelToken.isCancelled) {
             throw DioException(
               requestOptions: RequestOptions(path: punyUrl),
@@ -1913,21 +1926,24 @@ class DownloadEngine {
     for (final token in List<CancelToken>.from(_activeCancelTokens)) {
       try {
         token.cancel('Engine closing');
-      } catch (_) {}
+      } // Safe cleanup: Swallow cancel exception on shutdown.
+      catch (_) {}
     }
     _activeCancelTokens.clear();
     _sharedDio.close(force: true);
     for (final client in _activeDioClients) {
       try {
         client.close(force: true);
-      } catch (_) {}
+      } // Safe cleanup: Swallow close exception on shutdown.
+      catch (_) {}
     }
     _activeDioClients.clear();
     _dioClientCreationTimes.clear();
     for (final isolate in _activeIsolates) {
       try {
         isolate.kill(priority: Isolate.immediate);
-      } catch (_) {}
+      } // Safe cleanup: Swallow kill exception on shutdown.
+      catch (_) {}
     }
     _activeIsolates.clear();
     _activeIsolateCommandPorts.clear();

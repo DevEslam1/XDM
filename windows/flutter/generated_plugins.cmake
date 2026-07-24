@@ -6,6 +6,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   disk_space_2
   ffmpeg_kit_flutter_new_min
+  flutter_js
   flutter_secure_storage_windows
   permission_handler_windows
   share_plus

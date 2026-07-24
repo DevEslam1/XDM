@@ -184,11 +184,13 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                                       selector: (_, provider) =>
                                           provider.categorySizes,
                                       shouldRebuild: (prev, next) {
-                                        if (prev.length != next.length)
+                                        if (prev.length != next.length) {
                                           return true;
+                                        }
                                         for (final key in prev.keys) {
-                                          if (prev[key] != next[key])
+                                          if (prev[key] != next[key]) {
                                             return true;
+                                          }
                                         }
                                         return false;
                                       },

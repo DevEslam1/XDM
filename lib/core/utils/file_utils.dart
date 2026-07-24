@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:path/path.dart' as p;
 
 const List<String> videoExtensions = [
@@ -78,3 +79,24 @@ String safeFileName(String value) {
   if (_windowsReserved.contains(baseName)) sanitized = '_$sanitized';
   return sanitized;
 }
+
+/// Generates a unique file path in [directoryPath] for [fileName].
+/// If a file with the name already exists, appends `(1)`, `(2)`, etc.
+Future<String> getUniqueFilePath(String directoryPath, String fileName) async {
+  final safeName = safeFileName(fileName);
+  final ext = p.extension(safeName);
+  final nameWithoutExt = ext.isNotEmpty && safeName.endsWith(ext)
+      ? safeName.substring(0, safeName.length - ext.length)
+      : safeName;
+
+  var candidatePath = p.join(directoryPath, safeName);
+  var counter = 1;
+
+  while (await File(candidatePath).exists()) {
+    candidatePath = p.join(directoryPath, '$nameWithoutExt ($counter)$ext');
+    counter++;
+  }
+
+  return candidatePath;
+}
+

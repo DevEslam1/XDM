@@ -420,6 +420,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
           final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
+          if (!mounted) return;
           if (meta != null) {
             setState(() {
               _resolvedFileName = meta['name'] ?? '';
@@ -587,13 +588,16 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final int finalSize = _isMetadataResolved ? _resolvedFileSize : 0;
 
     DownloadTask? duplicateTask;
-    if (finalSize > 0) {
-      for (final task in provider.tasks) {
-        if (task.fileName.toLowerCase() == finalFileName.toLowerCase() &&
-            task.fileSize == finalSize) {
-          duplicateTask = task;
-          break;
-        }
+    final trimmedUrl = singleUrl.trim();
+    for (final task in provider.tasks) {
+      final isSameUrl = task.url.trim().toLowerCase() == trimmedUrl.toLowerCase();
+      final isSameNameAndSize = finalSize > 0 &&
+          task.fileName.toLowerCase() == finalFileName.toLowerCase() &&
+          task.fileSize == finalSize;
+
+      if (isSameUrl || isSameNameAndSize) {
+        duplicateTask = task;
+        break;
       }
     }
 
@@ -1353,6 +1357,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 },
                               );
                               if (date != null && mounted) {
+                                if (!context.mounted) return;
                                 final time = await showTimePicker(
                                   context: context,
                                   initialTime: TimeOfDay.fromDateTime(

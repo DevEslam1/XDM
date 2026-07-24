@@ -367,6 +367,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     _tabs[_currentTabIndex].id == tab.id) {
                   _urlController.text = tab.url;
                 }
+
+                // Clear stale detected download and media links from previous page
+                _detectedDownloadUrls.remove(tab.id);
+                _detectedPlaylistUrls.remove(tab.id);
+                _detectedMediaSources.remove(tab.id);
+                _mediaScanTimers[tab.id]?.cancel();
               });
               downloadProvider.setNavbarVisible(true);
             }
@@ -715,6 +721,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   Future<void> _setSnifferEnabled(bool value) async {
     setState(() {
       _isSnifferEnabled = value;
+      if (!value) {
+        _detectedDownloadUrls.clear();
+        _detectedPlaylistUrls.clear();
+        _detectedMediaSources.clear();
+        for (final timer in _mediaScanTimers.values) {
+          timer.cancel();
+        }
+        _mediaScanTimers.clear();
+      }
     });
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -765,17 +780,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       searchPrefix = 'https://search.yahoo.com/search?p=';
     }
 
-    final uri = Uri.tryParse(url);
-    if (uri != null && uri.hasScheme) {
-      if (uri.scheme != 'http' && uri.scheme != 'https') {
-        url = '$searchPrefix${Uri.encodeComponent(input)}';
-      }
+    final lowerUrl = url.toLowerCase();
+    if (lowerUrl.startsWith('http://') ||
+        lowerUrl.startsWith('https://') ||
+        lowerUrl.startsWith('file://') ||
+        lowerUrl.startsWith('about:')) {
+      // Valid URI scheme
+    } else if (url.contains(' ') || !url.contains('.')) {
+      url = '$searchPrefix${Uri.encodeComponent(input)}';
     } else {
-      if (url.contains('.') && !url.contains(' ')) {
-        url = 'https://$url';
-      } else {
-        url = '$searchPrefix${Uri.encodeComponent(url)}';
-      }
+      url = 'https://$url';
     }
 
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
@@ -915,6 +929,21 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 settings.adBlockerEnabled
                     ? 'Ad blocker enabled'
                     : 'Ad blocker disabled',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        break;
+      case 'sniffer':
+        await _setSnifferEnabled(!_isSnifferEnabled);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                _isSnifferEnabled
+                    ? 'Media detector enabled'
+                    : 'Media detector disabled',
               ),
               duration: const Duration(seconds: 2),
             ),
@@ -1182,7 +1211,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   // DOM Page Media Scanner
   Future<void> _scanPageMedia(BrowserTab tab) async {
-    if (!mounted || !_tabs.contains(tab) || tab.isHome) return;
+    if (!mounted || !_tabs.contains(tab) || tab.isHome || !_isSnifferEnabled) return;
+
+    final scannedUrl = tab.url;
 
     // Clean up stale media sources from removed tabs
     final activeIds = _tabs.map((t) => t.id).toSet();
@@ -1194,15 +1225,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
 
     // YouTube Playlist detection — do this first before single video
-    if (YoutubeService.isPlaylistUrl(tab.url)) {
+    if (YoutubeService.isPlaylistUrl(scannedUrl)) {
       try {
-        final info = await YoutubeService.getPlaylistInfo(tab.url);
-        if (info != null && mounted) {
+        final info = await YoutubeService.getPlaylistInfo(scannedUrl);
+        if (info != null && mounted && tab.url == scannedUrl) {
           final count = info['videoCount'] as int? ?? 0;
           setState(() {
             _detectedPlaylistUrls[tab.id] = count;
             // Also set a download URL so the FAB shows
-            _detectedDownloadUrls[tab.id] = tab.url;
+            _detectedDownloadUrls[tab.id] = scannedUrl;
           });
         }
       } catch (e) {
@@ -1210,10 +1241,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }
       // If it also has a video ID (e.g. watch?v=xxx&list=yyy),
       // still try to fetch the single video streams too
-      if (YoutubeService.isYoutubeVideoUrl(tab.url)) {
+      if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
-          final youtubeStreams = await YoutubeService.getStreams(tab.url);
-          if (youtubeStreams.isNotEmpty && mounted) {
+          final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
+          if (youtubeStreams.isNotEmpty && mounted && tab.url == scannedUrl) {
             setState(() {
               _detectedMediaSources[tab.id] = youtubeStreams;
             });
@@ -1226,13 +1257,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
 
     // Direct YouTube single video streams capture
-    if (YoutubeService.isYoutubeVideoUrl(tab.url)) {
+    if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
       try {
-        final youtubeStreams = await YoutubeService.getStreams(tab.url);
-        if (youtubeStreams.isNotEmpty && mounted) {
+        final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
+        if (youtubeStreams.isNotEmpty && mounted && tab.url == scannedUrl) {
           setState(() {
             _detectedMediaSources[tab.id] = youtubeStreams;
-            _ytDetectionFailed.remove(tab.url);
+            _ytDetectionFailed.remove(scannedUrl);
             if (_detectedDownloadUrls[tab.id] == null) {
               _detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
             }
@@ -1242,12 +1273,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       } catch (e) {
         debugPrint('YouTube stream detection error: $e');
       }
-      if (mounted) {
+      if (mounted && tab.url == scannedUrl) {
         if (_ytDetectionFailed.length > 100) {
           _ytDetectionFailed.remove(_ytDetectionFailed.first);
         }
         setState(() {
-          _ytDetectionFailed.add(tab.url);
+          _ytDetectionFailed.add(scannedUrl);
         });
       }
     }
@@ -2524,27 +2555,28 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                       child: Row(
                         children: [
                           // Back to Home / Close Button
+                          // Stop Loading (X) when loading, Refresh when loaded
                           IconButton(
-                            icon: Icon(Icons.close, size: 20, color: textClr),
-                            tooltip: isRtl ? 'العودة للرئيسية' : 'Back to Home',
+                            icon: Icon(
+                              activeTab.isLoading ? Icons.close : Icons.refresh,
+                              size: 20,
+                              color: textClr,
+                            ),
+                            tooltip: activeTab.isLoading
+                                ? (isRtl ? 'إلغاء التحميل' : 'Stop loading')
+                                : (isRtl ? 'إعادة تحميل الصفحة' : 'Refresh page'),
                             onPressed: () {
                               triggerHaptic(settings);
-                              setState(() {
-                                activeTab.isHome = true;
-                                activeTab.url = 'about:blank';
-                                activeTab.title = 'New Tab';
-                                _showBars = true;
-                                _lastScrollY = 0;
-                                _urlController.text = '';
-                              });
-                              downloadProvider.setActiveTabIndex(0);
-                              downloadProvider.setNavbarVisible(true);
-                              if (_dashboardScrollController.hasClients) {
-                                _dashboardScrollController.jumpTo(0);
+                              if (activeTab.isLoading) {
+                                activeTab.controller.runJavaScript('window.stop();');
+                                setState(() {
+                                  activeTab.isLoading = false;
+                                });
+                              } else {
+                                if (!activeTab.isHome) {
+                                  activeTab.controller.reload();
+                                }
                               }
-                              activeTab.controller.loadRequest(
-                                Uri.parse('about:blank'),
-                              );
                             },
                           ),
                           const SizedBox(width: 4),
@@ -2975,6 +3007,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     ? 'Ad blocker: ON'
                                     : 'Ad blocker: OFF',
                                 'adblock',
+                                textClr,
+                              ),
+                              _menuItem(
+                                _isSnifferEnabled
+                                    ? Icons.radar
+                                    : Icons.radar_outlined,
+                                _isSnifferEnabled
+                                    ? (L10n.isRtl(context) ? 'كاشف الوسائط: مفعل' : 'Media detector: ON')
+                                    : (L10n.isRtl(context) ? 'كاشف الوسائط: معطل' : 'Media detector: OFF'),
+                                'sniffer',
                                 textClr,
                               ),
                               _menuItem(

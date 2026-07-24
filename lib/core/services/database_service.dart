@@ -62,6 +62,7 @@ class DatabaseService {
 
   Future<bool> _migrateFromHive() async {
     // Check if hive boxes exist, migrate, and delete
+    bool hasFailures = false;
     try {
       if (await Hive.boxExists(downloadsBoxName)) {
         final box = await Hive.openBox<dynamic>(downloadsBoxName);
@@ -98,6 +99,7 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
+            hasFailures = true;
             debugPrint('Migration of $downloadsBoxName had ${failedItems.length} failures; '
                 'keeping the Hive box intact for recovery.');
           } else {
@@ -137,6 +139,7 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
+            hasFailures = true;
             debugPrint('Migration of $bookmarksBoxName had ${failedItems.length} failures; '
                 'keeping the Hive box intact for recovery.');
           } else {
@@ -180,6 +183,7 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
+            hasFailures = true;
             debugPrint('Migration of $browserHistoryBoxName had ${failedItems.length} failures; '
                 'keeping the Hive box intact for recovery.');
           } else {
@@ -189,7 +193,7 @@ class DatabaseService {
           await box.deleteFromDisk();
         }
       }
-      return true; // All boxes migrated successfully
+      return !hasFailures; // Only return true if all boxes migrated with zero failures
     } catch (e) {
       debugPrint('Hive to Drift migration error: $e');
       return false;
@@ -212,7 +216,7 @@ class DatabaseService {
       tempFilePath: task.tempFilePath,
       errorMessage: drift.Value(task.errorMessage),
       threadCount: task.threadCount,
-      chunks: task.chunks,
+      chunks: drift.Value(task.chunks),
       createdAt: task.createdAt.toIso8601String(),
       updatedAt: task.updatedAt.toIso8601String(),
       completedAt: drift.Value(task.completedAt?.toIso8601String()),
@@ -271,7 +275,7 @@ class DatabaseService {
       tempFilePath: row.tempFilePath,
       errorMessage: row.errorMessage,
       threadCount: row.threadCount,
-      chunks: row.chunks,
+      chunks: row.chunks ?? [],
       createdAt: parseDate(row.createdAt),
       updatedAt: parseDate(row.updatedAt),
       completedAt: parseNullableDate(row.completedAt),

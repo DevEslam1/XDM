@@ -27,13 +27,13 @@ class GoogleAuthService {
   static const _youtubeScope = 'https://www.googleapis.com/auth/youtube';
 
   /// Optional Server Client ID (Web Application Client ID from Google Cloud Console).
-  /// Override via --dart-define=GOOGLE_SERVER_CLIENT_ID=<your_id>
+  /// Override via `--dart-define=GOOGLE_SERVER_CLIENT_ID=<your_id>`
   static String? serverClientId =
       const String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID',
           defaultValue: '978586541696-qi3ggijiatj2baf3ib4eg25aedls9llv.apps.googleusercontent.com');
 
   /// Optional Client ID.
-  /// Override via --dart-define=GOOGLE_CLIENT_ID=<your_id>
+  /// Override via `--dart-define=GOOGLE_CLIENT_ID=<your_id>`
   static String? clientId =
       const String.fromEnvironment('GOOGLE_CLIENT_ID',
           defaultValue: '978586541696-qi3ggijiatj2baf3ib4eg25aedls9llv.apps.googleusercontent.com');

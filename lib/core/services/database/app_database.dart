@@ -89,6 +89,7 @@ class DownloadTasks extends Table {
   RealColumn get audioProgress => real().withDefault(const Constant(0.0))();
   BoolColumn get pausedByUser => boolean().withDefault(const Constant(false))();
   TextColumn get youtubeQualityPreset => text().nullable()();
+  TextColumn get notes => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -132,16 +133,19 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
         onUpgrade: (m, from, to) async {
           debugPrint('AppDatabase: Upgrading schema from $from to $to');
-          if (from < to) {
-            // Add future step migrations here
+          if (from < 2) {
+            // Migration 1 -> 2: Add notes column
+            await m.addColumn(downloadTasks, downloadTasks.notes);
           }
+          // Add future step migrations here using subsequent if checks:
+          // if (from < 3) { ... }
         },
       );
 }

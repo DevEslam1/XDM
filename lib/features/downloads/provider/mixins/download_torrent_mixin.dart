@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/torrent_service.dart';
+import '../../../../core/services/database_service.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
 
@@ -14,6 +15,9 @@ import '../../models/download_task.dart';
 ///  - `Map<int, TorrentUpdateInfo> get providerLatestTorrentStats`
 ///  - `SettingsProvider get providerSettingsProvider`
 ///  - `DownloadTask? findTaskById(String id)`
+///  - `DatabaseService get providerDatabaseService`
+///  - `void providerNotifyListeners()`
+///  - `void providerStartWidgetTimer()`
 mixin DownloadTorrentMixin {
   // ---------------------------------------------------------------------------
   // Abstract contract — must be provided by the host class
@@ -23,6 +27,9 @@ mixin DownloadTorrentMixin {
   Map<int, TorrentUpdateInfo> get providerLatestTorrentStats;
   SettingsProvider get providerSettingsProvider;
   DownloadTask? findTaskById(String id);
+  DatabaseService get providerDatabaseService;
+  void providerNotifyListeners();
+  void providerStartWidgetTimer();
 
   // ---------------------------------------------------------------------------
   // Seeding lifecycle
@@ -408,5 +415,98 @@ mixin DownloadTorrentMixin {
       i++;
     }
     return '${size.toStringAsFixed(i == 0 ? 0 : 1)} ${suffixes[i]}';
+  }
+
+  Future<void> updateTaskSeeding(
+    String taskId, {
+    bool? enabled,
+    bool? limited,
+    int? limitKbps,
+  }) async {
+    final index = providerTasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+
+    final oldTask = providerTasks[index];
+    final newEnabled = enabled ?? oldTask.seedingEnabled;
+
+    providerTasks[index] = oldTask.copyWith(
+      seedingEnabled: newEnabled,
+      seedingLimited: limited,
+      seedingLimitKbps: limitKbps,
+    );
+    await providerDatabaseService.saveTask(providerTasks[index]);
+
+    if (oldTask.isTorrent) {
+      final torrentId = providerTorrentIds[taskId];
+      if (newEnabled) {
+        if (torrentId != null) {
+          TorrentService.resumeTorrent(torrentId);
+        } else {
+          startSeedingTorrent(providerTasks[index]);
+        }
+      } else {
+        // Only pause/remove the torrent session if the task has already
+        // finished downloading (status == completed).  Calling pauseTorrent
+        // while still downloading would abort the in-progress transfer.
+        if (torrentId != null && oldTask.status == DownloadStatus.completed) {
+          TorrentService.pauseTorrent(torrentId);
+          providerTorrentIds.remove(taskId);
+        }
+        // Snap downloadedBytes to fileSize so the Completed tab shows 100%.
+        final updatedIdx = providerTasks.indexWhere((t) => t.id == taskId);
+        if (updatedIdx != -1) {
+          final t = providerTasks[updatedIdx];
+          if (t.status == DownloadStatus.completed &&
+              t.fileSize > 0 &&
+              t.downloadedBytes < t.fileSize) {
+            providerTasks[updatedIdx] = t.copyWith(
+              downloadedBytes: t.fileSize,
+              chunks: List<double>.filled(t.threadCount, 1.0),
+            );
+            await providerDatabaseService.saveTask(providerTasks[updatedIdx]);
+          }
+        }
+      }
+    }
+
+    updateActualTorrentUploadLimit();
+    providerNotifyListeners();
+    providerStartWidgetTimer();
+  }
+
+  Future<void> updateTorrentTaskFiles(
+    String taskId,
+    List<Map<String, dynamic>> files,
+  ) async {
+    final index = providerTasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+
+    final task = providerTasks[index];
+
+    // Calculate new total size of selected files
+    final selectedSize = files
+        .where((f) => f['selected'] == true)
+        .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
+
+    final updated = task.copyWith(
+      torrentFiles: files,
+      fileSize: selectedSize > 0 ? selectedSize : task.fileSize,
+    );
+
+    providerTasks[index] = updated;
+    await providerDatabaseService.saveTask(updated);
+
+    // Propagate priority changes to the live torrent engine.
+    final torrentId = providerTorrentIds[taskId];
+    if (torrentId != null) {
+      final priorities = files.map((f) {
+        final selected = f['selected'] as bool? ?? true;
+        if (!selected) return 0;
+        return f['priority'] as int? ?? 4;
+      }).toList();
+      TorrentService.setFilePriorities(torrentId, priorities);
+    }
+
+    providerNotifyListeners();
   }
 }
