@@ -627,7 +627,7 @@ class DownloadProvider extends ChangeNotifier
         url.contains('youtube.com/') ||
         url.contains('youtu.be/');
 
-    final effectiveThreadCount = isYoutube ? 1 : threadCount;
+    final effectiveThreadCount = threadCount;
 
     final task = DownloadTask(
       id: '${now.microsecondsSinceEpoch}_${Random.secure().nextInt(1000000000)}',
@@ -1318,8 +1318,8 @@ class DownloadProvider extends ChangeNotifier
       if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
     });
 
-    // YouTube streams use normal single-threaded mode as configured.
-    final streamThreadCount = isYoutube ? 1 : task.threadCount;
+    // YouTube streams use multi-threaded mode as configured.
+    final streamThreadCount = task.threadCount;
 
     // Run video and audio sequentially (audio first, then video)
     final downloadFuture = () async {
@@ -2347,7 +2347,7 @@ class DownloadProvider extends ChangeNotifier
         task.url.contains('youtube.com/') ||
         task.url.contains('youtu.be/');
 
-    final targetThreadCount = isYoutube ? 1 : threadCount;
+    final targetThreadCount = threadCount;
     if (task.threadCount == targetThreadCount) return;
 
 
