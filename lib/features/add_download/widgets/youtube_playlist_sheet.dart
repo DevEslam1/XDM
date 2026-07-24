@@ -85,7 +85,15 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   }
 
   static const List<Map<String, String>> _qualityOptions = [
-    {'value': 'best_combined', 'label': 'Best Quality (Auto Merge)'},
+    {'value': 'best_combined', 'label': 'Best Quality (Auto)'},
+    {'value': '2160p', 'label': '2160p (4K Ultra HD)'},
+    {'value': '1440p', 'label': '1440p (2K Quad HD)'},
+    {'value': '1080p', 'label': '1080p (Full HD)'},
+    {'value': '720p', 'label': '720p (HD)'},
+    {'value': '480p', 'label': '480p (SD)'},
+    {'value': '360p', 'label': '360p (SD)'},
+    {'value': '240p', 'label': '240p (Low)'},
+    {'value': '144p', 'label': '144p (Very Low)'},
     {'value': 'best_muxed', 'label': 'Best Compatible (.mp4)'},
     {'value': 'audio_only', 'label': 'Audio Only'},
   ];
@@ -638,31 +646,27 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
                                         // Thumbnail
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
+                                          borderRadius: BorderRadius.circular(8),
                                           child: SizedBox(
                                             width: 72,
                                             height: 42,
-                                            child: thumbnailUrl != null
+                                            child: thumbnailUrl != null && thumbnailUrl.isNotEmpty
                                                 ? Image.network(
-                                                    thumbnailUrl,
+                                                    thumbnailUrl.startsWith('//')
+                                                        ? 'https:$thumbnailUrl'
+                                                        : thumbnailUrl,
                                                     fit: BoxFit.cover,
-                                                    cacheWidth: 144,
-                                                    cacheHeight: 84,
+                                                    headers: const {
+                                                      'User-Agent':
+                                                          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                                    },
                                                     errorBuilder: (context, error, stackTrace) => Container(
-                                                      color:
-                                                          (isDark
-                                                                  ? AppTheme
-                                                                        .background
-                                                                  : AppTheme
-                                                                        .lightBackground)
-                                                              .withValues(
-                                                                alpha: 0.6,
-                                                              ),
+                                                      color: (isDark
+                                                              ? AppTheme.background
+                                                              : AppTheme.lightBackground)
+                                                          .withValues(alpha: 0.6),
                                                       child: Icon(
-                                                        Icons
-                                                            .play_circle_outline,
+                                                        Icons.play_circle_outline,
                                                         color: mutedClr,
                                                         size: 24,
                                                       ),

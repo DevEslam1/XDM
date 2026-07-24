@@ -619,14 +619,6 @@ class DownloadProvider extends ChangeNotifier
 
     final isScheduled = scheduledAt != null && scheduledAt.isAfter(now);
 
-    final bool isYoutube = youtubeQualityPreset != null ||
-        (downloadPageUrl != null &&
-            (downloadPageUrl.contains('youtube.com/') ||
-                downloadPageUrl.contains('youtu.be/'))) ||
-        url.contains('.googlevideo.com/') ||
-        url.contains('youtube.com/') ||
-        url.contains('youtu.be/');
-
     final effectiveThreadCount = threadCount;
 
     final task = DownloadTask(
@@ -2338,14 +2330,6 @@ class DownloadProvider extends ChangeNotifier
     if (taskIndex == -1) return;
 
     var task = _tasks[taskIndex];
-
-    final isYoutube = task.youtubeQualityPreset != null ||
-        (task.downloadPageUrl != null &&
-            (task.downloadPageUrl!.contains('youtube.com/') ||
-                task.downloadPageUrl!.contains('youtu.be/'))) ||
-        task.url.contains('.googlevideo.com/') ||
-        task.url.contains('youtube.com/') ||
-        task.url.contains('youtu.be/');
 
     final targetThreadCount = threadCount;
     if (task.threadCount == targetThreadCount) return;

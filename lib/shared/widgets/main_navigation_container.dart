@@ -6,7 +6,10 @@ import '../../core/services/clipboard_service.dart';
 import '../../core/services/share_service.dart';
 import '../../core/utils/localization.dart';
 import '../../core/utils/responsive.dart';
+import '../../core/services/youtube_service.dart';
 import '../../features/add_download/widgets/add_download_dialog.dart';
+import '../../features/add_download/widgets/youtube_quality_sheet.dart';
+import '../../features/add_download/widgets/youtube_playlist_sheet.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 
@@ -57,15 +60,22 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     }
   }
 
-  void _onUrlReceived(String url) {
+  void _onUrlReceived(String url) async {
     // The share-intent callback fires on isolate-level events that can land
     // after this widget is unmounted (background → resume). Guard against
     // using a deactivated context.
     if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (_) => AddDownloadDialog(prefilledUrl: url),
-    );
+
+    if (YoutubeService.isPlaylistUrl(url)) {
+      YoutubePlaylistSheet.show(context, url);
+    } else if (YoutubeService.isYoutubeVideoUrl(url)) {
+      YoutubeQualitySheet.show(context, url);
+    } else {
+      showDialog(
+        context: context,
+        builder: (_) => AddDownloadDialog(prefilledUrl: url),
+      );
+    }
   }
 
   Future<void> _checkClipboard() async {

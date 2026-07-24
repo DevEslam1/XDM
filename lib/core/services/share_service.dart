@@ -17,7 +17,9 @@ class ShareService {
 
     void handleUrl(String? raw) {
       final trimmed = (raw ?? '').trim();
-      if (isHttpUrl(trimmed) && trimmed != _lastReceivedUrl) {
+      if (trimmed.isEmpty) return;
+      if ((isHttpUrl(trimmed) || isMagnetUrl(trimmed) || isTorrentFileUrl(trimmed)) &&
+          trimmed != _lastReceivedUrl) {
         _lastReceivedUrl = trimmed;
         onUrlReceived(trimmed);
       }

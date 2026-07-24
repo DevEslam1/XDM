@@ -331,7 +331,7 @@ class YoutubeService {
         return streams.first;
       }
 
-      // Exact quality matching (e.g. 2160p, 1080p, 720p, etc.)
+      // Exact quality matching (e.g. 2160p, 1440p, 1080p, 720p, 480p, 360p, 240p, 144p)
       final reqHeight = parseQualityHeight(preset);
       if (reqHeight > 0) {
         final combinedStreams = streams.where((s) => s['type'] == 'combined').toList();
@@ -342,13 +342,19 @@ class YoutubeService {
         final exactMuxed = muxedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight);
         if (exactMuxed.isNotEmpty) return exactMuxed.first;
 
-        // Closest lower quality match among combined
-        final lowerCombined = combinedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList();
+        // Nearest lower quality match among combined (sorted descending by height)
+        final lowerCombined = combinedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList()
+          ..sort((a, b) => parseQualityHeight(b['quality'] as String? ?? '').compareTo(parseQualityHeight(a['quality'] as String? ?? '')));
         if (lowerCombined.isNotEmpty) return lowerCombined.first;
 
-        // Closest lower quality match among muxed
-        final lowerMuxed = muxedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList();
+        // Nearest lower quality match among muxed (sorted descending by height)
+        final lowerMuxed = muxedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList()
+          ..sort((a, b) => parseQualityHeight(b['quality'] as String? ?? '').compareTo(parseQualityHeight(a['quality'] as String? ?? '')));
         if (lowerMuxed.isNotEmpty) return lowerMuxed.first;
+
+        // If no lower quality exists, fallback to lowest available above requested
+        if (combinedStreams.isNotEmpty) return combinedStreams.last;
+        if (muxedStreams.isNotEmpty) return muxedStreams.last;
       }
 
       return streams.first;
