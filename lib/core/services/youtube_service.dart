@@ -249,8 +249,12 @@ class YoutubeService {
     final cacheKey = videoId ?? url;
 
     final cached = _streamsCache[cacheKey];
-    if (cached != null && DateTime.now().difference(cached.$1) < _cacheDuration) {
-      return cached.$2;
+    if (cached != null) {
+      if (DateTime.now().difference(cached.$1) < _cacheDuration) {
+        return cached.$2;
+      } else {
+        _streamsCache.remove(cacheKey);
+      }
     }
 
     try {
@@ -321,7 +325,17 @@ class YoutubeService {
           );
         }
 
-        _streamsCache[cacheKey] = (DateTime.now(), results);
+        // Evict expired entries first to prevent memory leak
+        final now = DateTime.now();
+        _streamsCache.removeWhere((key, val) => now.difference(val.$1) >= _cacheDuration);
+        // If still too large, remove the oldest entry
+        if (_streamsCache.length >= 50) {
+          final oldestKey = _streamsCache.entries
+              .reduce((a, b) => a.value.$1.isBefore(b.value.$1) ? a : b)
+              .key;
+          _streamsCache.remove(oldestKey);
+        }
+        _streamsCache[cacheKey] = (now, results);
         return results;
       }
     } on BackendException catch (e) {

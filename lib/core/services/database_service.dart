@@ -64,16 +64,26 @@ class DatabaseService {
     // Check if hive boxes exist, migrate, and delete
     bool hasFailures = false;
     try {
+      final existingTasks = await _db.select(_db.downloadTasks).get();
+      final existingTaskIds = existingTasks.map((t) => t.id).toSet();
+
+      final existingBms = await _db.select(_db.bookmarks).get();
+      final existingBmIds = existingBms.map((b) => b.id).toSet();
+
       if (await Hive.boxExists(downloadsBoxName)) {
         final box = await Hive.openBox<dynamic>(downloadsBoxName);
         if (box.isNotEmpty) {
           final tasks = <DownloadTasksCompanion>[];
+          final parsedValues = <dynamic>[];
           final failedItems = <dynamic>[];
           for (final value in box.values) {
             if (value is Map) {
               try {
                 final task = DownloadTask.fromMap(Map<String, dynamic>.from(value));
-                tasks.add(_taskToCompanion(task));
+                if (!existingTaskIds.contains(task.id)) {
+                  tasks.add(_taskToCompanion(task));
+                  parsedValues.add(value);
+                }
               } catch (e) {
                 failedItems.add(value);
               }
@@ -81,21 +91,13 @@ class DatabaseService {
               failedItems.add(value);
             }
           }
-            if (tasks.isNotEmpty) {
+          if (tasks.isNotEmpty) {
             try {
               await _db.batch((batch) => batch.insertAll(
                   _db.downloadTasks, tasks,
                   mode: drift.InsertMode.insertOrReplace));
             } catch (e) {
-              // Re-deriving failed items must not throw — guard the re-parse so
-              // the original migration error is preserved, not masked.
-              try {
-                failedItems.addAll(box.values.where((v) => !tasks.any((t) =>
-                    v is Map && t.id.value == DownloadTask.fromMap(Map<String, dynamic>.from(v)).id)));
-              } catch (innerErr) {
-                debugPrint('Failed to re-derive migration failed items: $innerErr');
-                failedItems.addAll(box.values);
-              }
+              failedItems.addAll(parsedValues);
             }
           }
           if (failedItems.isNotEmpty) {
@@ -116,12 +118,16 @@ class DatabaseService {
         final box = await Hive.openBox<dynamic>(bookmarksBoxName);
         if (box.isNotEmpty) {
           final bms = <BookmarksCompanion>[];
+          final parsedValues = <dynamic>[];
           final failedItems = <dynamic>[];
           for (final value in box.values) {
             if (value is Map) {
               try {
                 final bm = Bookmark.fromMap(Map<String, dynamic>.from(value));
-                bms.add(_bookmarkToCompanion(bm));
+                if (!existingBmIds.contains(bm.id)) {
+                  bms.add(_bookmarkToCompanion(bm));
+                  parsedValues.add(value);
+                }
               } catch (e) {
                 failedItems.add(value);
               }
@@ -135,7 +141,7 @@ class DatabaseService {
                   _db.bookmarks, bms,
                   mode: drift.InsertMode.insertOrReplace));
             } catch (e) {
-              failedItems.addAll(box.values);
+              failedItems.addAll(parsedValues);
             }
           }
           if (failedItems.isNotEmpty) {

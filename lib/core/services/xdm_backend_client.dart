@@ -75,8 +75,12 @@ class XdmBackendClient {
     String? cookies,
   }) async {
     final cached = _streamsCache[url];
-    if (cached != null && !cached.isExpired) {
-      return cached.data;
+    if (cached != null) {
+      if (!cached.isExpired) {
+        return cached.data;
+      } else {
+        _streamsCache.remove(url);
+      }
     }
 
     final headers = {
@@ -95,6 +99,15 @@ class XdmBackendClient {
         options: Options(headers: headers),
       );
       final data = response.data ?? {};
+      
+      _streamsCache.removeWhere((key, val) => val.isExpired);
+      if (_streamsCache.length >= 50) {
+        final oldestKey = _streamsCache.entries
+            .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
+            .key;
+        _streamsCache.remove(oldestKey);
+      }
+
       _streamsCache[url] = _StreamsCacheEntry(
         data: data,
         expiry: DateTime.now().add(const Duration(minutes: 10)),
@@ -109,6 +122,15 @@ class XdmBackendClient {
             options: Options(headers: headers),
           );
           final data = response.data ?? {};
+          
+          _streamsCache.removeWhere((key, val) => val.isExpired);
+          if (_streamsCache.length >= 50) {
+            final oldestKey = _streamsCache.entries
+                .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
+                .key;
+            _streamsCache.remove(oldestKey);
+          }
+
           _streamsCache[url] = _StreamsCacheEntry(
             data: data,
             expiry: DateTime.now().add(const Duration(minutes: 10)),

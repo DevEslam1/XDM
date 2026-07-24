@@ -759,14 +759,14 @@ class DownloadEngine {
 
     Timer? isolateWatchdog;
     isolateWatchdog = Timer(const Duration(seconds: 30), () {
-      if (cancelToken.isCancelled && isolateCommandPort == null) {
+      if (isolateCommandPort == null) {
         isolate.kill(priority: Isolate.immediate);
         if (!completer.isCompleted) {
           completer.completeError(
             DioException(
               requestOptions: RequestOptions(path: punyUrl),
-              type: DioExceptionType.cancel,
-              message: 'Download cancelled before isolate initialized.',
+              type: DioExceptionType.connectionTimeout,
+              message: 'Isolate failed to initialize within 30 seconds.',
             ),
           );
         }
@@ -778,6 +778,16 @@ class DownloadEngine {
         isolateCommandPort!.send({'type': 'cancel'});
       } else {
         isCancelledEarly = true;
+        isolate.kill(priority: Isolate.immediate);
+        if (!completer.isCompleted) {
+          completer.completeError(
+            DioException(
+              requestOptions: RequestOptions(path: punyUrl),
+              type: DioExceptionType.cancel,
+              message: 'Download cancelled before isolate initialized.',
+            ),
+          );
+        }
       }
     }
 
@@ -904,6 +914,7 @@ class DownloadEngine {
       bool metadataReceived = false;
 
       metadataSub = TorrentService.torrentUpdates.listen((torrents) {
+        if (cancelToken.isCancelled) return;
         final torrent = torrents[id];
         if (torrent != null && torrent.hasMetadata) {
           metadataSub?.cancel();
@@ -919,7 +930,7 @@ class DownloadEngine {
 
       // Handle cancel during metadata loading AND downloading
       cancelToken.whenCancel.then((_) async {
-        if (metadataReceived) {
+        if (metadataCompleter.isCompleted) {
           // Metadata already received → pause for resume (download phase)
           TorrentService.pauseTorrent(id);
         } else {
@@ -1398,7 +1409,7 @@ class DownloadEngine {
                           });
                           bufferStartOffset += bytesToWrite.length;
                           localWrittenBytes += bytesToWrite.length;
-                          chunkProgress[idx] = localWrittenBytes;
+                          chunkProgress[idx] = resumeFrom + localWrittenBytes;
                         }
 
                         reportProgress();
@@ -1430,7 +1441,7 @@ class DownloadEngine {
                           await sharedRaf.writeFrom(bytesToWrite);
                         });
                         localWrittenBytes += bytesToWrite.length;
-                        chunkProgress[idx] = localWrittenBytes;
+                        chunkProgress[idx] = resumeFrom + localWrittenBytes;
                       }
                     } catch (e) {
                       if (buffer.length > 0) {
@@ -1441,7 +1452,7 @@ class DownloadEngine {
                             await sharedRaf.writeFrom(bytesToWrite);
                           });
                           localWrittenBytes += bytesToWrite.length;
-                          chunkProgress[idx] = localWrittenBytes;
+                          chunkProgress[idx] = resumeFrom + localWrittenBytes;
                         } catch (writeError) {
                           debugPrint('Failed to flush buffer on error: $writeError');
                         }
@@ -1881,6 +1892,11 @@ class DownloadEngine {
         }
       }
     }
+
+    final stateFile = File('$tempFilePath.dmxstate');
+    if (await stateFile.exists()) {
+      await stateFile.delete();
+    }
   }
 
   String buildLocalFilePath(String directory, String fileName) {
@@ -1908,6 +1924,7 @@ class DownloadEngine {
         : int.tryParse(totalText);
 
     if (start != expectedStart ||
+        end != expectedEnd ||
         (expectedTotal > 0 && total != null && total != expectedTotal)) {
       throw DioException(
         requestOptions: RequestOptions(path: ''),
