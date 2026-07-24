@@ -1,98 +1,20 @@
-// ignore_for_file: implementation_imports
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_js/flutter_js.dart';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
-import 'package:youtube_explode_dart/youtube_explode_dart.dart';
-import 'package:youtube_explode_dart/src/reverse_engineering/challenges/ejs/base_ejs_solver.dart';
-import 'package:youtube_explode_dart/src/reverse_engineering/challenges/ejs/ejs.dart';
+import 'xdm_backend_client.dart';
+import 'xdm_backend_exceptions.dart';
 
-class FlutterJsSolver extends BaseEJSSolver {
-  JavascriptRuntime? _jsRuntime;
-  bool _initialized = false;
-  final _initLock = SynchronizedLock();
-
-  Future<JavascriptRuntime> _getRuntime() async {
-    if (_initialized && _jsRuntime != null) {
-      return _jsRuntime!;
-    }
-    return await _initLock.synchronized(() async {
-      if (_initialized && _jsRuntime != null) {
-        return _jsRuntime!;
-      }
-      final runtime = getJavascriptRuntime();
-      final initScript = await EJSBuilder.getJSModules();
-      final evalResult = runtime.evaluate(initScript);
-      if (evalResult.isError) {
-        throw Exception('Failed to initialize JS runtime for YoutubeExplode: ${evalResult.stringResult}');
-      }
-      _jsRuntime = runtime;
-      _initialized = true;
-      return _jsRuntime!;
-    });
-  }
-
-  @override
-  Future<String> executeJavaScript(String jsCode) async {
-    return await _initLock.synchronized(() async {
-      final runtime = await _getRuntime();
-      final evalResult = runtime.evaluate(jsCode);
-      if (evalResult.isError) {
-        throw Exception('JS Solver evaluation error: ${evalResult.stringResult}');
-      }
-      return evalResult.stringResult;
-    });
-  }
-
-  @override
-  void dispose() {
-    try {
-      _jsRuntime?.dispose();
-    } catch (_) {}
-    _jsRuntime = null;
-    _initialized = false;
-    super.dispose();
-  }
-}
-
-class SynchronizedLock {
-  Completer<void>? _completer;
-
-  Future<T> synchronized<T>(Future<T> Function() action) async {
-    while (_completer != null) {
-      await _completer!.future;
-    }
-    final completer = Completer<void>();
-    _completer = completer;
-    try {
-      return await action();
-    } finally {
-      _completer = null;
-      completer.complete();
-    }
-  }
-}
 
 class YoutubeService {
+
   static String? _cookies;
   static String? _oauthToken;
 
   /// The OAuth access token if set via [signInWithOAuth], or null.
-  /// Can be used to add an `Authorization: Bearer` header on custom
-  /// InnerTube API requests that [youtube_explode_dart] does not
-  /// natively support.
   static String? get oauthToken => _oauthToken;
   static final _authStateController = StreamController<bool>.broadcast();
-  static YoutubeExplode? _ytInstance;
-  static FlutterJsSolver? _jsSolverInstance;
-
-  static YoutubeExplode get _yt {
-    _jsSolverInstance ??= FlutterJsSolver();
-    _ytInstance ??= YoutubeExplode(jsSolver: _jsSolverInstance);
-    return _ytInstance!;
-  }
 
   /// Stream that emits `true` when signed in, `false` when signed out.
   static Stream<bool> get onAuthStateChanged => _authStateController.stream;
@@ -108,8 +30,6 @@ class YoutubeService {
   }
 
   /// Signs in using an OAuth access token from Google Sign-In.
-  /// The token is stored as [oauthToken] and should be passed separately
-  /// as an `Authorization: Bearer` header (not stuffed into cookies).
   static Future<void> signInWithOAuth(String accessToken) async {
     _oauthToken = accessToken;
     await resetClient();
@@ -122,7 +42,6 @@ class YoutubeService {
     _notifyAuthState();
   }
 
-  /// Whether the service has an OAuth token set.
   static bool get hasOAuth => _oauthToken != null && _oauthToken!.isNotEmpty;
 
   /// Signs out from all authentication methods (OAuth + cookies).
@@ -145,15 +64,8 @@ class YoutubeService {
   /// Resets client state.
   static Future<void> resetClient() async {
     _streamsCache.clear();
-    try {
-      _ytInstance?.close();
-    } catch (_) {}
-    _ytInstance = null;
-    try {
-      _jsSolverInstance?.dispose();
-    } catch (_) {}
-    _jsSolverInstance = null;
   }
+
 
 
   /// Whether the service currently has authentication cookies or OAuth set.
@@ -296,127 +208,95 @@ class YoutubeService {
       throw Exception('Invalid YouTube URL or Video ID.');
     }
 
+    final targetUrl = 'https://www.youtube.com/watch?v=$videoId';
+
     final cached = _streamsCache[videoId];
     if (cached != null && DateTime.now().difference(cached.$1) < _cacheDuration) {
       return cached.$2;
     }
 
     try {
-      final video = await _yt.videos.get(videoId);
-      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
-      final title = video.title;
+      final backendRes = await XdmBackendClient().getStreams(
+        targetUrl,
+        oauthToken: oauthToken,
+        cookies: currentCookies,
+      );
 
-      final results = <Map<String, dynamic>>[];
+      final title = (backendRes['title'] as String?) ?? 'Untitled';
+      final rawStreams = (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
 
-      // 1. Group video-only streams by height and pair with best audio stream (combined)
-      final videoOnlyStreams = manifest.videoOnly.toList();
-      final audioOnlyStreams = manifest.audioOnly.toList();
+      if (rawStreams != null && rawStreams.isNotEmpty) {
+        final results = <Map<String, dynamic>>[];
 
-      if (videoOnlyStreams.isNotEmpty && audioOnlyStreams.isNotEmpty) {
-        // Find best audio stream (prefer M4A / AAC)
-        final bestAudio = audioOnlyStreams.where((a) => a.container.name == 'mp4').isNotEmpty
-            ? audioOnlyStreams.where((a) => a.container.name == 'mp4').withHighestBitrate()
-            : audioOnlyStreams.withHighestBitrate();
+        for (final s in rawStreams) {
+          final map = Map<String, dynamic>.from(s as Map);
 
-        // Group video streams by quality height (descending)
-        final heightMap = <int, VideoOnlyStreamInfo>{};
-        for (final v in videoOnlyStreams) {
-          final h = v.videoResolution.height;
-          if (!heightMap.containsKey(h)) {
-            heightMap[h] = v;
-          } else {
-            // Prefer MP4 container if available for same height
-            if (v.container.name == 'mp4' && heightMap[h]!.container.name != 'mp4') {
-              heightMap[h] = v;
-            } else if (v.size.totalBytes > heightMap[h]!.size.totalBytes) {
-              heightMap[h] = v;
+          // Handle new POST /extract format output
+          if (map.containsKey('direct_url')) {
+            final rawType = map['type'] as String? ?? '';
+            final ext = map['ext'] as String? ?? 'mp4';
+            final quality = map['quality'] as String? ?? 'Unknown';
+            final filesize = (map['filesize'] as num?)?.toInt() ?? 0;
+            final directUrl = map['direct_url'] as String?;
+
+            String appType;
+            if (rawType == 'video_audio') {
+              appType = 'muxed';
+            } else if (rawType == 'video_only') {
+              appType = 'video_only';
+            } else if (rawType == 'audio_only') {
+              appType = 'audio';
+            } else {
+              appType = rawType;
             }
+
+            results.add({
+              'type': appType,
+              'quality': quality,
+              'label': appType == 'audio'
+                  ? 'Audio Only ${ext.toUpperCase()}'
+                  : '$quality ${ext.toUpperCase()}',
+              'src': directUrl,
+              'audioSrc': null,
+              'size': filesize,
+              'ext': ext,
+              'title': title,
+            });
+          } else {
+            // Handle original GET /api/streams format output
+            if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
+              map['audioSrc'] = map['audioSrc'].toString();
+            } else {
+              map['audioSrc'] = null;
+            }
+            results.add(map);
           }
         }
 
-        final sortedHeights = heightMap.keys.toList()..sort((a, b) => b.compareTo(a));
-
-        for (final h in sortedHeights) {
-          final vStream = heightMap[h]!;
-          final ext = 'mp4';
-          final qLabel = '${h}p';
-          final vSize = vStream.size.totalBytes;
-          final aSize = bestAudio.size.totalBytes;
-
-          results.add({
-            'type': 'combined',
-            'quality': qLabel,
-            'label': '$qLabel MP4 + M4A',
-            'src': vStream.url.toString(),
-            'audioSrc': bestAudio.url.toString(),
-            'videoSize': vSize,
-            'audioSize': aSize,
-            'size': vSize + aSize,
-            'ext': ext,
-            'title': title,
-          });
+        if (kDebugMode) {
+          final combinedCount = results.where((s) => s['type'] == 'combined').length;
+          final muxedCount = results.where((s) => s['type'] == 'muxed').length;
+          final audioCount = results.where((s) => s['type'] == 'audio').length;
+          final videoOnlyCount = results.where((s) => s['type'] == 'video_only').length;
+          debugPrint(
+            '[YoutubeService] Parsed ${results.length} streams (combined: $combinedCount, muxed: $muxedCount, audio: $audioCount, video_only: $videoOnlyCount)',
+          );
         }
-      }
 
-      // 2. Muxed streams (video + audio together)
-      for (final m in manifest.muxed) {
-        final h = m.videoResolution.height;
-        final qLabel = '${h}p';
-        final ext = m.container.name;
-        results.add({
-          'type': 'muxed',
-          'quality': qLabel,
-          'label': '$qLabel ${ext.toUpperCase()}',
-          'src': m.url.toString(),
-          'size': m.size.totalBytes,
-          'ext': ext,
-          'title': title,
-        });
+        _streamsCache[videoId] = (DateTime.now(), results);
+        return results;
       }
-
-      // 3. Audio-only streams
-      for (final a in audioOnlyStreams) {
-        final bitrateKbps = a.bitrate.kiloBitsPerSecond.round();
-        final ext = a.container.name == 'mp4' ? 'm4a' : a.container.name;
-        results.add({
-          'type': 'audio',
-          'quality': '${bitrateKbps}kbps',
-          'label': 'Audio Only ${ext.toUpperCase()}',
-          'src': a.url.toString(),
-          'size': a.size.totalBytes,
-          'ext': ext,
-          'title': title,
-        });
-      }
-
-      // 4. Video-only streams
-      for (final v in videoOnlyStreams) {
-        final h = v.videoResolution.height;
-        final qLabel = '${h}p';
-        final ext = v.container.name;
-        results.add({
-          'type': 'video_only',
-          'quality': qLabel,
-          'label': '$qLabel Video Only',
-          'src': v.url.toString(),
-          'size': v.size.totalBytes,
-          'ext': ext,
-          'title': title,
-        });
-      }
-
-      if (results.isEmpty) {
-        throw Exception(
-            'YouTube requires an updated resolver — some videos may be temporarily unavailable');
-      }
-
-      _streamsCache[videoId] = (DateTime.now(), results);
-      return results;
+    } on BackendException catch (e) {
+      throw Exception(e.toUserMessage());
     } catch (e) {
-      debugPrint('YoutubeService.getStreams error for $url: $e');
       throw Exception(_parseErrorMessage(e));
     }
+
+    throw Exception('No available streams found for this video.');
   }
+
+
+
 
   /// Selects a stream map for a specific video ID and quality preset/resolution.
   static Future<Map<String, dynamic>?> getStreamForVideo(
@@ -486,44 +366,37 @@ class YoutubeService {
     }
 
     try {
-      final playlist = await _yt.playlists.get(playlistId);
-      final videoList = <Map<String, dynamic>>[];
+      final backendRes = await XdmBackendClient().getPlaylist(
+        url,
+        oauthToken: oauthToken,
+        cookies: currentCookies,
+      );
 
-      await for (final video in _yt.playlists.getVideos(playlistId)) {
-        final durationSec = video.duration?.inSeconds ?? 0;
-        String? thumbUrl;
-        if (video.thumbnails.mediumResUrl.isNotEmpty) {
-          thumbUrl = video.thumbnails.mediumResUrl;
-        } else if (video.thumbnails.highResUrl.isNotEmpty) {
-          thumbUrl = video.thumbnails.highResUrl;
-        } else if (video.thumbnails.standardResUrl.isNotEmpty) {
-          thumbUrl = video.thumbnails.standardResUrl;
-        } else if (video.thumbnails.lowResUrl.isNotEmpty) {
-          thumbUrl = video.thumbnails.lowResUrl;
-        }
-
-        videoList.add({
-          'id': video.id.value,
-          'title': video.title,
-          'duration': durationSec,
-          'author': video.author,
-          'thumbnailUrl': thumbUrl,
-          'selected': true,
-        });
+      final info = backendRes['info'] as Map<String, dynamic>?;
+      final rawVideos = backendRes['videos'] as List?;
+      if (info != null && rawVideos != null) {
+        final videoList = rawVideos
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        return {
+          'info': info,
+          'videos': videoList,
+        };
       }
-
-      return {
-        'info': {
-          'title': playlist.title,
-          'author': playlist.author,
-          'videoCount': playlist.videoCount ?? videoList.length,
-        },
-        'videos': videoList,
-      };
+    } on BackendRateLimitException catch (e) {
+      throw Exception(e.toUserMessage());
+    } on BackendBadRequestException catch (e) {
+      throw Exception(e.toUserMessage());
+    } on BackendNotFoundException catch (e) {
+      throw Exception(e.toUserMessage());
+    } on BackendUnauthorizedException catch (e) {
+      throw Exception(e.toUserMessage());
     } catch (e) {
-      debugPrint('YoutubeService.getPlaylistDetails error for $url: $e');
+      debugPrint('[YoutubeService] Backend error during getPlaylistDetails ($e).');
       throw Exception(_parseErrorMessage(e));
     }
+
+    return null;
   }
 
   /// Fetches summary info for a playlist URL.
@@ -561,41 +434,38 @@ class YoutubeService {
     if (videoId == null) return null;
 
     try {
-      final manifest = await _yt.videos.streamsClient.getManifest(videoId);
-      String? freshVideoUrl;
-      String? freshAudioUrl;
-
-      final videoOnlyStreams = manifest.videoOnly.toList();
-      final audioOnlyStreams = manifest.audioOnly.toList();
-
-      if (videoOnlyStreams.isNotEmpty && audioOnlyStreams.isNotEmpty) {
-        final bestVideo = videoOnlyStreams.where((v) => v.container.name == 'mp4').isNotEmpty
-            ? videoOnlyStreams.where((v) => v.container.name == 'mp4').first
-            : videoOnlyStreams.first;
-        final bestAudio = audioOnlyStreams.where((a) => a.container.name == 'mp4').isNotEmpty
-            ? audioOnlyStreams.where((a) => a.container.name == 'mp4').withHighestBitrate()
-            : audioOnlyStreams.withHighestBitrate();
-
-        freshVideoUrl = bestVideo.url.toString();
-        freshAudioUrl = bestAudio.url.toString();
-      } else if (manifest.muxed.isNotEmpty) {
-        freshVideoUrl = manifest.muxed.first.url.toString();
-      } else if (audioOnlyStreams.isNotEmpty) {
-        freshAudioUrl = audioOnlyStreams.withHighestBitrate().url.toString();
-        freshVideoUrl = freshAudioUrl;
+      final streams = await getStreams(downloadPageUrl);
+      if (streams.isNotEmpty) {
+        final combined = streams.where((s) => s['type'] == 'combined').toList();
+        if (combined.isNotEmpty) {
+          final best = combined.first;
+          return {
+            'url': best['src'] as String?,
+            'audioUrl': best['audioSrc'] as String?,
+          };
+        }
+        final muxed = streams.where((s) => s['type'] == 'muxed').toList();
+        if (muxed.isNotEmpty) {
+          final best = muxed.first;
+          return {
+            'url': best['src'] as String?,
+            'audioUrl': null,
+          };
+        }
+        final first = streams.first;
+        return {
+          'url': first['src'] as String?,
+          'audioUrl': first['audioSrc'] as String?,
+        };
       }
-
-      if (freshVideoUrl == null) return null;
-
-      return {
-        'url': freshVideoUrl,
-        'audioUrl': freshAudioUrl,
-      };
     } catch (e) {
-      debugPrint('YoutubeService.getFreshStreams error for $downloadPageUrl: $e');
-      return null;
+      debugPrint('[YoutubeService] Backend getFreshStreams error ($e).');
     }
+
+    return null;
   }
+
+
 
   static String _parseErrorMessage(Object error) {
     final msg = error.toString();

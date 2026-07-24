@@ -380,6 +380,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
+            Future.delayed(const Duration(milliseconds: 300), _updateNavState);
           },
           onPageFinished: (url) {
             if (mounted) {
@@ -461,6 +462,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
 
             _updateNavState();
+            Future.delayed(const Duration(milliseconds: 300), _updateNavState);
 
             // Trigger background DOM media scanner
             _mediaScanTimers[tab.id]?.cancel();
@@ -499,7 +501,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   _scanPageMedia(tab);
                 });
 
-                // Fetch new page title after a short delay for SPA rendering
                 Future.delayed(const Duration(milliseconds: 1000), () {
                   if (mounted) {
                     tab.controller.getTitle().then((t) {
@@ -511,6 +512,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     });
                   }
                 });
+
+                _updateNavState();
+                Future.delayed(const Duration(milliseconds: 300), _updateNavState);
               }
             }
           },
@@ -751,17 +755,63 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     return BrowserDetector.isAutoDownloadable(url);
   }
 
-  void _updateNavState() async {
-    if (_tabs.isEmpty) return;
+  Future<void> _updateNavState() async {
+    if (!mounted || _tabs.isEmpty) return;
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
+    try {
+      final canBack = await activeTab.controller.canGoBack();
+      final canForward = await activeTab.controller.canGoForward();
+      final currentUrl = await activeTab.controller.currentUrl();
+
+      if (mounted) {
+        setState(() {
+          activeTab.canGoBack = canBack;
+          activeTab.canGoForward = canForward;
+          if (currentUrl != null && currentUrl.isNotEmpty) {
+            final clean = _cleanUrl(currentUrl);
+            activeTab.url = clean;
+            activeTab.isHome = (clean == 'about:blank' || clean.isEmpty);
+            if (_tabs[_currentTabIndex].id == activeTab.id) {
+              _urlController.text = activeTab.isHome ? '' : clean;
+            }
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _goBack() async {
+    if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+    final activeTab = _tabs[_currentTabIndex];
     final canBack = await activeTab.controller.canGoBack();
+    if (canBack) {
+      await activeTab.controller.goBack();
+      await Future.delayed(const Duration(milliseconds: 150));
+      await _updateNavState();
+    } else if (!activeTab.isHome) {
+      // Return to home tab view if no further history stack exists
+      if (mounted) {
+        setState(() {
+          activeTab.isHome = true;
+          activeTab.url = '';
+          activeTab.canGoBack = false;
+          _urlController.clear();
+        });
+        await activeTab.controller.loadRequest(Uri.parse('about:blank'));
+        await _updateNavState();
+      }
+    }
+  }
+
+  Future<void> _goForward() async {
+    if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+    final activeTab = _tabs[_currentTabIndex];
     final canForward = await activeTab.controller.canGoForward();
-    if (mounted) {
-      setState(() {
-        activeTab.canGoBack = canBack;
-        activeTab.canGoForward = canForward;
-      });
+    if (canForward) {
+      await activeTab.controller.goForward();
+      await Future.delayed(const Duration(milliseconds: 150));
+      await _updateNavState();
     }
   }
 
@@ -798,6 +848,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       activeTab.isHome = false;
     });
     activeTab.controller.loadRequest(Uri.parse(url));
+    Future.delayed(const Duration(milliseconds: 300), _updateNavState);
   }
 
   String _cleanUrl(String url) {
@@ -2498,7 +2549,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         final activeTab = _tabs[_currentTabIndex];
         final canGoBack = await activeTab.controller.canGoBack();
         if (canGoBack) {
-          await activeTab.controller.goBack();
+          await _goBack();
         } else {
           downloadProvider.setActiveTabIndex(0);
         }
@@ -2554,28 +2605,20 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                       padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Row(
                         children: [
-                          // Back to Home / Close Button
-                          // Stop Loading (X) when loading, Refresh when loaded
+                          // Close Browser Button
                           IconButton(
                             icon: Icon(
-                              activeTab.isLoading ? Icons.close : Icons.refresh,
+                              Icons.close,
                               size: 20,
                               color: textClr,
                             ),
-                            tooltip: activeTab.isLoading
-                                ? (isRtl ? 'إلغاء التحميل' : 'Stop loading')
-                                : (isRtl ? 'إعادة تحميل الصفحة' : 'Refresh page'),
+                            tooltip: isRtl ? 'إغلاق المتصفح' : 'Close browser',
                             onPressed: () {
                               triggerHaptic(settings);
-                              if (activeTab.isLoading) {
-                                activeTab.controller.runJavaScript('window.stop();');
-                                setState(() {
-                                  activeTab.isLoading = false;
-                                });
+                              if (Navigator.canPop(context)) {
+                                Navigator.pop(context);
                               } else {
-                                if (!activeTab.isHome) {
-                                  activeTab.controller.reload();
-                                }
+                                downloadProvider.setActiveTabIndex(0);
                               }
                             },
                           ),
@@ -2675,34 +2718,59 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                                   minWidth: 32,
                                                   minHeight: 32,
                                                 ),
-                                            suffixIcon: value.text.isNotEmpty
-                                                ? IconButton(
-                                                    padding: EdgeInsets.zero,
-                                                    constraints:
-                                                        const BoxConstraints(),
-                                                    icon: Icon(
-                                                      Icons.clear,
-                                                      size: 16,
-                                                      color: isDark
-                                                          ? AppTheme.textSecondary
-                                                          : AppTheme
-                                                                .lightTextSecondary,
-                                                    ),
-                                                    onPressed: () {
-                                                      triggerHaptic(settings);
-                                                      _urlController.clear();
-                                                    },
-                                                  )
-                                                : null,
-                                            suffixIconConstraints: value.text.isNotEmpty
-                                                ? const BoxConstraints(
+                                            suffixIcon: IconButton(
+                                              padding: EdgeInsets.zero,
+                                              constraints:
+                                                  const BoxConstraints(
                                                     minWidth: 32,
                                                     minHeight: 32,
-                                                  )
-                                                : const BoxConstraints(
-                                                    minWidth: 0,
-                                                    minHeight: 0,
                                                   ),
+                                              icon: Icon(
+                                                activeTab.isLoading
+                                                    ? Icons.close
+                                                    : (_isFocused && value.text.isNotEmpty
+                                                          ? Icons.clear
+                                                          : Icons.refresh),
+                                                size: 16,
+                                                color: _isFocused
+                                                    ? (isDark
+                                                          ? AppTheme.neonBlue
+                                                          : AppTheme.lightNeonBlue)
+                                                    : (isDark
+                                                          ? AppTheme.textSecondary
+                                                          : AppTheme.lightTextSecondary),
+                                              ),
+                                              tooltip: activeTab.isLoading
+                                                  ? (isRtl
+                                                        ? 'إلغاء التحميل'
+                                                        : 'Stop loading')
+                                                  : (_isFocused && value.text.isNotEmpty
+                                                        ? (isRtl ? 'مسح' : 'Clear')
+                                                        : (isRtl
+                                                              ? 'إعادة تحميل الصفحة'
+                                                              : 'Refresh page')),
+                                              onPressed: () {
+                                                triggerHaptic(settings);
+                                                if (activeTab.isLoading) {
+                                                  activeTab.controller
+                                                      .runJavaScript('window.stop();');
+                                                  setState(() {
+                                                    activeTab.isLoading = false;
+                                                  });
+                                                } else if (_isFocused && value.text.isNotEmpty) {
+                                                  _urlController.clear();
+                                                } else {
+                                                  if (!activeTab.isHome) {
+                                                    activeTab.controller.reload();
+                                                  }
+                                                }
+                                              },
+                                            ),
+                                            suffixIconConstraints:
+                                                const BoxConstraints(
+                                                  minWidth: 32,
+                                                  minHeight: 32,
+                                                ),
                                             hintText: isRtl
                                                 ? 'ابحث أو ادخل الرابط...'
                                                 : 'SEARCH OR SCAN SIGNAL...',
@@ -2867,16 +2935,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             icon: Icon(
                               Icons.arrow_back_ios_new,
                               size: 15,
-                              color: activeTab.canGoBack
+                              color: (activeTab.canGoBack || !activeTab.isHome)
                                   ? textClr
                                   : (isDark
                                         ? AppTheme.textMuted
                                         : AppTheme.lightTextMuted),
                             ),
-                            onPressed: activeTab.canGoBack
-                                ? () {
+                            onPressed: (activeTab.canGoBack || !activeTab.isHome)
+                                ? () async {
                                     triggerHaptic(settings);
-                                    activeTab.controller.goBack();
+                                    await _goBack();
                                   }
                                 : null,
                           ),
@@ -2892,9 +2960,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                         : AppTheme.lightTextMuted),
                             ),
                             onPressed: activeTab.canGoForward
-                                ? () {
+                                ? () async {
                                     triggerHaptic(settings);
-                                    activeTab.controller.goForward();
+                                    await _goForward();
                                   }
                                 : null,
                           ),
@@ -3108,12 +3176,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           onHorizontalDragEnd: (details) {
                             if (details.primaryVelocity != null &&
                                 details.primaryVelocity! > 300) {
-                              activeTab.controller.canGoBack().then((canGo) {
-                                if (canGo && mounted) {
-                                  triggerHaptic(settings);
-                                  activeTab.controller.goBack();
-                                }
-                              });
+                              if (mounted) {
+                                triggerHaptic(settings);
+                                _goBack();
+                              }
                             }
                           },
                         ),
@@ -3131,12 +3197,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           onHorizontalDragEnd: (details) {
                             if (details.primaryVelocity != null &&
                                 details.primaryVelocity! < -300) {
-                              activeTab.controller.canGoForward().then((canGo) {
-                                if (canGo && mounted) {
-                                  triggerHaptic(settings);
-                                  activeTab.controller.goForward();
-                                }
-                              });
+                              if (mounted) {
+                                triggerHaptic(settings);
+                                _goForward();
+                              }
                             }
                           },
                         ),

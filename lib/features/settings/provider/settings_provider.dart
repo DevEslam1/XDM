@@ -50,6 +50,12 @@ class SettingsProvider extends ChangeNotifier {
   static const _maxRetriesKey = 'maxRetries';
   static const _retryDelaySecondsKey = 'retryDelaySeconds';
   static const _searchEngineKey = 'searchEngine';
+  static const _useRemoteBackendKey = 'use_remote_backend';
+
+  static const _backendUrlKey = 'backend_url';
+  static const _backendTokenKey = 'backend_token';
+  static const _sendBrowserCookiesToBackendKey = 'send_browser_cookies_to_backend';
+
 
   late final SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();
@@ -96,6 +102,10 @@ class SettingsProvider extends ChangeNotifier {
   int cleanupDays = 0;
   bool categoryFolders = false;
 
+  String backendUrl = '';
+  String backendToken = '';
+  bool sendBrowserCookiesToBackend = false;
+
   // Torrent Seeding settings
   bool globalTorrentSeeding = true;
   bool globalTorrentSeedingLimited = false;
@@ -135,6 +145,8 @@ class SettingsProvider extends ChangeNotifier {
   int maxRetries = 3;
   int retryDelaySeconds = 3;
   String searchEngine = 'Google';
+  bool useRemoteBackend = true;
+
 
   void _onPlatformBrightnessChanged() {
     if (themeMode == 'system') {
@@ -176,6 +188,10 @@ class SettingsProvider extends ChangeNotifier {
     if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
     categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
 
+    backendUrl = _prefs.getString(_backendUrlKey) ?? backendUrl;
+    backendToken = await _secureStorage.read(key: _backendTokenKey) ?? '';
+    sendBrowserCookiesToBackend = _prefs.getBool(_sendBrowserCookiesToBackendKey) ?? sendBrowserCookiesToBackend;
+
     globalTorrentSeeding = _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
     globalTorrentSeedingLimited = _prefs.getBool(_globalTorrentSeedingLimitedKey) ?? globalTorrentSeedingLimited;
     globalTorrentSeedingLimitKbps = _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ?? globalTorrentSeedingLimitKbps;
@@ -210,7 +226,9 @@ class SettingsProvider extends ChangeNotifier {
     retryDelaySeconds = _prefs.getInt(_retryDelaySecondsKey) ?? retryDelaySeconds;
     if (![5, 10, 30, 60].contains(retryDelaySeconds)) retryDelaySeconds = 10;
     searchEngine = _prefs.getString(_searchEngineKey) ?? searchEngine;
+    useRemoteBackend = _prefs.getBool(_useRemoteBackendKey) ?? true;
   }
+
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
 
@@ -288,7 +306,14 @@ class SettingsProvider extends ChangeNotifier {
 
 
 
+  Future<void> setUseRemoteBackend(bool value) async {
+    useRemoteBackend = value;
+    await _prefs.setBool(_useRemoteBackendKey, value);
+    notifyListeners();
+  }
+
   Future<void> setEnableProxy(bool value) async {
+
     enableProxy = value;
     await _prefs.setBool(_enableProxyKey, value);
     notifyListeners();
@@ -508,6 +533,24 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setProxyPassword(String value) async {
     proxyPassword = value;
     await _secureStorage.write(key: _proxyPasswordKey, value: value);
+    notifyListeners();
+  }
+
+  Future<void> setBackendUrl(String value) async {
+    backendUrl = value;
+    await _prefs.setString(_backendUrlKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setBackendToken(String value) async {
+    backendToken = value;
+    await _secureStorage.write(key: _backendTokenKey, value: value);
+    notifyListeners();
+  }
+
+  Future<void> setSendBrowserCookiesToBackend(bool value) async {
+    sendBrowserCookiesToBackend = value;
+    await _prefs.setBool(_sendBrowserCookiesToBackendKey, value);
     notifyListeners();
   }
 

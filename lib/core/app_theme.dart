@@ -35,6 +35,9 @@ class AppTheme {
   static const Color lightNeonRed = Color(0xFFD90429);
   static const Color lightNeonAmber = Color(0xFFE5A900);
 
+  static const Color neonYellow = Color(0xFFFACC15);
+  static const Color lightNeonYellow = Color(0xFFD97706);
+
   // Text Colors
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFF94A3B8);

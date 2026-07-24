@@ -33,7 +33,7 @@
 
 ### YouTube Integration
 - **Auto-Retry & Seamless URL Refresh** — detects `403/410` expirations, stealthily refreshes stream manifests, and cleanly retries chunks without failing the task
-- **Video & audio stream fetching** — powered by `youtube_explode_dart`
+- **Video & audio stream fetching** — powered by remote XDM Cloud Run backend
 - **Playlist support** — batch download entire playlists
 - **Auto URL detection** — recognizes all YouTube formats (watch, embed, live, music, shorts)
 - **Quality selector** — choose resolution / format before downloading
@@ -74,7 +74,8 @@
 | **State Management** | Provider |
 | **Local Storage** | Hive + SharedPreferences |
 | **Networking** | Dio ^5.9.2 |
-| **YouTube** | youtube_explode_dart ^3.1.0 |
+| **YouTube** | XDM Cloud Run Backend (FastAPI / yt-dlp) |
+
 | **Torrent** | libtorrent FFI |
 | **Auth** | local_auth |
 | **Charts** | fl_chart |

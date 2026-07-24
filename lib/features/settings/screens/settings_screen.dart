@@ -23,6 +23,7 @@ import '../../browser/services/ad_blocker.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/services/xdm_backend_client.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -843,12 +844,195 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   ),
                   const SizedBox(height: 16),
 
-                  // 5. ADVANCED POWER CONSOLE
+                  // 5. YOUTUBE BACKEND CONFIGURATION
+                  _buildSettingsSection(
+                    context,
+                    settings: settings,
+                    title: L10n.of(context, 'settings_youtube_backend'),
+                    children: [
+                      _buildTextFieldTile(
+                        title: L10n.isRtl(context)
+                            ? 'عنوان الخادم الخلفي (URL)'
+                            : 'Backend URL',
+                        subtitle: L10n.isRtl(context)
+                            ? 'عنوان الخادم الخلفي لـ yt-dlp (http/https)'
+                            : 'Backend URL for yt-dlp (http:// or https://)',
+                        initialValue: settings.backendUrl,
+                        onChanged: (val) {
+                          settings.setBackendUrl(val.trim());
+                        },
+                        isDark: isDark,
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildTextFieldTile(
+                        title: L10n.isRtl(context) ? 'رمز الدخول' : 'API Token',
+                        subtitle: L10n.isRtl(context)
+                            ? 'رمز المصادقة الخاص بالخوادم الخلفي'
+                            : 'Authentication token for the backend API',
+                        controller: TextEditingController(text: '••••••••••••'),
+                        obscureText: true,
+                        onChanged: (val) {
+                          settings.setBackendToken(val);
+                        },
+                        isDark: isDark,
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context)
+                            ? 'إرسال ملفات تعريف الارتباط الخاصة بالمتصفح'
+                            : 'Send browser cookies to backend',
+                        subtitle: L10n.isRtl(context)
+                            ? 'مكالمة قليلة: يمنح الخادم الخلفي ملفات تعريف الارتباط الخاصة بالمتصفح الخاصة بك.'
+                            : 'Rarely needed: Gives the backend your browser cookies.',
+                        value: settings.sendBrowserCookiesToBackend,
+                        onChanged: (val) {
+                          settings.setSendBrowserCookiesToBackend(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      if (settings.sendBrowserCookiesToBackend) ...[
+                        Divider(color: dividerColor, height: 1),
+                        Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Text(
+                            L10n.isRtl(context)
+                                ? 'تحذير: يجب الوثوق بالخوادم الخلفية لضمان الأمان.'
+                                : 'WARNING: Only send cookies to trusted backends for security.',
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppTheme.neonYellow
+                                  : AppTheme.lightNeonYellow,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                      Divider(color: dividerColor, height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: NeonGlowButton(
+                          isFilled: false,
+                          color: isDark
+                              ? AppTheme.neonGreen
+                              : AppTheme.lightNeonGreen,
+                          text: L10n.isRtl(context)
+                              ? 'اختبار الاتصال'
+                              : 'TEST CONNECTION',
+                          onPressed: () async {
+                            triggerHaptic(settings);
+                            if (settings.backendUrl.isEmpty) {
+                              ThemedSnackbar.show(
+                                context,
+                                message: L10n.isRtl(context)
+                                    ? 'يرجى تعيين عنوان الخادم الخلفي أولاً.'
+                                    : 'Please configure backend URL first.',
+                                color: isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed,
+                                icon: Icons.error_outline,
+                                isDarkMode: isDark,
+                              );
+                              return;
+                            }
+
+                            ThemedSnackbar.show(
+                              context,
+                              message: L10n.isRtl(context)
+                                  ? 'جاري اختبار الخادم الخلفي...'
+                                  : 'Testing backend connection...',
+                              color: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              icon: Icons.sync,
+                              isDarkMode: isDark,
+                            );
+
+                            try {
+                              final response = await XdmBackendClient().health();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                final status = response['status'] as String? ?? 'unknown';
+                                if (status == 'ok') {
+                                  final backendVersion = response['ytdlp'] as String? ?? 'unknown';
+                                  final proxyConfigured = response['proxy_configured'] as bool? ?? false;
+                                  final proxyStatus = proxyConfigured
+                                      ? (L10n.isRtl(context)
+                                          ? 'الوكيل مفعل'
+                                          : 'Proxy enabled')
+                                      : (L10n.isRtl(context)
+                                          ? 'بدون وكيل'
+                                          : 'No proxy');
+
+                                  ThemedSnackbar.show(
+                                    context,
+                                    message: L10n.isRtl(context)
+                                        ? 'تم الاتصال! الخادم الخلفي يعمل. الإصدار: $backendVersion. $proxyStatus.'
+                                        : 'Backend connection successful! Version: $backendVersion. $proxyStatus.',
+                                    color: isDark
+                                        ? AppTheme.neonGreen
+                                        : AppTheme.lightNeonGreen,
+                                    icon: Icons.check_circle_outline,
+                                    isDarkMode: isDark,
+                                  );
+                                } else {
+                                  ThemedSnackbar.show(
+                                    context,
+                                    message: L10n.isRtl(context)
+                                        ? 'الخادم الخلفي لا يعمل (الحالة: $status)'
+                                        : 'Backend not responding (status: $status)',
+                                    color: isDark
+                                        ? AppTheme.neonRed
+                                        : AppTheme.lightNeonRed,
+                                    icon: Icons.error_outline,
+                                    isDarkMode: isDark,
+                                  );
+                                }
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: L10n.isRtl(context)
+                                      ? 'فشل في اختبار الاتصال: ${e.toString()} (تحقق من عنوان الخادم)'
+                                      : 'Connection test failed: $e (Check backend URL)',
+                                  color: isDark
+                                      ? AppTheme.neonRed
+                                      : AppTheme.lightNeonRed,
+                                  icon: Icons.error_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 6. ADVANCED POWER CONSOLE
                   _buildSettingsSection(
                     context,
                     settings: settings,
                     title: L10n.of(context, 'settings_adv_console'),
                     children: [
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context)
+                            ? 'استخدام الخادم الخلفي لليوتيوب'
+                            : 'Use remote backend for YouTube',
+                        subtitle: L10n.isRtl(context)
+                            ? 'معالج روابط يوتيوب عبر Cloud Run (موصى به)'
+                            : 'Resolve YouTube streams via Cloud Run (recommended)',
+                        value: settings.useRemoteBackend,
+                        onChanged: (val) {
+                          settings.setUseRemoteBackend(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
                         settings: settings,
                         title: L10n.isRtl(context)
@@ -863,6 +1047,443 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           triggerHaptic(settings);
                         },
                       ),
+
+
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.of(context, 'settings_subfolders'),
+                        subtitle: L10n.of(context, 'settings_subfolders_sub'),
+                        value: settings.categoryFolders,
+                        onChanged: (val) {
+                          settings.setCategoryFolders(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildDropdownTile<int>(
+                        settings: settings,
+                        title: L10n.of(context, 'settings_cleanup'),
+                        subtitle: L10n.of(context, 'settings_cleanup_sub'),
+                        value: settings.cleanupDays,
+                        items: [0, 7, 30],
+                        itemLabels: {
+                          0: L10n.isRtl(context) ? 'أبداً' : 'NEVER',
+                          7: L10n.isRtl(context) ? '٧ أيام' : '7 DAYS',
+                          30: L10n.isRtl(context) ? '٣٠ يوماً' : '30 DAYS',
+                        },
+                        onChanged: (val) {
+                          if (val != null) {
+                            settings.setCleanupDays(val);
+                            triggerHaptic(settings);
+                          }
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildTextFieldTile(
+                        title: L10n.of(context, 'settings_ua'),
+                        subtitle: L10n.of(context, 'settings_ua_sub'),
+                        controller: _uaController,
+                        onChanged: (val) {
+                          settings.setCustomUserAgent(val);
+                        },
+                        isDark: isDark,
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.of(context, 'settings_proxy'),
+                        subtitle: L10n.of(context, 'settings_proxy_sub'),
+                        value: settings.enableProxy,
+                        onChanged: (val) {
+                          settings.setEnableProxy(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      if (settings.enableProxy) ...[
+                        Divider(color: dividerColor, height: 1),
+                        _buildTextFieldTile(
+                          title: isRtl ? 'عنوان الوكيل (Host)' : 'PROXY HOST',
+                          subtitle: isRtl
+                              ? 'اسم المضيف أو عنوان IP'
+                              : 'Host name or IP address',
+                          controller: _proxyHostController,
+                          onChanged: (val) {
+                            settings.setProxyHost(val.trim());
+                            settings.setProxyAddress(
+                              '${val.trim()}:${settings.proxyPort}',
+                            );
+                          },
+                          isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildTextFieldTile(
+                          title: isRtl ? 'منفذ الوكيل (Port)' : 'PROXY PORT',
+                          subtitle: isRtl
+                              ? 'منفذ الاتصال بالوكيل'
+                              : 'Port number for connection',
+                          controller: _proxyPortController,
+                          onChanged: (val) {
+                            final port = int.tryParse(val.trim()) ?? 8080;
+                            settings.setProxyPort(port);
+                            settings.setProxyAddress(
+                              '${settings.proxyHost}:$port',
+                            );
+                          },
+                          isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildTextFieldTile(
+                          title: isRtl
+                              ? 'اسم المستخدم (اختياري)'
+                              : 'PROXY USERNAME (OPTIONAL)',
+                          subtitle: isRtl
+                              ? 'اسم المستخدم لمصادقة الوكيل'
+                              : 'Username for proxy credentials',
+                          controller: _proxyUsernameController,
+                          onChanged: (val) {
+                            settings.setProxyUsername(val.trim());
+                          },
+                          isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildTextFieldTile(
+                          title: isRtl
+                              ? 'كلمة المرور (اختياري)'
+                              : 'PROXY PASSWORD (OPTIONAL)',
+                          subtitle: isRtl
+                              ? 'كلمة المرور لمصادقة الوكيل'
+                              : 'Password for proxy credentials',
+                          controller: _proxyPasswordController,
+                          onChanged: (val) {
+                            settings.setProxyPassword(val.trim());
+                          },
+                          isDark: isDark,
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 10.0,
+                          ),
+                          child: NeonGlowButton(
+                            isFilled: false,
+                            color: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            text: isRtl ? 'اختبار الاتصال' : 'TEST CONNECTION',
+                            onPressed: () async {
+                              triggerHaptic(settings);
+                              ThemedSnackbar.show(
+                                context,
+                                message: isRtl
+                                    ? 'جاري اختبار اتصال الوكيل...'
+                                    : 'Testing proxy connection...',
+                                color: isDark
+                                    ? AppTheme.neonBlue
+                                    : AppTheme.lightNeonBlue,
+                                icon: Icons.sync,
+                                isDarkMode: isDark,
+                              );
+                              final success = await settings
+                                  .testProxyConnection(
+                                    _proxyHostController.text.trim(),
+                                    int.tryParse(
+                                          _proxyPortController.text.trim(),
+                                        ) ??
+                                        8080,
+                                    _proxyUsernameController.text.trim(),
+                                    _proxyPasswordController.text.trim(),
+                                  );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(
+                                  context,
+                                ).hideCurrentSnackBar();
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: success
+                                      ? (isRtl
+                                            ? 'نجح الاتصال بالوكيل!'
+                                            : 'Proxy connection successful!')
+                                      : (isRtl
+                                            ? 'فشل الاتصال بالوكيل'
+                                            : 'Proxy connection failed'),
+                                  color: success
+                                      ? (isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen)
+                                      : (isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed),
+                                  icon: success
+                                      ? Icons.check_circle_outline
+                                      : Icons.error_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                        Divider(color: dividerColor, height: 1),
+                        _buildSwitchTile(
+                          settings: settings,
+                          title: L10n.of(context, 'settings_bypass_ssl'),
+                          subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
+                          value: settings.bypassSSL,
+                          onChanged: (val) async {
+                            if (val) {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) {
+                                  return AlertDialog(
+                                    backgroundColor: isDark
+                                        ? AppTheme.surface
+                                        : AppTheme.lightSurface,
+                                    title: Text(
+                                      isRtl ? 'تحذير أمني' : 'SECURITY WARNING',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    content: Text(
+                                      isRtl
+                                          ? 'تخطي التحقق من شهادة SSL يعرض اتصالاتك لخطر التنصت وهجمات رجل في المنتصف (MITM). هل تريد الاستمرار؟'
+                                          : 'Bypassing SSL verification exposes your connections to eavesdropping and Man-in-the-Middle (MITM) attacks. Do you want to continue?',
+                                      style: TextStyle(color: textClr),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: Text(
+                                          isRtl ? 'إلغاء' : 'CANCEL',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? AppTheme.textSecondary
+                                                : AppTheme.lightTextSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: Text(
+                                          isRtl ? 'متابعة' : 'CONTINUE',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                              if (confirm == true) {
+                                settings.setBypassSSL(true);
+                              }
+                            } else {
+                              settings.setBypassSSL(false);
+                            }
+                            triggerHaptic(settings);
+                          },
+                        ),
+                        if (settings.bypassSSL) ...[
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color:
+                                  (isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed)
+                                      .withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppTheme.neonRed
+                                    : AppTheme.lightNeonRed,
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: isDark
+                                      ? AppTheme.neonRed
+                                      : AppTheme.lightNeonRed,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    isRtl
+                                        ? 'تحذير: تم تمكين تخطي شهادة SSL. اتصالاتك غير آمنة.'
+                                        : 'WARNING: SSL certificate bypass is active. Your connections are insecure.',
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                      Divider(color: dividerColor, height: 1),
+                      _buildUpdateHostsTile(context, settings),
+                      Divider(color: dividerColor, height: 1),
+                      _buildBackupTile(context, settings),
+                      Divider(color: dividerColor, height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: NeonGlowButton(
+                          isFilled: false,
+                          color: isDark
+                              ? AppTheme.neonRed
+                              : AppTheme.lightNeonRed,
+                          text: isRtl
+                              ? 'إعادة تعيين إلى الافتراضيات'
+                              : 'RESET TO DEFAULTS',
+                          onPressed: () async {
+                            triggerHaptic(settings);
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (context) {
+                                return AlertDialog(
+                                  backgroundColor: isDark
+                                      ? AppTheme.surface
+                                      : AppTheme.lightSurface,
+                                  title: Text(
+                                    isRtl
+                                        ? 'إعادة تعيين الإعدادات'
+                                        : 'RESET SETTINGS',
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  content: Text(
+                                    isRtl
+                                        ? 'هل أنت متأكد من رغبتك في إعادة تعيين جميع الإعدادات إلى القيم الافتراضية؟'
+                                        : 'Are you sure you want to reset all settings to their default values?',
+                                    style: TextStyle(color: textClr),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: Text(
+                                        isRtl ? 'إلغاء' : 'CANCEL',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.textSecondary
+                                              : AppTheme.lightTextSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: Text(
+                                        isRtl ? 'إعادة تعيين' : 'RESET',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.neonRed
+                                              : AppTheme.lightNeonRed,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                            if (confirm == true) {
+                              await settings.resetToDefaults();
+                              _uaController.text = settings.customUserAgent;
+                              _proxyController.text = settings.proxyAddress;
+                              _proxyHostController.text = settings.proxyHost;
+                              _proxyPortController.text = settings.proxyPort
+                                  .toString();
+                              _proxyUsernameController.text =
+                                  settings.proxyUsername;
+                              _proxyPasswordController.text =
+                                  settings.proxyPassword;
+
+                              if (context.mounted) {
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: isRtl
+                                      ? 'تمت إعادة تعيين الإعدادات بنجاح!'
+                                      : 'Settings reset to default values!',
+                                  color: isDark
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.lightNeonGreen,
+                                  icon: Icons.check_circle_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // 6. ADVANCED POWER CONSOLE
+                  _buildSettingsSection(
+                    context,
+                    settings: settings,
+                    title: L10n.of(context, 'settings_adv_console'),
+                    children: [
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context)
+                            ? 'استخدام الخادم الخلفي لليوتيوب'
+                            : 'Use remote backend for YouTube',
+                        subtitle: L10n.isRtl(context)
+                            ? 'معالج روابط يوتيوب عبر Cloud Run (موصى به)'
+                            : 'Resolve YouTube streams via Cloud Run (recommended)',
+                        value: settings.useRemoteBackend,
+                        onChanged: (val) {
+                          settings.setUseRemoteBackend(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+                      Divider(color: dividerColor, height: 1),
+                      _buildSwitchTile(
+                        settings: settings,
+                        title: L10n.isRtl(context)
+                            ? 'حفظ سجل المتصفح'
+                            : 'Save Browser History',
+                        subtitle: L10n.isRtl(context)
+                            ? 'حفظ المواقع التي تزورها في السجل'
+                            : 'Keep a history of websites you visit',
+                        value: settings.saveBrowserHistory,
+                        onChanged: (val) {
+                          settings.setSaveBrowserHistory(val);
+                          triggerHaptic(settings);
+                        },
+                      ),
+
 
                       Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
@@ -1806,12 +2427,15 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   Widget _buildTextFieldTile({
     required String title,
     required String subtitle,
-    required TextEditingController controller,
+    TextEditingController? controller,
+    String? initialValue,
+    bool obscureText = false,
     required ValueChanged<String> onChanged,
     required bool isDark,
   }) {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final subClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final effectiveController = controller ?? TextEditingController(text: initialValue);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
@@ -1842,7 +2466,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
               ),
             ),
             child: TextField(
-              controller: controller,
+              controller: effectiveController,
+              obscureText: obscureText,
               onChanged: onChanged,
               style: TextStyle(
                 color: textClr,

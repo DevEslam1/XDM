@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   disk_space_2
-  flutter_js
   flutter_secure_storage_linux
   url_launcher_linux
 )

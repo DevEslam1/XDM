@@ -76,14 +76,22 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
       });
     } catch (e) {
       if (!mounted) return;
+      final errorStr = e.toString().replaceAll('Exception: ', '');
       setState(() {
         _isLoading = false;
-        _errorMessage = L10n.isRtl(context)
-            ? 'فشل جلب البث: $e'
-            : 'Failed to fetch streams: $e';
+        if (errorStr.toLowerCase().contains('rate limit')) {
+          _errorMessage = L10n.isRtl(context)
+              ? 'تم الوصول إلى حد الطلبات. يرجى المحاولة لاحقاً.'
+              : errorStr;
+        } else {
+          _errorMessage = L10n.isRtl(context)
+              ? 'فشل جلب البث: $errorStr'
+              : 'Failed to fetch streams: $errorStr';
+        }
       });
     }
   }
+
 
   /// Extracts numeric height from a quality label like "720p" or "1080p".
   int _parseQuality(String q) {
