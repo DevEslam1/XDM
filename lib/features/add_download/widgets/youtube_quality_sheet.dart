@@ -21,6 +21,7 @@ class YoutubeQualitySheet extends StatefulWidget {
   static bool _isShowing = false;
 
   /// Shows the sheet and returns the chosen stream map, or null if dismissed.
+  /// If only 1 stream format is available, returns it immediately without showing UI.
   static Future<Map<String, dynamic>?> show(
     BuildContext context,
     String videoUrl,
@@ -31,6 +32,18 @@ class YoutubeQualitySheet extends StatefulWidget {
     try {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       runHaptic(settings);
+
+      try {
+        final streams = await YoutubeService.getStreams(videoUrl);
+        if (streams.length == 1) {
+          return streams.first;
+        }
+      } catch (_) {
+        // Fall back to opening sheet which will show retry / error state if needed
+      }
+
+      if (!context.mounted) return null;
+
       return await showModalBottomSheet<Map<String, dynamic>>(
         context: context,
         isScrollControlled: true,

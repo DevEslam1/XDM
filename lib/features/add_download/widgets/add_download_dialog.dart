@@ -333,15 +333,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       }
     }
 
-    if (YoutubeService.isYoutubeVideoUrl(url)) {
+    if (YoutubeService.isExtractableMediaUrl(url)) {
       if (!mounted) return;
       final stream = await YoutubeQualitySheet.show(context, url);
       if (!mounted) return;
-      if (stream == null) {
-        return;
-      }
-      if (mounted) {
-        final title = stream['title'] as String? ?? 'YouTube Video';
+      if (stream != null) {
+        final title = stream['title'] as String? ?? 'Media Download';
         final ext = stream['ext'] as String? ?? 'mp4';
         final streamUrl = stream['src'] as String;
         final streamSize = stream['size'] as int? ?? 0;
@@ -392,8 +389,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           isDarkMode: isDark,
         );
         Navigator.pop(context);
+        return;
       }
-      return;
+      // If stream == null (e.g. backend failed because URL is a direct file download), fall through to standard HTTP resolution below
     }
 
     if (!isValidTransmissionUrl(url)) {

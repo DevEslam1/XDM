@@ -134,6 +134,47 @@ class YoutubeService {
     return extractVideoId(url) != null;
   }
 
+  /// Returns true if [url] is a known extractable media site (YouTube, Facebook, X/Twitter,
+  /// Instagram, TikTok, Reddit, Vimeo, etc.) or a web URL without a direct static file extension.
+  static bool isExtractableMediaUrl(String url) {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    final path = uri.path.toLowerCase();
+
+    // Direct social media video hosts
+    if (host.contains('youtube.com') ||
+        host.contains('youtu.be') ||
+        host.contains('facebook.com') ||
+        host.contains('fb.watch') ||
+        host.contains('twitter.com') ||
+        host.contains('x.com') ||
+        host.contains('instagram.com') ||
+        host.contains('tiktok.com') ||
+        host.contains('reddit.com') ||
+        host.contains('vimeo.com') ||
+        host.contains('twitch.tv') ||
+        host.contains('dailymotion.com')) {
+      return true;
+    }
+
+    // Direct file extensions skip backend probing
+    final staticExtensions = [
+      '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm',
+      '.mp3', '.m4a', '.flac', '.wav', '.ogg',
+      '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2',
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      '.apk', '.dmg', '.iso', '.exe', '.msi',
+      '.png', '.jpg', '.jpeg', '.gif', '.webp'
+    ];
+    for (final ext in staticExtensions) {
+      if (path.endsWith(ext)) return false;
+    }
+
+    return true;
+  }
+
   static bool isPlaylistUrl(String url) {
     try {
       final uri = Uri.parse(url);
@@ -201,16 +242,13 @@ class YoutubeService {
   static final Map<String, (DateTime, List<Map<String, dynamic>>)> _streamsCache = {};
   static const _cacheDuration = Duration(minutes: 5);
 
-  /// Formats all available streams for a given YouTube URL or Video ID into structured maps.
+  /// Formats all available streams for a given URL or Video ID into structured maps.
   static Future<List<Map<String, dynamic>>> getStreams(String url) async {
     final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
-    if (videoId == null) {
-      throw Exception('Invalid YouTube URL or Video ID.');
-    }
+    final targetUrl = videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
+    final cacheKey = videoId ?? url;
 
-    final targetUrl = 'https://www.youtube.com/watch?v=$videoId';
-
-    final cached = _streamsCache[videoId];
+    final cached = _streamsCache[cacheKey];
     if (cached != null && DateTime.now().difference(cached.$1) < _cacheDuration) {
       return cached.$2;
     }
@@ -283,7 +321,7 @@ class YoutubeService {
           );
         }
 
-        _streamsCache[videoId] = (DateTime.now(), results);
+        _streamsCache[cacheKey] = (DateTime.now(), results);
         return results;
       }
     } on BackendException catch (e) {

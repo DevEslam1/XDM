@@ -3294,8 +3294,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       );
     }
 
-    // YouTube single video — show quality picker directly
-    if (YoutubeService.isYoutubeVideoUrl(activeTab.url) &&
+    // Single video / media — show quality picker directly
+    if (YoutubeService.isExtractableMediaUrl(activeTab.url) &&
         detectedSources.isNotEmpty) {
       return FloatingActionButton.extended(
         heroTag: null,
@@ -3312,7 +3312,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               activeTab.url,
             );
             if (stream != null && context.mounted) {
-              final title = stream['title'] as String? ?? 'YouTube Video';
+              final title = stream['title'] as String? ?? 'Media Video';
               final ext = stream['ext'] as String? ?? 'mp4';
               _startDirectDownload(
                 stream['src'] as String,
@@ -3328,8 +3328,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         icon: const Icon(Icons.play_circle_filled),
         label: Text(
           detectedSources.length > 1
-              ? 'YOUTUBE (${detectedSources.length})'
-              : 'YOUTUBE',
+              ? 'MEDIA (${detectedSources.length})'
+              : 'MEDIA',
         ),
       );
     }

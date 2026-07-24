@@ -809,7 +809,9 @@ class _ProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMergedDownload = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
     final showSplitBar =
+        !isMergedDownload &&
         (task.status == DownloadStatus.downloading ||
             task.status == DownloadStatus.paused) &&
         task.chunks.isNotEmpty &&
