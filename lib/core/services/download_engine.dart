@@ -7,6 +7,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -232,8 +233,9 @@ class DownloadEngine {
             debugPrint('[DMX] Cleanup timer: closing orphaned Dio client (${age.inSeconds}s old)');
             try {
               client.close(force: true);
-            } // Safe cleanup: Swallow exception during client cleanup to avoid interrupting loop.
-            catch (_) {}
+            } catch (e) {
+              debugPrint('[DMX] Failed to close client during cleanup: $e');
+            }
             _dioClientCreationTimes.remove(client);
             return true;
           }
@@ -314,6 +316,9 @@ class DownloadEngine {
                 ? int.tryParse(proxyAddress.split(':')[1]) ?? 8080
                 : 8080);
 
+      final downloadUri = url != null ? Uri.tryParse(url) : null;
+      final downloadHost = downloadUri?.host;
+
       adapter.createHttpClient = () {
         final httpClient = HttpClient();
         if (enableProxy && host.isNotEmpty) {
@@ -333,8 +338,10 @@ class DownloadEngine {
           }
         }
         if (bypassSSL) {
-          debugPrint('[DMX] SSL verification is BYPASSED for host $host — all certificates accepted.');
-          httpClient.badCertificateCallback = (cert, host, port) => true;
+          debugPrint('[DMX] SSL verification is BYPASSED for host $downloadHost — certificates accepted only for this host.');
+          httpClient.badCertificateCallback = (cert, host, port) {
+            return downloadHost != null && downloadHost.isNotEmpty && host == downloadHost;
+          };
         }
         return httpClient;
       };
@@ -421,8 +428,9 @@ class DownloadEngine {
               try {
                 TorrentService.pauseTorrent(torrentId);
                 TorrentService.removeTorrent(torrentId);
-              } // Safe cleanup: Swallow exception during best-effort torrent engine cleanup.
-              catch (_) {}
+              } catch (e) {
+                debugPrint('[DMX] Error pausing/removing torrent during metadata parsing: $e');
+              }
               completer.complete(
                 DownloadMetadata(
                   fileName: torrent.name,
@@ -444,8 +452,9 @@ class DownloadEngine {
             try {
               TorrentService.pauseTorrent(torrentId);
               TorrentService.removeTorrent(torrentId);
-            } // Safe cleanup: Swallow exception during best-effort torrent engine cleanup on timeout.
-            catch (_) {}
+            } catch (e) {
+              debugPrint('[DMX] Error pausing/removing torrent during metadata timeout: $e');
+            }
             completer.complete(
               DownloadMetadata(
                 fileName: resolvedName,
@@ -911,14 +920,12 @@ class DownloadEngine {
       // Wait for metadata to resolve
       final metadataCompleter = Completer<void>();
       StreamSubscription? metadataSub;
-      bool metadataReceived = false;
 
       metadataSub = TorrentService.torrentUpdates.listen((torrents) {
         if (cancelToken.isCancelled) return;
         final torrent = torrents[id];
         if (torrent != null && torrent.hasMetadata) {
           metadataSub?.cancel();
-          metadataReceived = true;
           if (!metadataCompleter.isCompleted) {
             metadataCompleter.complete();
           }
@@ -937,8 +944,9 @@ class DownloadEngine {
           // Metadata not yet received → remove (metadata phase, nothing to resume)
           try {
             TorrentService.removeTorrent(id);
-          } // Safe cleanup: Swallow exception when removing torrent during cancellation.
-          catch (_) {}
+          } catch (e) {
+            debugPrint('[DMX] Error removing torrent during cancellation: $e');
+          }
         }
         await metadataSub?.cancel();
         metadataTimer?.cancel();
@@ -973,8 +981,9 @@ class DownloadEngine {
         try {
           TorrentService.pauseTorrent(id);
           TorrentService.removeTorrent(id);
-        } // Safe cleanup: Swallow exception when pausing/removing torrent during metadata timeout.
-        catch (_) {}
+        } catch (e) {
+          debugPrint('[DMX] Error pausing/removing torrent during metadata timeout: $e');
+        }
         if (!metadataCompleter.isCompleted) {
           metadataCompleter.completeError(
             DioException(
@@ -1475,8 +1484,9 @@ class DownloadEngine {
                     chunkError ??= e;
                     rethrow;
                   }
-                  debugPrint('Thread $idx failed attempt $attempts: $e. Retrying in ${attempts}s...');
-                  await Future.delayed(Duration(seconds: attempts));
+                  debugPrint('Thread $idx failed attempt $attempts: $e. Retrying...');
+                  final delay = (attempts * attempts * 2) + Random().nextInt(3);
+                  await Future.delayed(Duration(seconds: delay));
                 }
               }
             }());
@@ -1534,8 +1544,9 @@ class DownloadEngine {
               await sharedRaf.close();
               isRafClosed = true;
             }
-          } // Safe cleanup: Swallow exception when closing random access file inside catch.
-          catch (_) {}
+          } catch (err) {
+            debugPrint('[DMX] Error closing shared RandomAccessFile on exception: $err');
+          }
 
           if (cancelToken.isCancelled) {
             await saveState(); // Save state on cancel
@@ -1639,7 +1650,15 @@ class DownloadEngine {
 
     var resumeFrom = 0;
     if (supportsResume && await tempFile.exists()) {
-      resumeFrom = await tempFile.length();
+      final partSize = await tempFile.length();
+      if (knownFileSize > 0 && partSize <= knownFileSize) {
+        resumeFrom = partSize;
+      } else if (knownFileSize == 0) {
+        resumeFrom = partSize;
+      } else {
+        debugPrint('[DownloadEngine] Single-threaded resume validation failed: file size $partSize exceeds expected $knownFileSize. Restarting from 0.');
+        await tempFile.delete();
+      }
     } else if (await tempFile.exists()) {
       await tempFile.delete();
     }
@@ -1943,24 +1962,27 @@ class DownloadEngine {
     for (final token in List<CancelToken>.from(_activeCancelTokens)) {
       try {
         token.cancel('Engine closing');
-      } // Safe cleanup: Swallow cancel exception on shutdown.
-      catch (_) {}
+      } catch (e) {
+        debugPrint('[DMX] Failed to cancel token on engine close: $e');
+      }
     }
     _activeCancelTokens.clear();
     _sharedDio.close(force: true);
     for (final client in _activeDioClients) {
       try {
         client.close(force: true);
-      } // Safe cleanup: Swallow close exception on shutdown.
-      catch (_) {}
+      } catch (e) {
+        debugPrint('[DMX] Failed to close Dio client on engine close: $e');
+      }
     }
     _activeDioClients.clear();
     _dioClientCreationTimes.clear();
     for (final isolate in _activeIsolates) {
       try {
         isolate.kill(priority: Isolate.immediate);
-      } // Safe cleanup: Swallow kill exception on shutdown.
-      catch (_) {}
+      } catch (e) {
+        debugPrint('[DMX] Failed to kill isolate on engine close: $e');
+      }
     }
     _activeIsolates.clear();
     _activeIsolateCommandPorts.clear();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
@@ -67,6 +68,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   Map<String, dynamic>? _playlistInfo;
   List<Map<String, dynamic>> _videos = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMoreVideos = true;
+  int? _nextPageToken;
   bool _isDownloading = false;
   bool _isCancelled = false;
   String? _errorMessage;
@@ -74,6 +78,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   int _downloadProgress = 0;
   String _currentVideoTitle = '';
   String _searchQuery = '';
+  final ScrollController _scrollController = ScrollController();
 
   List<Map<String, dynamic>> get _filteredVideos {
     if (_searchQuery.isEmpty) return _videos;
@@ -101,13 +106,59 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _fetchPlaylist();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreVideos();
+    }
+  }
+
+  Future<void> _loadMoreVideos() async {
+    if (_isLoadingMore || !_hasMoreVideos || _nextPageToken == null) return;
+    if (_searchQuery.isNotEmpty) return;
+
+    setState(() => _isLoadingMore = true);
+
+    try {
+      final details = await YoutubeService.getPlaylistDetails(
+        widget.playlistUrl,
+        pageToken: _nextPageToken,
+      );
+
+      if (!mounted) return;
+
+      final videos = List<Map<String, dynamic>>.from(
+        (details?['videos'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)) ?? [],
+      );
+
+      setState(() {
+        _videos.addAll(videos);
+        _hasMoreVideos = videos.isNotEmpty;
+        _nextPageToken = details?['nextPageToken'] as int?;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingMore = false);
+    }
   }
 
   Future<void> _fetchPlaylist() async {
     try {
       final details = await YoutubeService.getPlaylistDetails(
         widget.playlistUrl,
+        pageSize: 50,
       );
 
       if (!mounted) return;
@@ -118,6 +169,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         _playlistInfo = info;
         _videos = videos;
         _isLoading = false;
+        _nextPageToken = details?['nextPageToken'] as int?;
+        _hasMoreVideos = _nextPageToken != null || videos.length >= 50;
         if (videos.isEmpty && info != null) {
           final count = info['videoCount'] as int? ?? 0;
           if (count > 0) {
@@ -570,13 +623,27 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                     // Video list
                     Expanded(
                       child: ListView.builder(
-                        controller: scrollController,
+                        controller: _scrollController,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        itemCount: _filteredVideos.length,
+                        itemCount: _filteredVideos.length + (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
                         itemBuilder: (context, index) {
+                          if (index == _filteredVideos.length) {
+                            return _isLoadingMore
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink();
+                          }
                           final video = _filteredVideos[index];
                           final isSelected = video['selected'] as bool? ?? true;
                           final title =
@@ -651,16 +718,24 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                             width: 72,
                                             height: 42,
                                             child: thumbnailUrl != null && thumbnailUrl.isNotEmpty
-                                                ? Image.network(
-                                                    thumbnailUrl.startsWith('//')
+                                                ? CachedNetworkImage(
+                                                    imageUrl: thumbnailUrl.startsWith('//')
                                                         ? 'https:$thumbnailUrl'
                                                         : thumbnailUrl,
                                                     fit: BoxFit.cover,
-                                                    headers: const {
-                                                      'User-Agent':
-                                                          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                                                    },
-                                                    errorBuilder: (context, error, stackTrace) => Container(
+                                                    memCacheWidth: 144,
+                                                    placeholder: (context, url) => Container(
+                                                      color: (isDark
+                                                              ? AppTheme.background
+                                                              : AppTheme.lightBackground)
+                                                          .withValues(alpha: 0.6),
+                                                      child: Icon(
+                                                        Icons.play_circle_outline,
+                                                        color: mutedClr,
+                                                        size: 24,
+                                                      ),
+                                                    ),
+                                                    errorWidget: (context, url, error) => Container(
                                                       color: (isDark
                                                               ? AppTheme.background
                                                               : AppTheme.lightBackground)

@@ -169,44 +169,44 @@ class $DownloadTasksTable extends DownloadTasks
     'createdAt',
   );
   @override
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
     'created_at',
     aliasedName,
     false,
-    type: DriftSqlType.string,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
   @override
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
     'updated_at',
     aliasedName,
     false,
-    type: DriftSqlType.string,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _completedAtMeta = const VerificationMeta(
     'completedAt',
   );
   @override
-  late final GeneratedColumn<String> completedAt = GeneratedColumn<String>(
+  late final GeneratedColumn<int> completedAt = GeneratedColumn<int>(
     'completed_at',
     aliasedName,
     true,
-    type: DriftSqlType.string,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
   static const VerificationMeta _scheduledAtMeta = const VerificationMeta(
     'scheduledAt',
   );
   @override
-  late final GeneratedColumn<String> scheduledAt = GeneratedColumn<String>(
+  late final GeneratedColumn<int> scheduledAt = GeneratedColumn<int>(
     'scheduled_at',
     aliasedName,
     true,
-    type: DriftSqlType.string,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
   static const VerificationMeta _supportsResumeMeta = const VerificationMeta(
@@ -743,19 +743,19 @@ class $DownloadTasksTable extends DownloadTasks
         ),
       ),
       createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}created_at'],
       )!,
       updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}updated_at'],
       )!,
       completedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}completed_at'],
       ),
       scheduledAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}scheduled_at'],
       ),
       supportsResume: attachedDatabase.typeMapping.read(
@@ -844,10 +844,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? errorMessage;
   final int threadCount;
   final List<double>? chunks;
-  final String createdAt;
-  final String updatedAt;
-  final String? completedAt;
-  final String? scheduledAt;
+  final int createdAt;
+  final int updatedAt;
+  final int? completedAt;
+  final int? scheduledAt;
   final bool supportsResume;
   final int speedLimitKbps;
   final bool seedingEnabled;
@@ -921,13 +921,13 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         $DownloadTasksTable.$converterchunks.toSql(chunks),
       );
     }
-    map['created_at'] = Variable<String>(createdAt);
-    map['updated_at'] = Variable<String>(updatedAt);
+    map['created_at'] = Variable<int>(createdAt);
+    map['updated_at'] = Variable<int>(updatedAt);
     if (!nullToAbsent || completedAt != null) {
-      map['completed_at'] = Variable<String>(completedAt);
+      map['completed_at'] = Variable<int>(completedAt);
     }
     if (!nullToAbsent || scheduledAt != null) {
-      map['scheduled_at'] = Variable<String>(scheduledAt);
+      map['scheduled_at'] = Variable<int>(scheduledAt);
     }
     map['supports_resume'] = Variable<bool>(supportsResume);
     map['speed_limit_kbps'] = Variable<int>(speedLimitKbps);
@@ -1033,10 +1033,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       errorMessage: serializer.fromJson<String?>(json['errorMessage']),
       threadCount: serializer.fromJson<int>(json['threadCount']),
       chunks: serializer.fromJson<List<double>?>(json['chunks']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-      completedAt: serializer.fromJson<String?>(json['completedAt']),
-      scheduledAt: serializer.fromJson<String?>(json['scheduledAt']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+      completedAt: serializer.fromJson<int?>(json['completedAt']),
+      scheduledAt: serializer.fromJson<int?>(json['scheduledAt']),
       supportsResume: serializer.fromJson<bool>(json['supportsResume']),
       speedLimitKbps: serializer.fromJson<int>(json['speedLimitKbps']),
       seedingEnabled: serializer.fromJson<bool>(json['seedingEnabled']),
@@ -1075,10 +1075,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'errorMessage': serializer.toJson<String?>(errorMessage),
       'threadCount': serializer.toJson<int>(threadCount),
       'chunks': serializer.toJson<List<double>?>(chunks),
-      'createdAt': serializer.toJson<String>(createdAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-      'completedAt': serializer.toJson<String?>(completedAt),
-      'scheduledAt': serializer.toJson<String?>(scheduledAt),
+      'createdAt': serializer.toJson<int>(createdAt),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+      'completedAt': serializer.toJson<int?>(completedAt),
+      'scheduledAt': serializer.toJson<int?>(scheduledAt),
       'supportsResume': serializer.toJson<bool>(supportsResume),
       'speedLimitKbps': serializer.toJson<int>(speedLimitKbps),
       'seedingEnabled': serializer.toJson<bool>(seedingEnabled),
@@ -1113,10 +1113,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     Value<String?> errorMessage = const Value.absent(),
     int? threadCount,
     Value<List<double>?> chunks = const Value.absent(),
-    String? createdAt,
-    String? updatedAt,
-    Value<String?> completedAt = const Value.absent(),
-    Value<String?> scheduledAt = const Value.absent(),
+    int? createdAt,
+    int? updatedAt,
+    Value<int?> completedAt = const Value.absent(),
+    Value<int?> scheduledAt = const Value.absent(),
     bool? supportsResume,
     int? speedLimitKbps,
     bool? seedingEnabled,
@@ -1371,10 +1371,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> errorMessage;
   final Value<int> threadCount;
   final Value<List<double>?> chunks;
-  final Value<String> createdAt;
-  final Value<String> updatedAt;
-  final Value<String?> completedAt;
-  final Value<String?> scheduledAt;
+  final Value<int> createdAt;
+  final Value<int> updatedAt;
+  final Value<int?> completedAt;
+  final Value<int?> scheduledAt;
   final Value<bool> supportsResume;
   final Value<int> speedLimitKbps;
   final Value<bool> seedingEnabled;
@@ -1440,8 +1440,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.errorMessage = const Value.absent(),
     required int threadCount,
     this.chunks = const Value.absent(),
-    required String createdAt,
-    required String updatedAt,
+    required int createdAt,
+    required int updatedAt,
     this.completedAt = const Value.absent(),
     this.scheduledAt = const Value.absent(),
     this.supportsResume = const Value.absent(),
@@ -1485,10 +1485,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? errorMessage,
     Expression<int>? threadCount,
     Expression<String>? chunks,
-    Expression<String>? createdAt,
-    Expression<String>? updatedAt,
-    Expression<String>? completedAt,
-    Expression<String>? scheduledAt,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<int>? completedAt,
+    Expression<int>? scheduledAt,
     Expression<bool>? supportsResume,
     Expression<int>? speedLimitKbps,
     Expression<bool>? seedingEnabled,
@@ -1558,10 +1558,10 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Value<String?>? errorMessage,
     Value<int>? threadCount,
     Value<List<double>?>? chunks,
-    Value<String>? createdAt,
-    Value<String>? updatedAt,
-    Value<String?>? completedAt,
-    Value<String?>? scheduledAt,
+    Value<int>? createdAt,
+    Value<int>? updatedAt,
+    Value<int?>? completedAt,
+    Value<int?>? scheduledAt,
     Value<bool>? supportsResume,
     Value<int>? speedLimitKbps,
     Value<bool>? seedingEnabled,
@@ -1665,16 +1665,16 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       );
     }
     if (createdAt.present) {
-      map['created_at'] = Variable<String>(createdAt.value);
+      map['created_at'] = Variable<int>(createdAt.value);
     }
     if (updatedAt.present) {
-      map['updated_at'] = Variable<String>(updatedAt.value);
+      map['updated_at'] = Variable<int>(updatedAt.value);
     }
     if (completedAt.present) {
-      map['completed_at'] = Variable<String>(completedAt.value);
+      map['completed_at'] = Variable<int>(completedAt.value);
     }
     if (scheduledAt.present) {
-      map['scheduled_at'] = Variable<String>(scheduledAt.value);
+      map['scheduled_at'] = Variable<int>(scheduledAt.value);
     }
     if (supportsResume.present) {
       map['supports_resume'] = Variable<bool>(supportsResume.value);
@@ -2458,10 +2458,10 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<String?> errorMessage,
       required int threadCount,
       Value<List<double>?> chunks,
-      required String createdAt,
-      required String updatedAt,
-      Value<String?> completedAt,
-      Value<String?> scheduledAt,
+      required int createdAt,
+      required int updatedAt,
+      Value<int?> completedAt,
+      Value<int?> scheduledAt,
       Value<bool> supportsResume,
       Value<int> speedLimitKbps,
       Value<bool> seedingEnabled,
@@ -2494,10 +2494,10 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<String?> errorMessage,
       Value<int> threadCount,
       Value<List<double>?> chunks,
-      Value<String> createdAt,
-      Value<String> updatedAt,
-      Value<String?> completedAt,
-      Value<String?> scheduledAt,
+      Value<int> createdAt,
+      Value<int> updatedAt,
+      Value<int?> completedAt,
+      Value<int?> scheduledAt,
       Value<bool> supportsResume,
       Value<int> speedLimitKbps,
       Value<bool> seedingEnabled,
@@ -2599,22 +2599,22 @@ class $$DownloadTasksTableFilterComposer
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
-  ColumnFilters<String> get createdAt => $composableBuilder(
+  ColumnFilters<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get updatedAt => $composableBuilder(
+  ColumnFilters<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get completedAt => $composableBuilder(
+  ColumnFilters<int> get completedAt => $composableBuilder(
     column: $table.completedAt,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get scheduledAt => $composableBuilder(
+  ColumnFilters<int> get scheduledAt => $composableBuilder(
     column: $table.scheduledAt,
     builder: (column) => ColumnFilters(column),
   );
@@ -2774,22 +2774,22 @@ class $$DownloadTasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get createdAt => $composableBuilder(
+  ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get updatedAt => $composableBuilder(
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get completedAt => $composableBuilder(
+  ColumnOrderings<int> get completedAt => $composableBuilder(
     column: $table.completedAt,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get scheduledAt => $composableBuilder(
+  ColumnOrderings<int> get scheduledAt => $composableBuilder(
     column: $table.scheduledAt,
     builder: (column) => ColumnOrderings(column),
   );
@@ -2924,18 +2924,18 @@ class $$DownloadTasksTableAnnotationComposer
   GeneratedColumnWithTypeConverter<List<double>?, String> get chunks =>
       $composableBuilder(column: $table.chunks, builder: (column) => column);
 
-  GeneratedColumn<String> get createdAt =>
+  GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
-  GeneratedColumn<String> get updatedAt =>
+  GeneratedColumn<int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
-  GeneratedColumn<String> get completedAt => $composableBuilder(
+  GeneratedColumn<int> get completedAt => $composableBuilder(
     column: $table.completedAt,
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get scheduledAt => $composableBuilder(
+  GeneratedColumn<int> get scheduledAt => $composableBuilder(
     column: $table.scheduledAt,
     builder: (column) => column,
   );
@@ -3049,10 +3049,10 @@ class $$DownloadTasksTableTableManager
                 Value<String?> errorMessage = const Value.absent(),
                 Value<int> threadCount = const Value.absent(),
                 Value<List<double>?> chunks = const Value.absent(),
-                Value<String> createdAt = const Value.absent(),
-                Value<String> updatedAt = const Value.absent(),
-                Value<String?> completedAt = const Value.absent(),
-                Value<String?> scheduledAt = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<int?> completedAt = const Value.absent(),
+                Value<int?> scheduledAt = const Value.absent(),
                 Value<bool> supportsResume = const Value.absent(),
                 Value<int> speedLimitKbps = const Value.absent(),
                 Value<bool> seedingEnabled = const Value.absent(),
@@ -3120,10 +3120,10 @@ class $$DownloadTasksTableTableManager
                 Value<String?> errorMessage = const Value.absent(),
                 required int threadCount,
                 Value<List<double>?> chunks = const Value.absent(),
-                required String createdAt,
-                required String updatedAt,
-                Value<String?> completedAt = const Value.absent(),
-                Value<String?> scheduledAt = const Value.absent(),
+                required int createdAt,
+                required int updatedAt,
+                Value<int?> completedAt = const Value.absent(),
+                Value<int?> scheduledAt = const Value.absent(),
                 Value<bool> supportsResume = const Value.absent(),
                 Value<int> speedLimitKbps = const Value.absent(),
                 Value<bool> seedingEnabled = const Value.absent(),

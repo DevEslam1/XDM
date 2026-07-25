@@ -19,13 +19,15 @@ class DownloadUtils {
       }
     }
 
+    final existingNames = <String>{
+      for (final t in provider.tasks) t.fileName.toLowerCase(),
+    };
+
     String numberedName = finalFileName;
     final ext = p.extension(finalFileName);
     final base = p.basenameWithoutExtension(finalFileName);
     var counter = 1;
-    while (provider.tasks.any(
-      (t) => t.fileName.toLowerCase() == numberedName.toLowerCase(),
-    )) {
+    while (existingNames.contains(numberedName.toLowerCase())) {
       numberedName = '${base}_$counter$ext';
       counter++;
     }

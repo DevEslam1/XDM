@@ -148,11 +148,18 @@ class XdmBackendClient {
     String url, {
     String? oauthToken,
     String? cookies,
+    int? pageToken,
+    int? pageSize,
   }) async {
     try {
+      final queryParams = <String, dynamic>{
+        'url': url,
+        if (pageToken != null) 'page': pageToken.toString(),
+        if (pageSize != null) 'pageSize': pageSize.toString(),
+      };
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/playlist',
-        queryParameters: {'url': url},
+        queryParameters: queryParams,
         options: Options(
           headers: {
             if (oauthToken != null && oauthToken.isNotEmpty)

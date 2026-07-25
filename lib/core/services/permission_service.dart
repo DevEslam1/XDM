@@ -18,7 +18,8 @@ class PermissionService {
       final androidInfo = await deviceInfo.androidInfo;
       _cachedSdkLevel = androidInfo.version.sdkInt;
       return _cachedSdkLevel!;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PermissionService] Error getting SDK level via DeviceInfo: $e');
       try {
         final version = Platform.operatingSystemVersion;
         final apiMatch = RegExp(r'API\s+(\d+)').firstMatch(version);
@@ -49,7 +50,9 @@ class PermissionService {
             };
           }
         }
-      } catch (_) {}
+      } catch (err) {
+        debugPrint('[PermissionService] Fallback SDK level check failed: $err');
+      }
     }
     return 0;
   }
@@ -74,7 +77,8 @@ class PermissionService {
           }
           return pth;
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[PermissionService] Error getting desktop downloads directory: $e');
         String? home;
         if (Platform.isWindows) {
           home = Platform.environment['USERPROFILE'];
@@ -115,7 +119,9 @@ class PermissionService {
             }
             return pth;
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[PermissionService] Failed to get external storage directories: $e');
+        }
         // Fallback to app-specific directory
         try {
           final dir = await getDownloadsDirectory();
@@ -127,7 +133,9 @@ class PermissionService {
             }
             return pth;
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[PermissionService] Failed to get app downloads directory: $e');
+        }
       } else if (await _isStorageGranted()) {
         // API 29 and below with storage granted: the hardcoded public path is accessible
         const publicPath = '/storage/emulated/0/Download/XDM';
@@ -153,7 +161,9 @@ class PermissionService {
           }
           return pth;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[PermissionService] Failed to get downloads directory fallback: $e');
+      }
       try {
         final extDir = await getExternalStorageDirectory();
         if (extDir != null) {
@@ -164,7 +174,9 @@ class PermissionService {
           }
           return pth;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[PermissionService] Failed to get external storage directory fallback: $e');
+      }
     }
 
     final docs = await getApplicationDocumentsDirectory();
@@ -233,7 +245,9 @@ class PermissionService {
           }
           return true;
         }
-      } catch (_) {}
+      } catch (err) {
+        debugPrint('[PermissionService] ensureStorageAccess downloads dir fallback failed: $err');
+      }
       try {
         final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
         if (extDirs != null && extDirs.isNotEmpty) {
@@ -243,7 +257,9 @@ class PermissionService {
           }
           return true;
         }
-      } catch (_) {}
+      } catch (err) {
+        debugPrint('[PermissionService] ensureStorageAccess external dir fallback failed: $err');
+      }
       return false;
     }
   }
@@ -258,5 +274,22 @@ class PermissionService {
           (await Permission.audio.status.isPermanentlyDenied);
     }
     return (await Permission.storage.status).isPermanentlyDenied;
+  }
+
+  /// Requests a one-time battery optimization exemption (ignore battery
+  /// optimizations). Returns `true` if already exempt or the user granted
+  /// the exemption. Returns `false` if the user denied it or the platform
+  /// doesn't support the permission.
+  Future<bool> requestBatteryOptimizationExemption() async {
+    if (kIsWeb || !Platform.isAndroid) return true;
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      if (status.isGranted) return true;
+      final result = await Permission.ignoreBatteryOptimizations.request();
+      return result.isGranted;
+    } catch (e) {
+      debugPrint('[PermissionService] Battery optimization exemption request failed: $e');
+      return false;
+    }
   }
 }

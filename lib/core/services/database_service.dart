@@ -223,10 +223,10 @@ class DatabaseService {
       errorMessage: drift.Value(task.errorMessage),
       threadCount: task.threadCount,
       chunks: drift.Value(task.chunks),
-      createdAt: task.createdAt.toIso8601String(),
-      updatedAt: task.updatedAt.toIso8601String(),
-      completedAt: drift.Value(task.completedAt?.toIso8601String()),
-      scheduledAt: drift.Value(task.scheduledAt?.toIso8601String()),
+      createdAt: task.createdAt.millisecondsSinceEpoch,
+      updatedAt: task.updatedAt.millisecondsSinceEpoch,
+      completedAt: drift.Value(task.completedAt?.millisecondsSinceEpoch),
+      scheduledAt: drift.Value(task.scheduledAt?.millisecondsSinceEpoch),
       supportsResume: drift.Value(task.supportsResume),
       speedLimitKbps: drift.Value(task.speedLimitKbps),
       seedingEnabled: drift.Value(task.seedingEnabled),
@@ -243,19 +243,21 @@ class DatabaseService {
   }
 
   DownloadTask _rowToTask(DbDownloadTask row) {
-    DateTime parseDate(String dateStr) {
+    DateTime parseIntDate(int msSinceEpoch) {
       try {
-        return DateTime.parse(dateStr);
-      } catch (_) {
+        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
+      } catch (e) {
+        debugPrint('[DMX] Error parsing date millisecondsSinceEpoch $msSinceEpoch: $e');
         return DateTime(2000);
       }
     }
 
-    DateTime? parseNullableDate(String? dateStr) {
-      if (dateStr == null) return null;
+    DateTime? parseNullableIntDate(int? msSinceEpoch) {
+      if (msSinceEpoch == null) return null;
       try {
-        return DateTime.parse(dateStr);
-      } catch (_) {
+        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
+      } catch (e) {
+        debugPrint('[DMX] Error parsing nullable date millisecondsSinceEpoch $msSinceEpoch: $e');
         return null;
       }
     }
@@ -282,10 +284,10 @@ class DatabaseService {
       errorMessage: row.errorMessage,
       threadCount: row.threadCount,
       chunks: row.chunks ?? [],
-      createdAt: parseDate(row.createdAt),
-      updatedAt: parseDate(row.updatedAt),
-      completedAt: parseNullableDate(row.completedAt),
-      scheduledAt: parseNullableDate(row.scheduledAt),
+      createdAt: parseIntDate(row.createdAt),
+      updatedAt: parseIntDate(row.updatedAt),
+      completedAt: parseNullableIntDate(row.completedAt),
+      scheduledAt: parseNullableIntDate(row.scheduledAt),
       supportsResume: row.supportsResume,
       speedLimitKbps: row.speedLimitKbps,
       seedingEnabled: row.seedingEnabled,

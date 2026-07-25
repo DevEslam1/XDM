@@ -26,7 +26,7 @@ import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 
-import '../widgets/youtube_quality_sheet.dart';
+import '../widgets/media_quality_sheet.dart';
 import '../widgets/youtube_playlist_sheet.dart';
 
 class AddDownloadDialog extends StatefulWidget {
@@ -45,6 +45,27 @@ class AddDownloadDialog extends StatefulWidget {
 
   @override
   State<AddDownloadDialog> createState() => _AddDownloadDialogState();
+
+  /// Session-level tracking of recently added URLs (within the last 30 s).
+  /// Prevents accidental double-queues when the user shares the same link
+  /// twice in quick succession. Entries older than 30 s are pruned on access.
+  static final Map<String, DateTime> _recentlyAddedUrls = {};
+
+  /// Returns `true` if [url] was already added in the current session window.
+  static bool wasRecentlyAdded(String url) {
+    _pruneRecentUrls();
+    return _recentlyAddedUrls.containsKey(url.trim().toLowerCase());
+  }
+
+  /// Records [url] as having been added in the current session.
+  static void recordAddedUrl(String url) {
+    _recentlyAddedUrls[url.trim().toLowerCase()] = DateTime.now();
+  }
+
+  static void _pruneRecentUrls() {
+    final cutoff = DateTime.now().subtract(const Duration(seconds: 30));
+    _recentlyAddedUrls.removeWhere((_, time) => time.isBefore(cutoff));
+  }
 }
 
 class _AddDownloadDialogState extends State<AddDownloadDialog>
@@ -158,8 +179,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         _selectedCategory = 'Archive';
         _isMetadataResolved = true;
       });
-    } else if (YoutubeService.isYoutubeVideoUrl(url) ||
-        YoutubeService.isPlaylistUrl(url)) {
+    } else if (YoutubeService.isExtractableMediaUrl(url)) {
       if (!_isResolvingLink && !_isMetadataResolved) {
         _ytDebounceTimer = Timer(const Duration(milliseconds: 800), () {
           if (_urlController.text.trim() == url && mounted) {
@@ -216,7 +236,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         TextPosition(offset: _urlController.text.length),
       );
       final url = data.text!.trim();
-      if (YoutubeService.isYoutubeVideoUrl(url) ||
+      if (YoutubeService.isExtractableMediaUrl(url) ||
           YoutubeService.isPlaylistUrl(url)) {
         _resolveLinkMetadata();
       }
@@ -540,10 +560,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         .toList();
 
     if (urls.length > 1) {
-      // Multiple URLs: skip duplicate check, add each one
+      // Multiple URLs: check session-level duplicates, then add each one
       var addedCount = 0;
+      var duplicateCount = 0;
       for (final singleUrl in urls) {
         if (!isValidTransmissionUrl(singleUrl)) continue;
+        if (AddDownloadDialog.wasRecentlyAdded(singleUrl)) {
+          duplicateCount++;
+          continue;
+        }
         final enteredName = _nameController.text.trim();
         final enteredExt = _extController.text.trim();
         String fullName = enteredName;
@@ -573,6 +598,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             audioSize: _resolvedAudioSize ?? 0,
           );
           addedCount++;
+          AddDownloadDialog.recordAddedUrl(singleUrl);
         } catch (e) {
           if (!mounted) return;
           ThemedSnackbar.show(
@@ -586,16 +612,31 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       }
       if (!mounted) return;
       if (addedCount > 0) {
+        final dupMsg = duplicateCount > 0
+            ? (isRtl
+                ? ' ($duplicateCount مكرر تم تخطيه)'
+                : ' ($duplicateCount duplicate${duplicateCount != 1 ? 's' : ''} skipped)')
+            : '';
         ThemedSnackbar.show(
           context,
-          message: isRtl
+          message: (isRtl
               ? 'تم إضافة $addedCount رابط'
-              : '$addedCount URLs added',
+              : '$addedCount URLs added') + dupMsg,
           color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
           icon: Icons.check_circle_outline,
           isDarkMode: isDark,
         );
         Navigator.pop(context);
+      } else if (duplicateCount > 0) {
+        ThemedSnackbar.show(
+          context,
+          message: isRtl
+              ? 'تم تخطي $duplicateCount رابط مكرر'
+              : 'Skipped $duplicateCount duplicate URL${duplicateCount != 1 ? 's' : ''}',
+          color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+          icon: Icons.info_outline,
+          isDarkMode: isDark,
+        );
       }
       return;
     }
@@ -827,6 +868,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;
+                    AddDownloadDialog.recordAddedUrl(singleUrl);
                     Navigator.pop(context);
                   } catch (e) {
                     if (!mounted) return;
@@ -899,6 +941,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         );
         return;
       }
+      AddDownloadDialog.recordAddedUrl(singleUrl);
       ThemedSnackbar.show(
         context,
         message: isRtl ? 'تم إنشاء الاتصال' : 'TRANSMISSION ESTABLISHED',

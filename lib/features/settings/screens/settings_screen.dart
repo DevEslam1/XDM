@@ -436,6 +436,37 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                           triggerHaptic(settings);
                         },
                       ),
+                      if (Platform.isIOS) ...[
+                        Divider(color: dividerColor, height: 1),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 0.8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.info_outline, size: 16, color: Colors.amber),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    L10n.isRtl(context)
+                                        ? 'التنزيل في الخلفية غير مدعوم على iOS بسبب قيود النظام. يُنصح بتفعيل "بدء تلقائي" لمواصلة التنزيل.'
+                                        : 'Background downloads are not supported on iOS due to system limitations. Enable "Auto Resume" to continue downloads when the app is opened.',
+                                    style: TextStyle(
+                                      color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                       Divider(color: dividerColor, height: 1),
                       _buildDropdownTile<int>(
                         settings: settings,

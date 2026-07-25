@@ -73,10 +73,14 @@ class FFmpegMuxService {
       Future<void> cleanUpInputs() async {
         if (deleteInputsIfTemp) {
           if (isTempFile(videoPath)) {
-            try { await videoFile.delete(); } catch (_) {}
+            try { await videoFile.delete(); } catch (e) {
+              _log.warning('Failed to delete temp video input file: $e');
+            }
           }
           if (isTempFile(audioPath)) {
-            try { await audioFile.delete(); } catch (_) {}
+            try { await audioFile.delete(); } catch (e) {
+              _log.warning('Failed to delete temp audio input file: $e');
+            }
           }
         }
       }
@@ -130,12 +134,14 @@ class FFmpegMuxService {
         try {
           final outputFile = File(outputPath);
           if (await outputFile.exists()) await outputFile.delete();
-        } catch (_) {}
+        } catch (e) {
+          _log.warning('Failed to delete failed output file: $e');
+        }
         return false;
       }
     } catch (e, stackTrace) {
       _log.severe('Exception during FFmpeg merge: $e\n$stackTrace');
-      return false;
+      rethrow;
     }
   }
 }

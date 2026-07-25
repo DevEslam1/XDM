@@ -11,21 +11,31 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../settings/provider/settings_provider.dart';
 
-/// A bottom sheet that fetches available YouTube streams for a single video
-/// and lets the user pick one. Returns the selected stream map via Navigator.pop.
-/// For 'combined' type streams, downloads are created directly from the sheet.
-class YoutubeQualitySheet extends StatefulWidget {
+/// A bottom sheet that fetches available streams for a URL (any
+/// yt-dlp-supported site) and lets the user pick one. Returns the selected
+/// stream map via Navigator.pop.
+class MediaQualitySheet extends StatefulWidget {
   final String videoUrl;
-  const YoutubeQualitySheet({super.key, required this.videoUrl});
+  /// Pre-fetched streams. When provided the sheet skips the backend fetch
+  /// entirely, avoiding redundant calls that trigger 429 rate limits.
+  final List<Map<String, dynamic>>? preloadedStreams;
+
+  const MediaQualitySheet({
+    super.key,
+    required this.videoUrl,
+    this.preloadedStreams,
+  });
 
   static bool _isShowing = false;
 
   /// Shows the sheet and returns the chosen stream map, or null if dismissed.
   /// If only 1 stream format is available, returns it immediately without showing UI.
+  /// Pass [preloadedStreams] to skip the backend fetch inside the sheet.
   static Future<Map<String, dynamic>?> show(
     BuildContext context,
-    String videoUrl,
-  ) async {
+    String videoUrl, {
+    List<Map<String, dynamic>>? preloadedStreams,
+  }) async {
     if (_isShowing) return null;
     _isShowing = true;
 
@@ -33,13 +43,19 @@ class YoutubeQualitySheet extends StatefulWidget {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       runHaptic(settings);
 
-      try {
-        final streams = await YoutubeService.getStreams(videoUrl);
-        if (streams.length == 1) {
-          return streams.first;
+      // Only fetch if we don't already have streams from the caller.
+      if (preloadedStreams == null) {
+        try {
+          final fetched = await YoutubeService.getStreamsForAnyUrl(videoUrl);
+          if (fetched != null && fetched.length == 1) {
+            return fetched.first;
+          }
+          preloadedStreams = fetched;
+        } catch (_) {
+          // Fall through — sheet will show its own error/retry state
         }
-      } catch (_) {
-        // Fall back to opening sheet which will show retry / error state if needed
+      } else if (preloadedStreams.length == 1) {
+        return preloadedStreams.first;
       }
 
       if (!context.mounted) return null;
@@ -51,7 +67,10 @@ class YoutubeQualitySheet extends StatefulWidget {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        builder: (_) => YoutubeQualitySheet(videoUrl: videoUrl),
+        builder: (_) => MediaQualitySheet(
+          videoUrl: videoUrl,
+          preloadedStreams: preloadedStreams,
+        ),
       );
     } finally {
       _isShowing = false;
@@ -59,10 +78,10 @@ class YoutubeQualitySheet extends StatefulWidget {
   }
 
   @override
-  State<YoutubeQualitySheet> createState() => _YoutubeQualitySheetState();
+  State<MediaQualitySheet> createState() => _MediaQualitySheetState();
 }
 
-class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
+class _MediaQualitySheetState extends State<MediaQualitySheet> {
   List<Map<String, dynamic>> _streams = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -71,20 +90,26 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
   @override
   void initState() {
     super.initState();
-    _fetchStreams();
+    if (widget.preloadedStreams != null && widget.preloadedStreams!.isNotEmpty) {
+      // Use caller-provided streams — no backend call needed.
+      _streams = widget.preloadedStreams!;
+      _isLoading = false;
+    } else {
+      _fetchStreams();
+    }
   }
 
   Future<void> _fetchStreams() async {
     try {
-      final streams = await YoutubeService.getStreams(widget.videoUrl);
+      final streams = await YoutubeService.getStreamsForAnyUrl(widget.videoUrl);
       if (!mounted) return;
       setState(() {
-        _streams = streams;
+        _streams = streams ?? [];
         _isLoading = false;
-        if (streams.isEmpty) {
+        if (_streams.isEmpty) {
           _errorMessage = L10n.isRtl(context)
-              ? 'لم يتم العثور على بث لهذا الفيديو.'
-              : 'No streams found for this video.';
+              ? 'لم يتم العثور على بث لهذا الرابط.'
+              : 'No streams found for this URL.';
         }
       });
     } catch (e) {
@@ -170,8 +195,8 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
           });
 
     final videoTitle = _streams.isNotEmpty
-        ? (_streams.first['title'] as String? ?? 'YouTube Video')
-        : 'YouTube Video';
+        ? (_streams.first['title'] as String? ?? 'Media')
+        : 'Media';
 
     return DraggableScrollableSheet(
       expand: false,
@@ -226,12 +251,12 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.red.withValues(alpha: 0.1),
+                            color: accent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.play_circle_filled,
-                            color: Colors.red,
+                            color: accent,
                             size: 22,
                           ),
                         ),
@@ -826,3 +851,6 @@ class _YoutubeQualitySheetState extends State<YoutubeQualitySheet> {
     );
   }
 }
+
+/// Backward-compatible alias so existing callers don't break.
+typedef YoutubeQualitySheet = MediaQualitySheet;

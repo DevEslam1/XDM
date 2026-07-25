@@ -1,9 +1,10 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../../models/download_task.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 
 /// Mixin that encapsulates download queue concurrency management — the pump
-/// loop, batch‑mode coalescing, and slot calculation.
+/// loop, batch‑mode coalescing, slot calculation, and global connection cap.
 ///
 /// Requires the host class to expose:
 ///  - `List<DownloadTask> get providerTasks`
@@ -31,6 +32,12 @@ mixin DownloadQueueMixin {
   bool _batchMode = false;
   bool _needsNotify = false;
   bool _needsRePump = false;
+
+  /// Per-task effective thread count overrides calculated by [pumpQueue] to
+  /// enforce the global connection cap. The host class should check this map
+  /// in `_startTaskBody` and use the override value instead of the task's
+  /// stored `threadCount`.
+  final Map<String, int> effectiveThreadOverrides = {};
 
   // ---------------------------------------------------------------------------
   // Batch mode
@@ -74,6 +81,7 @@ mixin DownloadQueueMixin {
     _needsRePump = false;
     try {
       final maxSlots = providerSettingsProvider.maxDownloads;
+      final maxTotalConn = providerSettingsProvider.maxTotalConnections;
       final queued = providerTasks
           .where((task) =>
               task.status == DownloadStatus.queued &&
@@ -81,8 +89,17 @@ mixin DownloadQueueMixin {
           .toList();
       var startedThisPass = 0;
       for (final task in queued) {
-        final availableSlots = maxSlots - downloadingTasksCount - pendingStartCount - startedThisPass;
+        final activePlusPending = downloadingTasksCount + pendingStartCount + startedThisPass;
+        final availableSlots = maxSlots - activePlusPending;
         if (availableSlots <= 0) break;
+
+        // Enforce global connection cap: distribute connections evenly across
+        // all concurrent downloads (including the ones being started this pass).
+        final totalConcurrent = max(1, activePlusPending + 1);
+        final effectiveThreads = max(1, maxTotalConn ~/ totalConcurrent);
+        final clampedThreads = min(task.threadCount, effectiveThreads);
+        effectiveThreadOverrides[task.id] = clampedThreads;
+
         startTaskFromQueue(task);
         startedThisPass++;
       }

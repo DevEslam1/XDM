@@ -51,6 +51,8 @@ class SettingsProvider extends ChangeNotifier {
   static const _retryDelaySecondsKey = 'retryDelaySeconds';
   static const _searchEngineKey = 'searchEngine';
   static const _useRemoteBackendKey = 'use_remote_backend';
+  static const _batteryOptimizationPromptedKey = 'batteryOptimizationPrompted';
+  static const _maxTotalConnectionsKey = 'maxTotalConnections';
 
   static const _backendUrlKey = 'backend_url';
   static const _backendTokenKey = 'backend_token';
@@ -146,6 +148,9 @@ class SettingsProvider extends ChangeNotifier {
   int retryDelaySeconds = 3;
   String searchEngine = 'Google';
   bool useRemoteBackend = true;
+  bool batteryOptimizationPrompted = false;
+  int _maxTotalConnections = 32;
+  int get maxTotalConnections => _maxTotalConnections;
 
 
   void _onPlatformBrightnessChanged() {
@@ -227,6 +232,9 @@ class SettingsProvider extends ChangeNotifier {
     if (![5, 10, 30, 60].contains(retryDelaySeconds)) retryDelaySeconds = 10;
     searchEngine = _prefs.getString(_searchEngineKey) ?? searchEngine;
     useRemoteBackend = _prefs.getBool(_useRemoteBackendKey) ?? true;
+    batteryOptimizationPrompted = _prefs.getBool(_batteryOptimizationPromptedKey) ?? false;
+    _maxTotalConnections = _prefs.getInt(_maxTotalConnectionsKey) ?? 32;
+    if (![8, 16, 24, 32, 48, 64].contains(_maxTotalConnections)) _maxTotalConnections = 32;
   }
 
 
@@ -554,6 +562,17 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setBatteryOptimizationPrompted(bool value) async {
+    batteryOptimizationPrompted = value;
+    await _prefs.setBool(_batteryOptimizationPromptedKey, value);
+  }
+
+  Future<void> setMaxTotalConnections(int value) async {
+    _maxTotalConnections = value;
+    await _prefs.setInt(_maxTotalConnectionsKey, value);
+    notifyListeners();
+  }
+
   Future<bool> testProxyConnection(String host, int port, String username, String password) async {
     final client = HttpClient();
     try {
@@ -629,6 +648,8 @@ class SettingsProvider extends ChangeNotifier {
       _maxRetriesKey,
       _retryDelaySecondsKey,
       _searchEngineKey,
+      _batteryOptimizationPromptedKey,
+      _maxTotalConnectionsKey,
     ];
     for (final key in settingsKeys) {
       if (key == _proxyPasswordKey) {
@@ -681,6 +702,8 @@ class SettingsProvider extends ChangeNotifier {
     maxRetries = 3;
     retryDelaySeconds = 10;
     searchEngine = 'Google';
+    batteryOptimizationPrompted = false;
+    _maxTotalConnections = 32;
 
     await _prefs.setBool(_isDarkModeKey, _isDarkMode);
     await _prefs.setBool(_classicUiKey, _classicUi);
@@ -724,6 +747,8 @@ class SettingsProvider extends ChangeNotifier {
     await _prefs.setInt(_maxRetriesKey, maxRetries);
     await _prefs.setInt(_retryDelaySecondsKey, retryDelaySeconds);
     await _prefs.setString(_searchEngineKey, searchEngine);
+    await _prefs.setBool(_batteryOptimizationPromptedKey, batteryOptimizationPrompted);
+    await _prefs.setInt(_maxTotalConnectionsKey, _maxTotalConnections);
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }

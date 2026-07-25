@@ -19,7 +19,8 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
         return decoded.map((e) => (e as num).toDouble()).toList();
       }
       return [];
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[DMX] Error decoding DoubleList from DB: $e');
       return [];
     }
   }
@@ -40,7 +41,8 @@ class TorrentFilesConverter
         return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
       return [];
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[DMX] Error decoding TorrentFiles from DB: $e');
       return [];
     }
   }
@@ -71,10 +73,10 @@ class DownloadTasks extends Table {
   TextColumn get chunks => text()
       .map(NullAwareTypeConverter.wrap(const DoubleListConverter()))
       .nullable()();
-  TextColumn get createdAt => text()();
-  TextColumn get updatedAt => text()();
-  TextColumn get completedAt => text().nullable()();
-  TextColumn get scheduledAt => text().nullable()();
+  IntColumn get createdAt => integer()();
+  IntColumn get updatedAt => integer()();
+  IntColumn get completedAt => integer().nullable()();
+  IntColumn get scheduledAt => integer().nullable()();
   BoolColumn get supportsResume => boolean().withDefault(const Constant(false))();
   IntColumn get speedLimitKbps => integer().withDefault(const Constant(0))();
   BoolColumn get seedingEnabled => boolean().withDefault(const Constant(false))();
@@ -133,19 +135,104 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
+        onCreate: (m) async {
+          await m.createAll();
+          // Create indexes on fresh database
+          await customStatement('CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
+          await customStatement('CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
+          await customStatement('CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
+        },
         onUpgrade: (m, from, to) async {
           debugPrint('AppDatabase: Upgrading schema from $from to $to');
           if (from < 2) {
             // Migration 1 -> 2: Add notes column
             await m.addColumn(downloadTasks, downloadTasks.notes);
           }
-          // Add future step migrations here using subsequent if checks:
-          // if (from < 3) { ... }
+          if (from < 3) {
+            // Migration 2 -> 3: Convert timestamp columns from text to integer
+            // and add indexes.
+
+            // Step 1: Create a temporary table with the new schema
+            await customStatement('''
+              CREATE TABLE download_tasks_new (
+                id TEXT PRIMARY KEY NOT NULL,
+                file_name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                downloaded_bytes INTEGER NOT NULL DEFAULT 0,
+                speed REAL NOT NULL DEFAULT 0.0,
+                eta INTEGER,
+                category TEXT NOT NULL,
+                status TEXT NOT NULL,
+                save_path TEXT NOT NULL,
+                local_file_path TEXT NOT NULL,
+                temp_file_path TEXT NOT NULL,
+                error_message TEXT,
+                thread_count INTEGER NOT NULL,
+                chunks TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                completed_at INTEGER,
+                scheduled_at INTEGER,
+                supports_resume INTEGER NOT NULL DEFAULT 0,
+                speed_limit_kbps INTEGER NOT NULL DEFAULT 0,
+                seeding_enabled INTEGER NOT NULL DEFAULT 0,
+                seeding_limited INTEGER NOT NULL DEFAULT 0,
+                seeding_limit_kbps INTEGER NOT NULL DEFAULT 500,
+                torrent_files TEXT,
+                download_page_url TEXT,
+                merged_audio_url TEXT,
+                audio_size INTEGER NOT NULL DEFAULT 0,
+                audio_progress REAL NOT NULL DEFAULT 0.0,
+                paused_by_user INTEGER NOT NULL DEFAULT 0,
+                youtube_quality_preset TEXT,
+                notes TEXT
+              )
+            ''');
+
+            // Step 2: Copy data with date conversion
+            // ISO8601 string dates are converted to milliseconds since epoch
+            await customStatement('''
+              INSERT INTO download_tasks_new (
+                id, file_name, url, file_size, downloaded_bytes, speed, eta,
+                category, status, save_path, local_file_path, temp_file_path,
+                error_message, thread_count, chunks,
+                created_at, updated_at, completed_at, scheduled_at,
+                supports_resume, speed_limit_kbps, seeding_enabled,
+                seeding_limited, seeding_limit_kbps, torrent_files,
+                download_page_url, merged_audio_url, audio_size, audio_progress,
+                paused_by_user, youtube_quality_preset, notes
+              )
+              SELECT
+                id, file_name, url, file_size, downloaded_bytes, speed, eta,
+                category, status, save_path, local_file_path, temp_file_path,
+                error_message, thread_count, chunks,
+                CAST((julianday(created_at) - 2440587.5) * 86400000 AS INTEGER) as created_at,
+                CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER) as updated_at,
+                CASE WHEN completed_at IS NOT NULL THEN CAST((julianday(completed_at) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as completed_at,
+                CASE WHEN scheduled_at IS NOT NULL THEN CAST((julianday(scheduled_at) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as scheduled_at,
+                supports_resume, speed_limit_kbps, seeding_enabled,
+                seeding_limited, seeding_limit_kbps, torrent_files,
+                download_page_url, merged_audio_url, audio_size, audio_progress,
+                paused_by_user, youtube_quality_preset, notes
+              FROM download_tasks
+            ''');
+
+            // Step 3: Drop old table
+            await customStatement('DROP TABLE download_tasks');
+
+            // Step 4: Rename new table
+            await customStatement('ALTER TABLE download_tasks_new RENAME TO download_tasks');
+
+            // Step 5: Create indexes
+            await customStatement('CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
+            await customStatement('CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
+            await customStatement('CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
+          }
         },
       );
 }

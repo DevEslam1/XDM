@@ -25,7 +25,7 @@ import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../add_download/widgets/youtube_playlist_sheet.dart';
-import '../../add_download/widgets/youtube_quality_sheet.dart';
+import '../../add_download/widgets/media_quality_sheet.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';

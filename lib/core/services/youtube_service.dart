@@ -51,7 +51,9 @@ class YoutubeService {
     await resetClient();
     try {
       await WebviewCookieManager().clearCookies();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[YouTubeService] Failed to clear WebView cookies on signout: $e');
+    }
     _notifyAuthState();
   }
 
@@ -93,7 +95,9 @@ class YoutubeService {
               allCookies[c.name] = c.value;
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[YouTubeService] Failed to get cookies for URL $u: $e');
+        }
       }
 
       if (allCookies.isNotEmpty) {
@@ -134,30 +138,15 @@ class YoutubeService {
     return extractVideoId(url) != null;
   }
 
-  /// Returns true if [url] is a known extractable media site (YouTube, Facebook, X/Twitter,
-  /// Instagram, TikTok, Reddit, Vimeo, etc.) or a web URL without a direct static file extension.
+  /// Returns true if [url] is an HTTP(S) URL that does not point to a direct
+  /// static file (by extension). Any such URL will be probed via the backend's
+  /// extract endpoint — if the site is unsupported the caller should fall back
+  /// to a normal direct-download flow.
   static bool isExtractableMediaUrl(String url) {
     if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
-    final host = uri.host.toLowerCase();
     final path = uri.path.toLowerCase();
-
-    // Direct social media video hosts
-    if (host.contains('youtube.com') ||
-        host.contains('youtu.be') ||
-        host.contains('facebook.com') ||
-        host.contains('fb.watch') ||
-        host.contains('twitter.com') ||
-        host.contains('x.com') ||
-        host.contains('instagram.com') ||
-        host.contains('tiktok.com') ||
-        host.contains('reddit.com') ||
-        host.contains('vimeo.com') ||
-        host.contains('twitch.tv') ||
-        host.contains('dailymotion.com')) {
-      return true;
-    }
 
     // Direct file extensions skip backend probing
     final staticExtensions = [
@@ -183,7 +172,8 @@ class YoutubeService {
         return false;
       }
       return extractPlaylistId(url) != null;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[YouTubeService] isPlaylistUrl failed to parse URL: $e');
       return false;
     }
   }
@@ -215,7 +205,9 @@ class YoutubeService {
       if (uri.pathSegments.contains('watch')) {
         return uri.queryParameters['v'];
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[YouTubeService] extractVideoId failed to parse URL: $e');
+    }
     return null;
   }
 
@@ -228,7 +220,9 @@ class YoutubeService {
           return listId;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[YouTubeService] extractPlaylistId failed to parse URL: $e');
+    }
     return null;
   }
 
@@ -350,6 +344,109 @@ class YoutubeService {
 
 
 
+  /// Generic extraction for any URL (any yt-dlp-supported site).
+  /// Unlike [getStreams], does NOT extract a YouTube video ID — sends the raw
+  /// URL to the backend. Only attaches YouTube OAuth/cookie headers when the
+  /// URL is actually on a YouTube host. Returns null if the backend reports
+  /// the site as unsupported ([BackendBadRequestException] /
+  /// [BackendNotFoundException]).
+  static Future<List<Map<String, dynamic>>?> getStreamsForAnyUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    final host = uri?.host.toLowerCase() ?? '';
+    final isYouTubeHost =
+        host.contains('youtube.com') || host.contains('youtu.be');
+
+    final cached = _streamsCache[url];
+    if (cached != null) {
+      if (DateTime.now().difference(cached.$1) < _cacheDuration) {
+        return cached.$2;
+      } else {
+        _streamsCache.remove(url);
+      }
+    }
+
+    try {
+      final backendRes = await XdmBackendClient().getStreams(
+        url,
+        oauthToken: isYouTubeHost ? oauthToken : null,
+        cookies: isYouTubeHost ? currentCookies : null,
+      );
+
+      final title = (backendRes['title'] as String?) ?? 'Untitled';
+      final rawStreams = (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
+
+      if (rawStreams != null && rawStreams.isNotEmpty) {
+        final results = <Map<String, dynamic>>[];
+
+        for (final s in rawStreams) {
+          final map = Map<String, dynamic>.from(s as Map);
+
+          if (map.containsKey('direct_url')) {
+            final rawType = map['type'] as String? ?? '';
+            final ext = map['ext'] as String? ?? 'mp4';
+            final quality = map['quality'] as String? ?? 'Unknown';
+            final filesize = (map['filesize'] as num?)?.toInt() ?? 0;
+            final directUrl = map['direct_url'] as String?;
+
+            String appType;
+            if (rawType == 'video_audio') {
+              appType = 'muxed';
+            } else if (rawType == 'video_only') {
+              appType = 'video_only';
+            } else if (rawType == 'audio_only') {
+              appType = 'audio';
+            } else {
+              appType = rawType;
+            }
+
+            results.add({
+              'type': appType,
+              'quality': quality,
+              'label': appType == 'audio'
+                  ? 'Audio Only ${ext.toUpperCase()}'
+                  : '$quality ${ext.toUpperCase()}',
+              'src': directUrl,
+              'audioSrc': null,
+              'size': filesize,
+              'ext': ext,
+              'title': title,
+            });
+          } else {
+            if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
+              map['audioSrc'] = map['audioSrc'].toString();
+            } else {
+              map['audioSrc'] = null;
+            }
+            results.add(map);
+          }
+        }
+
+        // Cache results
+        final now = DateTime.now();
+        _streamsCache.removeWhere((key, val) => now.difference(val.$1) >= _cacheDuration);
+        if (_streamsCache.length >= 50) {
+          final oldestKey = _streamsCache.entries
+              .reduce((a, b) => a.value.$1.isBefore(b.value.$1) ? a : b)
+              .key;
+          _streamsCache.remove(oldestKey);
+        }
+        _streamsCache[url] = (now, results);
+        return results;
+      }
+    } on BackendBadRequestException {
+      // Site unsupported by backend — fall back to direct download
+      return null;
+    } on BackendNotFoundException {
+      return null;
+    } on BackendException catch (e) {
+      throw Exception(e.toUserMessage());
+    } catch (e) {
+      throw Exception(_parseErrorMessage(e));
+    }
+
+    return null;
+  }
+
   /// Selects a stream map for a specific video ID and quality preset/resolution.
   static Future<Map<String, dynamic>?> getStreamForVideo(
     String videoId, [
@@ -417,7 +514,12 @@ class YoutubeService {
   }
 
   /// Fetches playlist info and video list for `YoutubePlaylistSheet`.
-  static Future<Map<String, dynamic>?> getPlaylistDetails(String url) async {
+  /// When [pageToken] is provided, only fetches the next page of videos.
+  static Future<Map<String, dynamic>?> getPlaylistDetails(
+    String url, {
+    int? pageToken,
+    int pageSize = 50,
+  }) async {
     final playlistId = extractPlaylistId(url);
     if (playlistId == null) {
       throw Exception('Invalid YouTube playlist URL.');
@@ -428,6 +530,8 @@ class YoutubeService {
         url,
         oauthToken: oauthToken,
         cookies: currentCookies,
+        pageToken: pageToken,
+        pageSize: pageSize,
       );
 
       final info = backendRes['info'] as Map<String, dynamic>?;
@@ -465,9 +569,15 @@ class YoutubeService {
 
   /// Fetches video items for a playlist ID.
   static Future<List<Map<String, dynamic>>?> getPlaylistVideos(
-    String playlistId,
-  ) async {
-    final details = await getPlaylistDetails('https://www.youtube.com/playlist?list=$playlistId');
+    String playlistId, {
+    int? pageToken,
+    int pageSize = 50,
+  }) async {
+    final details = await getPlaylistDetails(
+      'https://www.youtube.com/playlist?list=$playlistId',
+      pageToken: pageToken,
+      pageSize: pageSize,
+    );
     return (details?['videos'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
@@ -486,7 +596,9 @@ class YoutubeService {
         Uri? oldUri;
         try {
           oldUri = Uri.parse(oldStreamUrl);
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[YouTubeService] Failed to parse oldStreamUrl in refreshStreamUrl: $e');
+        }
 
         final oldItag = oldUri?.queryParameters['itag'];
         

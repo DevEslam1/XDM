@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../utils/url_utils.dart';
@@ -12,8 +13,20 @@ class SingleInstanceService {
   HttpServer? _server;
   void Function(String url)? _onUrlListener;
   String? _initialUrl;
+  String? _securityToken;
 
   String? get initialUrl => _initialUrl;
+
+  static File get _tokenFile =>
+      File('${Directory.systemTemp.path}/xdm_instance_$_port.token');
+
+  String _generateSecurityToken() {
+    final bytes = List<int>.generate(32, (i) {
+      final now = DateTime.now().microsecondsSinceEpoch;
+      return ((now >> (i % 8 * 8)) ^ (i * 73 + now.hashCode)) & 0xFF;
+    });
+    return base64Url.encode(bytes);
+  }
 
   /// Call this in `main(List<String> args)`.
   /// Returns `true` if this instance should continue running,
@@ -26,12 +39,24 @@ class SingleInstanceService {
       return true;
     }
 
+    _securityToken = _generateSecurityToken();
+
     try {
       _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
       _initialUrl = candidateUrl;
 
+      // Write token to file so secondary instances can read it
+      await _tokenFile.writeAsString(_securityToken!);
+
       _server?.listen((HttpRequest request) async {
         try {
+          final tokenParam = request.uri.queryParameters['token'];
+          if (tokenParam == null || tokenParam != _securityToken) {
+            request.response.statusCode = HttpStatus.forbidden;
+            await request.response.close();
+            return;
+          }
+
           final urlParam = request.uri.queryParameters['url'];
           if (urlParam != null && urlParam.trim().isNotEmpty) {
             final decoded = Uri.decodeComponent(urlParam.trim());
@@ -52,8 +77,17 @@ class SingleInstanceService {
       // Server already running in primary instance! Forward candidateUrl if present.
       if (candidateUrl != null && candidateUrl.isNotEmpty) {
         try {
+          String? remoteToken;
+          if (await _tokenFile.exists()) {
+            remoteToken = (await _tokenFile.readAsString()).trim();
+          }
+
           final client = HttpClient();
-          final uri = Uri.http('127.0.0.1:$_port', '/', {'url': candidateUrl});
+          final queryParams = <String, String>{'url': candidateUrl};
+          if (remoteToken != null && remoteToken.isNotEmpty) {
+            queryParams['token'] = remoteToken;
+          }
+          final uri = Uri.http('127.0.0.1:$_port', '/', queryParams);
           final req = await client.getUrl(uri);
           await req.close();
           client.close();
@@ -81,6 +115,11 @@ class SingleInstanceService {
     _server?.close(force: true);
     _server = null;
     _onUrlListener = null;
+    try {
+      if (_tokenFile.existsSync()) _tokenFile.deleteSync();
+    } catch (e) {
+      debugPrint('[SingleInstanceService] Failed to delete token file on dispose: $e');
+    }
   }
 
   static String? extractLaunchUrl(List<String> args) {

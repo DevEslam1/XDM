@@ -264,5 +264,100 @@ void main() {
       expect((map['c'] as List)[1], [3]);
       expect(map['d'], 42);
     });
+
+    test('large integer near max safe int', () {
+      final raw = utf8.encode('i9007199254740991e');
+      final result = BencodeDecoder(raw).decode();
+      expect(result, 9007199254740991);
+    });
+
+    test('large integer near max safe int (native)', () {
+      // On native platforms Dart uses int64, so values up to 2^63-1 are valid
+      final raw = utf8.encode('i9007199254740993e');
+      final result = BencodeDecoder(raw).decode();
+      expect(result, 9007199254740993);
+    });
+
+    test('rejects integer exceeding int64 range', () {
+      // 2^63 = 9223372036854775808 exceeds int64 max (2^63-1)
+      expect(
+        () => BencodeDecoder(utf8.encode('i9223372036854775808e')).decode(),
+        throwsFormatException,
+      );
+    });
+
+    test('empty data returns null', () {
+      final result = BencodeDecoder(Uint8List(0)).decode();
+      expect(result, isNull);
+    });
+
+    test('truncated data throws', () {
+      expect(
+        () => BencodeDecoder(utf8.encode('i4')).decode(),
+        throwsFormatException,
+      );
+    });
+  });
+
+  group('BencodeDecoder — edge cases', () {
+    test('dict with mixed key types', () {
+      final raw = utf8.encode('d4:infod4:name5:hello6:lengthi42eee');
+      final result = BencodeDecoder(raw).decode();
+      expect(result, isA<Map>());
+      final info = (result as Map)['info'] as Map;
+      expect(utf8.decode(info['name'] as Uint8List), 'hello');
+      expect(info['length'], 42);
+    });
+
+    test('list containing empty dict', () {
+      final result = BencodeDecoder(utf8.encode('ldee')).decode();
+      expect(result, [{}]);
+    });
+
+    test('dict with nested list of dicts', () {
+      // Build: {"files": [{"length": 100, "name": "test"}, {"length": 200, "name": "data"}]}
+      final raw = Uint8List.fromList([
+        0x64,                                           // 'd' - outer dict start
+        ...utf8.encode('5:files'),                      // key "files"
+        0x6c,                                           // 'l' - list start
+        0x64,                                           // 'd' - inner dict 1 start
+        ...utf8.encode('6:length'),                     // key "length"
+        ...utf8.encode('i100e'),                        // value 100
+        ...utf8.encode('4:name'),                       // key "name"
+        ...utf8.encode('4:test'),                       // value "test"
+        0x65,                                           // 'e' - inner dict 1 end
+        0x64,                                           // 'd' - inner dict 2 start
+        ...utf8.encode('6:length'),                     // key "length"
+        ...utf8.encode('i200e'),                        // value 200
+        ...utf8.encode('4:name'),                       // key "name"
+        ...utf8.encode('4:data'),                       // value "data"
+        0x65,                                           // 'e' - inner dict 2 end
+        0x65,                                           // 'e' - list end
+        0x65,                                           // 'e' - outer dict end
+      ]);
+      final result = BencodeDecoder(raw).decode();
+      expect(result, isA<Map>());
+      final files = (result as Map)['files'] as List;
+      expect(files.length, 2);
+      expect((files[0] as Map)['length'], 100);
+      expect((files[1] as Map)['length'], 200);
+    });
+
+    test('zero-length string value in dict', () {
+      // Build: {"foo": "", "bar": "test"}
+      final raw = Uint8List.fromList([
+        0x64,                                           // 'd' - dict start
+        ...utf8.encode('3:foo'),                        // key "foo"
+        ...utf8.encode('0:'),                           // value "" (empty)
+        ...utf8.encode('3:bar'),                        // key "bar"
+        ...utf8.encode('4:test'),                       // value "test"
+        0x65,                                           // 'e' - dict end
+      ]);
+      final result = BencodeDecoder(raw).decode();
+      expect(result, isA<Map>());
+      expect((result as Map)['foo'], isA<Uint8List>());
+      expect((result['foo'] as Uint8List).length, 0);
+      expect(utf8.decode(result['bar'] as Uint8List), 'test');
+    });
   });
 }

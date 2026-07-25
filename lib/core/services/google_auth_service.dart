@@ -111,7 +111,9 @@ class GoogleAuthService {
           _tokenExpiry = DateTime.now().add(const Duration(minutes: 55));
           return _accessToken;
         }
-      } catch (_) {}
+      } catch (err) {
+        debugPrint('[GoogleAuth] Silent re-auth retry failed: $err');
+      }
       return null;
     }
   }

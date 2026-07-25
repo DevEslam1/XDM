@@ -8,7 +8,7 @@ import '../../core/utils/localization.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/services/youtube_service.dart';
 import '../../features/add_download/widgets/add_download_dialog.dart';
-import '../../features/add_download/widgets/youtube_quality_sheet.dart';
+import '../../features/add_download/widgets/media_quality_sheet.dart';
 import '../../features/add_download/widgets/youtube_playlist_sheet.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/home/screens/home_screen.dart';
@@ -17,6 +17,7 @@ import '../../features/settings/provider/settings_provider.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/downloads/provider/download_provider.dart';
 import '../../core/services/single_instance_service.dart';
+import '../../shared/widgets/themed_snackbar.dart';
 import 'clipboard_detection_sheet.dart';
 import 'dmx_backdrop_filter.dart';
 
@@ -89,23 +90,118 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     // using a deactivated context.
     if (!mounted) return;
 
+    // YouTube playlists get their own dedicated sheet (kept separate because
+    // the backend's playlist endpoint is YouTube-specific).
     if (YoutubeService.isPlaylistUrl(url)) {
       await YoutubePlaylistSheet.show(context, url);
-    } else if (YoutubeService.isYoutubeVideoUrl(url)) {
-      await YoutubeQualitySheet.show(context, url);
-    } else {
-      await showDialog(
-        context: context,
-        builder: (_) => AddDownloadDialog(
-          prefilledUrl: url,
-          isShareLaunch: isShareLaunch,
-        ),
-      );
-    }
+    } else if (YoutubeService.isExtractableMediaUrl(url)) {
+      // Any HTTP URL that isn't a direct static file — try backend extraction.
+      // If the backend says the site is unsupported, fall back to the standard
+      // AddDownloadDialog which will treat it as a normal direct download.
+      List<Map<String, dynamic>>? streams;
+      try {
+        streams = await YoutubeService.getStreamsForAnyUrl(url);
+      } catch (_) {
+        streams = null;
+      }
 
-    if (isShareLaunch && mounted) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      SystemNavigator.pop();
+      if (!mounted) return;
+
+      if (streams == null || streams.isEmpty) {
+        // Backend doesn't support this site — fall back to direct download dialog
+        await showDialog(
+          context: context,
+          builder: (_) => AddDownloadDialog(
+            prefilledUrl: url,
+            isShareLaunch: isShareLaunch,
+          ),
+        );
+      } else if (streams.length == 1) {
+        // Exactly one stream — auto-download immediately, skip all dialogs.
+        final stream = streams.first;
+        final title = stream['title'] as String? ?? 'Media Download';
+        final ext = stream['ext'] as String? ?? 'mp4';
+        final streamUrl = stream['src'] as String;
+        final streamSize = stream['size'] as int? ?? 0;
+        final audioUrl = stream['audioSrc'] as String?;
+        final audioSize = stream['audioSize'] as int?;
+        final streamType = stream['type'] as String? ?? 'muxed';
+        final qualityPreset = streamType == 'audio' ? 'audio_only' : stream['quality'] as String?;
+        final category = streamType == 'audio' ? 'Audio' : 'Video';
+        final fileName = '$title.$ext';
+
+        final provider = context.read<DownloadProvider>();
+        final settings = context.read<SettingsProvider>();
+        final threadCount = settings.defaultThreadCount;
+        final savePath = settings.customDownloadPath ?? '';
+        await provider.addDownload(
+          name: fileName,
+          url: streamUrl,
+          size: streamSize,
+          category: category,
+          savePath: savePath,
+          threadCount: threadCount,
+          downloadPageUrl: url,
+          youtubeQualityPreset: qualityPreset,
+          mergedAudioUrl: audioUrl,
+          audioSize: audioSize ?? 0,
+        );
+
+        if (mounted) {
+          final isDark = settings.isDarkMode;
+          ThemedSnackbar.show(
+            context,
+            message: L10n.isRtl(context)
+                ? 'تم بدء التحميل'
+                : 'Download started',
+            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            icon: Icons.check_circle_outline,
+            isDarkMode: isDark,
+          );
+        }
+      } else {
+        // Multiple streams — show quality picker with pre-fetched data to
+        // avoid redundant backend calls that trigger 429 rate limits.
+        final selected = await MediaQualitySheet.show(
+          context,
+          url,
+          preloadedStreams: streams,
+        );
+        if (selected == null || !mounted) return;
+
+        final title = selected['title'] as String? ?? 'Media Download';
+        final ext = selected['ext'] as String? ?? 'mp4';
+        final streamUrl = selected['src'] as String;
+        final streamSize = selected['size'] as int? ?? 0;
+        final audioUrl = selected['audioSrc'] as String?;
+        final audioSize = selected['audioSize'] as int?;
+        final streamType = selected['type'] as String? ?? 'muxed';
+        final qualityPreset = streamType == 'audio' ? 'audio_only' : selected['quality'] as String?;
+        final category = streamType == 'audio' ? 'Audio' : 'Video';
+        final fileName = '$title.$ext';
+
+        final provider = context.read<DownloadProvider>();
+        final settings = context.read<SettingsProvider>();
+        final threadCount = settings.defaultThreadCount;
+        final savePath = settings.customDownloadPath ?? '';
+        await provider.addDownload(
+          name: fileName,
+          url: streamUrl,
+          size: streamSize,
+          category: category,
+          savePath: savePath,
+          threadCount: threadCount,
+          downloadPageUrl: url,
+          youtubeQualityPreset: qualityPreset,
+          mergedAudioUrl: audioUrl,
+          audioSize: audioSize ?? 0,
+        );
+      }
+
+      if (isShareLaunch && mounted) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        SystemNavigator.pop();
+      }
     }
   }
 

@@ -1001,6 +1001,19 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _startTaskBody(DownloadTask task) async {
+    // Apply global connection cap override from queue pump
+    final overrideThreads = effectiveThreadOverrides.remove(task.id);
+    if (overrideThreads != null && overrideThreads != task.threadCount) {
+      final idx = _tasks.indexWhere((t) => t.id == task.id);
+      if (idx != -1) {
+        _tasks[idx] = _tasks[idx].copyWith(
+          threadCount: overrideThreads,
+          chunks: List<double>.filled(overrideThreads, 0.0),
+        );
+        task = _tasks[idx];
+      }
+    }
+
     final hasWifiOrEthernet =
         _currentConnectivity.contains(ConnectivityResult.wifi) ||
         _currentConnectivity.contains(ConnectivityResult.ethernet);
@@ -1016,6 +1029,11 @@ class DownloadProvider extends ChangeNotifier
 
     if (downloadingTasksCount == 0) {
       BackgroundService.start();
+      // Prompt for battery optimization exemption once per app install
+      if (!_settingsProvider.batteryOptimizationPrompted) {
+        _settingsProvider.setBatteryOptimizationPrompted(true);
+        PermissionService().requestBatteryOptimizationExemption();
+      }
     }
     _updateBackgroundNotification();
     _startWidgetTimer();
@@ -1103,12 +1121,18 @@ class DownloadProvider extends ChangeNotifier
             );
 
             if (type == 'combined') {
+              final videoSize = streamInfo['videoSize'] as int? ?? 0;
+              final audioSize = streamInfo['audioSize'] as int? ?? 0;
+              // Fall back to the total 'size' field when backend doesn't return
+              // separate video/audio sizes (common with the /extract endpoint).
+              final totalSize = (videoSize + audioSize) > 0
+                  ? videoSize + audioSize
+                  : (streamInfo['size'] as int? ?? 0);
               task = task.copyWith(
                 url: streamInfo['src'] as String,
                 mergedAudioUrl: streamInfo['audioSrc'] as String,
-                fileSize: (streamInfo['videoSize'] as int? ?? 0) +
-                    (streamInfo['audioSize'] as int? ?? 0),
-                audioSize: streamInfo['audioSize'] as int? ?? 0,
+                fileSize: totalSize,
+                audioSize: audioSize,
                 fileName: resolvedFileName,
                 localFilePath: resolvedLocalPath,
                 tempFilePath: resolvedTempPath,
@@ -1251,7 +1275,6 @@ class DownloadProvider extends ChangeNotifier
         audioProgress: 0.0,
       ),
     );
-
     final notificationId = _getNotificationId(task.id);
     final isAutoName =
         task.fileName == 'torrent_download.zip' ||
@@ -1264,9 +1287,15 @@ class DownloadProvider extends ChangeNotifier
         task.mergedAudioUrl!.isNotEmpty;
     final audioTempPath = hasAudio ? '${task.tempFilePath}.audio' : null;
 
-    // Ensure audioSize is properly set for combined downloads
-    if (hasAudio && task.audioSize <= 0 && task.mergedAudioUrl != null) {
-      // Try to get audio size from a HEAD request
+    // Detect YouTube early so we can skip CDN HEAD probes that trigger 429s.
+    final isYoutube = task.downloadPageUrl != null &&
+        (task.downloadPageUrl!.contains('youtube.com/') ||
+            task.downloadPageUrl!.contains('youtu.be/'));
+
+    // Ensure audioSize is properly set for combined downloads.
+    // Skip for YouTube — googlevideo.com CDN URLs 429 on extra HEAD requests
+    // and the audio size is already provided by the stream resolution step.
+    if (hasAudio && task.audioSize <= 0 && task.mergedAudioUrl != null && !isYoutube) {
       try {
         final meta = await _downloadEngine.resolveMetadata(
           url: task.mergedAudioUrl!,
@@ -1291,14 +1320,47 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
-    // Recalculate video transfer size with correct audio size
-    final videoTransferSize = hasAudio && task.audioSize > 0
-        ? (task.fileSize - task.audioSize).clamp(0, task.fileSize)
-        : task.fileSize;
+    // Recalculate video transfer size with correct audio size.
+    // When sizes were set from stream info: videoTransferSize = fileSize - audioSize.
+    // When only total fileSize is known (no sub-sizes from backend): use fileSize directly
+    // and rely on the engine's own probe to determine actual video segment size.
+    int videoTransferSize;
+    if (hasAudio && task.audioSize > 0 && task.fileSize > task.audioSize) {
+      videoTransferSize = task.fileSize - task.audioSize;
+    } else if (hasAudio && task.audioSize > 0 && task.fileSize > 0) {
+      // fileSize may only represent the video portion (backend returned total=videoSize)
+      // or total is equal to audioSize — treat fileSize as total and subtract audio.
+      videoTransferSize = (task.fileSize - task.audioSize).clamp(0, task.fileSize);
+    } else {
+      videoTransferSize = task.fileSize;
+    }
 
-    final isYoutube = task.downloadPageUrl != null &&
-        (task.downloadPageUrl!.contains('youtube.com/') ||
-            task.downloadPageUrl!.contains('youtu.be/'));
+    // If the video transfer size is still unknown and this is NOT a YouTube
+    // download, probe the video URL via HEAD so the engine can activate
+    // multi-threaded mode. We skip this for YouTube because googlevideo.com
+    // CDN URLs 429 easily and every extra HEAD wastes a signed URL's limited
+    // window — the engine's single-thread fallback handles them fine.
+    if (hasAudio && videoTransferSize <= 0 && !isYoutube) {
+      try {
+        final videoMeta = await _downloadEngine.resolveMetadata(
+          url: task.url,
+          customUserAgent: _settingsProvider.customUserAgent,
+          enableProxy: _settingsProvider.enableProxy,
+          proxyAddress: _settingsProvider.proxyAddress,
+          proxyHost: _settingsProvider.proxyHost,
+          proxyPort: _settingsProvider.proxyPort,
+          bypassSSL: _settingsProvider.bypassSSL,
+          cookies: cookieString,
+          oauthToken: YoutubeService.oauthToken,
+        );
+        if (videoMeta.fileSize > 0) {
+          videoTransferSize = videoMeta.fileSize;
+          debugPrint('[DMX] Resolved video transfer size via HEAD probe: $videoTransferSize bytes');
+        }
+      } catch (e) {
+        debugPrint('[DMX] Failed to resolve video transfer size: $e');
+      }
+    }
 
     // Separate cancel tokens for audio/video so we can cancel one if the other
     // fails, without a shared-cancel causing ParallelWaitError confusion.
@@ -1571,6 +1633,7 @@ class DownloadProvider extends ChangeNotifier
                       return _settingsProvider.speedLimitBytesPerSecond;
                     },
                     activeDownloadCount: () => downloadingTasksCount,
+                    threadCount: streamThreadCount,
                     customUserAgent: _settingsProvider.customUserAgent,
                     enableProxy: _settingsProvider.enableProxy,
 
