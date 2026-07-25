@@ -80,6 +80,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   static const String _snifferPrefKey = 'browserSnifferEnabled';
   bool _isSnifferEnabled = true;
   bool _lastZoomEnabled = false; // Cached to avoid redundant enableZoom calls
+  // URL the user was on when they pressed back past the first page (home
+  // fallback). Stored so Forward can restore the page without clobbering the
+  // native WebView history stack.
+  String? _homeReturnUrl;
 
   static const String _longPressChannel = 'XDM_LongPress';
   static const String _kLongPressScript = '''
@@ -382,7 +386,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
-            Future.delayed(const Duration(milliseconds: 300), _updateNavState);
+            // Re-check after 500 ms and 1200 ms: back/forward navigations need
+            // extra time for the WebView history stack to settle.
+            Future.delayed(const Duration(milliseconds: 500), _updateNavState);
+            Future.delayed(const Duration(milliseconds: 1200), _updateNavState);
           },
           onPageFinished: (url) {
             if (mounted) {
@@ -464,7 +471,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
 
             _updateNavState();
-            Future.delayed(const Duration(milliseconds: 300), _updateNavState);
+            Future.delayed(const Duration(milliseconds: 500), _updateNavState);
+            Future.delayed(const Duration(milliseconds: 1200), _updateNavState);
 
             // Trigger background DOM media scanner
             _mediaScanTimers[tab.id]?.cancel();
@@ -516,7 +524,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 });
 
                 _updateNavState();
-                Future.delayed(const Duration(milliseconds: 300), _updateNavState);
+                Future.delayed(const Duration(milliseconds: 500), _updateNavState);
+                Future.delayed(const Duration(milliseconds: 1200), _updateNavState);
               }
             }
           },
@@ -786,14 +795,35 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
       if (mounted) {
         setState(() {
-          activeTab.canGoBack = canBack;
-          activeTab.canGoForward = canForward;
           if (currentUrl != null && currentUrl.isNotEmpty) {
             final clean = _cleanUrl(currentUrl);
-            activeTab.url = clean;
-            activeTab.isHome = (clean == 'about:blank' || clean.isEmpty);
-            if (_tabs[_currentTabIndex].id == activeTab.id) {
-              _urlController.text = activeTab.isHome ? '' : clean;
+            // Only update url/isHome when NOT in the virtual home state.
+            // When isHome was set by _goBack()'s fallback (without loading
+            // about:blank), currentUrl still returns the last real page URL.
+            // We must NOT overwrite isHome=true in that case.
+            final isBlank = clean == 'about:blank' || clean.isEmpty;
+            if (!activeTab.isHome || isBlank) {
+              // Normal case: sync url and isHome from the actual WebView URL.
+              activeTab.url = clean;
+              activeTab.isHome = isBlank;
+              if (_tabs[_currentTabIndex].id == activeTab.id) {
+                _urlController.text = isBlank ? '' : clean;
+              }
+            }
+            if (activeTab.isHome) {
+              // On the home screen the native back must stay disabled so that
+              // pressing Back doesn't re-enter old pages shown as "forward".
+              // Forward is allowed: _homeReturnUrl tracks where to go.
+              activeTab.canGoBack = false;
+              activeTab.canGoForward = _homeReturnUrl != null && _homeReturnUrl!.isNotEmpty;
+            } else {
+              activeTab.canGoBack = canBack;
+              activeTab.canGoForward = canForward;
+            }
+          } else {
+            if (!activeTab.isHome) {
+              activeTab.canGoBack = canBack;
+              activeTab.canGoForward = canForward;
             }
           }
         });
@@ -806,22 +836,31 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   Future<void> _goBack() async {
     if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
-    final canBack = await activeTab.controller.canGoBack();
-    if (canBack) {
+    // Trust the cached canGoBack state (set by _updateNavState) to avoid a
+    // redundant async round-trip that can race with an in-progress page load.
+    if (activeTab.canGoBack) {
+      _homeReturnUrl = null; // Entering real WebView history — clear home return
       await activeTab.controller.goBack();
-      await Future.delayed(const Duration(milliseconds: 150));
+      // Give the WebView enough time to commit the history navigation before
+      // we query canGoBack/canGoForward again (150 ms was too short).
+      await Future.delayed(const Duration(milliseconds: 400));
       await _updateNavState();
-    } else if (!activeTab.isHome) {
-      // Return to home tab view if no further history stack exists
+    } else if (!activeTab.isHome && activeTab.url.isNotEmpty) {
+      // Show the home screen WITHOUT loading about:blank into the WebView.
+      // Loading about:blank would push a new entry onto the history stack and
+      // destroy the forward stack. Instead, we just flip the Flutter state and
+      // remember the current URL so Forward can restore the page later.
       if (mounted) {
+        _homeReturnUrl = activeTab.url; // remember where we came from
         setState(() {
           activeTab.isHome = true;
           activeTab.url = '';
           activeTab.canGoBack = false;
+          // Forward stays enabled so the user can return to the last page.
+          activeTab.canGoForward = true;
           _urlController.clear();
         });
-        await activeTab.controller.loadRequest(Uri.parse('about:blank'));
-        await _updateNavState();
+        // No loadRequest here — the WebView history is left intact.
       }
     }
   }
@@ -829,12 +868,27 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   Future<void> _goForward() async {
     if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
-    final canForward = await activeTab.controller.canGoForward();
-    if (canForward) {
-      await activeTab.controller.goForward();
-      await Future.delayed(const Duration(milliseconds: 150));
-      await _updateNavState();
+    if (!activeTab.canGoForward) return;
+
+    if (activeTab.isHome && _homeReturnUrl != null && _homeReturnUrl!.isNotEmpty) {
+      // We're on the virtual home screen (no about:blank was loaded).
+      // Restore the last page by navigating to it directly.
+      final returnUrl = _homeReturnUrl!;
+      _homeReturnUrl = null;
+      if (mounted) {
+        setState(() {
+          activeTab.isHome = false;
+        });
+      }
+      _navigateToUrl(returnUrl);
+      return;
     }
+
+    // Normal forward navigation in the WebView history stack.
+    await activeTab.controller.goForward();
+    // Give the WebView enough time to commit the history navigation.
+    await Future.delayed(const Duration(milliseconds: 400));
+    await _updateNavState();
   }
 
   void _navigateToUrl(String input) {
@@ -2215,13 +2269,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     );
   }
 
-  Widget _buildHomeDashboard(BuildContext context, SettingsProvider settings) {
+  Widget _buildHomeDashboard(BuildContext context, SettingsProvider settings, {ScrollController? scrollController}) {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final accentColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
     return SingleChildScrollView(
-      controller: _dashboardScrollController,
+      controller: scrollController,
       padding: const EdgeInsets.all(24.0),
       physics: const BouncingScrollPhysics(),
       child: Column(
@@ -3182,12 +3236,25 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               index: _currentTabIndex >= 0 && _currentTabIndex < _tabs.length
                                   ? _currentTabIndex
                                   : 0,
-                              children: _tabs.map((tab) {
+                              children: _tabs.asMap().entries.map((entry) {
+                                final tabIndex = entry.key;
+                                final tab = entry.value;
+                                final isActiveTab = tabIndex == _currentTabIndex;
                                 if (tab.isHome) {
                                   return SizedBox(
                                     width: double.infinity,
                                     height: double.infinity,
-                                    child: _buildHomeDashboard(context, settings),
+                                    // Only pass the shared ScrollController to the
+                                    // active tab's dashboard. Passing it to every
+                                    // isHome tab in the IndexedStack would attach
+                                    // the same controller to multiple ScrollViews
+                                    // and crash with the '_positions.length == 1'
+                                    // assertion.
+                                    child: _buildHomeDashboard(
+                                      context,
+                                      settings,
+                                      scrollController: isActiveTab ? _dashboardScrollController : null,
+                                    ),
                                   );
                                 } else {
                                   return SizedBox(

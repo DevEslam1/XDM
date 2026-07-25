@@ -13,6 +13,8 @@ import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/single_instance_service.dart';
+import 'core/services/xdm_backend_client.dart';
+import 'core/services/youtube_service.dart';
 import 'features/downloads/provider/download_provider.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/browser/services/ad_blocker.dart';
@@ -53,6 +55,10 @@ Future<void> main(List<String> args) async {
 
         final settingsProvider = SettingsProvider();
         await settingsProvider.load();
+
+        await XdmBackendClient().refreshConfig();
+
+        await YoutubeService.init();
 
         final notificationService = NotificationService();
         await notificationService.init();

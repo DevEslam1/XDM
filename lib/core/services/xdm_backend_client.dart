@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -13,7 +14,7 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  late final Dio _dio;
+  late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
 
   static final _settings = SettingsProvider();
@@ -28,26 +29,23 @@ class XdmBackendClient {
       BaseOptions(
         baseUrl: _settings.backendUrl.isNotEmpty ? _settings.backendUrl : kDefaultBackendBaseUrl,
         connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
+        // Backend extraction can take up to 45 s; give a comfortable margin.
+        receiveTimeout: const Duration(seconds: 60),
         headers: {
           'Accept': 'application/json',
+          'Authorization': 'Bearer KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0',
         },
       ),
     );
-    
-    if (_settings.backendToken.isNotEmpty) {
-      _dio.options.headers['Authorization'] = 'Bearer ${_settings.backendToken}';
-    }
-    
+
     if (kDebugMode) {
       debugPrint('[XdmBackendClient] Configured with backend URL: ${_settings.backendUrl.isNotEmpty ? _settings.backendUrl : kDefaultBackendBaseUrl}');
     }
   }
 
   /// Manually updates the backend configuration and refreshes the Dio client
-  Future<void> updateBackendConfig(String backendUrl, String backendToken) async {
+  Future<void> updateBackendConfig(String backendUrl) async {
     await _settings.setBackendUrl(backendUrl);
-    await _settings.setBackendToken(backendToken);
     _updateDioFromSettings();
   }
 
@@ -69,9 +67,21 @@ class XdmBackendClient {
     }
   }
 
+  Map<String, String> _buildHeaders([Map<String, String>? extra]) {
+    return {
+      'Accept': 'application/json',
+      'Authorization': 'Bearer KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0',
+      ...?extra,
+    };
+  }
+
+  /// Fetches downloadable streams for a YouTube video URL.
+  ///
+  /// [cookies] — Netscape-format or key=value cookie string forwarded as
+  ///   `X-YouTube-Cookies`. The backend may also pick from its own cookie pool
+  ///   if none are supplied.
   Future<Map<String, dynamic>> getStreams(
     String url, {
-    String? oauthToken,
     String? cookies,
   }) async {
     final cached = _streamsCache[url];
@@ -83,14 +93,10 @@ class XdmBackendClient {
       }
     }
 
-    final headers = {
-      if (oauthToken != null && oauthToken.isNotEmpty)
-        'X-YT-OAuth': 'Bearer $oauthToken',
+    final headers = _buildHeaders({
       if (cookies != null && cookies.isNotEmpty)
-        'X-YouTube-Cookies': cookies,
-      if (cookies != null && cookies.isNotEmpty)
-        'X-YT-Cookies': cookies,
-    };
+        'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
+    });
 
     try {
       final response = await _dio.get<Map<String, dynamic>>(
@@ -99,7 +105,7 @@ class XdmBackendClient {
         options: Options(headers: headers),
       );
       final data = response.data ?? {};
-      
+
       _streamsCache.removeWhere((key, val) => val.isExpired);
       if (_streamsCache.length >= 50) {
         final oldestKey = _streamsCache.entries
@@ -114,59 +120,27 @@ class XdmBackendClient {
       );
       return data;
     } catch (e) {
-      if (e is DioException && e.response?.statusCode == 404) {
-        try {
-          final response = await _dio.post<Map<String, dynamic>>(
-            '/extract',
-            data: {'url': url},
-            options: Options(headers: headers),
-          );
-          final data = response.data ?? {};
-          
-          _streamsCache.removeWhere((key, val) => val.isExpired);
-          if (_streamsCache.length >= 50) {
-            final oldestKey = _streamsCache.entries
-                .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
-                .key;
-            _streamsCache.remove(oldestKey);
-          }
-
-          _streamsCache[url] = _StreamsCacheEntry(
-            data: data,
-            expiry: DateTime.now().add(const Duration(minutes: 10)),
-          );
-          return data;
-        } catch (postErr) {
-          throw _handleDioError(postErr);
-        }
-      }
       throw _handleDioError(e);
     }
   }
 
+  /// Fetches playlist metadata and video list for a YouTube playlist URL.
+  ///
+  /// [cookies] — forwarded as `X-YouTube-Cookies`.
   Future<Map<String, dynamic>> getPlaylist(
     String url, {
-    String? oauthToken,
     String? cookies,
-    int? pageToken,
-    int? pageSize,
   }) async {
+    final headers = _buildHeaders({
+      if (cookies != null && cookies.isNotEmpty)
+        'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
+    });
+
     try {
-      final queryParams = <String, dynamic>{
-        'url': url,
-        if (pageToken != null) 'page': pageToken.toString(),
-        if (pageSize != null) 'pageSize': pageSize.toString(),
-      };
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/playlist',
-        queryParameters: queryParams,
-        options: Options(
-          headers: {
-            if (oauthToken != null && oauthToken.isNotEmpty)
-              'X-YT-OAuth': 'Bearer $oauthToken',
-            if (cookies != null && cookies.isNotEmpty) 'X-YT-Cookies': cookies,
-          },
-        ),
+        queryParameters: {'url': url},
+        options: Options(headers: headers),
       );
       return response.data ?? {};
     } catch (e) {
@@ -179,6 +153,7 @@ class XdmBackendClient {
       final response = await _dio.get<Map<String, dynamic>>(
         '/api/search',
         queryParameters: {'q': q},
+        options: Options(headers: _buildHeaders()),
       );
       final data = response.data ?? {};
       final results = data['results'] as List?;
@@ -214,7 +189,14 @@ class XdmBackendClient {
         if (retryHeader != null) {
           retryAfter = int.tryParse(retryHeader);
         }
-        return BackendRateLimitException(retryAfterSeconds: retryAfter);
+        return BackendRateLimitException(
+          retryAfterSeconds: retryAfter,
+          message: backendMsg,
+        );
+      } else if (statusCode == 451) {
+        return BackendBadRequestException(
+          backendMsg ?? 'Video is geo-restricted and not available from this server.',
+        );
       } else if (error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.receiveTimeout ||
           error.type == DioExceptionType.sendTimeout ||

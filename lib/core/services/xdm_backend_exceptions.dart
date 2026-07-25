@@ -44,9 +44,7 @@ class BackendRateLimitException extends BackendException {
         );
 
   @override
-  String toUserMessage() => retryAfterSeconds != null
-      ? 'Rate limit reached. Try again in $retryAfterSeconds seconds.'
-      : 'Rate limit reached. Try again later.';
+  String toUserMessage() => message;
 }
 
 class BackendNetworkException extends BackendException {

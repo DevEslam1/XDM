@@ -38,7 +38,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   late final TextEditingController _proxyUsernameController;
   late final TextEditingController _proxyPasswordController;
   late final TextEditingController _backendUrlController;
-  late final TextEditingController _backendTokenController;
   bool _isUpdatingHosts = false;
   final Map<String, bool> _expandedSections = {};
 
@@ -59,7 +58,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
       text: settings.proxyPassword,
     );
     _backendUrlController = TextEditingController(text: settings.backendUrl);
-    _backendTokenController = TextEditingController(text: settings.backendToken);
   }
 
   @override
@@ -71,7 +69,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     _proxyUsernameController.dispose();
     _proxyPasswordController.dispose();
     _backendUrlController.dispose();
-    _backendTokenController.dispose();
     super.dispose();
   }
 
@@ -894,20 +891,6 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         },
                         isDark: isDark,
                       ),
-                      Divider(color: dividerColor, height: 1),
-                      _buildTextFieldTile(
-                        title: L10n.isRtl(context) ? 'رمز الدخول' : 'API Token',
-                        subtitle: L10n.isRtl(context)
-                            ? 'رمز المصادقة الخاص بالخوادم الخلفي'
-                            : 'Authentication token for the backend API',
-                        controller: _backendTokenController,
-                        obscureText: true,
-                        onChanged: (val) {
-                          settings.setBackendToken(val);
-                        },
-                        isDark: isDark,
-                      ),
-                      Divider(color: dividerColor, height: 1),
                       _buildSwitchTile(
                         settings: settings,
                         title: L10n.isRtl(context)

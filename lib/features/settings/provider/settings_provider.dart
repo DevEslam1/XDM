@@ -107,7 +107,7 @@ class SettingsProvider extends ChangeNotifier {
 
   String backendUrl = '';
   String backendToken = '';
-  bool sendBrowserCookiesToBackend = false;
+  bool sendBrowserCookiesToBackend = true;
 
   // Torrent Seeding settings
   bool globalTorrentSeeding = true;

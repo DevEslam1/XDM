@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'xdm_backend_client.dart';
 import 'xdm_backend_exceptions.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -12,6 +13,20 @@ class YoutubeService {
 
   static String? _cookies;
   static String? _oauthToken;
+
+  /// Loads persisted cookies on startup.
+  static Future<void> init() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedCookies = prefs.getString('youtube_cookies_persisted');
+      if (savedCookies != null && savedCookies.isNotEmpty) {
+        _cookies = savedCookies;
+        debugPrint('[YouTubeService] Loaded persisted cookies');
+      }
+    } catch (e) {
+      debugPrint('[YouTubeService] Failed to load persisted cookies: $e');
+    }
+  }
 
   /// The OAuth access token if set via [signInWithOAuth], or null.
   static String? get oauthToken => _oauthToken;
@@ -28,6 +43,12 @@ class YoutubeService {
   static Future<void> signIn(String cookieString) async {
     _cookies = cookieString;
     _notifyAuthState();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('youtube_cookies_persisted', cookieString);
+    } catch (e) {
+      debugPrint('[YouTubeService] Failed to persist cookies: $e');
+    }
   }
 
   /// Signs in using an OAuth access token from Google Sign-In.
@@ -52,6 +73,8 @@ class YoutubeService {
     await resetClient();
     try {
       await WebviewCookieManager().clearCookies();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('youtube_cookies_persisted');
     } catch (e) {
       debugPrint('[YouTubeService] Failed to clear WebView cookies on signout: $e');
     }
@@ -260,7 +283,6 @@ class YoutubeService {
     try {
       final backendRes = await XdmBackendClient().getStreams(
         targetUrl,
-        oauthToken: oauthToken,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
       );
 
@@ -311,6 +333,7 @@ class YoutubeService {
             } else {
               map['audioSrc'] = null;
             }
+            map['title'] = title;
             results.add(map);
           }
         }
@@ -375,7 +398,6 @@ class YoutubeService {
       final settings = SettingsProvider();
       final backendRes = await XdmBackendClient().getStreams(
         url,
-        oauthToken: isYouTubeHost ? oauthToken : null,
         cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend ? currentCookies : null,
       );
 
@@ -536,10 +558,7 @@ class YoutubeService {
       final settings = SettingsProvider();
       final backendRes = await XdmBackendClient().getPlaylist(
         url,
-        oauthToken: oauthToken,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
-        pageToken: pageToken,
-        pageSize: pageSize,
       );
 
       final info = backendRes['info'] as Map<String, dynamic>?;
