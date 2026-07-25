@@ -22,9 +22,13 @@ class _ShareLaunchScreenState extends State<ShareLaunchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SizedBox.shrink(),
+    return Scaffold(
+      backgroundColor: Colors.black54,
+      body: Container(
+        color: Colors.transparent,
+        width: double.infinity,
+        height: double.infinity,
+      ),
     );
   }
 }

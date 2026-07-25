@@ -14,8 +14,8 @@ import '../../features/settings/provider/settings_provider.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/downloads/provider/download_provider.dart';
 import '../../core/services/single_instance_service.dart';
-import 'clipboard_detection_sheet.dart';
 import 'dmx_backdrop_filter.dart';
+import 'themed_snackbar.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   final String? initialUrl;
@@ -98,18 +98,22 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   }
 
   void _showClipboardBottomSheet(String url) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) {
-        return ClipboardDetectionSheet(
-          url: url,
-          onEstablish: () => _onUrlReceived(url),
-        );
-      },
+    final settings = context.read<SettingsProvider>();
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    if (settings.vibration) {
+      HapticFeedback.mediumImpact();
+    }
+
+    ThemedSnackbar.show(
+      context,
+      message: isRtl
+          ? 'تم اكتشاف رابط في الحافظة: ${url.length > 30 ? "${url.substring(0, 30)}..." : url}'
+          : 'Link detected in clipboard: ${url.length > 30 ? "${url.substring(0, 30)}..." : url}',
+      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+      icon: Icons.content_paste_go_rounded,
+      isDarkMode: isDark,
     );
   }
 
@@ -577,6 +581,8 @@ class _NavItem extends StatelessWidget {
     final inactiveColor = isDark
         ? AppTheme.textSecondary
         : AppTheme.lightTextSecondary;
+    final activeDownloadsCount = index == 0 ? downloadProvider.downloadingTasksCount : 0;
+    final totalSpeed = index == 0 ? downloadProvider.currentDownloadSpeedFormatted : '';
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? activeIcon : icon;
 
@@ -586,7 +592,7 @@ class _NavItem extends StatelessWidget {
         child: InkWell(
           onTap: () {
             if (settings.vibration) {
-              HapticFeedback.lightImpact();
+              HapticFeedback.mediumImpact();
             }
             downloadProvider.setActiveTabIndex(index);
           },
@@ -594,20 +600,51 @@ class _NavItem extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? activeColor.withValues(alpha: 0.12)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(displayIcon, color: color, size: 22),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? activeColor.withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(displayIcon, color: color, size: 22),
+                  ),
+                  if (index == 0 && activeDownloadsCount > 0)
+                    Positioned(
+                      top: -4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.4),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          totalSpeed.isNotEmpty ? totalSpeed : '$activeDownloadsCount',
+                          style: TextStyle(
+                            color: isDark ? Colors.black : Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 4),
               FittedBox(

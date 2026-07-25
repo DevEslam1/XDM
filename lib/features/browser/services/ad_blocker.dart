@@ -607,8 +607,49 @@ class AdBlocker {
   // 8. Inject CSS selector hiding stylesheet
   try {
     const style = document.createElement('style');
-    style.innerHTML = 'iframe[src*="doubleclick.net"], iframe[src*="googleads"], .ad-box, .ad-banner, .pub_300x250, div[id^="google_ads_iframe"] { display: none !important; height: 0 !important; width: 0 !important; }';
+    style.innerHTML = `
+      iframe[src*="doubleclick.net"], iframe[src*="googleads"], .ad-box, .ad-banner, .pub_300x250, div[id^="google_ads_iframe"],
+      .video-ads, .ytp-ad-module, .ytp-ad-overlay-container, ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer {
+        display: none !important;
+        height: 0 !important;
+        width: 0 !important;
+      }
+    `;
     document.head.appendChild(style);
+  } catch(e) {}
+
+  // 9. Dedicated YouTube Ad Skipping & Black Screen Fast-Forward Engine
+  try {
+    if (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be')) {
+      setInterval(() => {
+        try {
+          const video = document.querySelector('video');
+          const adContainer = document.querySelector('.ad-showing, .ad-interrupting');
+          
+          // Fast-forward video ad if detected
+          if (adContainer && video && !isNaN(video.duration)) {
+            video.muted = true;
+            video.currentTime = video.duration || 99999;
+          }
+
+          // Click 'Skip Ad' button as soon as it appears
+          const skipButtons = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-skip-button-slot');
+          skipButtons.forEach(btn => {
+            if (btn && typeof btn.click === 'function') {
+              btn.click();
+            }
+          });
+
+          // Dismiss overlay banner ads
+          const closeOverlayButtons = document.querySelectorAll('.ytp-ad-overlay-close-button');
+          closeOverlayButtons.forEach(btn => {
+            if (btn && typeof btn.click === 'function') {
+              btn.click();
+            }
+          });
+        } catch (err) {}
+      }, 300);
+    }
   } catch(e) {}
 })();
 ''';

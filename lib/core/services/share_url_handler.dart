@@ -121,11 +121,11 @@ class ShareUrlHandler {
           audioSize: audioSize ?? 0,
         );
       }
+    }
 
-      if (isShareLaunch && contextMounted.mounted) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        SystemNavigator.pop();
-      }
+    if (isShareLaunch && context.mounted) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      SystemNavigator.pop();
     }
   }
 }

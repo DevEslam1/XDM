@@ -711,12 +711,24 @@ class DownloadProvider extends ChangeNotifier
   void _handleNotificationAction(Map<String, String> event) {
     final action = event['action'];
     final taskId = event['taskId'];
-    if (action == null || taskId == null) return;
+    if (action == null) return;
 
-    if (action == 'pause') {
-      pauseTask(taskId);
-    } else if (action == 'cancel') {
-      cancelTask(taskId);
+    switch (action) {
+      case 'pause':
+        if (taskId != null) pauseTask(taskId);
+        break;
+      case 'resume':
+        if (taskId != null) resumeTask(taskId);
+        break;
+      case 'cancel':
+        if (taskId != null) cancelTask(taskId);
+        break;
+      case 'pause_all':
+        pauseAllTasks();
+        break;
+      case 'resume_all':
+        resumeAllTasks();
+        break;
     }
   }
 

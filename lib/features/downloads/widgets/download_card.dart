@@ -1,5 +1,6 @@
 import '../../../../core/utils/file_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/utils/file_opener.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/app_theme.dart';
@@ -27,7 +28,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
 
     return Selector<DownloadProvider, _CardSnapshot>(
       selector: (_, p) {
-        final t = p.taskById(task.id) ?? task;
+        final t = p.findTaskById(task.id) ?? task;
         return _CardSnapshot.fromTask(t);
       },
       builder: (context, snapshot, child) {
@@ -129,6 +130,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                 child: DetailsScreen(taskId: task.id),
               ),
             );
+          },
+          onLongPress: () {
+            triggerHaptic(settings);
+            _showAdvancedOptionsSheet(context, task, provider, settings);
           },
           child: Padding(
             padding: EdgeInsets.all(compact ? 12.0 : 16.0),
@@ -636,6 +641,338 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         ),
       ),
     );
+      },
+    );
+  }
+
+  void _showAdvancedOptionsSheet(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(
+                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                width: 0.8,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
+                          .withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.tune_rounded,
+                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          task.fileName,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: Icon(
+                    Icons.info_outline,
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  ),
+                  title: Text(isRtl ? 'عرض التفاصيل المتقدمة' : 'View Full Details'),
+                  subtitle: Text(
+                    isRtl ? 'معلومات الملف والسرعة والأجزاء' : 'File stats, threads & headers',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      PremiumPageRoute(
+                        type: PageTransitionType.slideRight,
+                        child: DetailsScreen(taskId: task.id),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.language_rounded,
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                  ),
+                  title: Text(isRtl ? 'فتح في تبويب المتصفح' : 'Open Source in Browser Tab'),
+                  subtitle: Text(
+                    isRtl ? 'فتح صفحة التنزيل بالمتصفح' : 'Loads target site in built-in browser',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    final targetUrl = task.downloadPageUrl ?? task.url;
+                    provider.openUrlInBrowser(targetUrl);
+                    provider.setActiveTabIndex(1);
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.link,
+                    color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  ),
+                  title: Text(isRtl ? 'تحديث رابط التنزيل' : 'Update Download Link'),
+                  subtitle: Text(
+                    isRtl ? 'استبدال الرابط المنتهي برابط جديد' : 'Replace expired link to resume download',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showUpdateUrlDialog(context, task, provider, settings);
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    Icons.copy_rounded,
+                    color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  ),
+                  title: Text(isRtl ? 'نسخ رابط التحميل' : 'Copy Download Link'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Clipboard.setData(ClipboardData(text: task.url));
+                    ThemedSnackbar.show(
+                      context,
+                      message: isRtl ? 'تم نسخ الرابط' : 'URL copied to clipboard',
+                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      icon: Icons.check,
+                      isDarkMode: isDark,
+                    );
+                  },
+                ),
+                if (task.status == DownloadStatus.completed)
+                  ListTile(
+                    leading: Icon(
+                      Icons.folder_open_rounded,
+                      color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                    ),
+                    title: Text(isRtl ? 'فتح الملف أو المجلد' : 'Open File or Folder'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      openFile(context, task.localFilePath, settings);
+                    },
+                  ),
+                if (task.status == DownloadStatus.downloading ||
+                    task.status == DownloadStatus.paused)
+                  ListTile(
+                    leading: Icon(
+                      task.status == DownloadStatus.downloading
+                          ? Icons.pause_circle_outline
+                          : Icons.play_circle_outline,
+                      color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                    ),
+                    title: Text(
+                      task.status == DownloadStatus.downloading
+                          ? (isRtl ? 'إيقاف مؤقت' : 'Pause Download')
+                          : (isRtl ? 'استئناف التحميل' : 'Resume Download'),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      if (task.status == DownloadStatus.downloading) {
+                        provider.pauseTask(task.id);
+                      } else {
+                        provider.resumeTask(task.id);
+                      }
+                    },
+                  ),
+                if (task.status == DownloadStatus.failed)
+                  ListTile(
+                    leading: Icon(
+                      Icons.refresh_rounded,
+                      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    ),
+                    title: Text(isRtl ? 'إعادة المحاولة' : 'Retry Download'),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      provider.retryTask(task.id);
+                    },
+                  ),
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_outline_rounded,
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  ),
+                  title: Text(
+                    isRtl ? 'حذف التنزيل' : 'Delete Task',
+                    style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final deleteFiles = await _showDeleteConfirmationDialog(
+                      context,
+                      task,
+                      settings,
+                    );
+                    if (deleteFiles != null) {
+                      provider.deleteTask(task.id, deleteFiles: deleteFiles);
+                      if (context.mounted) {
+                        ThemedSnackbar.show(
+                          context,
+                          message: isRtl
+                              ? 'تم حذف التنزيل بنجاح'
+                              : 'Download deleted successfully',
+                          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          icon: Icons.delete,
+                          isDarkMode: isDark,
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showUpdateUrlDialog(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    SettingsProvider settings,
+  ) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final textController = TextEditingController(text: task.url);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(
+                Icons.link,
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isRtl ? 'تحديث رابط التنزيل' : 'Update Download Link',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isRtl
+                    ? 'أدخل الرابط الجديد المباشر للتنزيل لاستئناف التحميل:'
+                    : 'Enter the new direct stream / download link to resume:',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                style: TextStyle(
+                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  fontSize: 13,
+                ),
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'https://...',
+                  filled: true,
+                  fillColor: (isDark ? AppTheme.background : AppTheme.lightBackground)
+                      .withValues(alpha: 0.6),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                final newUrl = textController.text.trim();
+                if (newUrl.isNotEmpty) {
+                  Navigator.pop(dialogCtx);
+                  await provider.updateTaskUrl(task.id, newUrl);
+                  if (context.mounted) {
+                    ThemedSnackbar.show(
+                      context,
+                      message: isRtl
+                          ? 'تم تحديث رابط التنزيل بنجاح'
+                          : 'Download URL updated successfully',
+                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      icon: Icons.check_circle_outline,
+                      isDarkMode: isDark,
+                    );
+                  }
+                }
+              },
+              child: Text(isRtl ? 'حفظ الرابط' : 'Save Link'),
+            ),
+          ],
+        );
       },
     );
   }

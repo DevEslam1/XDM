@@ -173,38 +173,62 @@ class NotificationService {
     required String eta,
     required String languageCode,
     required String payload,
+    bool isPaused = false,
+    bool hasMultipleActive = false,
   }) async {
     if (!_initialized) return;
+
+    final actions = <AndroidNotificationAction>[
+      AndroidNotificationAction(
+        isPaused ? 'resume' : 'pause',
+        isPaused
+            ? L10n.translate(languageCode, 'resume_btn')
+            : L10n.translate(languageCode, 'pause_btn'),
+        showsUserInterface: false,
+      ),
+      AndroidNotificationAction(
+        'cancel',
+        L10n.translate(languageCode, 'cancel_btn'),
+        showsUserInterface: false,
+      ),
+    ];
+
+    if (hasMultipleActive) {
+      actions.addAll([
+        AndroidNotificationAction(
+          'pause_all',
+          languageCode == 'ar' ? 'إيقاف الكل' : 'Pause All',
+          showsUserInterface: false,
+        ),
+        AndroidNotificationAction(
+          'resume_all',
+          languageCode == 'ar' ? 'استئناف الكل' : 'Resume All',
+          showsUserInterface: false,
+        ),
+      ]);
+    }
+
     final androidDetails = AndroidNotificationDetails(
       _downloadChannelId,
       _downloadChannelName,
       channelDescription: _downloadChannelDesc,
       importance: Importance.low,
       priority: Priority.low,
-      showProgress: true,
+      showProgress: !isPaused,
       maxProgress: 100,
       progress: progressPercent.clamp(0, 100),
       onlyAlertOnce: true,
-      ongoing: true,
+      ongoing: !isPaused,
       autoCancel: false,
-      actions: <AndroidNotificationAction>[
-        AndroidNotificationAction(
-          'pause',
-          L10n.translate(languageCode, 'pause_btn'),
-          showsUserInterface: false,
-        ),
-        AndroidNotificationAction(
-          'cancel',
-          L10n.translate(languageCode, 'cancel_btn'),
-          showsUserInterface: false,
-        ),
-      ],
+      actions: actions,
     );
     final details = NotificationDetails(android: androidDetails);
     await _plugin.show(
       id: notificationId,
       title: title,
-      body: eta.isNotEmpty ? '$speed | $eta' : speed,
+      body: isPaused
+          ? (languageCode == 'ar' ? 'متوقف مؤقتاً' : 'Paused')
+          : (eta.isNotEmpty ? '$speed | $eta' : speed),
       notificationDetails: details,
       payload: payload,
     );

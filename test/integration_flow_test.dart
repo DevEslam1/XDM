@@ -9,6 +9,7 @@ import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -192,7 +193,7 @@ void main() {
         .setMockMethodCallHandler(
       const MethodChannel('flutter.arthenica.com/ffmpeg_kit'),
       (methodCall) async {
-        print('FFMPEG_KIT_MOCK: ${methodCall.method} called');
+        debugPrint('FFMPEG_KIT_MOCK: ${methodCall.method} called');
         if (methodCall.method == 'getLogLevel') {
           return 0;
         }

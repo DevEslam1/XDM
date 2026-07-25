@@ -13,38 +13,38 @@ class L10n {
       'title_history': 'History',
       'title_config': 'Settings',
       'config_header': 'Settings',
-      'settings_engine_status': 'Download engine status',
-      'settings_auto_resume': 'Auto-resume downloads',
-      'settings_auto_resume_sub': 'Resume unfinished downloads on startup',
-      'settings_max_channels': 'Max active downloads',
-      'settings_max_channels_sub': 'Limit concurrent downloads',
-      'settings_bandwidth': 'Speed & connections',
-      'settings_speed_limit': 'Global speed limit',
-      'settings_unlimited': 'Unlimited bandwidth',
-      'settings_limit_to': 'MB/s maximum',
-      'settings_wifi_only': 'Wifi-only mode',
-      'settings_wifi_only_sub': 'Pause downloads on mobile networks',
-      'settings_cockpit': 'Interface styling',
-      'settings_glow': 'Enable neon glow accents',
-      'settings_glow_sub': 'Draw glowing drop shadows on buttons',
-      'settings_grid': 'Background grid density',
-      'settings_grid_sub': 'Intensity',
-      'settings_alerters': 'Alert sounds',
-      'settings_chime': 'Completion audible chime',
-      'settings_chime_sub': 'Play audio ping when download completes',
-      'settings_haptic': 'Haptic feedback pulses',
-      'settings_haptic_sub': 'Vibrate device on key transitions',
-      'settings_theme': 'Visual mode style',
-      'settings_theme_sub': 'Dark mode engine',
+      'settings_engine_status': 'Engine Status',
+      'settings_auto_resume': 'Auto-resume Downloads',
+      'settings_auto_resume_sub': 'Resume unfinished downloads on app launch',
+      'settings_max_channels': 'Max Concurrent Downloads',
+      'settings_max_channels_sub': 'Limit active parallel downloads',
+      'settings_bandwidth': 'Network & Speed Limits',
+      'settings_speed_limit': 'Global Download Speed Limit',
+      'settings_unlimited': 'Unlimited',
+      'settings_limit_to': 'MB/s Max',
+      'settings_wifi_only': 'Wi-Fi Only Mode',
+      'settings_wifi_only_sub': 'Pause downloads when on cellular data',
+      'settings_cockpit': 'App Interface & Theme',
+      'settings_glow': 'Neon Glow Effects',
+      'settings_glow_sub': 'Show subtle glowing highlights on active UI elements',
+      'settings_grid': 'Background Grid Pattern',
+      'settings_grid_sub': 'Grid Density',
+      'settings_alerters': 'Sound & Alerts',
+      'settings_chime': 'Completion Notification Chime',
+      'settings_chime_sub': 'Play a sound when a download completes',
+      'settings_haptic': 'Haptic Touch Feedback',
+      'settings_haptic_sub': 'Vibrate device on button taps and tab switches',
+      'settings_theme': 'Theme Mode',
+      'settings_theme_sub': 'Choose appearance theme',
       'settings_lang': 'Language',
-      'settings_lang_sub': 'Select interface localization',
-      'settings_default_threads': 'Default connections (threads)',
+      'settings_lang_sub': 'Select app display language',
+      'settings_default_threads': 'Default Connection Threads',
       'settings_default_threads_sub':
-          'Default connection threads count for new downloads',
-      'settings_about': 'About xdm',
-      'settings_firmware': 'Firmware',
+          'Number of parallel connection threads for new downloads',
+      'settings_about': 'About XDM',
+      'settings_firmware': 'Version',
       'settings_about_desc':
-          'High-efficiency parallel multithreaded download processor.',
+          'High-performance multi-threaded download manager and web browser.',
       'add_download': 'Add new download',
       'add_download_url': 'Download url / link',
       'add_download_name': 'File name (optional)',
@@ -380,38 +380,38 @@ class L10n {
       'title_history': 'السجل',
       'title_config': 'الإعدادات',
       'config_header': 'الإعدادات',
-      'settings_engine_status': 'حالة محرك التنزيل',
-      'settings_auto_resume': 'استئناف تلقائي للتنزيلات',
-      'settings_auto_resume_sub': 'استئناف التنزيلات غير المكتملة عند التشغيل',
-      'settings_max_channels': 'أقصى تنزيلات نشطة',
-      'settings_max_channels_sub': 'تحديد التنزيلات المتزامنة',
-      'settings_bandwidth': 'السرعة والاتصالات',
-      'settings_speed_limit': 'حد السرعة العام',
-      'settings_unlimited': 'سرعة غير محدودة',
-      'settings_limit_to': 'ميغابايت/ثانية كحد أقصى',
-      'settings_wifi_only': 'وضع الواي فاي فقط',
-      'settings_wifi_only_sub': 'إيقاف مؤقت للتنزيل على شبكات الهاتف المحمول',
-      'settings_cockpit': 'تنسيق الواجهة',
-      'settings_glow': 'تفعيل توهج النيون',
-      'settings_glow_sub': 'رسم ظلال متوهجة على الأزرار',
-      'settings_grid': 'كثافة شبكة الخلفية',
-      'settings_grid_sub': 'مستوى الشدة',
-      'settings_alerters': 'أصوات التنبيه',
-      'settings_chime': 'رنين التنبيه بالاكتمال',
-      'settings_chime_sub': 'تشغيل نغمة عند اكتمال التنزيل',
-      'settings_haptic': 'نبضات الاهتزاز التفاعلية',
-      'settings_haptic_sub': 'اهتزاز الجهاز عند الانتقالات الرئيسية',
-      'settings_theme': 'النمط البصري للواجهة',
-      'settings_theme_sub': 'محرك الوضع المظلم',
-      'settings_lang': 'اللغة',
-      'settings_lang_sub': 'اختر لغة واجهة المستخدم',
-      'settings_default_threads': 'خيوط الاتصال الافتراضية',
+      'settings_engine_status': 'حالة المحرك',
+      'settings_auto_resume': 'الاستئناف التلقائي للتنزيلات',
+      'settings_auto_resume_sub': 'استئناف التنزيلات المتبقية عند فتح التطبيق',
+      'settings_max_channels': 'أقصى عدد للتنزيلات المتزامنة',
+      'settings_max_channels_sub': 'تحديد عدد الملفات التي يتم تنزيلها في وقت واحد',
+      'settings_bandwidth': 'إعدادات الشبكة والسرعة',
+      'settings_speed_limit': 'حد سرعة التنزيل العام',
+      'settings_unlimited': 'غير محدود',
+      'settings_limit_to': 'ميجابايت/ثانية كحد أقصى',
+      'settings_wifi_only': 'الواي فاي فقط',
+      'settings_wifi_only_sub': 'إيقاف التنزيلات مؤقتاً عند استخدام بيانات الهاتف',
+      'settings_cockpit': 'المظهر والواجهة',
+      'settings_glow': 'تأثيرات التوهج النيوني',
+      'settings_glow_sub': 'إظهار إضاءة خفيفة حول الأزرار والتطبيقات',
+      'settings_grid': 'شبكة الخلفية',
+      'settings_grid_sub': 'كثافة النمط',
+      'settings_alerters': 'الصوت والتنبيهات',
+      'settings_chime': 'تنبيه اكتمال التنزيل',
+      'settings_chime_sub': 'تشغيل صوت تنبيه عند انتهاء تنزيل الملف',
+      'settings_haptic': 'الاهتزاز والتفاعل اللمسي',
+      'settings_haptic_sub': 'اهتزاز خفيف عند الضغط والتنقل بين التبويبات',
+      'settings_theme': 'نمط المظهر',
+      'settings_theme_sub': 'اختيار المظهر الداكن أو الفاتح',
+      'settings_lang': 'لغة التطبيق',
+      'settings_lang_sub': 'تغيير لغة الواجهة',
+      'settings_default_threads': 'عدد الاتصالات التلقائي (Threads)',
       'settings_default_threads_sub':
-          'عدد خيوط الأجزاء الافتراضية للتنزيلات الجديدة',
-      'settings_about': 'حول XDM',
-      'settings_firmware': 'البرنامج الثابت',
+          'عدد أجزاء التنزيل المتوازية للملفات الجديدة',
+      'settings_about': 'عن XDM',
+      'settings_firmware': 'الإصدار',
       'settings_about_desc':
-          'معالج تنزيل متوازي متعدد الخيوط عالي الكفاءة.',
+          'مدير تنزيلات سريع متعدد الأجزاء ومتصفح ويب متكامل.',
       'add_download': 'إضافة تنزيل جديد',
       'add_download_url': 'رابط التنزيل (URL)',
       'add_download_name': 'اسم الملف (اختياري)',
@@ -783,20 +783,20 @@ class L10n {
     if (!isRtl(context)) return rawEta;
     switch (status) {
       case DownloadStatus.completed:
-        if (rawEta == 'Seeding') return 'مشاركة (Seeding)';
+        if (rawEta == 'Seeding') return 'مشاركة الملف (Seeding)';
         return 'مكتمل';
       case DownloadStatus.queued:
-        return 'في الانتظار';
+        return 'قيد الانتظار';
       case DownloadStatus.paused:
-        return 'موقوف';
+        return 'متوقف مؤقتاً';
       case DownloadStatus.failed:
-        return 'فشل';
+        return 'فشل التنزيل';
       case DownloadStatus.downloading:
         return rawEta
-            .replaceAllMapped(RegExp(r'(\d+)\s*h\b'), (m) => '${m[1]}س')
-            .replaceAllMapped(RegExp(r'(\d+)\s*m\b'), (m) => '${m[1]}د')
-            .replaceAllMapped(RegExp(r'(\d+)\s*s\b'), (m) => '${m[1]}ث')
-            .replaceAll(RegExp(r'\bleft\b'), 'متبقي');
+            .replaceAllMapped(RegExp(r'(\d+)\s*h\b'), (m) => '${m[1]} ساعة')
+            .replaceAllMapped(RegExp(r'(\d+)\s*m\b'), (m) => '${m[1]} دقيقة')
+            .replaceAllMapped(RegExp(r'(\d+)\s*s\b'), (m) => '${m[1]} ثانية')
+            .replaceAll(RegExp(r'\bleft\b'), 'متبقية');
     }
   }
 
