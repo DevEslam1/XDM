@@ -91,12 +91,9 @@ void main() {
   testWidgets('DmxApp smoke test - dashboard verification', (tester) async {
     final app = (await tester.runAsync(() => _buildTestApp()))!;
     await tester.pumpWidget(app);
-    // Pump a frame to trigger postFrameCallback in SplashScreen
     await tester.pump();
-    // Pump another frame to allow navigation
     await tester.pump(const Duration(milliseconds: 100));
 
-    // The splash screen should show 'XDM' in its title
     expect(find.textContaining('XDM'), findsWidgets);
   });
 }
