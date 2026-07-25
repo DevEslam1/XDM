@@ -1345,292 +1345,292 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
-    // Separate cancel tokens for audio/video so we can cancel one if the other
-    // fails, without a shared-cancel causing ParallelWaitError confusion.
-    final videoCancelToken = CancelToken();
-    final audioCancelToken = CancelToken();
-    // Mirror the top-level cancel into both
-    cancelToken.whenCancel.then((_) {
-      if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
-      if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
-    });
-
     // YouTube streams use multi-threaded mode as configured.
     final streamThreadCount = runtimeThreadCount;
 
-    // Run video and audio sequentially (audio first, then video)
+    // Run video and audio in PARALLEL — each gets the full configured
+    // thread count (streamThreadCount), not split between them.
     final downloadFuture = () async {
-      // Re-fetch current task state by ID to prevent using stale parameters if mutated during async gap
       final currentTask = _findTask(task.id);
       if (currentTask == null) return;
       task = currentTask;
       final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
       int attempt = 0;
+
+      // Shared byte/speed trackers — read and written by both the audio and
+      // video progress callbacks, combined by pushCombinedProgress().
+      int audioBytesSoFar = 0;
+      int videoBytesSoFar = 0;
+      double audioSpeedNow = 0.0;
+      double videoSpeedNow = 0.0;
+
+      void pushCombinedProgress({
+        List<double>? chunksOverride,
+        bool? supportsResumeOverride,
+        List<Map<String, dynamic>>? torrentFilesOverride,
+        String? fileNameOverride,
+        String? localFilePathOverride,
+        String? tempFilePathOverride,
+        String? categoryOverride,
+      }) {
+        final index = _tasks.indexWhere((t) => t.id == task.id);
+        if (index == -1) return;
+        final base = _tasks[index];
+        if (base.status != DownloadStatus.downloading) return;
+
+        final totalSize =
+            hasAudio ? (videoTransferSize + base.audioSize) : videoTransferSize;
+        final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
+        final combinedSpeed = audioSpeedNow + videoSpeedNow;
+
+        final updated = base.copyWith(
+          fileName: fileNameOverride ?? base.fileName,
+          localFilePath: localFilePathOverride ?? base.localFilePath,
+          tempFilePath: tempFilePathOverride ?? base.tempFilePath,
+          category: categoryOverride ?? base.category,
+          fileSize: totalSize,
+          downloadedBytes: totalDownloaded,
+          speed: combinedSpeed,
+          chunks: chunksOverride ?? base.chunks,
+          supportsResume: supportsResumeOverride ?? base.supportsResume,
+          torrentFiles: torrentFilesOverride ?? base.torrentFiles,
+        );
+
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
+        if (now - lastUpdate >= 250) {
+          _lastProgressUpdateTimes[task.id] = now;
+          _tasks[index] = updated;
+          notifyListeners();
+
+          if (_settingsProvider.notificationsEnabled) {
+            final progressPercent = totalSize > 0
+                ? ((totalDownloaded / totalSize) * 100).round().clamp(0, 100)
+                : 0;
+            _notificationService.showDownloadProgress(
+              notificationId: notificationId,
+              title: task.fileName,
+              progressPercent: progressPercent,
+              speed: updated.speedFormatted,
+              eta: updated.etaFormatted,
+              languageCode: _settingsProvider.languageCode,
+              payload: task.id,
+            );
+          }
+          BackgroundService.sendHeartbeat();
+        } else {
+          _tasks[index] = updated;
+          _pendingProgressUpdates.add(task.id);
+        }
+      }
+
       while (true) {
         attempt++;
+
+        // Fresh cancel tokens every attempt — see note #3 above. Mirror the
+        // top-level cancelToken into both, same as before.
+        final videoCancelToken = CancelToken();
+        final audioCancelToken = CancelToken();
+        cancelToken.whenCancel.then((_) {
+          if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
+          if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
+        });
+
         try {
-          await () async {
-      if (hasAudio) {
-                    debugPrint('[DMX] Sequential download: Starting audio first.');
-                    await _downloadEngine.download(
-                      url: task.mergedAudioUrl!,
-                      tempFilePath: audioTempPath!,
-                      localFilePath: audioTempPath,
-                      knownFileSize: task.audioSize,
-                      supportsResume: true,
-                      cancelToken: audioCancelToken,
-                      cookies: cookieString,
-                      oauthToken: YoutubeService.oauthToken,
-                      onProgress: (progress) {
-                        final t = _findTask(task.id);
-                        if (t == null || t.status != DownloadStatus.downloading) return;
-                        final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
-                        final p = size > 0 ? (progress.downloadedBytes / size).clamp(0.0, 1.0) : 0.0;
-                        
-                        final index = _tasks.indexWhere((x) => x.id == task.id);
-                        if (index != -1) {
-                          final updated = _tasks[index].copyWith(
-                            audioProgress: p,
-                            downloadedBytes: progress.downloadedBytes,
-                            speed: progress.speed,
-                            eta: progress.eta,
-                            audioSize: size,
-                          );
-                          _tasks[index] = updated;
-                          if (DateTime.now().millisecondsSinceEpoch - (_lastProgressUpdateTimes[task.id] ?? 0) >= 200) {
-                            _lastProgressUpdateTimes[task.id] = DateTime.now().millisecondsSinceEpoch;
-                            notifyListeners();
-            
-                            if (_settingsProvider.notificationsEnabled) {
-                              final progressPercent = task.fileSize > 0
-                                  ? ((progress.downloadedBytes / task.fileSize) * 100).round().clamp(0, 100)
-                                  : 0;
-                              _notificationService.showDownloadProgress(
-                                notificationId: notificationId,
-                                title: '${task.fileName} (Audio)',
-                                progressPercent: progressPercent,
-                                speed: updated.speedFormatted,
-                                eta: updated.etaFormatted,
-                                languageCode: _settingsProvider.languageCode,
-                                payload: task.id,
-                              );
-                            }
-                          }
-                        }
-                      },
-                      speedLimitBytesPerSecond: () {
-                        final current = _findTask(task.id);
-                        if (current != null && current.speedLimitKbps > 0) {
-                          return (current.speedLimitKbps * 1000) ~/ 8;
-                        }
-                        return _settingsProvider.speedLimitBytesPerSecond;
-                      },
-                      activeDownloadCount: () => downloadingTasksCount,
-                      threadCount: streamThreadCount,
-                      customUserAgent: _settingsProvider.customUserAgent,
-                      referer: isYoutube
-                          ? (task.downloadPageUrl ?? 'https://www.youtube.com/')
-                          : null,
-                      enableProxy: _settingsProvider.enableProxy,
+          Future<void> runAudio() async {
+            if (!hasAudio) return;
+            debugPrint('[DMX] Parallel download: starting audio stream.');
+            await _downloadEngine.download(
+              url: task.mergedAudioUrl!,
+              tempFilePath: audioTempPath!,
+              localFilePath: audioTempPath,
+              knownFileSize: task.audioSize,
+              supportsResume: true,
+              cancelToken: audioCancelToken,
+              cookies: cookieString,
+              oauthToken: YoutubeService.oauthToken,
+              onProgress: (progress) {
+                final t = _findTask(task.id);
+                if (t == null || t.status != DownloadStatus.downloading) return;
 
+                audioBytesSoFar = progress.downloadedBytes;
+                audioSpeedNow = progress.speed;
 
-                      proxyAddress: _settingsProvider.proxyAddress,
-                      proxyHost: _settingsProvider.proxyHost,
-                      proxyPort: _settingsProvider.proxyPort,
-                      proxyUsername: _settingsProvider.proxyUsername,
-                      proxyPassword: _settingsProvider.proxyPassword,
-                      bypassSSL: _settingsProvider.bypassSSL,
-                      isNameAutoGenerated: false,
-                    );
-            
-                    final audioFile = File(audioTempPath);
-                    if (!await audioFile.exists()) {
-                      throw Exception('Audio file not found after download: $audioTempPath');
-                    }
-                    final audioLen = await audioFile.length();
-                    debugPrint('[DMX] Audio download complete: $audioTempPath ($audioLen bytes)');
-                    if (audioLen == 0) {
-                      throw Exception('Audio file is empty: $audioTempPath');
-                    }
-                    final idx = _tasks.indexWhere((x) => x.id == task.id);
-                    if (idx != -1) {
-                      _tasks[idx] = _tasks[idx].copyWith(
-                        audioProgress: 1.0,
-                        downloadedBytes: task.audioSize,
-                      );
-                    }
-                  }
-            
-                  // Step 2: Download Video
-                  debugPrint('[DMX] Sequential download: Starting video second.');
-                  await _downloadEngine.download(
-                    url: task.url,
-                    tempFilePath: task.tempFilePath,
-                    localFilePath: task.localFilePath,
-                    knownFileSize: videoTransferSize,
-                    supportsResume: task.supportsResume,
-                    cancelToken: videoCancelToken,
-                    isNameAutoGenerated: isAutoName,
-                    referer: isYoutube ? task.downloadPageUrl : null,
-                    getTorrentFiles: () => _findTask(task.id)?.torrentFiles ?? task.torrentFiles,
-                    cookies: cookieString,
-                    oauthToken: YoutubeService.oauthToken,
-                    onProgress: (progress) {
-                      final current = _findTask(task.id);
-                      if (current == null || current.status != DownloadStatus.downloading) {
-                        return;
-                      }
+                final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
+                final fraction =
+                    size > 0 ? (progress.downloadedBytes / size).clamp(0.0, 1.0) : 0.0;
+                final index = _tasks.indexWhere((x) => x.id == task.id);
+                if (index != -1) {
+                  _tasks[index] =
+                      _tasks[index].copyWith(audioProgress: fraction, audioSize: size);
+                }
+                pushCombinedProgress();
+              },
+              speedLimitBytesPerSecond: () {
+                final current = _findTask(task.id);
+                if (current != null && current.speedLimitKbps > 0) {
+                  return (current.speedLimitKbps * 1000) ~/ 8;
+                }
+                return _settingsProvider.speedLimitBytesPerSecond;
+              },
+              activeDownloadCount: () => downloadingTasksCount,
+              threadCount: streamThreadCount,
+              customUserAgent: _settingsProvider.customUserAgent,
+              referer: isYoutube
+                  ? (task.downloadPageUrl ?? 'https://www.youtube.com/')
+                  : null,
+              enableProxy: _settingsProvider.enableProxy,
+              proxyAddress: _settingsProvider.proxyAddress,
+              proxyHost: _settingsProvider.proxyHost,
+              proxyPort: _settingsProvider.proxyPort,
+              proxyUsername: _settingsProvider.proxyUsername,
+              proxyPassword: _settingsProvider.proxyPassword,
+              bypassSSL: _settingsProvider.bypassSSL,
+              isNameAutoGenerated: false,
+            );
 
-                      final index = _tasks.indexWhere((t) => t.id == task.id);
-                      if (index == -1) return;
+            final audioFile = File(audioTempPath);
+            if (!await audioFile.exists()) {
+              throw Exception('Audio file not found after download: $audioTempPath');
+            }
+            final audioLen = await audioFile.length();
+            debugPrint('[DMX] Audio download complete: $audioTempPath ($audioLen bytes)');
+            if (audioLen == 0) {
+              throw Exception('Audio file is empty: $audioTempPath');
+            }
+            audioBytesSoFar = task.audioSize > 0 ? task.audioSize : audioLen;
+            audioSpeedNow = 0.0;
+            final idx = _tasks.indexWhere((x) => x.id == task.id);
+            if (idx != -1) {
+              _tasks[idx] = _tasks[idx].copyWith(audioProgress: 1.0);
+            }
+            pushCombinedProgress();
+          }
 
-                      // Check for suspiciously low YouTube download speeds (< 120 KB/s)
-                      if (isYoutube &&
-                          progress.downloadedBytes > 1024 * 1024 &&
-                          progress.speed > 0 &&
-                          progress.speed < 120 * 1024) {
-                        final lowSpeedCount = (_ytLowSpeedCounts[task.id] ?? 0) + 1;
-                        _ytLowSpeedCounts[task.id] = lowSpeedCount;
+          Future<void> runVideo() async {
+            debugPrint('[DMX] Parallel download: starting video stream.');
+            await _downloadEngine.download(
+              url: task.url,
+              tempFilePath: task.tempFilePath,
+              localFilePath: task.localFilePath,
+              knownFileSize: videoTransferSize,
+              supportsResume: task.supportsResume,
+              cancelToken: videoCancelToken,
+              isNameAutoGenerated: isAutoName,
+              referer: isYoutube ? task.downloadPageUrl : null,
+              getTorrentFiles: () => _findTask(task.id)?.torrentFiles ?? task.torrentFiles,
+              cookies: cookieString,
+              oauthToken: YoutubeService.oauthToken,
+              onProgress: (progress) {
+                final current = _findTask(task.id);
+                if (current == null || current.status != DownloadStatus.downloading) {
+                  return;
+                }
 
-                        Logger.root.warning(
-                          'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id} (sample $lowSpeedCount). '
-                          'The stream URL may be throttled due to n-parameter descrambling.'
-                        );
+                videoBytesSoFar = progress.downloadedBytes;
+                videoSpeedNow = progress.speed;
 
-                        // If low speed persists for 10 consecutive progress ticks (> 5s), trigger an automatic stream refresh
-                        if (lowSpeedCount >= 10 && !(_ytThrottlingRefreshing[task.id] ?? false)) {
-                          _ytThrottlingRefreshing[task.id] = true;
-                          _ytLowSpeedCounts[task.id] = 0;
-                          Logger.root.info('Persistent YouTube throttling detected for ${task.id}. Attempting automatic stream refresh...');
-                          Future.microtask(() async {
-                            try {
-                              final pageUrl = task.downloadPageUrl ?? task.url;
-                              final fresh = await YoutubeService.getFreshStreams(pageUrl);
-                              if (fresh != null && fresh['url'] != null) {
-                                await updateTaskUrlAndResume(task.id, fresh['url']!, newAudioUrl: fresh['audioUrl']);
-                              }
-                            } catch (err) {
-                              debugPrint('Auto YouTube stream refresh failed: $err');
-                            } finally {
-                              _ytThrottlingRefreshing[task.id] = false;
-                            }
-                          });
-                        }
-                      } else if (isYoutube && progress.speed >= 120 * 1024) {
-                        _ytLowSpeedCounts[task.id] = 0;
-                      }
+                // --- Throttling detection: unchanged from the original logic ---
+                if (isYoutube &&
+                    progress.downloadedBytes > 1024 * 1024 &&
+                    progress.speed > 0 &&
+                    progress.speed < 120 * 1024) {
+                  final lowSpeedCount = (_ytLowSpeedCounts[task.id] ?? 0) + 1;
+                  _ytLowSpeedCounts[task.id] = lowSpeedCount;
 
-                      final now = DateTime.now().millisecondsSinceEpoch;
-                      final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
-
-                      final speedQueue = _speedHistories[task.id] ??= Queue<double>();
-                      speedQueue.add(progress.speed);
-                      if (speedQueue.length > 20) {
-                        speedQueue.removeFirst();
-                      }
-
-                      // FIX #2: Re-read immediately before mutating and keep the read-modify-write
-                      // synchronous so a concurrent update (e.g. YouTube URL refresh) is not clobbered.
-                      final freshIndex = _tasks.indexWhere((t) => t.id == task.id);
-                      if (freshIndex == -1) return;
-                      final latest = _tasks[freshIndex];
-                      if (latest.status != DownloadStatus.downloading) return;
-                      final base = latest;
-
-                      final newFileName = isAutoName && progress.fileName != null
-                          ? progress.fileName!
-                          : base.fileName;
-
-                      final newLocalPath = newFileName != base.fileName
-                          ? p.join(p.dirname(base.localFilePath), safeFileName(newFileName))
-                          : base.localFilePath;
-
-                      final newTempPath = newFileName != base.fileName
-                          ? p.join(p.dirname(base.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
-                          : base.tempFilePath;
-
-                      final newCategory = newFileName != base.fileName && base.category == 'Other'
-                          ? categoryFromFileName(newFileName)
-                          : base.category;
-
-                      final resolvedVideoSize = progress.fileSize > 0 ? progress.fileSize : videoTransferSize;
-                      final resolvedTotalSize = hasAudio ? resolvedVideoSize + base.audioSize : resolvedVideoSize;
-                      final currentDownloadedBytes = (hasAudio ? base.audioSize : 0) + progress.downloadedBytes;
-
-                      final updatedTask = base.copyWith(
-                        fileName: newFileName,
-                        localFilePath: newLocalPath,
-                        tempFilePath: newTempPath,
-                        category: newCategory,
-                        fileSize: resolvedTotalSize,
-                        downloadedBytes: currentDownloadedBytes,
-                        speed: progress.speed,
-                        eta: progress.eta,
-                        chunks: progress.chunks ??
-                            _buildChunks(
-                              base.threadCount,
-                              resolvedVideoSize,
-                              progress.downloadedBytes,
-                            ),
-                        supportsResume: progress.supportsResume ?? base.supportsResume,
-                        torrentFiles: progress.torrentFiles ?? base.torrentFiles,
-                      );
-
-                      if (now - lastUpdate >= 250) {
-                        _lastProgressUpdateTimes[task.id] = now;
-                        final freshIndex2 = _tasks.indexWhere((t) => t.id == task.id);
-                        if (freshIndex2 != -1 && _tasks[freshIndex2].status == DownloadStatus.downloading) {
-                          _tasks[freshIndex2] = updatedTask;
-                        }
-                        notifyListeners();
-
-                        if (_settingsProvider.notificationsEnabled) {
-                          final progressPercent = resolvedTotalSize > 0
-                              ? ((currentDownloadedBytes / resolvedTotalSize) * 100).round().clamp(0, 100)
-                              : 0;
-                          _notificationService.showDownloadProgress(
-                            notificationId: notificationId,
-                            title: task.fileName,
-                            progressPercent: progressPercent,
-                            speed: updatedTask.speedFormatted,
-                            eta: updatedTask.etaFormatted,
-                            languageCode: _settingsProvider.languageCode,
-                            payload: task.id,
-                          );
-                        }
-
-                        // Keep the foreground service alive directly from the active
-                        // download path so it never self-stops while bytes are flowing
-                        BackgroundService.sendHeartbeat();
-                      } else {
-                        final freshIndex2 = _tasks.indexWhere((t) => t.id == task.id);
-                        if (freshIndex2 != -1) _tasks[freshIndex2] = updatedTask;
-                        _pendingProgressUpdates.add(task.id);
-                      }
-                    },
-                    speedLimitBytesPerSecond: () {
-                      final current = _findTask(task.id);
-                      if (current != null && current.speedLimitKbps > 0) {
-                        return (current.speedLimitKbps * 1000) ~/ 8;
-                      }
-                      return _settingsProvider.speedLimitBytesPerSecond;
-                    },
-                    activeDownloadCount: () => downloadingTasksCount,
-                    threadCount: streamThreadCount,
-                    customUserAgent: _settingsProvider.customUserAgent,
-                    enableProxy: _settingsProvider.enableProxy,
-
-
-                    proxyAddress: _settingsProvider.proxyAddress,
-                    proxyHost: _settingsProvider.proxyHost,
-                    proxyPort: _settingsProvider.proxyPort,
-                    proxyUsername: _settingsProvider.proxyUsername,
-                    proxyPassword: _settingsProvider.proxyPassword,
-                    bypassSSL: _settingsProvider.bypassSSL,
+                  Logger.root.warning(
+                    'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id} (sample $lowSpeedCount). '
+                    'The stream URL may be throttled due to n-parameter descrambling.',
                   );
-          }();
+
+                  if (lowSpeedCount >= 10 && !(_ytThrottlingRefreshing[task.id] ?? false)) {
+                    _ytThrottlingRefreshing[task.id] = true;
+                    _ytLowSpeedCounts[task.id] = 0;
+                    Logger.root.info(
+                      'Persistent YouTube throttling detected for ${task.id}. Attempting automatic stream refresh...',
+                    );
+                    Future.microtask(() async {
+                      try {
+                        final pageUrl = task.downloadPageUrl ?? task.url;
+                        final fresh = await YoutubeService.getFreshStreams(pageUrl);
+                        if (fresh != null && fresh['url'] != null) {
+                          await updateTaskUrlAndResume(task.id, fresh['url']!,
+                              newAudioUrl: fresh['audioUrl']);
+                        }
+                      } catch (err) {
+                        debugPrint('Auto YouTube stream refresh failed: $err');
+                      } finally {
+                        _ytThrottlingRefreshing[task.id] = false;
+                      }
+                    });
+                  }
+                } else if (isYoutube && progress.speed >= 120 * 1024) {
+                  _ytLowSpeedCounts[task.id] = 0;
+                }
+                // --- end throttling detection ---
+
+                final speedQueue = _speedHistories[task.id] ??= Queue<double>();
+                speedQueue.add(progress.speed);
+                if (speedQueue.length > 20) speedQueue.removeFirst();
+
+                final index = _tasks.indexWhere((t) => t.id == task.id);
+                if (index == -1) return;
+                final base = _tasks[index];
+
+                final newFileName = isAutoName && progress.fileName != null
+                    ? progress.fileName!
+                    : base.fileName;
+                final newLocalPath = newFileName != base.fileName
+                    ? p.join(p.dirname(base.localFilePath), safeFileName(newFileName))
+                    : base.localFilePath;
+                final newTempPath = newFileName != base.fileName
+                    ? p.join(p.dirname(base.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
+                    : base.tempFilePath;
+                final newCategory =
+                    newFileName != base.fileName && base.category == 'Other'
+                        ? categoryFromFileName(newFileName)
+                        : base.category;
+
+                pushCombinedProgress(
+                  chunksOverride: progress.chunks ??
+                      _buildChunks(streamThreadCount, videoTransferSize, progress.downloadedBytes),
+                  supportsResumeOverride: progress.supportsResume,
+                  torrentFilesOverride: progress.torrentFiles,
+                  fileNameOverride: newFileName,
+                  localFilePathOverride: newLocalPath,
+                  tempFilePathOverride: newTempPath,
+                  categoryOverride: newCategory,
+                );
+              },
+              speedLimitBytesPerSecond: () {
+                final current = _findTask(task.id);
+                if (current != null && current.speedLimitKbps > 0) {
+                  return (current.speedLimitKbps * 1000) ~/ 8;
+                }
+                return _settingsProvider.speedLimitBytesPerSecond;
+              },
+              activeDownloadCount: () => downloadingTasksCount,
+              threadCount: streamThreadCount,
+              customUserAgent: _settingsProvider.customUserAgent,
+              enableProxy: _settingsProvider.enableProxy,
+              proxyAddress: _settingsProvider.proxyAddress,
+              proxyHost: _settingsProvider.proxyHost,
+              proxyPort: _settingsProvider.proxyPort,
+              proxyUsername: _settingsProvider.proxyUsername,
+              proxyPassword: _settingsProvider.proxyPassword,
+              bypassSSL: _settingsProvider.bypassSSL,
+            );
+          }
+
+          await Future.wait([runVideo(), runAudio()]);
           return;
         } catch (error) {
+          // Stop whichever side is still running before we retry or give up —
+          // otherwise a background download from this failed attempt can
+          // collide with the next attempt's writes to the same temp files.
+          if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
+          if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
+
           final isYoutubeDownload = (task.downloadPageUrl != null &&
                   YoutubeService.extractVideoId(task.downloadPageUrl!) != null) ||
               task.url.contains('.googlevideo.com/') ||
@@ -1661,14 +1661,9 @@ class DownloadProvider extends ChangeNotifier
                       ? task.downloadPageUrl!
                       : task.url;
 
-              // For combined downloads (audio+video), use getFreshStreams
-              // which returns both URLs. refreshStreamUrl only returns the
-              // video URL, leaving the audio URL expired.
               Map<String, dynamic>? newUrlInfo;
               if (hasAudio) {
-                final freshStreams = await YoutubeService.getFreshStreams(
-                  pageUrl,
-                );
+                final freshStreams = await YoutubeService.getFreshStreams(pageUrl);
                 if (freshStreams != null && freshStreams['url'] != null) {
                   newUrlInfo = {
                     'url': freshStreams['url'],
@@ -1676,17 +1671,13 @@ class DownloadProvider extends ChangeNotifier
                   };
                 }
               } else {
-                newUrlInfo = await _refreshYoutubeStreamUrlSafe(
-                  pageUrl,
-                  task.url,
-                );
+                newUrlInfo = await _refreshYoutubeStreamUrlSafe(pageUrl, task.url);
               }
 
               if (newUrlInfo != null && newUrlInfo['url'] != null) {
                 final refreshedUrl = newUrlInfo['url'] as String;
                 final refreshedAudioUrl = newUrlInfo['audioUrl'] as String?;
 
-                // Reject MIME type changes
                 if (!_youtubeMimeCompatible(task.url, refreshedUrl)) {
                   rethrow;
                 }

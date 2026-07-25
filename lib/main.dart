@@ -18,6 +18,7 @@ import 'features/settings/provider/settings_provider.dart';
 import 'features/browser/services/ad_blocker.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'shared/widgets/main_navigation_container.dart';
+import 'shared/widgets/share_intent_screen.dart';
 
 Future<void> main(List<String> args) async {
   runZonedGuarded(
@@ -162,10 +163,9 @@ class DmxApp extends StatelessWidget {
             locale: Locale(settings.languageCode),
             home: settings.showOnboarding
                 ? const OnboardingScreen()
-                : MainNavigationContainer(
-                    initialUrl: initialUrl,
-                    isShareLaunch: initialUrl != null && initialUrl!.trim().isNotEmpty,
-                  ),
+                : (initialUrl != null && initialUrl!.trim().isNotEmpty)
+                    ? ShareLaunchScreen(url: initialUrl!)
+                    : const MainNavigationContainer(),
             builder: (context, child) {
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(

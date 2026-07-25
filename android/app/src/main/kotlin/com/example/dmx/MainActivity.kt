@@ -22,6 +22,10 @@ class MainActivity : FlutterActivity() {
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val action = intent?.action
+        if (Intent.ACTION_SEND == action || Intent.ACTION_SEND_MULTIPLE == action) {
+            setTheme(R.style.TranslucentShareTheme)
+        }
         super.onCreate(savedInstanceState)
         // Request maximum refresh rate on supported devices (Android 11+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
