@@ -385,12 +385,14 @@ class YoutubeService {
     final isYouTubeHost =
         host.contains('youtube.com') || host.contains('youtu.be');
 
-    final cached = _streamsCache[url];
+    final videoId = extractVideoId(url);
+    final cacheKey = videoId ?? url;
+    final cached = _streamsCache[cacheKey];
     if (cached != null) {
       if (DateTime.now().difference(cached.$1) < _cacheDuration) {
         return cached.$2;
       } else {
-        _streamsCache.remove(url);
+        _streamsCache.remove(cacheKey);
       }
     }
 
@@ -459,7 +461,7 @@ class YoutubeService {
               .key;
           _streamsCache.remove(oldestKey);
         }
-        _streamsCache[url] = (now, results);
+        _streamsCache[cacheKey] = (now, results);
         return results;
       }
     } on BackendBadRequestException {

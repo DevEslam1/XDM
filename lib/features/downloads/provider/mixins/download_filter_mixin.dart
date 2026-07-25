@@ -30,6 +30,7 @@ mixin DownloadFilterMixin {
   String? _browserUrlToLoad;
 
   List<DownloadTask>? _cachedFilteredTasks;
+  List<DownloadTask>? _cachedResolvedTasks;
   bool _filteredTasksDirty = true;
 
   // ---------------------------------------------------------------------------
@@ -50,7 +51,10 @@ mixin DownloadFilterMixin {
   // Dirty flag — usable by other mixins / host
   // ---------------------------------------------------------------------------
   bool get filteredTasksDirty => _filteredTasksDirty;
-  set filteredTasksDirty(bool value) => _filteredTasksDirty = value;
+  set filteredTasksDirty(bool value) {
+    _filteredTasksDirty = value;
+    if (value) _cachedResolvedTasks = null;
+  }
 
   // ---------------------------------------------------------------------------
   // Computed aggregates
@@ -119,10 +123,13 @@ mixin DownloadFilterMixin {
   // ---------------------------------------------------------------------------
   List<DownloadTask> get filteredTasks {
     if (!_filteredTasksDirty && _cachedFilteredTasks != null) {
-      return _cachedFilteredTasks!
+      // Return cached resolved list if available
+      if (_cachedResolvedTasks != null) return _cachedResolvedTasks!;
+      _cachedResolvedTasks = _cachedFilteredTasks!
           .map((t) => findTaskById(t.id))
           .whereType<DownloadTask>()
           .toList();
+      return _cachedResolvedTasks!;
     }
     final list = providerTasks.where((task) {
       final queryLower = _searchQuery.toLowerCase();
@@ -172,6 +179,7 @@ mixin DownloadFilterMixin {
     });
 
     _cachedFilteredTasks = list;
+    _cachedResolvedTasks = null; // Invalidate resolved cache
     _filteredTasksDirty = false;
     return list;
   }

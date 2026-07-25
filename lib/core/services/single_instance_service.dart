@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../utils/url_utils.dart';
 
@@ -21,10 +22,8 @@ class SingleInstanceService {
       File('${Directory.systemTemp.path}/xdm_instance_$_port.token');
 
   String _generateSecurityToken() {
-    final bytes = List<int>.generate(32, (i) {
-      final now = DateTime.now().microsecondsSinceEpoch;
-      return ((now >> (i % 8 * 8)) ^ (i * 73 + now.hashCode)) & 0xFF;
-    });
+    final random = Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
     return base64Url.encode(bytes);
   }
 

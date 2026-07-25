@@ -47,8 +47,8 @@ class ShareService {
     });
 
     if (!_initialMediaConsumed) {
-      _initialMediaConsumed = true;
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+        _initialMediaConsumed = true; // Set AFTER processing
         if (!_initialized) return;
         for (final file in value) {
           handleUrl(file.path, isInitial: true);

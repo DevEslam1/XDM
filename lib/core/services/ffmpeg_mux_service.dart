@@ -67,7 +67,7 @@ class FFmpegMuxService {
       _log.info('FFmpeg arguments: $arguments');
       final session = await FFmpegKit
           .executeWithArguments(arguments)
-          .timeout(const Duration(minutes: 60));
+          .timeout(const Duration(minutes: 10));
       final returnCode = await session.getReturnCode();
 
       Future<void> cleanUpInputs() async {
@@ -115,7 +115,7 @@ class FFmpegMuxService {
         ];
         
         final fallbackSession = await FFmpegKit.executeWithArguments(fallbackArguments)
-            .timeout(const Duration(minutes: 60));
+            .timeout(const Duration(minutes: 10));
         final fallbackReturnCode = await fallbackSession.getReturnCode();
         
         if (ReturnCode.isSuccess(fallbackReturnCode)) {

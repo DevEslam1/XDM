@@ -95,6 +95,9 @@ mixin DownloadQueueMixin {
 
       var startedThisPass = 0;
       for (final task in queued) {
+        // Skip if this task already has a pending override (already being started)
+        if (effectiveThreadOverrides.containsKey(task.id)) continue;
+
         final activePlusPending = downloadingTasksCount + pendingStartCount + startedThisPass;
         final availableSlots = maxSlots - activePlusPending;
         if (availableSlots <= 0) break;

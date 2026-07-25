@@ -164,6 +164,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       final List<Map<String, dynamic>> tabList = [];
       int savedIndex = 0;
       int normalTabCount = 0;
+      bool currentTabFound = false;
 
       for (int i = 0; i < _tabs.length; i++) {
         final tab = _tabs[i];
@@ -171,9 +172,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
         if (i == _currentTabIndex) {
           savedIndex = normalTabCount;
-        } else if (savedIndex >= normalTabCount) {
-          // Current tab is incognito; track fallback index for non-incognito
-          savedIndex = normalTabCount;
+          currentTabFound = true;
         }
         tabList.add({
           'url': tab.url,
@@ -181,6 +180,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           'isIncognito': false,
         });
         normalTabCount++;
+      }
+
+      // If current tab was incognito (not found in normal tabs), use last valid index
+      if (!currentTabFound && normalTabCount > 0) {
+        savedIndex = normalTabCount - 1;
       }
       // Clamp savedIndex to valid range in case all tabs were incognito
       if (normalTabCount > 0) {
@@ -209,6 +213,18 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           if (item is Map<String, dynamic>) {
             final String url = item['url'] as String? ?? 'about:blank';
             final String title = item['title'] as String? ?? fallbackTitle;
+
+            // Validate URL scheme to prevent javascript: or file:// injection
+            final uri = Uri.tryParse(url);
+            final isSafeScheme = uri == null ||
+                url == 'about:blank' ||
+                url.isEmpty ||
+                uri.scheme == 'http' ||
+                uri.scheme == 'https';
+            if (!isSafeScheme) {
+              debugPrint('[Browser] Skipping unsafe restored URL: $url');
+              continue;
+            }
 
             final tab = _createNewTab(initialUrl: url, isIncognito: false);
             tab.title = title;
@@ -788,6 +804,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || _tabs.isEmpty) return;
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
+
+    // Skip native state sync when in virtual home state (set by _goBack fallback)
+    if (activeTab.isHome && _homeReturnUrl != null) return;
+
     try {
       final canBack = await activeTab.controller.canGoBack();
       final canForward = await activeTab.controller.canGoForward();
@@ -1480,13 +1500,20 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           }
         }
         final List<dynamic> parsed = jsonDecode(cleanResult);
-        if (parsed.isNotEmpty) {
+        final safeSources = parsed.where((e) {
+          final src = (e as Map)['src'] as String? ?? '';
+          final uri = Uri.tryParse(src);
+          return uri != null &&
+              (uri.scheme == 'http' || uri.scheme == 'https') &&
+              uri.host.isNotEmpty;
+        }).toList();
+        if (safeSources.isNotEmpty) {
           setState(() {
-            _detectedMediaSources[tab.id] = parsed
+            _detectedMediaSources[tab.id] = safeSources
                 .map((e) => Map<String, dynamic>.from(e as Map))
                 .toList();
             if (_detectedDownloadUrls[tab.id] == null) {
-              _detectedDownloadUrls[tab.id] = parsed.first['src'];
+              _detectedDownloadUrls[tab.id] = safeSources.first['src'];
             }
           });
         }

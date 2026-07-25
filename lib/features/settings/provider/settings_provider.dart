@@ -66,6 +66,10 @@ class SettingsProvider extends ChangeNotifier {
   bool autoStart = true;
   String? customDownloadPath;
   int _maxDownloads = 3;
+  /// Returns the effective max downloads. When battery saver is active,
+  /// this is forced to 1 regardless of the user's configured value.
+  /// The configured value is preserved in [_maxDownloads] and restored
+  /// when battery saver is disabled.
   int get maxDownloads => batterySaverMode ? 1 : _maxDownloads;
   double speedLimitMb = 0.0;
   bool enableGlow = true;
@@ -179,6 +183,10 @@ class SettingsProvider extends ChangeNotifier {
     wifiOnly = _prefs.getBool(_wifiOnlyKey) ?? wifiOnly;
     languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
     themeMode = _prefs.getString(_themeModeKey) ?? 'system';
+    // Validate themeMode value
+    if (!['light', 'dark', 'system'].contains(themeMode)) {
+      themeMode = 'system';
+    }
     _isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
     showOnboarding = _prefs.getBool(_showOnboardingKey) ?? showOnboarding;
     _classicUi = _prefs.getBool(_classicUiKey) ?? _classicUi;

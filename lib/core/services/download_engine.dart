@@ -761,10 +761,12 @@ class DownloadEngine {
     final completer = Completer<void>();
     SendPort? isolateCommandPort;
     bool isCancelledEarly = false;
+    bool isolateKilled = false;
 
     Timer? isolateWatchdog;
     isolateWatchdog = Timer(const Duration(seconds: 30), () {
       if (isolateCommandPort == null) {
+        isolateKilled = true;
         isolate.kill(priority: Isolate.immediate);
         if (!completer.isCompleted) {
           completer.completeError(
@@ -779,6 +781,7 @@ class DownloadEngine {
     });
 
     void handleEarlyCancel() {
+      isolateKilled = true;
       if (isolateCommandPort != null) {
         isolateCommandPort!.send({'type': 'cancel'});
       } else {
@@ -817,6 +820,7 @@ class DownloadEngine {
 
     receivePort.listen((message) {
       if (message is SendPort) {
+        if (isolateKilled) return; // Don't register ports from killed isolates
         isolateCommandPort = message;
         _activeIsolateCommandPorts.add(isolateCommandPort!);
         if (isCancelledEarly) {
@@ -1262,7 +1266,10 @@ class DownloadEngine {
         }
 
         void reportProgress() {
-          final downloadedTotal = chunkProgress.reduce((a, b) => a + b);
+          int downloadedTotal = 0;
+          // Use a local snapshot to avoid holding lock during UI callback
+          final snapshot = List<int>.from(chunkProgress);
+          downloadedTotal = snapshot.reduce((a, b) => a + b);
           final nowMs = stopwatch.elapsedMilliseconds;
           speedSamples.add(_SpeedSample(nowMs, downloadedTotal));
 
@@ -1603,6 +1610,9 @@ class DownloadEngine {
             if (await stateFile.exists()) await stateFile.delete();
           }
 
+          // Give the OS time to release the file handle (Windows-specific)
+          await Future.delayed(const Duration(milliseconds: 200));
+
           // Fallback to single-threaded stream download
           await _downloadSingleThreaded(
             url: url,
@@ -1719,6 +1729,21 @@ class DownloadEngine {
       actualResumeFrom = 0;
       if (await tempFile.exists()) {
         await tempFile.delete();
+      }
+    }
+
+    if (actualResumeFrom > 0 && isPartialResponse) {
+      final contentRange = response.headers.value('content-range');
+      if (contentRange != null) {
+        final rangeMatch = RegExp(r'bytes\s+(\d+)-').firstMatch(contentRange);
+        if (rangeMatch != null) {
+          final serverStart = int.tryParse(rangeMatch.group(1) ?? '');
+          if (serverStart != null && serverStart != actualResumeFrom) {
+            debugPrint('[DownloadEngine] Server resumed from $serverStart but we expected $actualResumeFrom. Restarting.');
+            actualResumeFrom = 0;
+            if (await tempFile.exists()) await tempFile.delete();
+          }
+        }
       }
     }
 

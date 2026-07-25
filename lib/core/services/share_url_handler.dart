@@ -121,6 +121,15 @@ class ShareUrlHandler {
           audioSize: audioSize ?? 0,
         );
       }
+    } else {
+      // Direct file links (e.g. .zip, .apk, .mp4) — open the standard download dialog
+      await showDialog(
+        context: context,
+        builder: (_) => AddDownloadDialog(
+          prefilledUrl: url,
+          isShareLaunch: isShareLaunch,
+        ),
+      );
     }
 
     if (isShareLaunch && context.mounted) {

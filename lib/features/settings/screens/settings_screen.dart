@@ -22,6 +22,8 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../browser/services/ad_blocker.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/services/xdm_backend_client.dart';
+import '../../../core/services/update_service.dart';
+import '../widgets/update_dialogs.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -1515,6 +1517,61 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                   letterSpacing: 0.8,
                   fontSize: 11,
                 ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    width: 1,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                icon: Icon(
+                  Icons.system_update_rounded,
+                  size: 16,
+                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ),
+                label: Text(
+                  L10n.isRtl(context) ? 'التحقق من وجود تحديثات' : 'Check for updates',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onPressed: () async {
+                  triggerHaptic(settings);
+                  ThemedSnackbar.show(
+                    context,
+                    message: L10n.isRtl(context)
+                        ? 'جاري التحقق من وجود تحديثات...'
+                        : 'Checking for updates...',
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    icon: Icons.sync,
+                    isDarkMode: isDark,
+                  );
+                  final update = await UpdateService().checkForUpdate();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  final provider = context.read<DownloadProvider>();
+                  if (update != null) {
+                    showUpdateInfoDialog(context, update, provider, settings);
+                  } else {
+                    ThemedSnackbar.show(
+                      context,
+                      message: L10n.isRtl(context)
+                          ? 'التطبيق محدّث لأحدث إصدار!'
+                          : 'App is up to date!',
+                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      icon: Icons.check_circle_outline,
+                      isDarkMode: isDark,
+                    );
+                  }
+                },
               ),
               const SizedBox(height: 12),
               Divider(

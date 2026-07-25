@@ -10,9 +10,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logging/logging.dart';
+import 'package:open_filex/open_filex.dart' as open_filex;
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/services/update_service.dart';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -439,6 +442,7 @@ class DownloadProvider extends ChangeNotifier
     int audioSize = 0,
     String? youtubeQualityPreset,
     int? torrentId,
+    bool isAppUpdate = false,
   }) async {
     _lastError = null;
     final urls = url
@@ -486,6 +490,7 @@ class DownloadProvider extends ChangeNotifier
             audioSize: audioSize,
             youtubeQualityPreset: youtubeQualityPreset,
             torrentId: torrentId,
+            isAppUpdate: isAppUpdate,
           );
           addedCount++;
         }
@@ -514,6 +519,7 @@ class DownloadProvider extends ChangeNotifier
           audioSize: audioSize,
           youtubeQualityPreset: youtubeQualityPreset,
           torrentId: torrentId,
+          isAppUpdate: isAppUpdate,
         );
       }
     } catch (e) {
@@ -536,6 +542,7 @@ class DownloadProvider extends ChangeNotifier
     int audioSize = 0,
     String? youtubeQualityPreset,
     int? torrentId,
+    bool isAppUpdate = false,
   }) async {
     final exists = _tasks.any((t) {
       if (t.status == DownloadStatus.failed ||
@@ -552,7 +559,7 @@ class DownloadProvider extends ChangeNotifier
       }
       return t.url == url;
     });
-    if (exists) {
+    if (exists && !isAppUpdate) {
       throw Exception('This download is already active in the queue.');
     }
 
@@ -647,6 +654,7 @@ class DownloadProvider extends ChangeNotifier
       mergedAudioUrl: mergedAudioUrl,
       audioSize: audioSize,
       youtubeQualityPreset: youtubeQualityPreset,
+      isAppUpdate: isAppUpdate,
     );
 
     _tasks.insert(0, task);
@@ -728,6 +736,15 @@ class DownloadProvider extends ChangeNotifier
         break;
       case 'resume_all':
         resumeAllTasks();
+        break;
+      case 'install_apk':
+      case 'tap':
+        if (taskId != null) {
+          final task = _findTask(taskId);
+          if (task != null && task.isAppUpdate && task.status == DownloadStatus.completed) {
+            open_filex.OpenFilex.open(task.localFilePath);
+          }
+        }
         break;
     }
   }
@@ -1012,6 +1029,9 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _startTaskBody(DownloadTask task) async {
+    // Clean up stale torrent IDs for tasks that no longer exist
+    _torrentIds.removeWhere((id, _) => !_tasks.any((t) => t.id == id));
+
     // Apply global connection cap override from queue pump (runtime-only, never mutates stored task)
     final runtimeThreadCount =
         effectiveThreadOverrides.remove(task.id) ?? task.threadCount;
@@ -1040,6 +1060,12 @@ class DownloadProvider extends ChangeNotifier
     _updateBackgroundNotification();
     _startWidgetTimer();
     _updateTelemetryWidget();
+
+    // Periodic cleanup of stale cookie cache entries
+    if (_cookieCache.length > _cookieCacheMaxSize ~/ 2) {
+      final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
+      _cookieCache.removeWhere((_, entry) => entry.timestamp.isBefore(cutoff));
+    }
 
     // Extract cookies from native WebView for authentication (using a 5-minute TTL cache)
     String cookieString = '';
@@ -1390,8 +1416,8 @@ class DownloadProvider extends ChangeNotifier
         final base = _tasks[index];
         if (base.status != DownloadStatus.downloading) return;
 
-        final totalSize =
-            hasAudio ? (videoTransferSize + base.audioSize) : videoTransferSize;
+        final audioContribution = hasAudio ? (base.audioSize > 0 ? base.audioSize : 0) : 0;
+        final totalSize = videoTransferSize + audioContribution;
         final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
         final combinedSpeed = audioSpeedNow + videoSpeedNow;
 
@@ -1850,11 +1876,28 @@ class DownloadProvider extends ChangeNotifier
           }
 
           if (_settingsProvider.notificationsEnabled) {
-            _notificationService.showDownloadComplete(
-              notificationId: notificationId,
-              title: task.fileName,
-              playSound: _settingsProvider.soundNotification,
-            );
+            if (task.isAppUpdate) {
+              _notificationService.showDownloadComplete(
+                notificationId: notificationId,
+                title: 'Update ready',
+                body: 'App update ${task.fileName} downloaded. Tap to install.',
+                playSound: _settingsProvider.soundNotification,
+                payload: task.id,
+                actions: const [
+                  AndroidNotificationAction(
+                    'install_apk',
+                    'Install',
+                    showsUserInterface: true,
+                  ),
+                ],
+              );
+            } else {
+              _notificationService.showDownloadComplete(
+                notificationId: notificationId,
+                title: task.fileName,
+                playSound: _settingsProvider.soundNotification,
+              );
+            }
           }
         })
         .catchError((Object error, StackTrace stackTrace) async {
@@ -1993,13 +2036,16 @@ class DownloadProvider extends ChangeNotifier
     _dbSaveQueues[updated.id] = completer.future;
 
     updateActualTorrentUploadLimit();
-    notifyListeners();
 
     await previousSave;
     try {
       await _databaseService.saveTask(updated);
+      // Notify AFTER successful DB write to keep UI and persistence in sync
+      notifyListeners();
     } catch (e) {
       debugPrint('Error saving task to database: $e');
+      // Still notify so UI doesn't freeze, but log the inconsistency
+      notifyListeners();
     } finally {
       completer.complete();
       if (_dbSaveQueues[updated.id] == completer.future) {
@@ -2235,6 +2281,7 @@ class DownloadProvider extends ChangeNotifier
           task.status == DownloadStatus.queued,
     );
     for (final task in active.toList()) {
+      _tasksPausedDueToNetwork.add(task.id); // Track for proper resume
       if (task.status == DownloadStatus.downloading) {
         final torrentId = _torrentIds[task.id];
         if (torrentId != null) {
@@ -2272,14 +2319,76 @@ class DownloadProvider extends ChangeNotifier
     if (!skipPump) pumpQueue();
   }
 
+  DateTime? _lastUpdateCheckTime;
+
   void _startSchedulingTimer() {
     _schedulingTimer?.cancel();
     _schedulingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _checkScheduledDownloads();
+      _checkPeriodicAppUpdate();
       if (downloadingTasksCount > 0) {
         BackgroundService.sendHeartbeat();
       }
     });
+  }
+
+  Future<void> _checkPeriodicAppUpdate() async {
+    final now = DateTime.now();
+    if (_lastUpdateCheckTime != null &&
+        now.difference(_lastUpdateCheckTime!).inHours < 12) {
+      return;
+    }
+    _lastUpdateCheckTime = now;
+    try {
+      await UpdateService().checkForUpdate();
+    } catch (e) {
+      debugPrint('[DownloadProvider] Background update check error: $e');
+    }
+  }
+
+  Future<void> startUpdateDownload(UpdateInfo update) async {
+    final updatesDir = await UpdateService().getUpdatesDirectory();
+    final fileName = 'XDM_${update.latestVersion}_v${update.versionCode}.apk';
+
+    final existing = _tasks.firstWhere(
+      (t) => t.isAppUpdate && t.fileName == fileName,
+      orElse: () => DownloadTask(
+        id: '',
+        fileName: '',
+        url: '',
+        fileSize: 0,
+        downloadedBytes: 0,
+        category: 'APK',
+        status: DownloadStatus.failed,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
+
+    if (existing.id.isNotEmpty && existing.status == DownloadStatus.completed) {
+      final file = File(existing.localFilePath);
+      final isIntact = await UpdateService().verifyApkIntegrity(
+        file,
+        expectedSha256: update.sha256,
+      );
+      if (isIntact) {
+        return;
+      }
+    }
+
+    await addDownload(
+      name: fileName,
+      url: update.apkUrl,
+      size: 0,
+      category: 'APK',
+      savePath: updatesDir.path,
+      isAppUpdate: true,
+    );
   }
 
   Future<void> _checkScheduledDownloads() async {
@@ -2344,22 +2453,23 @@ class DownloadProvider extends ChangeNotifier
         _updateTelemetryWidget();
         BackgroundService.sendHeartbeat();
         
-        final saves = <Future<void>>[];
+        final tasksToSave = <DownloadTask>[];
         for (var i = 0; i < _tasks.length; i++) {
           final t = _tasks[i];
           if (t.status == DownloadStatus.downloading) {
             final lastBytes = _lastDbSaveBytes[t.id] ?? -1;
             if (t.downloadedBytes != lastBytes) {
               _lastDbSaveBytes[t.id] = t.downloadedBytes;
-              saves.add(_databaseService.saveTask(t));
+              tasksToSave.add(t);
             }
           }
           // Do NOT save queued tasks here — they have no meaningful progress
         }
-        Future.wait(saves).catchError((e) {
-          debugPrint('Batch DB save failed: $e');
-          return <void>[];
-        });
+        if (tasksToSave.isNotEmpty) {
+          _databaseService.saveTasks(tasksToSave).catchError((e) {
+            debugPrint('Batch DB save failed: $e');
+          });
+        }
 
         if (updateSeedingSpeeds()) {
           notifyListeners();

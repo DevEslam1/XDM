@@ -54,16 +54,22 @@ class NotificationService {
 
   Future<void> init() async {
     if (!isSupported) return;
-    // Guard against concurrent re-entrancy: if an init is already in
-    // progress (or completed), reuse its future instead of re-running
-    // setup, which would re-create the ReceivePort and leak the old one.
+
+    // If init is already in progress or completed successfully, reuse it
     if (_initFuture != null) {
-      if (_receivePort == null || IsolateNameServer.lookupPortByName('dmx_notification_port') == null) {
-        _initFuture = null;
-      } else {
+      // Only reset if the port is genuinely missing (crash recovery)
+      if (_receivePort != null &&
+          IsolateNameServer.lookupPortByName('dmx_notification_port') != null) {
         return _initFuture!;
       }
+      // Port is missing — need to re-init, but wait for any in-flight init first
+      try {
+        await _initFuture;
+      } catch (_) {
+        // Previous init failed, proceed with fresh init
+      }
     }
+
     final completer = Completer<void>();
     _initFuture = completer.future;
     try {
@@ -110,9 +116,9 @@ class NotificationService {
     await _plugin.initialize(
       settings: settings,
       onDidReceiveNotificationResponse: (response) {
-        final actionId = response.actionId;
+        final actionId = response.actionId ?? 'tap';
         final payload = response.payload;
-        if (actionId != null && payload != null) {
+        if (payload != null) {
           _actionStreamController.add({
             'action': actionId,
             'taskId': payload,
@@ -237,7 +243,10 @@ class NotificationService {
   Future<void> showDownloadComplete({
     required int notificationId,
     required String title,
+    String body = 'Download complete',
     bool playSound = true,
+    String? payload,
+    List<AndroidNotificationAction>? actions,
   }) async {
     if (!_initialized) return;
     final channelId = playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
@@ -245,17 +254,19 @@ class NotificationService {
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
-      importance: playSound ? Importance.defaultImportance : Importance.low,
-      priority: playSound ? Priority.defaultPriority : Priority.low,
+      importance: playSound ? Importance.defaultImportance : Importance.high,
+      priority: playSound ? Priority.defaultPriority : Priority.high,
       showProgress: false,
       playSound: playSound,
+      actions: actions,
     );
     final details = NotificationDetails(android: androidDetails);
     await _plugin.show(
       id: notificationId,
       title: title,
-      body: 'Download complete',
+      body: body,
       notificationDetails: details,
+      payload: payload,
     );
   }
 

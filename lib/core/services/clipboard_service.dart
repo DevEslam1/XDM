@@ -19,6 +19,13 @@ class ClipboardService {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
       if (text != null && isHttpUrl(text)) {
+        // Basic safety: reject URLs with suspicious patterns
+        final lower = text.toLowerCase();
+        if (lower.contains('javascript:') ||
+            lower.contains('data:') ||
+            lower.contains('vbscript:')) {
+          return null;
+        }
         if (text != _lastCheckedUrl) {
           _lastCheckedUrl = text;
           _lastCheckedTime = DateTime.now();

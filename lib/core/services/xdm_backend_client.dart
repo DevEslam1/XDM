@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/constants.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -14,10 +15,43 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
+  static const String _apiKeyFallback = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
+  static String? _apiKey;
+
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
 
   static final _settings = SettingsProvider();
+  static final _secureStorage = const FlutterSecureStorage();
+  static const _apiKeyStorageKey = 'xdm_backend_api_key';
+
+  /// Reads the API key from secure storage, falling back to the compile-time constant.
+  /// Call this once at app startup before using the client.
+  static Future<void> loadApiKey() async {
+    try {
+      final stored = await _secureStorage.read(key: _apiKeyStorageKey);
+      if (stored != null && stored.isNotEmpty) {
+        _apiKey = stored;
+        return;
+      }
+    } catch (e) {
+      debugPrint('[XdmBackendClient] Failed to read API key from secure storage: $e');
+    }
+    _apiKey = _apiKeyFallback;
+  }
+
+  /// Persists a new API key to secure storage and refreshes the Dio client.
+  /// Pass an empty string to reset to the built-in fallback key.
+  static Future<void> setApiKey(String key) async {
+    if (key.isEmpty) {
+      await _secureStorage.delete(key: _apiKeyStorageKey);
+      _apiKey = _apiKeyFallback;
+    } else {
+      await _secureStorage.write(key: _apiKeyStorageKey, value: key);
+      _apiKey = key;
+    }
+    _instance._updateDioFromSettings();
+  }
 
   XdmBackendClient._internal() {
     _updateDioFromSettings();
@@ -25,6 +59,7 @@ class XdmBackendClient {
 
   /// Updates the backend configuration from SettingsProvider
   void _updateDioFromSettings() {
+    final key = _apiKey ?? _apiKeyFallback;
     _dio = Dio(
       BaseOptions(
         baseUrl: _settings.backendUrl.isNotEmpty ? _settings.backendUrl : kDefaultBackendBaseUrl,
@@ -33,7 +68,7 @@ class XdmBackendClient {
         receiveTimeout: const Duration(seconds: 60),
         headers: {
           'Accept': 'application/json',
-          'Authorization': 'Bearer KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0',
+          'Authorization': 'Bearer $key',
         },
       ),
     );
@@ -68,9 +103,10 @@ class XdmBackendClient {
   }
 
   Map<String, String> _buildHeaders([Map<String, String>? extra]) {
+    final key = _apiKey ?? _apiKeyFallback;
     return {
       'Accept': 'application/json',
-      'Authorization': 'Bearer KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0',
+      'Authorization': 'Bearer $key',
       ...?extra,
     };
   }

@@ -55,6 +55,7 @@ class DownloadTask {
   final bool pausedByUser;
   final String? youtubeQualityPreset;
   final String? notes;
+  final bool isAppUpdate;
 
   DownloadTask({
     required this.id,
@@ -90,6 +91,7 @@ class DownloadTask {
     this.pausedByUser = false,
     this.youtubeQualityPreset,
     this.notes,
+    this.isAppUpdate = false,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -187,6 +189,7 @@ class DownloadTask {
     String? youtubeQualityPreset,
     bool clearYoutubeQualityPreset = false,
     String? notes,
+    bool? isAppUpdate,
   }) {
     return DownloadTask(
       id: id,
@@ -222,6 +225,7 @@ class DownloadTask {
       pausedByUser: pausedByUser ?? this.pausedByUser,
       youtubeQualityPreset: clearYoutubeQualityPreset ? null : youtubeQualityPreset ?? this.youtubeQualityPreset,
       notes: notes ?? this.notes,
+      isAppUpdate: isAppUpdate ?? this.isAppUpdate,
     );
   }
 
@@ -260,6 +264,7 @@ class DownloadTask {
       'pausedByUser': pausedByUser,
       'youtubeQualityPreset': youtubeQualityPreset,
       'notes': notes,
+      'isAppUpdate': isAppUpdate,
     };
   }
 
@@ -288,8 +293,22 @@ class DownloadTask {
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
     } else if (rawChunks.length > threadCount) {
+      if (kDebugMode) {
+        debugPrint(
+          'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
+          'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
+          'Truncating chunks to match threadCount.',
+        );
+      }
       chunks = rawChunks.sublist(0, threadCount);
     } else {
+      if (kDebugMode) {
+        debugPrint(
+          'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
+          'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
+          'Padding chunks to match threadCount.',
+        );
+      }
       chunks = [
         ...rawChunks,
         ...List.filled(threadCount - rawChunks.length, 0.0),
@@ -338,6 +357,7 @@ class DownloadTask {
       pausedByUser: map['pausedByUser'] as bool? ?? false,
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
       notes: map['notes'] as String?,
+      isAppUpdate: map['isAppUpdate'] as bool? ?? false,
     );
   }
 

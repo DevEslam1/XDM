@@ -14,6 +14,8 @@ import '../../features/settings/provider/settings_provider.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/downloads/provider/download_provider.dart';
 import '../../core/services/single_instance_service.dart';
+import '../../core/services/update_service.dart';
+import '../../features/settings/widgets/update_dialogs.dart';
 import 'dmx_backdrop_filter.dart';
 import 'themed_snackbar.dart';
 
@@ -63,6 +65,61 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     }
 
     _checkClipboard();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAppUpdates();
+    });
+  }
+
+  Future<void> _checkAppUpdates() async {
+    try {
+      final update = await UpdateService().checkForUpdate();
+      if (update != null && mounted) {
+        final provider = context.read<DownloadProvider>();
+        final settings = context.read<SettingsProvider>();
+        if (update.mandatory) {
+          showMandatoryUpdateDialog(context, update, provider);
+        } else {
+          final isDark = settings.isDarkMode;
+          final isRtl = L10n.isRtl(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              content: Row(
+                children: [
+                  Icon(
+                    Icons.system_update_rounded,
+                    color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isRtl
+                          ? 'تحديث جديد متوفر v${update.latestVersion}'
+                          : 'New update available v${update.latestVersion}',
+                      style: TextStyle(
+                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              action: SnackBarAction(
+                label: isRtl ? 'تنزيل' : 'UPDATE',
+                textColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                onPressed: () {
+                  showUpdateInfoDialog(context, update, provider, settings);
+                },
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Update check error: $e');
+    }
   }
 
   @override

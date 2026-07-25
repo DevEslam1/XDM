@@ -331,9 +331,13 @@ class AdBlocker {
   /// initialized, the check is skipped rather than mutating state.
   static bool shouldBlock(String url) {
     if (!_initialized) {
-      if (_blockedDomains.isEmpty) {
-        _blockedDomains.addAll(_fallbackDomains);
+      // Use a local check against fallback domains only (no mutation)
+      final host = _extractHost(url.toLowerCase());
+      if (host.isEmpty) return false;
+      for (final domain in _fallbackDomains) {
+        if (host == domain || host.endsWith('.$domain')) return true;
       }
+      return false;
     }
 
     // 0. Always allow YouTube domains and API paths
