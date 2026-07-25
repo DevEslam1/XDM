@@ -13,7 +13,6 @@ import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:logging/logging.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/youtube_service.dart';
-import '../../../core/services/google_auth_service.dart';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -1069,13 +1068,6 @@ class DownloadProvider extends ChangeNotifier
     if (task.youtubeQualityPreset != null &&
         (youtubeUrl.contains('youtube.com/') ||
             youtubeUrl.contains('youtu.be/'))) {
-      final googleAuth = GoogleAuthService();
-      if (googleAuth.isSignedIn) {
-        final freshToken = await googleAuth.getAccessToken();
-        if (freshToken != null) {
-          YoutubeService.refreshOAuthToken(freshToken);
-        }
-      }
       if (cookieString.isNotEmpty) {
         YoutubeService.signIn(cookieString);
       }

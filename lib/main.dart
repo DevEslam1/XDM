@@ -11,7 +11,6 @@ import 'core/services/torrent_service.dart';
 import 'core/app_theme.dart';
 import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
-import 'core/services/google_auth_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/single_instance_service.dart';
 import 'features/downloads/provider/download_provider.dart';
@@ -52,9 +51,6 @@ Future<void> main(List<String> args) async {
 
         final settingsProvider = SettingsProvider();
         await settingsProvider.load();
-
-        // Initialize Google Auth (restores previous session)
-        await GoogleAuthService().initialize();
 
         final notificationService = NotificationService();
         await notificationService.init();

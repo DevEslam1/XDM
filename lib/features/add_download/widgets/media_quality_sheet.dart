@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
-import '../../../core/services/google_auth_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -458,54 +457,6 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 style: TextStyle(color: secClr, fontSize: 12),
                               ),
                               const SizedBox(height: 20),
-
-                              // Google Sign-In button when auth error
-                              if (_errorMessage!.contains('age-restricted') ||
-                                  _errorMessage!.contains('sign-in') ||
-                                  _errorMessage!.contains('Sign in') ||
-                                  _errorMessage!.contains('تسجيل الدخول')) ...[
-                                ElevatedButton.icon(
-                                  onPressed: () async {
-                                    var success =
-                                        await GoogleAuthService().signIn();
-                                    if (!success) {
-                                      await YoutubeService.authenticateFromBrowser();
-                                      if (YoutubeService.isSignedIn) {
-                                        success = true;
-                                      }
-                                    }
-                                    if (success && mounted) {
-                                      setState(() {
-                                        _isLoading = true;
-                                        _errorMessage = null;
-                                        _streams = [];
-                                      });
-                                      _fetchStreams(); // Retry with auth
-                                    }
-                                  },
-                                  icon: const Icon(Icons.login_rounded,
-                                      size: 16),
-                                  label: Text(
-                                    L10n.isRtl(context)
-                                        ? 'تسجيل الدخول بحساب Google'
-                                        : 'SIGN IN WITH GOOGLE',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        accent.withValues(alpha: 0.1),
-                                    foregroundColor: accent,
-                                    side: BorderSide(color: accent),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                              ],
 
                               TextButton.icon(
                                 onPressed: () {
