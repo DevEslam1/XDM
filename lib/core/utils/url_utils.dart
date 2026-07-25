@@ -50,8 +50,7 @@ bool isTorrentFileUrl(String value) {
   return clean.startsWith('file://') ||
       clean.startsWith('content://') ||
       clean.endsWith('.torrent') ||
-      clean.contains('.torrent?') ||
-      clean.contains('.torrent');
+      clean.contains('.torrent?');
 }
 
 bool isTorrentUrl(String url, {String? fileName}) {

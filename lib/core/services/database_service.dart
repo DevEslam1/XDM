@@ -239,6 +239,7 @@ class DatabaseService {
       audioProgress: drift.Value(task.audioProgress),
       pausedByUser: drift.Value(task.pausedByUser),
       youtubeQualityPreset: drift.Value(task.youtubeQualityPreset),
+      notes: drift.Value(task.notes),
     );
   }
 
@@ -300,6 +301,7 @@ class DatabaseService {
       audioProgress: row.audioProgress,
       pausedByUser: row.pausedByUser,
       youtubeQualityPreset: row.youtubeQualityPreset,
+      notes: row.notes,
     );
   }
 

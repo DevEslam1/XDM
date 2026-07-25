@@ -188,6 +188,17 @@ void main() {
         }
       },
     );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('flutter.arthenica.com/ffmpeg_kit'),
+      (methodCall) async {
+        print('FFMPEG_KIT_MOCK: ${methodCall.method} called');
+        if (methodCall.method == 'getLogLevel') {
+          return 0;
+        }
+        return null;
+      },
+    );
   });
 
   tearDown(() async {

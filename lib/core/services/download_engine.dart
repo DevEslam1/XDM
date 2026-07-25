@@ -1,7 +1,3 @@
-// NOTE: A legacy file named download_engine.dart.bak exists alongside this
-// file. It is a historical artifact from a prior refactor and is not used by
-// the application. It can be safely deleted once this note is confirmed.
-
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';

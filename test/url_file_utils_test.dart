@@ -140,6 +140,8 @@ void main() {
     test('rejects non-torrent URLs', () {
       expect(isTorrentUrl('https://example.com/video.mp4'), isFalse);
       expect(isTorrentUrl('https://example.com/file.zip'), isFalse);
+      expect(isTorrentUrl('https://example.com/page?ref=my.torrent.backup'), isFalse);
+      expect(isTorrentUrl('https://example.com/not-a-torrent.html'), isFalse);
     });
 
     test('detects .torrent via fileName parameter', () {

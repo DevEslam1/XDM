@@ -576,7 +576,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           try {
             final db = Provider.of<DatabaseService>(context, listen: false);
             db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
-          } catch (_) {}
+          } catch (e) {
+            // Fails silently if DB is busy/uninitialized, which is safe to ignore for best-effort title updating.
+            debugPrint('[DMX Browser] Failed to update browser history title: $e');
+          }
         } else {
           _pendingTitleUpdate = title;
         }
@@ -607,14 +610,19 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               }
             }
           });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to add browser history: $e');
+    }
   }
 
   Future<void> _injectLongPressScriptToTab(BrowserTab tab) async {
     if (!mounted) return;
     try {
       await tab.controller.runJavaScript(_kLongPressScript);
-    } catch (_) {}
+    } catch (e) {
+      // WebView controller might not be fully initialized or page already closed
+      debugPrint('[DMX Browser] Failed to inject long press script: $e');
+    }
   }
 
   Future<void> _injectAdBlocker(BrowserTab tab) async {
@@ -643,7 +651,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       triggerHaptic(settings);
       _showLongPressSheet(context, url, type);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to decode/handle long press message: $e');
+    }
   }
 
   void _onDashboardScroll() {
@@ -689,10 +699,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       try {
         tab.controller.clearCache();
         tab.controller.clearLocalStorage();
-      } catch (_) {}
+      } catch (e) {
+        // Safe to ignore if controller is already disposed or uninitialized
+      }
       try {
         tab.progressNotifier.dispose();
-      } catch (_) {}
+      } catch (e) {
+        // Safe to ignore if notifier is already disposed
+      }
     }
     _tabs.clear();
     _detectedDownloadUrls.clear();
@@ -719,7 +733,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       setState(() {
         _isSnifferEnabled = value;
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to load sniffer preference: $e');
+    }
   }
 
   Future<void> _setSnifferEnabled(bool value) async {
@@ -738,7 +754,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_snifferPrefKey, value);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to save sniffer preference: $e');
+    }
   }
 
   Future<void> _loadCustomJsCss() async {
@@ -748,7 +766,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         _customJs = prefs.getString('browser_custom_js') ?? '';
         _customCss = prefs.getString('browser_custom_css') ?? '';
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to load custom JS/CSS: $e');
+    }
   }
 
   bool _isDownloadable(String url) {
@@ -778,7 +798,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           }
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      // Normal if webview controller is not attached yet during navigation/load
+    }
   }
 
   Future<void> _goBack() async {
@@ -922,7 +944,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               isDarkMode: settings.isDarkMode,
             );
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[DMX Browser] Failed to save bookmark: $e');
+        }
         break;
       case 'copy':
         final url = _urlController.text.trim();
@@ -1395,6 +1419,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           try {
             cleanResult = jsonDecode(cleanResult);
           } catch (_) {
+            // Expected fallback if result is a raw quoted string rather than a JSON structure
             if (cleanResult.length > 2) {
               cleanResult = cleanResult.substring(1, cleanResult.length - 1);
             }
@@ -1412,7 +1437,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           });
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      // Occurs if the page is currently redirecting or WebView is not fully ready
+      debugPrint('[DMX Browser] Failed to run media scan JavaScript: $e');
+    }
   }
 
   // Show dialog to choose quality
@@ -1769,7 +1797,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           }
         """;
         await tab.controller.runJavaScript(jsWrapper);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[DMX Browser] Failed to inject custom JS: $e');
+      }
     }
     if (_customCss.isNotEmpty) {
       try {
@@ -1787,7 +1817,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           })();
         """;
         await tab.controller.runJavaScript(cssScript);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[DMX Browser] Failed to inject custom CSS: $e');
+      }
     }
   }
 
@@ -1808,6 +1840,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           try {
             rawHtml = jsonDecode(rawHtml) as String;
           } catch (_) {
+            // Expected fallback if result is a raw quoted string rather than a JSON structure
             if (rawHtml.length > 2) {
               rawHtml = rawHtml.substring(1, rawHtml.length - 1);
             }
