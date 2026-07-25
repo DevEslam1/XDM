@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/services/database_service.dart';
@@ -316,8 +318,22 @@ mixin DownloadTorrentMixin {
 
     final result = <int>[];
     for (final f in task.torrentFiles!) {
-      final downloaded = (f['downloadedBytes'] as int?) ?? 0;
-      result.add(downloaded);
+      final relPath = f['name'] as String? ?? '';
+      if (relPath.isEmpty) {
+        result.add((f['downloadedBytes'] as int?) ?? 0);
+        continue;
+      }
+      try {
+        final fullPath = p.normalize(p.join(task.savePath, relPath));
+        if (!fullPath.startsWith(task.savePath)) {
+          result.add((f['downloadedBytes'] as int?) ?? 0);
+          continue;
+        }
+        final file = File(fullPath);
+        result.add(await file.exists() ? await file.length() : 0);
+      } catch (_) {
+        result.add((f['downloadedBytes'] as int?) ?? 0);
+      }
     }
     return result;
   }

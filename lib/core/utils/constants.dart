@@ -12,5 +12,4 @@ const String kDeveloperLinkedin = 'linkedin.com/in/deveslam-mahmoud';
 const String kDeveloperPhone = '+20 112 229 9831';
 
 const String kDefaultBackendBaseUrl = 'https://xdm-backend-378435892989.europe-west1.run.app';
-const String kXdmBackendApiToken = String.fromEnvironment('XDM_API_TOKEN', defaultValue: '');
 

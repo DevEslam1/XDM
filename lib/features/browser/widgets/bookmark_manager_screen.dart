@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/utils/localization.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../settings/provider/settings_provider.dart';
@@ -99,11 +100,11 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('BOOKMARKS'),
+        title: Text(L10n.of(context, 'browser_bookmarks')),
         actions: [
           IconButton(
             icon: Icon(Icons.add, color: accent),
-            tooltip: 'Add bookmark',
+            tooltip: L10n.of(context, 'browser_add_bookmark'),
             onPressed: _addBookmarkDialog,
           ),
         ],
@@ -119,7 +120,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                           ? AppTheme.textMuted
                           : AppTheme.lightTextMuted),
                   const SizedBox(height: 14),
-                  Text('No bookmarks yet',
+                  Text(L10n.of(context, 'browser_no_bookmarks'),
                       style: TextStyle(
                         color: isDark
                             ? AppTheme.textPrimary
@@ -127,7 +128,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                         fontWeight: FontWeight.bold,
                       )),
                   const SizedBox(height: 6),
-                  Text('Tap + to save your favorite sites',
+                  Text(L10n.of(context, 'browser_no_bookmarks_desc'),
                       style: TextStyle(
                         color: isDark
                             ? AppTheme.textSecondary
@@ -211,7 +212,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                   color: isDark
                                       ? AppTheme.textSecondary
                                       : AppTheme.lightTextSecondary),
-                              tooltip: 'Copy URL',
+                              tooltip: L10n.of(context, 'browser_menu_copy_url'),
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: bm.url));
                                 runHaptic(settings);
@@ -223,7 +224,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                   color: isDark
                                       ? AppTheme.neonRed
                                       : AppTheme.lightNeonRed),
-                              tooltip: 'Delete',
+                              tooltip: L10n.of(context, 'browser_delete'),
                               onPressed: () => _delete(bm),
                             ),
                           ],
@@ -289,32 +290,32 @@ class _AddBookmarkDialogState extends State<_AddBookmarkDialog> {
       backgroundColor:
           (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.95),
       title: Text(widget.initialUrl.isEmpty
-          ? 'Add bookmark'
-          : 'Edit bookmark'),
+          ? L10n.of(context, 'browser_add_bookmark')
+          : L10n.of(context, 'browser_edit_bookmark')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _titleC,
-            decoration: const InputDecoration(labelText: 'Title'),
+            decoration: InputDecoration(labelText: L10n.of(context, 'browser_title_label')),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _urlC,
-            decoration: const InputDecoration(labelText: 'URL'),
+            decoration: InputDecoration(labelText: L10n.of(context, 'browser_url_label')),
             keyboardType: TextInputType.url,
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _folderC,
-            decoration: const InputDecoration(labelText: 'Folder (optional)'),
+            decoration: InputDecoration(labelText: L10n.of(context, 'browser_folder_optional')),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('CANCEL'),
+          child: Text(L10n.of(context, 'browser_cancel_uppercase')),
         ),
         FilledButton(
           onPressed: () {
@@ -329,7 +330,7 @@ class _AddBookmarkDialogState extends State<_AddBookmarkDialog> {
               ),
             );
           },
-          child: const Text('SAVE'),
+          child: Text(L10n.of(context, 'browser_save_btn')),
         ),
       ],
     );

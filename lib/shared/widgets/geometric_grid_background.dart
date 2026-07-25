@@ -12,6 +12,7 @@ class GeometricGridBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = context.select((SettingsProvider s) => s.isDarkMode);
     final classicUi = context.select((SettingsProvider s) => s.classicUi);
+    final gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
     final bgColor = isDark ? AppTheme.background : AppTheme.lightBackground;
 
     if (classicUi) {
@@ -22,7 +23,8 @@ class GeometricGridBackground extends StatelessWidget {
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
 
-    final double blobAlpha = isDark ? 0.08 : 0.04;
+    final double blobAlpha =
+        (isDark ? 0.08 : 0.04) * (gridOpacity / 12.0).clamp(0.0, 3.0);
 
     return RepaintBoundary(
       child: Stack(

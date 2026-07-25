@@ -223,7 +223,11 @@ class AdBlocker {
 
       try {
         final file = await _getHostsFile();
-        await file.writeAsString(newDomains.join('\n'));
+        final lines = <String>[
+          ...newDomains,
+          ...newPatterns.map((p) => '/$p/'),
+        ];
+        await file.writeAsString(lines.join('\n'));
         debugPrint('AdBlocker: Successfully saved ${_blockedDomains.length} total domains and ${_blockedPatterns.length} patterns.');
       } catch (e) {
         debugPrint('AdBlocker: Error caching hosts to file: $e');

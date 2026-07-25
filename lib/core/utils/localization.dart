@@ -225,6 +225,152 @@ class L10n {
       'audio_label': 'AUDIO',
       'quality_label': 'QUALITY',
       'yt_legal_warning': 'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
+
+      // Browser – general
+      'browser_new_tab': 'New Tab',
+      'browser_dashboard': 'Dashboard',
+      'browser_bookmark_saved': 'Bookmark saved',
+      'browser_url_copied': 'URL copied',
+      'browser_desktop_mode_reload': 'Desktop mode — reloading',
+      'browser_mobile_mode_reload': 'Mobile mode — reloading',
+      'browser_ad_blocker_on': 'Ad blocker enabled',
+      'browser_ad_blocker_off': 'Ad blocker disabled',
+      'browser_media_detector_on': 'Media detector enabled',
+      'browser_media_detector_off': 'Media detector disabled',
+      'browser_incognito_on': 'Incognito mode ON — no history recorded',
+      'browser_incognito_off': 'Incognito mode OFF',
+      'browser_save_page_failed': 'Failed to read page content',
+      'browser_page_saved': 'Page saved successfully',
+      'browser_page_save_error': 'Failed to save page',
+      'browser_max_tabs': 'Maximum tab limit of 10 reached.',
+      'browser_playlist_enqueued': 'videos enqueued from',
+      'browser_already_completed': 'This download is already completed.',
+      'browser_already_in_progress': 'This download is already in progress.',
+      'browser_download_resumed': 'Download resumed.',
+      'browser_transmission_established': 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
+
+      // Browser – interception sheet
+      'browser_intercepted_signal': 'INTERCEPTED DOWNLOAD SIGNAL',
+      'browser_xdm_scanner': 'XDM Scanner intercepted a downloadable stream signal:',
+      'browser_continue_browsing': 'CONTINUE BROWSING',
+      'browser_download_btn': 'DOWNLOAD',
+
+      // Browser – quality / media picker
+      'browser_select_video_quality': 'SELECT VIDEO QUALITY',
+      'browser_alternative_stream': 'Alternative Stream',
+      'browser_no_alternative_streams': 'No alternative streams detected',
+      'browser_detected_media': 'DETECTED MEDIA ON PAGE',
+      'browser_media_stream': 'Media Stream',
+
+      // Browser – JS-injected labels
+      'browser_video_stream_default': 'Video Stream (Default)',
+      'browser_resolution': 'Resolution ',
+      'browser_video_poster': 'Video Poster Image',
+      'browser_audio_stream': 'Audio Stream',
+      'browser_lazy_video': 'Lazy-Loaded Video',
+      'browser_embedded_video': 'Embedded Video',
+
+      // Browser – default filenames
+      'browser_offline_page': 'Offline_Page',
+      'browser_youtube_video': 'YouTube Video',
+      'browser_media_video': 'Media Video',
+      'browser_torrent_download': 'Torrent Download',
+
+      // Browser – tooltips
+      'browser_new_incognito_tab': 'New Incognito Tab',
+      'browser_close': 'Close browser',
+      'browser_stop_loading': 'Stop loading',
+      'browser_clear': 'Clear',
+      'browser_refresh': 'Refresh page',
+      'browser_download_playlist': 'Download Playlist',
+      'browser_download_video': 'Download Video',
+
+      // Browser – hint text
+      'browser_search_web': 'Search the web...',
+      'browser_search_or_enter_url': 'Search or enter URL...',
+
+      // Browser – dashboard sections
+      'browser_search_engine': 'Search Engine:',
+      'browser_stream_sniffer_status': 'STREAM SNIFFER STATUS',
+      'browser_auto_intercept_active': 'AUTO-INTERCEPT ACTIVE',
+      'browser_auto_intercept_off': 'AUTO-INTERCEPT DEACTIVATED',
+      'browser_sniff_description': 'Sniffs media files and documents dynamically',
+      'browser_quick_signals': 'QUICK SIGNALS (BOOKMARKS)',
+
+      // Browser – popup menu
+      'browser_menu_reload': 'Reload',
+      'browser_menu_bookmark_page': 'Bookmark this page',
+      'browser_menu_bookmarks_manager': 'Bookmarks Manager',
+      'browser_menu_history': 'Browser History',
+      'browser_menu_copy_url': 'Copy URL',
+      'browser_menu_share_url': 'Share URL',
+      'browser_menu_save_offline': 'Save Page Offline',
+      'browser_menu_inject_js_css': 'Inject JS / CSS',
+      'browser_menu_mobile_mode': 'Mobile mode',
+      'browser_menu_desktop_mode': 'Desktop mode',
+      'browser_menu_ad_blocker_on': 'Ad blocker: ON',
+      'browser_menu_ad_blocker_off': 'Ad blocker: OFF',
+      'browser_menu_media_detector_on': 'Media detector: ON',
+      'browser_menu_media_detector_off': 'Media detector: OFF',
+      'browser_menu_exit_incognito': 'Exit incognito',
+      'browser_menu_new_incognito': 'New incognito tab',
+
+      // Browser – dialogs
+      'browser_download_choice': 'What do you want to download?',
+      'browser_single_and_playlist': 'This link contains both a single video and a playlist.',
+      'browser_single_video': 'Single Video',
+      'browser_entire_playlist': 'Entire Playlist',
+
+      // Browser – FAB
+      'browser_fab_playlist': 'PLAYLIST',
+      'browser_fab_media': 'MEDIA',
+      'browser_fab_youtube_retry': 'YOUTUBE (RETRY)',
+      'browser_fab_downloads': 'DOWNLOADS',
+
+      // Browser – JS/CSS Injector
+      'browser_js_css_injector': 'JS / CSS INJECTOR',
+      'browser_js_css_warning': 'WARNING: Code runs on web pages. Do not enter sensitive data.',
+      'browser_javascript': 'JavaScript',
+      'browser_css_style': 'CSS Style',
+      'browser_cancel_uppercase': 'CANCEL',
+      'browser_apply_uppercase': 'APPLY',
+
+      // Browser – history sheet
+      'browser_history_title': 'BROWSER HISTORY',
+      'browser_download_history': 'DOWNLOAD HISTORY',
+      'browser_surfing_history': 'Surfing History',
+      'browser_downloads_tab': 'Downloads',
+      'browser_close_btn': 'CLOSE',
+      'browser_clear_search': 'CLEAR SEARCH',
+      'browser_export_json': 'Export to JSON',
+      'browser_clear_history_btn': 'Clear history',
+      'browser_search_history_hint': 'Search history...',
+      'browser_no_results_for': 'No results for',
+      'browser_no_history_found': 'No history found',
+      'browser_no_history_desc': 'Websites you visit will be listed here.',
+      'browser_no_downloads_yet': 'No downloads yet',
+      'browser_no_downloads_desc': 'Files you download from the browser will appear here.',
+      'browser_clear_history_title': 'CLEAR HISTORY?',
+      'browser_clear_history_desc': 'Are you sure you want to clear all history?',
+      'browser_export_failed': 'Export failed',
+      'browser_copied_url_for': 'Copied URL for:',
+      'browser_status_done': 'DONE',
+      'browser_status_active': 'ACTIVE',
+      'browser_status_paused': 'PAUSED',
+      'browser_status_failed': 'FAILED',
+      'browser_status_queued': 'QUEUED',
+
+      // Browser – bookmark manager
+      'browser_bookmarks': 'BOOKMARKS',
+      'browser_add_bookmark': 'Add bookmark',
+      'browser_edit_bookmark': 'Edit bookmark',
+      'browser_delete': 'Delete',
+      'browser_no_bookmarks': 'No bookmarks yet',
+      'browser_no_bookmarks_desc': 'Tap + to save your favorite sites',
+      'browser_title_label': 'Title',
+      'browser_url_label': 'URL',
+      'browser_folder_optional': 'Folder (optional)',
+      'browser_save_btn': 'SAVE',
     },
     'ar': {
       'app_title': 'XDM',
@@ -445,6 +591,152 @@ class L10n {
       'audio_label': 'صوت',
       'quality_label': 'الجودة',
       'yt_legal_warning': 'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
+
+      // Browser – general
+      'browser_new_tab': 'تبويب جديد',
+      'browser_dashboard': 'لوحة التحكم',
+      'browser_bookmark_saved': 'تم حفظ الإشارة المرجعية',
+      'browser_url_copied': 'تم نسخ الرابط',
+      'browser_desktop_mode_reload': 'وضع سطح المكتب — جاري إعادة التحميل',
+      'browser_mobile_mode_reload': 'وضع الجوال — جاري إعادة التحميل',
+      'browser_ad_blocker_on': 'تم تفعيل مانع الإعلانات',
+      'browser_ad_blocker_off': 'تم تعطيل مانع الإعلانات',
+      'browser_media_detector_on': 'تم تفعيل كاشف الوسائط',
+      'browser_media_detector_off': 'تم تعطيل كاشف الوسائط',
+      'browser_incognito_on': 'وضع التصفح الخفي مفعّل — لا يتم تسجيل السجل',
+      'browser_incognito_off': 'وضع التصفح الخفي معطّل',
+      'browser_save_page_failed': 'فشل في قراءة محتوى الصفحة',
+      'browser_page_saved': 'تم حفظ الصفحة بنجاح',
+      'browser_page_save_error': 'فشل في حفظ الصفحة',
+      'browser_max_tabs': 'تم الوصول إلى الحد الأقصى للمبوبات (10 مبوبات).',
+      'browser_playlist_enqueued': 'فيديو تمت إضافتها إلى قائمة الانتظار من',
+      'browser_already_completed': 'هذا التنزيل مكتمل بالفعل.',
+      'browser_already_in_progress': 'هذا التنزيل قيد التشغيل بالفعل.',
+      'browser_download_resumed': 'تم استئناف التنزيل.',
+      'browser_transmission_established': 'تم إنشاء الاتصال. القنوات متصلة.',
+
+      // Browser – interception sheet
+      'browser_intercepted_signal': 'تم التقاط إشارة تنزيل',
+      'browser_xdm_scanner': 'اكتشف مستعرض XDM إشارة تنزيل قابلة للاعتراض:',
+      'browser_continue_browsing': 'متابعة التصفح',
+      'browser_download_btn': 'تحميل',
+
+      // Browser – quality / media picker
+      'browser_select_video_quality': 'اختر جودة الفيديو',
+      'browser_alternative_stream': 'بث بديل',
+      'browser_no_alternative_streams': 'لم يتم اكتشاف تدفقات بديلة',
+      'browser_detected_media': 'وسائط مكتشفة على الصفحة',
+      'browser_media_stream': 'تدفق الوسائط',
+
+      // Browser – JS-injected labels
+      'browser_video_stream_default': 'تدفق الفيديو (افتراضي)',
+      'browser_resolution': 'الدقة ',
+      'browser_video_poster': 'صورة ملصق الفيديو',
+      'browser_audio_stream': 'تدفق الصوت',
+      'browser_lazy_video': 'فيديو محمل ببطء',
+      'browser_embedded_video': 'فيديو مدمج',
+
+      // Browser – default filenames
+      'browser_offline_page': 'صفحة_غير_متصلة',
+      'browser_youtube_video': 'فيديو يوتيوب',
+      'browser_media_video': 'فيديو وسائط',
+      'browser_torrent_download': 'تنزيل تورنت',
+
+      // Browser – tooltips
+      'browser_new_incognito_tab': 'تبويب خفي جديد',
+      'browser_close': 'إغلاق المتصفح',
+      'browser_stop_loading': 'إلغاء التحميل',
+      'browser_clear': 'مسح',
+      'browser_refresh': 'إعادة تحميل الصفحة',
+      'browser_download_playlist': 'تحميل قائمة التشغيل',
+      'browser_download_video': 'تحميل الفيديو',
+
+      // Browser – hint text
+      'browser_search_web': 'ابحث في الويب...',
+      'browser_search_or_enter_url': 'ابحث أو ادخل الرابط...',
+
+      // Browser – dashboard sections
+      'browser_search_engine': 'محرك البحث:',
+      'browser_stream_sniffer_status': 'حالة كاشف الملفات',
+      'browser_auto_intercept_active': 'الاعتراض التلقائي نشط',
+      'browser_auto_intercept_off': 'الاعتراض التلقائي متوقف',
+      'browser_sniff_description': 'يكتشف روابط التحميل المباشرة والوسائط تلقائياً',
+      'browser_quick_signals': 'إشارات سريعة (روابط)',
+
+      // Browser – popup menu
+      'browser_menu_reload': 'إعادة تحميل',
+      'browser_menu_bookmark_page': 'إشارة مرجعية لهذه الصفحة',
+      'browser_menu_bookmarks_manager': 'مدير الإشارات المرجعية',
+      'browser_menu_history': 'سجل المتصفح',
+      'browser_menu_copy_url': 'نسخ الرابط',
+      'browser_menu_share_url': 'مشاركة الرابط',
+      'browser_menu_save_offline': 'حفظ الصفحة بدون إنترنت',
+      'browser_menu_inject_js_css': 'حقن JS / CSS',
+      'browser_menu_mobile_mode': 'وضع الجوال',
+      'browser_menu_desktop_mode': 'وضع سطح المكتب',
+      'browser_menu_ad_blocker_on': 'مانع الإعلانات: مفعل',
+      'browser_menu_ad_blocker_off': 'مانع الإعلانات: معطل',
+      'browser_menu_media_detector_on': 'كاشف الوسائط: مفعل',
+      'browser_menu_media_detector_off': 'كاشف الوسائط: معطل',
+      'browser_menu_exit_incognito': 'الخروج من التصفح الخفي',
+      'browser_menu_new_incognito': 'تبويب خفي جديد',
+
+      // Browser – dialogs
+      'browser_download_choice': 'ماذا تريد تحميل؟',
+      'browser_single_and_playlist': 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.',
+      'browser_single_video': 'فيديو واحد فقط',
+      'browser_entire_playlist': 'قائمة التشغيل كاملة',
+
+      // Browser – FAB
+      'browser_fab_playlist': 'قائمة التشغيل',
+      'browser_fab_media': 'الوسائط',
+      'browser_fab_youtube_retry': 'يوتيوب (إعادة المحاولة)',
+      'browser_fab_downloads': 'التنزيلات',
+
+      // Browser – JS/CSS Injector
+      'browser_js_css_injector': 'محقن JS / CSS',
+      'browser_js_css_warning': 'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
+      'browser_javascript': 'JavaScript',
+      'browser_css_style': 'نمط CSS',
+      'browser_cancel_uppercase': 'إلغاء',
+      'browser_apply_uppercase': 'تطبيق',
+
+      // Browser – history sheet
+      'browser_history_title': 'سجل المتصفح',
+      'browser_download_history': 'سجل التنزيلات',
+      'browser_surfing_history': 'سجل التصفح',
+      'browser_downloads_tab': 'التنزيلات',
+      'browser_close_btn': 'إغلاق',
+      'browser_clear_search': 'مسح البحث',
+      'browser_export_json': 'تصدير إلى JSON',
+      'browser_clear_history_btn': 'مسح السجل',
+      'browser_search_history_hint': 'البحث في السجل...',
+      'browser_no_results_for': 'لا توجد نتائج لـ',
+      'browser_no_history_found': 'لا يوجد سجل',
+      'browser_no_history_desc': 'سيتم عرض المواقع التي تزورها هنا.',
+      'browser_no_downloads_yet': 'لا توجد تنزيلات بعد',
+      'browser_no_downloads_desc': 'ستظهر الملفات التي تنزلها من المتصفح هنا.',
+      'browser_clear_history_title': 'مسح السجل؟',
+      'browser_clear_history_desc': 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟',
+      'browser_export_failed': 'فشل التصدير',
+      'browser_copied_url_for': 'تم نسخ الرابط لـ:',
+      'browser_status_done': 'مكتمل',
+      'browser_status_active': 'نشط',
+      'browser_status_paused': 'موقوف',
+      'browser_status_failed': 'فشل',
+      'browser_status_queued': 'في الانتظار',
+
+      // Browser – bookmark manager
+      'browser_bookmarks': 'الإشارات المرجعية',
+      'browser_add_bookmark': 'إضافة إشارة مرجعية',
+      'browser_edit_bookmark': 'تعديل الإشارة المرجعية',
+      'browser_delete': 'حذف',
+      'browser_no_bookmarks': 'لا توجد إشارات مرجعية بعد',
+      'browser_no_bookmarks_desc': 'اضغط + لحفظ مواقعك المفضلة',
+      'browser_title_label': 'العنوان',
+      'browser_url_label': 'الرابط',
+      'browser_folder_optional': 'المجلد (اختياري)',
+      'browser_save_btn': 'حفظ',
     },
   };
 

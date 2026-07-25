@@ -37,6 +37,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
   late final TextEditingController _proxyPortController;
   late final TextEditingController _proxyUsernameController;
   late final TextEditingController _proxyPasswordController;
+  late final TextEditingController _backendUrlController;
+  late final TextEditingController _backendTokenController;
   bool _isUpdatingHosts = false;
   final Map<String, bool> _expandedSections = {};
 
@@ -56,6 +58,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     _proxyPasswordController = TextEditingController(
       text: settings.proxyPassword,
     );
+    _backendUrlController = TextEditingController(text: settings.backendUrl);
+    _backendTokenController = TextEditingController(text: settings.backendToken);
   }
 
   @override
@@ -66,6 +70,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
     _proxyPortController.dispose();
     _proxyUsernameController.dispose();
     _proxyPasswordController.dispose();
+    _backendUrlController.dispose();
+    _backendTokenController.dispose();
     super.dispose();
   }
 
@@ -882,7 +888,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         subtitle: L10n.isRtl(context)
                             ? 'عنوان الخادم الخلفي لـ yt-dlp (http/https)'
                             : 'Backend URL for yt-dlp (http:// or https://)',
-                        initialValue: settings.backendUrl,
+                        controller: _backendUrlController,
                         onChanged: (val) {
                           settings.setBackendUrl(val.trim());
                         },
@@ -894,7 +900,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                         subtitle: L10n.isRtl(context)
                             ? 'رمز المصادقة الخاص بالخوادم الخلفي'
                             : 'Authentication token for the backend API',
-                        initialValue: settings.backendToken,
+                        controller: _backendTokenController,
                         obscureText: true,
                         onChanged: (val) {
                           settings.setBackendToken(val);
@@ -974,8 +980,8 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                             );
 
                             try {
-                              final response = await XdmBackendClient().health();
                               await XdmBackendClient().refreshConfig();
+                              final response = await XdmBackendClient().health();
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).hideCurrentSnackBar();
                                 final status = response['status'] as String? ?? 'unknown';

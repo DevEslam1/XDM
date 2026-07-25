@@ -1000,18 +1000,9 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _startTaskBody(DownloadTask task) async {
-    // Apply global connection cap override from queue pump
-    final overrideThreads = effectiveThreadOverrides.remove(task.id);
-    if (overrideThreads != null && overrideThreads != task.threadCount) {
-      final idx = _tasks.indexWhere((t) => t.id == task.id);
-      if (idx != -1) {
-        _tasks[idx] = _tasks[idx].copyWith(
-          threadCount: overrideThreads,
-          chunks: List<double>.filled(overrideThreads, 0.0),
-        );
-        task = _tasks[idx];
-      }
-    }
+    // Apply global connection cap override from queue pump (runtime-only, never mutates stored task)
+    final runtimeThreadCount =
+        effectiveThreadOverrides.remove(task.id) ?? task.threadCount;
 
     final hasWifiOrEthernet =
         _currentConnectivity.contains(ConnectivityResult.wifi) ||
@@ -1365,7 +1356,7 @@ class DownloadProvider extends ChangeNotifier
     });
 
     // YouTube streams use multi-threaded mode as configured.
-    final streamThreadCount = task.threadCount;
+    final streamThreadCount = runtimeThreadCount;
 
     // Run video and audio sequentially (audio first, then video)
     final downloadFuture = () async {
@@ -1739,7 +1730,7 @@ class DownloadProvider extends ChangeNotifier
             final videoExt = p.extension(actualVideoPath).isNotEmpty
                 ? p.extension(actualVideoPath)
                 : '.mp4';
-            final mergedPath = '${p.withoutExtension(actualVideoPath)}.$videoExt.merged$videoExt';
+            final mergedPath = '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
 
             debugPrint('[DMX] Phase 3 — Merge starting:');
             debugPrint('[DMX]   Video: $actualVideoPath');

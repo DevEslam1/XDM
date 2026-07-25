@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'xdm_backend_client.dart';
 import 'xdm_backend_exceptions.dart';
+import '../../features/settings/provider/settings_provider.dart';
 
 
 class YoutubeService {
@@ -251,11 +252,16 @@ class YoutubeService {
       }
     }
 
+    final settings = SettingsProvider();
+    if (!settings.useRemoteBackend) {
+      throw Exception('Remote backend is disabled in settings.');
+    }
+
     try {
       final backendRes = await XdmBackendClient().getStreams(
         targetUrl,
         oauthToken: oauthToken,
-        cookies: currentCookies,
+        cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
       );
 
       final title = (backendRes['title'] as String?) ?? 'Untitled';
@@ -366,10 +372,11 @@ class YoutubeService {
     }
 
     try {
+      final settings = SettingsProvider();
       final backendRes = await XdmBackendClient().getStreams(
         url,
         oauthToken: isYouTubeHost ? oauthToken : null,
-        cookies: isYouTubeHost ? currentCookies : null,
+        cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend ? currentCookies : null,
       );
 
       final title = (backendRes['title'] as String?) ?? 'Untitled';
@@ -526,10 +533,11 @@ class YoutubeService {
     }
 
     try {
+      final settings = SettingsProvider();
       final backendRes = await XdmBackendClient().getPlaylist(
         url,
         oauthToken: oauthToken,
-        cookies: currentCookies,
+        cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
         pageToken: pageToken,
         pageSize: pageSize,
       );

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../../core/services/xdm_backend_client.dart';
 
 class SettingsProvider extends ChangeNotifier {
   static const _autoStartKey = 'autoStart';
@@ -547,12 +548,14 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setBackendUrl(String value) async {
     backendUrl = value;
     await _prefs.setString(_backendUrlKey, value);
+    await XdmBackendClient().refreshConfig();
     notifyListeners();
   }
 
   Future<void> setBackendToken(String value) async {
     backendToken = value;
     await _secureStorage.write(key: _backendTokenKey, value: value);
+    await XdmBackendClient().refreshConfig();
     notifyListeners();
   }
 

@@ -195,6 +195,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final String? tabsJson = prefs.getString('persisted_browser_tabs');
     final int savedTabIndex = prefs.getInt('persisted_browser_tab_index') ?? 0;
 
+    final fallbackTitle = mounted ? L10n.of(context, 'browser_new_tab') : 'New Tab';
+
     if (tabsJson != null && tabsJson.isNotEmpty) {
       try {
         final List<dynamic> decoded = jsonDecode(tabsJson);
@@ -202,7 +204,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         for (final item in decoded) {
           if (item is Map<String, dynamic>) {
             final String url = item['url'] as String? ?? 'about:blank';
-            final String title = item['title'] as String? ?? 'New Tab';
+            final String title = item['title'] as String? ?? fallbackTitle;
 
             final tab = _createNewTab(initialUrl: url, isIncognito: false);
             tab.title = title;
@@ -290,7 +292,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       id: id,
       controller: controller,
       url: cleanInitialUrl == 'about:blank' ? '' : cleanInitialUrl,
-      title: cleanInitialUrl == 'about:blank' ? 'New Tab' : cleanInitialUrl,
+      title: cleanInitialUrl == 'about:blank' ? L10n.of(context, 'browser_new_tab') : cleanInitialUrl,
       isIncognito: isIncognito,
       isHome: cleanInitialUrl == 'about:blank',
     );
@@ -665,10 +667,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }
       _lastScrollY = y;
     } else if (y - _lastScrollY > 40) {
+      // URL bar stays visible; only hide bottom navbar on scroll down
       if (_showBars) {
-        setState(() {
-          _showBars = false;
-        });
         downloadProvider.setNavbarVisible(false);
       }
       _lastScrollY = y;
@@ -916,7 +916,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           if (mounted) {
             ThemedSnackbar.show(
               context,
-              message: 'Bookmark saved',
+              message: L10n.of(context, 'browser_bookmark_saved'),
               color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
               icon: Icons.bookmark_added,
               isDarkMode: settings.isDarkMode,
@@ -931,7 +931,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           if (mounted) {
             ThemedSnackbar.show(
               context,
-              message: 'URL copied',
+              message: L10n.of(context, 'browser_url_copied'),
               color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
               icon: Icons.copy,
               isDarkMode: settings.isDarkMode,
@@ -951,8 +951,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ThemedSnackbar.show(
             context,
             message: settings.desktopMode
-                ? 'Desktop mode enabled \u2014 reloading'
-                : 'Mobile mode \u2014 reloading',
+                ? L10n.of(context, 'browser_desktop_mode_reload')
+                : L10n.of(context, 'browser_mobile_mode_reload'),
             color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             icon: Icons.desktop_windows,
             isDarkMode: settings.isDarkMode,
@@ -978,8 +978,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ThemedSnackbar.show(
             context,
             message: settings.adBlockerEnabled
-                ? 'Ad blocker enabled'
-                : 'Ad blocker disabled',
+                ? L10n.of(context, 'browser_ad_blocker_on')
+                : L10n.of(context, 'browser_ad_blocker_off'),
             color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: settings.adBlockerEnabled ? Icons.check_circle_outline : Icons.block,
             isDarkMode: settings.isDarkMode,
@@ -992,8 +992,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ThemedSnackbar.show(
             context,
             message: _isSnifferEnabled
-                ? 'Media detector enabled'
-                : 'Media detector disabled',
+                ? L10n.of(context, 'browser_media_detector_on')
+                : L10n.of(context, 'browser_media_detector_off'),
             color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: _isSnifferEnabled ? Icons.check_circle_outline : Icons.block,
             isDarkMode: settings.isDarkMode,
@@ -1006,8 +1006,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ThemedSnackbar.show(
             context,
             message: settings.incognitoEnabled
-                ? 'Incognito mode ON \u2014 no history recorded'
-                : 'Incognito mode OFF',
+                ? L10n.of(context, 'browser_incognito_on')
+                : L10n.of(context, 'browser_incognito_off'),
             color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             icon: Icons.security,
             isDarkMode: settings.isDarkMode,
@@ -1138,8 +1138,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             const SizedBox(width: 12),
                             Text(
                               isRtl
-                                  ? 'تم التقاط إشارة تنزيل'
-                                  : 'INTERCEPTED DOWNLOAD SIGNAL',
+                                  ? L10n.of(context, 'browser_intercepted_signal')
+                                  : L10n.of(context, 'browser_intercepted_signal'),
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
                                     color: isDark
@@ -1154,8 +1154,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         const SizedBox(height: 16),
                         Text(
                           isRtl
-                              ? 'اكتشف مستعرض XDM إشارة تنزيل قابلة للاعتراض:'
-                              : 'XDM Scanner intercepted a downloadable stream signal:',
+                              ? L10n.of(context, 'browser_xdm_scanner')
+                              : L10n.of(context, 'browser_xdm_scanner'),
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
                                 color: isDark
@@ -1226,7 +1226,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   }
                                 },
                                 child: Text(
-                                  isRtl ? 'متابعة التصفح' : 'CONTINUE BROWSING',
+                                  isRtl ? L10n.of(context, 'browser_continue_browsing') : L10n.of(context, 'browser_continue_browsing'),
                                 ),
                               ),
                             ),
@@ -1241,7 +1241,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   Navigator.pop(context);
                                   _startDirectDownload(downloadUrl);
                                 },
-                                text: isRtl ? 'تحميل' : 'DOWNLOAD',
+                                text: isRtl ? L10n.of(context, 'browser_download_btn') : L10n.of(context, 'browser_download_btn'),
                               ),
                             ),
                           ],
@@ -1473,7 +1473,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         ),
                       ),
                       Text(
-                        'SELECT VIDEO QUALITY',
+                        L10n.of(context, 'browser_select_video_quality'),
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
                               color: accent,
@@ -1485,7 +1485,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                       if (detectedSources.isNotEmpty) ...[
                         ...detectedSources.map((src) {
                           final label =
-                              src['label'] as String? ?? 'Alternative Stream';
+                              src['label'] as String? ?? L10n.of(context, 'browser_alternative_stream');
                           final srcUrl = src['src'] as String? ?? '';
                           return _buildQualityTile(
                             context,
@@ -1500,8 +1500,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           child: Text(
                             L10n.isRtl(context)
-                                ? 'لم يتم اكتشاف تدفقات بديلة'
-                                : 'No alternative streams detected',
+                                ? L10n.of(context, 'browser_no_alternative_streams')
+                                : L10n.of(context, 'browser_no_alternative_streams'),
                             style: TextStyle(
                               color: accent,
                               fontSize: 13,
@@ -1610,7 +1610,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         ),
                       ),
                       Text(
-                        'DETECTED MEDIA ON PAGE',
+                        L10n.of(context, 'browser_detected_media'),
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
                               color: accent,
@@ -1632,7 +1632,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             final src = detectedSources[i];
                             final label =
                                 src['label'] as String? ??
-                                'Media Stream ${i + 1}';
+                                '${L10n.of(context, 'browser_media_stream')} ${i + 1}';
                             final srcUrl = src['src'] as String? ?? '';
                             return ListTile(
                               leading: Icon(
@@ -1671,7 +1671,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                 final ext = src['ext'] as String?;
                                 final label =
                                     src['label'] as String? ??
-                                    'Media Stream ${i + 1}';
+                                    '${L10n.of(context, 'browser_media_stream')} ${i + 1}';
                                 String? filename;
                                 if (title != null && title.isNotEmpty) {
                                   filename = ext != null
@@ -1819,7 +1819,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         if (mounted) {
           ThemedSnackbar.show(
             context,
-            message: 'Failed to read page content',
+            message: L10n.of(context, 'browser_save_page_failed'),
             color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
             icon: Icons.error_outline,
             isDarkMode: settings.isDarkMode,
@@ -1828,7 +1828,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         return;
       }
 
-      String title = tab.title.isNotEmpty ? tab.title : 'Offline_Page';
+      final offlineTitle = mounted ? L10n.of(context, 'browser_offline_page') : 'Offline Page';
+      String title = tab.title.isNotEmpty ? tab.title : offlineTitle;
       title = title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
 
       final path = settings.customDownloadPath?.isNotEmpty == true
@@ -1873,7 +1874,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         if (mounted) {
           ThemedSnackbar.show(
             context,
-            message: 'Page saved successfully as $title.html',
+            message: '${L10n.of(context, 'browser_page_saved')} - $title.html',
             color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: Icons.check_circle_outline,
             isDarkMode: settings.isDarkMode,
@@ -1884,7 +1885,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       if (mounted) {
         ThemedSnackbar.show(
           context,
-          message: 'Failed to save page: $e',
+          message: '${L10n.of(context, 'browser_page_save_error')}: $e',
           color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
           icon: Icons.error_outline,
           isDarkMode: settings.isDarkMode,
@@ -1897,8 +1898,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final isRtl = L10n.isRtl(context);
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1967,15 +1966,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                           ? AppTheme.neonViolet
                                           : AppTheme.lightNeonViolet,
                                     ),
-                                    tooltip: 'New Incognito Tab',
+                                    tooltip: L10n.of(context, 'browser_new_incognito_tab'),
                                     onPressed: () {
                                       triggerHaptic(settings);
                                       if (_tabs.length >= 10) {
                                         ThemedSnackbar.show(
                                           context,
-                                          message: isRtl
-                                              ? 'تم الوصول إلى الحد الأقصى للمبوبات (10 مبوبات)'
-                                              : 'Maximum tab limit of 10 reached.',
+                                          message: L10n.of(context, 'browser_max_tabs'),
                                           color: Colors.red,
                                           icon: Icons.warning_amber_rounded,
                                           isDarkMode: isDark,
@@ -1999,15 +1996,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   // New Tab button
                                   IconButton(
                                     icon: Icon(Icons.add, color: accent),
-                                    tooltip: 'New Tab',
+                                    tooltip: L10n.of(context, 'browser_new_tab'),
                                     onPressed: () {
                                       triggerHaptic(settings);
                                       if (_tabs.length >= 10) {
                                         ThemedSnackbar.show(
                                           context,
-                                          message: isRtl
-                                              ? 'تم الوصول إلى الحد الأقصى للمبوبات (10 مبوبات)'
-                                              : 'Maximum tab limit of 10 reached.',
+                                          message: L10n.of(context, 'browser_max_tabs'),
                                           color: Colors.red,
                                           icon: Icons.warning_amber_rounded,
                                           isDarkMode: isDark,

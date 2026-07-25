@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
@@ -109,9 +110,14 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
       ));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        final isDark = context.read<SettingsProvider>().isDarkMode;
+        ThemedSnackbar.show(
           context,
-        ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+          message: '${L10n.of(context, 'browser_export_failed')}: $e',
+          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          icon: Icons.error_outline,
+          isDarkMode: isDark,
+        );
       }
     }
   }
@@ -214,8 +220,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                           Expanded(
                             child: Text(
                               _selectedTab == 0
-                                  ? 'BROWSER HISTORY'
-                                  : 'DOWNLOAD HISTORY',
+                                  ? L10n.of(context, 'browser_history_title')
+                                  : L10n.of(context, 'browser_download_history'),
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
                                     color: accent,
@@ -230,7 +236,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                               color: accent,
                               size: 20,
                             ),
-                            tooltip: 'Export to JSON',
+                            tooltip: L10n.of(context, 'browser_export_json'),
                             onPressed: _exportHistoryToJson,
                           ),
                           if (_selectedTab == 0 && _surfingHistory.isNotEmpty)
@@ -242,7 +248,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                                     : AppTheme.lightNeonRed,
                                 size: 22,
                               ),
-                              tooltip: 'Clear history',
+                              tooltip: L10n.of(context, 'browser_clear_history_btn'),
                               onPressed: () {
                                 runHaptic(settings);
                                 _showClearHistoryConfirmation(settings);
@@ -253,7 +259,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                               runHaptic(settings);
                               Navigator.pop(context);
                             },
-                            child: const Text('CLOSE'),
+                            child: Text(L10n.of(context, 'browser_close_btn')),
                           ),
                         ],
                       ),
@@ -287,7 +293,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                             Expanded(
                               child: _buildTabItem(
                                 0,
-                                'Surfing History',
+                                L10n.of(context, 'browser_surfing_history'),
                                 accent,
                                 isDark,
                               ),
@@ -295,7 +301,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                             Expanded(
                               child: _buildTabItem(
                                 1,
-                                'Downloads',
+                                L10n.of(context, 'browser_downloads_tab'),
                                 accent,
                                 isDark,
                               ),
@@ -361,9 +367,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                                     ),
                                   )
                                 : null,
-                            hintText: L10n.isRtl(context)
-                                ? 'البحث في السجل...'
-                                : 'Search history...',
+                            hintText: L10n.of(context, 'browser_search_history_hint'),
                             hintStyle: TextStyle(
                               color: isDark
                                   ? AppTheme.textMuted
@@ -515,7 +519,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
               ),
               const SizedBox(height: 14),
               Text(
-                'No results for "$_searchQuery"',
+                '${L10n.of(context, 'browser_no_results_for')} "$_searchQuery"',
                 style: TextStyle(
                   color: isDark
                       ? AppTheme.textPrimary
@@ -528,7 +532,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
               TextButton.icon(
                 onPressed: () => _searchController.clear(),
                 icon: const Icon(Icons.clear, size: 16),
-                label: const Text('CLEAR SEARCH'),
+                label: Text(L10n.of(context, 'browser_clear_search')),
               ),
             ],
           ),
@@ -548,7 +552,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             ),
             const SizedBox(height: 14),
             Text(
-              'No history found',
+              L10n.of(context, 'browser_no_history_found'),
               style: TextStyle(
                 color: isDark
                     ? AppTheme.textPrimary
@@ -559,7 +563,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Websites you visit will be listed here.',
+              L10n.of(context, 'browser_no_history_desc'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: isDark
@@ -588,7 +592,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             ),
             const SizedBox(height: 14),
             Text(
-              'No downloads yet',
+              L10n.of(context, 'browser_no_downloads_yet'),
               style: TextStyle(
                 color: isDark
                     ? AppTheme.textPrimary
@@ -599,7 +603,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Files you download from the browser will appear here.',
+              L10n.of(context, 'browser_no_downloads_desc'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: isDark
@@ -616,7 +620,6 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
   Future<void> _showClearHistoryConfirmation(SettingsProvider settings) async {
     final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
 
     showDialog<bool>(
       context: context,
@@ -630,16 +633,14 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
             ),
           ),
           title: Text(
-            isRtl ? 'مسح السجل؟' : 'CLEAR HISTORY?',
+            L10n.of(context, 'browser_clear_history_title'),
             style: TextStyle(
               color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
               fontWeight: FontWeight.bold,
             ),
           ),
           content: Text(
-            isRtl
-                ? 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟'
-                : 'Are you sure you want to clear all history?',
+            L10n.of(context, 'browser_clear_history_content'),
             style: TextStyle(
               color: isDark
                   ? AppTheme.textSecondary
@@ -653,7 +654,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                 Navigator.pop(context, false);
               },
               child: Text(
-                isRtl ? 'إلغاء' : 'CANCEL',
+                L10n.of(context, 'browser_cancel_uppercase'),
                 style: TextStyle(
                   color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                 ),
@@ -676,7 +677,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                 Navigator.pop(context, true);
               },
               child: Text(
-                isRtl ? 'مسح' : 'CLEAR',
+                L10n.of(context, 'browser_clear_btn'),
                 style: TextStyle(
                   color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                   fontWeight: FontWeight.bold,
@@ -844,11 +845,13 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
           onTap: () {
             Clipboard.setData(ClipboardData(text: t.url));
             runHaptic(context.read<SettingsProvider>());
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Copied URL for: ${t.fileName}'),
-                duration: const Duration(seconds: 2),
-              ),
+            final isDark = context.read<SettingsProvider>().isDarkMode;
+            ThemedSnackbar.show(
+              context,
+              message: '${L10n.of(context, 'browser_copied_url_for')} ${t.fileName}',
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              icon: Icons.copy,
+              isDarkMode: isDark,
             );
           },
           child: Padding(
@@ -921,7 +924,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    _statusLabel(t.status),
+                    _statusLabel(t.status, context),
                     style: TextStyle(
                       color: color,
                       fontSize: 9,
@@ -968,18 +971,18 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     }
   }
 
-  String _statusLabel(DownloadStatus s) {
+  String _statusLabel(DownloadStatus s, BuildContext context) {
     switch (s) {
       case DownloadStatus.completed:
-        return 'DONE';
+        return L10n.of(context, 'browser_status_done');
       case DownloadStatus.downloading:
-        return 'ACTIVE';
+        return L10n.of(context, 'browser_status_active');
       case DownloadStatus.paused:
-        return 'PAUSED';
+        return L10n.of(context, 'browser_status_paused');
       case DownloadStatus.failed:
-        return 'FAILED';
+        return L10n.of(context, 'browser_status_failed');
       case DownloadStatus.queued:
-        return 'QUEUED';
+        return L10n.of(context, 'browser_status_queued');
     }
   }
 }

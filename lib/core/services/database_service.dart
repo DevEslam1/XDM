@@ -408,11 +408,14 @@ class DatabaseService {
         mode: drift.InsertMode.insertOrReplace);
 
     // Prune old entries to keep the table bounded
-    final count = await _db.select(_db.browserHistory).get();
-    if (count.length > 500) {
+    final countResult = await (_db.selectOnly(_db.browserHistory)
+          ..addColumns([_db.browserHistory.id.count()]))
+        .getSingle();
+    final count = countResult.read(_db.browserHistory.id.count()) ?? 0;
+    if (count > 500) {
       final toDelete = await (_db.select(_db.browserHistory)
-            ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
-            ..limit(count.length - 500))
+            ..orderBy([(t) => drift.OrderingTerm.asc(t.visitedAt)])
+            ..limit(count - 500))
           .get();
       if (toDelete.isNotEmpty) {
         final ids = toDelete.map((r) => r.id).toList();

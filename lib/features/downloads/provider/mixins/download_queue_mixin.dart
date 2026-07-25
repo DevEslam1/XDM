@@ -87,6 +87,12 @@ mixin DownloadQueueMixin {
               task.status == DownloadStatus.queued &&
               !isTaskWaitingForRetry(task.id))
           .toList();
+
+      // Remove overrides for tasks no longer queued
+      effectiveThreadOverrides.removeWhere(
+        (id, _) => !queued.any((t) => t.id == id),
+      );
+
       var startedThisPass = 0;
       for (final task in queued) {
         final activePlusPending = downloadingTasksCount + pendingStartCount + startedThisPass;

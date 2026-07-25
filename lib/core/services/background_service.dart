@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
@@ -7,7 +8,8 @@ class BackgroundService {
   static const int foregroundNotificationId = 888;
   static const String _serviceChannelId = 'dmx_background_service';
 
-  static bool get isSupported => !kIsWeb;
+  static bool get isSupported =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   static Future<void> initialize() async {
     if (!isSupported) return;

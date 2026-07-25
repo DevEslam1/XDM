@@ -29,8 +29,10 @@ class NeonGlowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Provider.of<SettingsProvider>(context, listen: false).isDarkMode;
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final isDark = settings.isDarkMode;
     final filledContentColor = isDark ? AppTheme.background : AppTheme.lightBackground;
+    final effectiveGlow = hasGlow || settings.enableGlow;
 
     Widget buttonContent = Row(
       mainAxisSize: MainAxisSize.min,
@@ -80,7 +82,7 @@ class NeonGlowButton extends StatelessWidget {
           minimumSize: Size(isExpanded ? double.infinity : 0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 24),
         ),
-        child: hasGlow
+        child: effectiveGlow
             ? Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
@@ -108,7 +110,7 @@ class NeonGlowButton extends StatelessWidget {
           minimumSize: Size(isExpanded ? double.infinity : 0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 24),
         ),
-        child: hasGlow
+        child: effectiveGlow
             ? Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
