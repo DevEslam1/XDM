@@ -1,15 +1,13 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 
 @pragma('vm:entry-point')
 class BackgroundService {
   static const int foregroundNotificationId = 888;
   static const String _serviceChannelId = 'dmx_background_service';
 
-  static bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  static bool get isSupported => !kIsWeb;
 
   static Future<void> initialize() async {
     if (!isSupported) return;
@@ -102,11 +100,6 @@ class BackgroundService {
 
   static Future<void> start() async {
     if (!isSupported) return;
-    try {
-      await WakelockPlus.enable();
-    } catch (e) {
-      debugPrint('Failed to enable WakelockPlus: $e');
-    }
     final service = FlutterBackgroundService();
     final isRunning = await service.isRunning();
     if (!isRunning) {
@@ -116,11 +109,6 @@ class BackgroundService {
 
   static Future<void> stop() async {
     if (!isSupported) return;
-    try {
-      await WakelockPlus.disable();
-    } catch (e) {
-      debugPrint('Failed to disable WakelockPlus: $e');
-    }
     final service = FlutterBackgroundService();
     service.invoke('stopService');
   }

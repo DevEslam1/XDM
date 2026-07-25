@@ -1744,7 +1744,10 @@ class DownloadProvider extends ChangeNotifier
               actualVideoPath = currentForMerge.tempFilePath;
             }
             final actualAudioPath = audioTempPath!;
-            final mergedPath = '$actualVideoPath.merged.mp4';
+            final videoExt = p.extension(actualVideoPath).isNotEmpty
+                ? p.extension(actualVideoPath)
+                : '.mp4';
+            final mergedPath = '${p.withoutExtension(actualVideoPath)}.$videoExt.merged$videoExt';
 
             debugPrint('[DMX] Phase 3 — Merge starting:');
             debugPrint('[DMX]   Video: $actualVideoPath');

@@ -3,7 +3,7 @@
 /// Higher values improve speed on fast connections but increase server load.
 const List<int> kAvailableThreadOptions = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16];
 
-const String kAppVersion = '2.0.0';
+String kAppVersion = '3.0.0';
 const String kDeveloperName = 'Eslam Mahmoud';
 const String kDeveloperTitle = 'Mobile Development Engineer';
 const String kDeveloperEmail = 'xdev.eslam@gmail.com';

@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'core/utils/constants.dart';
 import 'core/services/torrent_service.dart';
 import 'core/app_theme.dart';
 import 'core/services/background_service.dart';
@@ -34,7 +37,8 @@ Future<void> main(List<String> args) async {
         final isPrimary = await SingleInstanceService().initialize(args);
         if (!isPrimary) {
           // A running primary instance was notified, exit this process cleanly.
-          return;
+          // ignore: avoid_slow_async_io
+          exit(0);
         }
 
         await AdBlocker.initialize();
@@ -56,6 +60,9 @@ Future<void> main(List<String> args) async {
         await notificationService.init();
 
         await BackgroundService.initialize();
+
+        final packageInfo = await PackageInfo.fromPlatform();
+        kAppVersion = packageInfo.version;
 
         final downloadProvider = DownloadProvider(
           databaseService: databaseService,

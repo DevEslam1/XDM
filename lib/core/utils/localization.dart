@@ -112,6 +112,7 @@ class L10n {
       'category_files': 'Files',
       'empty_transmissions': 'No active downloads',
 
+      'settings_youtube_backend': 'Backend configuration',
       'settings_adv_console': 'Advanced settings',
       'settings_ua': 'Custom user-agent',
       'settings_ua_sub': 'Override default HTTP client headers',
@@ -331,6 +332,7 @@ class L10n {
       'category_files': 'ملفات',
       'empty_transmissions': 'لا توجد تنزيلات نشطة',
 
+      'settings_youtube_backend': 'إعدادات الخادم الخلفي',
       'settings_adv_console': 'إعدادات متقدمة',
       'settings_ua': 'عميل مستخدم مخصص (User-Agent)',
       'settings_ua_sub': 'تجاوز ترويسات عميل HTTP الافتراضية',

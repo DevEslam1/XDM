@@ -41,14 +41,7 @@ class ShareService {
     // URL text isn't silently dropped.
     _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
       for (final file in value) {
-        final type = file.type;
-        if (type == SharedMediaType.text ||
-            type == SharedMediaType.url ||
-            type == SharedMediaType.file) {
-          handleUrl(file.path, isInitial: false);
-        } else {
-          handleUrl(file.path, isInitial: false);
-        }
+        handleUrl(file.path, isInitial: false);
       }
     }, onError: (err) {
     });

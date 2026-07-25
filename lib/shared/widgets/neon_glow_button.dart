@@ -80,7 +80,21 @@ class NeonGlowButton extends StatelessWidget {
           minimumSize: Size(isExpanded ? double.infinity : 0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 24),
         ),
-        child: buttonContent,
+        child: hasGlow
+            ? Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (glowColor ?? color).withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      spreadRadius: -2,
+                    ),
+                  ],
+                ),
+                child: buttonContent,
+              )
+            : buttonContent,
       );
     } else {
       return OutlinedButton(
@@ -94,7 +108,21 @@ class NeonGlowButton extends StatelessWidget {
           minimumSize: Size(isExpanded ? double.infinity : 0, 48),
           padding: const EdgeInsets.symmetric(horizontal: 24),
         ),
-        child: buttonContent,
+        child: hasGlow
+            ? Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (glowColor ?? color).withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      spreadRadius: -2,
+                    ),
+                  ],
+                ),
+                child: buttonContent,
+              )
+            : buttonContent,
       );
     }
   }

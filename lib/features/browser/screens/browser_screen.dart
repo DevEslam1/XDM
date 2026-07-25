@@ -914,11 +914,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             ),
           );
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Bookmark saved'),
-                duration: Duration(seconds: 2),
-              ),
+            ThemedSnackbar.show(
+              context,
+              message: 'Bookmark saved',
+              color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              icon: Icons.bookmark_added,
+              isDarkMode: settings.isDarkMode,
             );
           }
         } catch (_) {}
@@ -928,11 +929,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         if (url.isNotEmpty) {
           await Clipboard.setData(ClipboardData(text: url));
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('URL copied'),
-                duration: Duration(seconds: 2),
-              ),
+            ThemedSnackbar.show(
+              context,
+              message: 'URL copied',
+              color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              icon: Icons.copy,
+              isDarkMode: settings.isDarkMode,
             );
           }
         }
@@ -946,15 +948,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       case 'desktop':
         await settings.setDesktopMode(!settings.desktopMode);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                settings.desktopMode
-                    ? 'Desktop mode enabled — reloading'
-                    : 'Mobile mode — reloading',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
+          ThemedSnackbar.show(
+            context,
+            message: settings.desktopMode
+                ? 'Desktop mode enabled \u2014 reloading'
+                : 'Mobile mode \u2014 reloading',
+            color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            icon: Icons.desktop_windows,
+            isDarkMode: settings.isDarkMode,
           );
 
           for (final t in _tabs) {
@@ -974,45 +975,42 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       case 'adblock':
         await settings.setAdBlockerEnabled(!settings.adBlockerEnabled);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                settings.adBlockerEnabled
-                    ? 'Ad blocker enabled'
-                    : 'Ad blocker disabled',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
+          ThemedSnackbar.show(
+            context,
+            message: settings.adBlockerEnabled
+                ? 'Ad blocker enabled'
+                : 'Ad blocker disabled',
+            color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            icon: settings.adBlockerEnabled ? Icons.check_circle_outline : Icons.block,
+            isDarkMode: settings.isDarkMode,
           );
         }
         break;
       case 'sniffer':
         await _setSnifferEnabled(!_isSnifferEnabled);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                _isSnifferEnabled
-                    ? 'Media detector enabled'
-                    : 'Media detector disabled',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
+          ThemedSnackbar.show(
+            context,
+            message: _isSnifferEnabled
+                ? 'Media detector enabled'
+                : 'Media detector disabled',
+            color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            icon: _isSnifferEnabled ? Icons.check_circle_outline : Icons.block,
+            isDarkMode: settings.isDarkMode,
           );
         }
         break;
       case 'incognito':
         await settings.setIncognitoEnabled(!settings.incognitoEnabled);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                settings.incognitoEnabled
-                    ? 'Incognito mode ON — no history recorded'
-                    : 'Incognito mode OFF',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
+          ThemedSnackbar.show(
+            context,
+            message: settings.incognitoEnabled
+                ? 'Incognito mode ON \u2014 no history recorded'
+                : 'Incognito mode OFF',
+            color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            icon: Icons.security,
+            isDarkMode: settings.isDarkMode,
           );
           if (settings.incognitoEnabled) {
             // Clear current tabs cookies, cache, local storage
@@ -1819,8 +1817,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
       if (rawHtml.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to read page content')),
+          ThemedSnackbar.show(
+            context,
+            message: 'Failed to read page content',
+            color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.error_outline,
+            isDarkMode: settings.isDarkMode,
           );
         }
         return;
@@ -1869,16 +1871,24 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           pauseOrphanDownloads: false,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Page saved successfully as $title.html')),
+          ThemedSnackbar.show(
+            context,
+            message: 'Page saved successfully as $title.html',
+            color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            icon: Icons.check_circle_outline,
+            isDarkMode: settings.isDarkMode,
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        ThemedSnackbar.show(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save page: $e')));
+          message: 'Failed to save page: $e',
+          color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          icon: Icons.error_outline,
+          isDarkMode: settings.isDarkMode,
+        );
       }
     }
   }
@@ -2885,12 +2895,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   if (choice == 'playlist') {
                                     final result = await YoutubePlaylistSheet.show(context, tabUrl);
                                     if (result != null && context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                        content: Text(isRtl
+                                      ThemedSnackbar.show(
+                                        context,
+                                        message: isRtl
                                             ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
-                                            : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"'),
-                                        duration: const Duration(seconds: 3),
-                                      ));
+                                            : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
+                                        color: AppTheme.neonGreen,
+                                        icon: Icons.playlist_add_check,
+                                        isDarkMode: isDark,
+                                      );
                                     }
                                     return;
                                   } else if (choice != 'video') {
@@ -2901,12 +2914,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   // Pure playlist URL
                                   final result = await YoutubePlaylistSheet.show(context, tabUrl);
                                   if (result != null && context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                      content: Text(isRtl
+                                    ThemedSnackbar.show(
+                                      context,
+                                      message: isRtl
                                           ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
-                                          : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"'),
-                                      duration: const Duration(seconds: 3),
-                                    ));
+                                          : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
+                                      color: AppTheme.neonGreen,
+                                      icon: Icons.playlist_add_check,
+                                      isDarkMode: isDark,
+                                    );
                                   }
                                   return;
                                 }
@@ -3279,13 +3295,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             activeTab.url,
           );
           if (result != null && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
-                ),
-                duration: const Duration(seconds: 3),
-              ),
+            ThemedSnackbar.show(
+              context,
+              message: '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
+              color: AppTheme.neonGreen,
+              icon: Icons.playlist_add_check,
+              isDarkMode: isDark,
             );
           }
         },

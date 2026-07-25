@@ -150,10 +150,13 @@ class AdBlocker {
     try {
       final file = await _getHostsFile();
       if (await file.exists()) {
-        final filePath = file.path;
-        final domains = await compute(_loadAndParseHostsFile, filePath);
-        _blockedDomains.addAll(domains);
-        debugPrint('AdBlocker loaded ${domains.length} custom domains from local cache.');
+      final filePath = file.path;
+      final result = await compute(_loadAndParseHostsFile, filePath);
+      final domains = result['domains'] as Set<String>;
+      final patterns = (result['patterns'] as List).cast<String>();
+      _blockedDomains.addAll(domains);
+      _blockedPatterns.addAll(patterns.map((p) => RegExp(p)));
+      debugPrint('AdBlocker loaded ${domains.length} custom domains and ${patterns.length} regex patterns from local cache.');
       } else {
         // Trigger background download
         updateHosts();
@@ -164,16 +167,16 @@ class AdBlocker {
     }
   }
 
-  static Set<String> _loadAndParseHostsFile(String filePath) {
+  static Map<String, dynamic> _loadAndParseHostsFile(String filePath) {
     try {
       final file = File(filePath);
-      if (!file.existsSync()) return {};
+      if (!file.existsSync()) return {'domains': <String>{}, 'patterns': <String>[]};
       final content = file.readAsStringSync();
-      final domains = _parseHostsContent(content);
-      _precomputeParentDomains(domains);
-      return domains;
+      final result = _parseHostsWithPatterns(content);
+      _precomputeParentDomains(result['domains'] as Set<String>);
+      return result;
     } catch (_) {
-      return {};
+      return {'domains': <String>{}, 'patterns': <String>[]};
     }
   }
 
@@ -181,6 +184,7 @@ class AdBlocker {
   static Future<void> updateHosts() async {
     final dio = Dio();
     final Set<String> newDomains = {};
+    final List<String> newPatterns = [];
 
     for (final source in hostsSources) {
       try {
@@ -192,9 +196,12 @@ class AdBlocker {
           ),
         );
         if (response.data != null) {
-          final parsed = _parseHostsContent(response.data!);
-          newDomains.addAll(parsed);
-          debugPrint('AdBlocker: Downloaded ${parsed.length} domains from $source');
+          final result = _parseHostsWithPatterns(response.data!);
+          final domains = result['domains'] as Set<String>;
+          final patterns = (result['patterns'] as List).cast<String>();
+          newDomains.addAll(domains);
+          newPatterns.addAll(patterns);
+          debugPrint('AdBlocker: Downloaded ${domains.length} domains and ${patterns.length} patterns from $source');
         }
       } catch (e) {
         debugPrint('AdBlocker: Error downloading hosts from $source: $e');
@@ -210,11 +217,14 @@ class AdBlocker {
       _blockedDomains
         ..clear()
         ..addAll(updated);
+      _blockedPatterns
+        ..clear()
+        ..addAll(newPatterns.map((p) => RegExp(p)));
 
       try {
         final file = await _getHostsFile();
         await file.writeAsString(newDomains.join('\n'));
-        debugPrint('AdBlocker: Successfully saved ${_blockedDomains.length} total domains.');
+        debugPrint('AdBlocker: Successfully saved ${_blockedDomains.length} total domains and ${_blockedPatterns.length} patterns.');
       } catch (e) {
         debugPrint('AdBlocker: Error caching hosts to file: $e');
       }
@@ -249,8 +259,9 @@ class AdBlocker {
     }
   }
 
-  static Set<String> _parseHostsContent(String content) {
+  static Map<String, dynamic> _parseHostsWithPatterns(String content) {
     final Set<String> domains = {};
+    final List<String> patterns = [];
     final lines = content.split('\n');
 
     for (var line in lines) {
@@ -262,7 +273,8 @@ class AdBlocker {
       // Handle adblock-style regex rules: /pattern/
       if (line.startsWith('/') && line.endsWith('/') && line.length > 2) {
         try {
-          _blockedPatterns.add(RegExp(line.substring(1, line.length - 1)));
+          RegExp(line.substring(1, line.length - 1));
+          patterns.add(line.substring(1, line.length - 1));
         } catch (_) {}
         continue;
       }
@@ -281,7 +293,7 @@ class AdBlocker {
         }
       }
     }
-    return domains;
+    return {'domains': domains, 'patterns': patterns};
   }
 
   /// Pre-computes parent domains so runtime lookup is O(1) per URL.
