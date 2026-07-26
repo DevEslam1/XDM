@@ -8,6 +8,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -331,28 +332,11 @@ class DownloadProvider extends ChangeNotifier
         })
         .toList();
 
-    final reconciled = <DownloadTask>[];
-    for (final task in loaded) {
-      final hasActiveStream = _cancelTokens.containsKey(task.id);
-      if (hasActiveStream) {
-        final memoryTask = _findTask(task.id);
-        if (memoryTask != null) {
-          reconciled.add(memoryTask);
-          continue;
-        }
-      }
-
-      try {
-        reconciled.add(await _reconcilePartialProgress(task));
-      } catch (e) {
-        debugPrint('Failed to reconcile partial file for ${task.id}: $e');
-        reconciled.add(task);
-      }
-    }
-
+    // Phase 1 — load tasks into memory immediately so the UI can render.
+    // File-reconciliation I/O is deferred to phase 2 (post-first-frame) below.
     _tasks
       ..clear()
-      ..addAll(reconciled);
+      ..addAll(loaded);
 
     for (final task in toDelete) {
       await _databaseService.deleteTask(task.id);
@@ -425,12 +409,43 @@ class DownloadProvider extends ChangeNotifier
     // auto-resumed ones) start without requiring user interaction.
     pumpQueue();
     _updateTelemetryWidget();
+
+    // Phase 2 — deferred per-task file reconciliation (I/O heavy).
+    // Runs after the first frame so the UI renders immediately with stale
+    // progress, then updates in place once files are stat'ed.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final reconciled = <DownloadTask>[];
+      for (final task in _tasks) {
+        final hasActiveStream = _cancelTokens.containsKey(task.id);
+        if (hasActiveStream) {
+          final memoryTask = _findTask(task.id);
+          if (memoryTask != null) {
+            reconciled.add(memoryTask);
+            continue;
+          }
+        }
+
+        try {
+          reconciled.add(await _reconcilePartialProgress(task));
+        } catch (e) {
+          debugPrint('Failed to reconcile partial file for ${task.id}: $e');
+          reconciled.add(task);
+        }
+      }
+
+      for (var i = 0; i < reconciled.length; i++) {
+        if (i < _tasks.length && _tasks[i].id == reconciled[i].id) {
+          _tasks[i] = reconciled[i];
+        }
+      }
+      notifyListeners();
+    });
   }
 
   // ---------------------------------------------------------------------------
   // Download task lifecycle
   // ---------------------------------------------------------------------------
-
+  
   Future<void> addDownload({
     required String name,
     required String url,
@@ -884,7 +899,10 @@ class DownloadProvider extends ChangeNotifier
     if (activeFuture != null) {
       try {
         await activeFuture;
-      } catch (_) {}
+      // ignore: avoid_catches_without_on_clauses
+      } catch (e) {
+        debugPrint('[DMX] activeFuture error in save: $e');
+      }
     }
 
     _cancelTokens.remove(id);
@@ -1119,7 +1137,10 @@ class DownloadProvider extends ChangeNotifier
           }
         }
       }
-    } catch (_) {}
+    // ignore: avoid_catches_without_on_clauses
+    } catch (e) {
+      debugPrint('[DMX] Cookie resolution error: $e');
+    }
 
     // Just-in-time stream resolution for YouTube videos
     final youtubeUrl = task.downloadPageUrl ?? task.url;
@@ -2822,7 +2843,10 @@ class DownloadProvider extends ChangeNotifier
     if (activeFuture != null && !fromError) {
       try {
         await activeFuture;
-      } catch (_) {}
+      // ignore: avoid_catches_without_on_clauses
+      } catch (e) {
+        debugPrint('[DMX] activeFuture error in cancel: $e');
+      }
     }
 
     final torrentId = _torrentIds[id];
@@ -2885,7 +2909,26 @@ class DownloadProvider extends ChangeNotifier
     }
     _cancelTokens.clear();
     _activeFutures.clear();
-    _downloadEngine.close();
+    _cookieCache.clear();
+    _speedHistories.clear();
+    _lastProgressUpdateTimes.clear();
+    _lastDbSaveTimes.clear();
+    _lastDbSaveBytes.clear();
+    _pendingProgressUpdates.clear();
+    _ytLowSpeedCounts.clear();
+    _ytThrottlingRefreshing.clear();
+    _torrentIds.clear();
+    _notificationIds.clear();
+    _retryCounts.clear();
+    // Drain pending DB saves before closing the engine
+    if (_dbSaveQueues.isNotEmpty) {
+      Future.wait(_dbSaveQueues.values).then((_) {
+        _downloadEngine.close();
+      });
+    } else {
+      _downloadEngine.close();
+    }
+    _dbSaveQueues.clear();
     super.dispose();
   }
 }

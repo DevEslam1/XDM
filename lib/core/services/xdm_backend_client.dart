@@ -20,6 +20,7 @@ class XdmBackendClient {
 
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
+  final _ApiRateLimiter _rateLimiter = _ApiRateLimiter();
 
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
@@ -128,35 +129,37 @@ class XdmBackendClient {
       }
     }
 
-    final headers = _buildHeaders({
-      if (cookies != null && cookies.isNotEmpty)
-        'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
-    });
+    return _rateLimiter.call('streams', () async {
+      final headers = _buildHeaders({
+        if (cookies != null && cookies.isNotEmpty)
+          'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
+      });
 
-    try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/api/streams',
-        queryParameters: {'url': url},
-        options: Options(headers: headers),
-      );
-      final data = response.data ?? {};
+      try {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '/api/streams',
+          queryParameters: {'url': url},
+          options: Options(headers: headers),
+        );
+        final data = response.data ?? {};
 
-      _streamsCache.removeWhere((key, val) => val.isExpired);
-      if (_streamsCache.length >= 50) {
-        final oldestKey = _streamsCache.entries
-            .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
-            .key;
-        _streamsCache.remove(oldestKey);
+        _streamsCache.removeWhere((key, val) => val.isExpired);
+        if (_streamsCache.length >= 50) {
+          final oldestKey = _streamsCache.entries
+              .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
+              .key;
+          _streamsCache.remove(oldestKey);
+        }
+
+        _streamsCache[url] = _StreamsCacheEntry(
+          data: data,
+          expiry: DateTime.now().add(const Duration(minutes: 10)),
+        );
+        return data;
+      } catch (e) {
+        throw _handleDioError(e);
       }
-
-      _streamsCache[url] = _StreamsCacheEntry(
-        data: data,
-        expiry: DateTime.now().add(const Duration(minutes: 10)),
-      );
-      return data;
-    } catch (e) {
-      throw _handleDioError(e);
-    }
+    });
   }
 
   /// Fetches playlist metadata and video list for a YouTube playlist URL.
@@ -166,37 +169,41 @@ class XdmBackendClient {
     String url, {
     String? cookies,
   }) async {
-    final headers = _buildHeaders({
-      if (cookies != null && cookies.isNotEmpty)
-        'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
-    });
+    return _rateLimiter.call('playlist', () async {
+      final headers = _buildHeaders({
+        if (cookies != null && cookies.isNotEmpty)
+          'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
+      });
 
-    try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/api/playlist',
-        queryParameters: {'url': url},
-        options: Options(headers: headers),
-      );
-      return response.data ?? {};
-    } catch (e) {
-      throw _handleDioError(e);
-    }
+      try {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '/api/playlist',
+          queryParameters: {'url': url},
+          options: Options(headers: headers),
+        );
+        return response.data ?? {};
+      } catch (e) {
+        throw _handleDioError(e);
+      }
+    });
   }
 
   Future<List<Map<String, dynamic>>> search(String q) async {
-    try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/api/search',
-        queryParameters: {'q': q},
-        options: Options(headers: _buildHeaders()),
-      );
-      final data = response.data ?? {};
-      final results = data['results'] as List?;
-      if (results == null) return [];
-      return results.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-    } catch (e) {
-      throw _handleDioError(e);
-    }
+    return _rateLimiter.call('search', () async {
+      try {
+        final response = await _dio.get<Map<String, dynamic>>(
+          '/api/search',
+          queryParameters: {'q': q},
+          options: Options(headers: _buildHeaders()),
+        );
+        final data = response.data ?? {};
+        final results = data['results'] as List?;
+        if (results == null) return [];
+        return results.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      } catch (e) {
+        throw _handleDioError(e);
+      }
+    });
   }
 
   BackendException _handleDioError(Object error) {
@@ -259,4 +266,30 @@ class _StreamsCacheEntry {
   _StreamsCacheEntry({required this.data, required this.expiry});
 
   bool get isExpired => DateTime.now().isAfter(expiry);
+}
+
+class _ApiRateLimiter {
+  final Map<String, List<DateTime>> _endpoints = {};
+  final Map<String, int> _limits = {
+    'streams': 30,
+    'playlist': 10,
+    'search': 10,
+  };
+
+  Future<T> call<T>(String endpoint, Future<T> Function() request) async {
+    final key = endpoint.split('/').last;
+    final limit = _limits[key] ?? 30;
+    final now = DateTime.now();
+
+    _endpoints.putIfAbsent(key, () => []);
+    _endpoints[key]!.removeWhere((t) => now.difference(t).inSeconds >= 60);
+
+    if (_endpoints[key]!.length >= limit) {
+      final wait = 60 - now.difference(_endpoints[key]!.first).inSeconds;
+      await Future.delayed(Duration(seconds: wait + 1));
+    }
+
+    _endpoints[key]!.add(now);
+    return await request();
+  }
 }

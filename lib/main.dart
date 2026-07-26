@@ -44,11 +44,19 @@ Future<void> main(List<String> args) async {
           exit(0);
         }
 
-        await AdBlocker.initialize();
+        // AdBlocker is only needed in the browser — defer after first frame.
+        // ignore: unawaited_futures
+        Future.microtask(() => AdBlocker.initialize());
+
         await XdmBackendClient.loadApiKey();
+
+        // Torrent engine is only needed for torrent downloads — lazy-init on
+        // first use rather than blocking app startup.
         if (TorrentService.isSupported) {
-          await TorrentService.init();
+          // ignore: unawaited_futures
+          Future.microtask(() => TorrentService.init());
         }
+
         await Hive.initFlutter();
 
         final databaseService = DatabaseService();

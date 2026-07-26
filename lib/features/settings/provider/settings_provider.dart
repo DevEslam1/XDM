@@ -672,9 +672,12 @@ class SettingsProvider extends ChangeNotifier {
       _searchEngineKey,
       _batteryOptimizationPromptedKey,
       _maxTotalConnectionsKey,
+      _backendUrlKey,
+      _sendBrowserCookiesToBackendKey,
+      _useRemoteBackendKey,
     ];
     for (final key in settingsKeys) {
-      if (key == _proxyPasswordKey) {
+      if (key == _proxyPasswordKey || key == _backendTokenKey) {
         await _secureStorage.delete(key: key);
       } else {
         await _prefs.remove(key);
@@ -726,6 +729,10 @@ class SettingsProvider extends ChangeNotifier {
     searchEngine = 'Google';
     batteryOptimizationPrompted = false;
     _maxTotalConnections = 32;
+    backendUrl = '';
+    backendToken = '';
+    sendBrowserCookiesToBackend = true;
+    useRemoteBackend = true;
 
     await _prefs.setBool(_isDarkModeKey, _isDarkMode);
     await _prefs.setBool(_classicUiKey, _classicUi);
@@ -771,6 +778,9 @@ class SettingsProvider extends ChangeNotifier {
     await _prefs.setString(_searchEngineKey, searchEngine);
     await _prefs.setBool(_batteryOptimizationPromptedKey, batteryOptimizationPrompted);
     await _prefs.setInt(_maxTotalConnectionsKey, _maxTotalConnections);
+    await _prefs.setString(_backendUrlKey, backendUrl);
+    await _prefs.setBool(_sendBrowserCookiesToBackendKey, sendBrowserCookiesToBackend);
+    await _prefs.setBool(_useRemoteBackendKey, useRemoteBackend);
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }

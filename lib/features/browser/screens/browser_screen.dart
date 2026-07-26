@@ -76,6 +76,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   String? _pendingTitleUpdate;
   final Set<String> _bypassedSniffUrls = {};
   final ScrollController _dashboardScrollController = ScrollController();
+  final List<Timer> _pendingTimers = [];
   Timer? _navDebounce;
   static const String _snifferPrefKey = 'browserSnifferEnabled';
   bool _isSnifferEnabled = true;
@@ -271,7 +272,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         _isFocused = _focusNode.hasFocus;
       });
       if (_focusNode.hasFocus) {
-        Future.delayed(Duration.zero, () {
+        _delayed(Duration.zero, () {
           if (_focusNode.hasFocus && mounted) {
             _urlController.selection = TextSelection(
               baseOffset: 0,
@@ -294,7 +295,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
       AdBlocker.initialize();
-      AdBlocker.autoUpdateHosts();
     }
   }
 
@@ -404,8 +404,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _updateNavState();
             // Re-check after 500 ms and 1200 ms: back/forward navigations need
             // extra time for the WebView history stack to settle.
-            Future.delayed(const Duration(milliseconds: 500), _updateNavState);
-            Future.delayed(const Duration(milliseconds: 1200), _updateNavState);
+            _delayed(const Duration(milliseconds: 500), _updateNavState);
+            _delayed(const Duration(milliseconds: 1200), _updateNavState);
           },
           onPageFinished: (url) {
             if (mounted) {
@@ -487,8 +487,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
 
             _updateNavState();
-            Future.delayed(const Duration(milliseconds: 500), _updateNavState);
-            Future.delayed(const Duration(milliseconds: 1200), _updateNavState);
+            _delayed(const Duration(milliseconds: 500), _updateNavState);
+            _delayed(const Duration(milliseconds: 1200), _updateNavState);
 
             // Trigger background DOM media scanner
             _mediaScanTimers[tab.id]?.cancel();
@@ -527,7 +527,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   _scanPageMedia(tab);
                 });
 
-                Future.delayed(const Duration(milliseconds: 1000), () {
+                _delayed(const Duration(milliseconds: 1000), () {
                   if (mounted) {
                     tab.controller.getTitle().then((t) {
                       if (t != null && t.isNotEmpty && mounted) {
@@ -540,8 +540,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 });
 
                 _updateNavState();
-                Future.delayed(const Duration(milliseconds: 500), _updateNavState);
-                Future.delayed(const Duration(milliseconds: 1200), _updateNavState);
+                _delayed(const Duration(milliseconds: 500), _updateNavState);
+                _delayed(const Duration(milliseconds: 1200), _updateNavState);
               }
             }
           },
@@ -716,6 +716,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
   }
 
+  void _delayed(Duration duration, VoidCallback callback) {
+    final timer = Timer(duration, callback);
+    _pendingTimers.add(timer);
+  }
+
   @override
   void dispose() {
     for (final tab in _tabs) {
@@ -740,6 +745,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       timer.cancel();
     }
     _mediaScanTimers.clear();
+    for (final timer in _pendingTimers) {
+      timer.cancel();
+    }
+    _pendingTimers.clear();
     _navDebounce?.cancel();
     _downloadProvider?.removeListener(_onDownloadProviderChanged);
     _urlController.dispose();
@@ -858,6 +867,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       // Give the WebView enough time to commit the history navigation before
       // we query canGoBack/canGoForward again (150 ms was too short).
       await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
       await _updateNavState();
     } else if (!activeTab.isHome && activeTab.url.isNotEmpty) {
       // Show the home screen WITHOUT loading about:blank into the WebView.
@@ -902,6 +912,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     await activeTab.controller.goForward();
     // Give the WebView enough time to commit the history navigation.
     await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
     await _updateNavState();
   }
 
@@ -938,7 +949,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       activeTab.isHome = false;
     });
     activeTab.controller.loadRequest(Uri.parse(url));
-    Future.delayed(const Duration(milliseconds: 300), _updateNavState);
+    _delayed(const Duration(milliseconds: 300), _updateNavState);
   }
 
   String _cleanUrl(String url) {

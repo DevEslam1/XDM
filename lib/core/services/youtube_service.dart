@@ -594,6 +594,19 @@ class YoutubeService {
     return null;
   }
 
+  /// Searches YouTube videos via the backend.
+  static Future<List<Map<String, dynamic>>> search(String query) async {
+    try {
+      final results = await XdmBackendClient().search(query);
+      return results;
+    } on BackendException catch (e) {
+      throw Exception(e.toUserMessage());
+    } catch (e) {
+      debugPrint('[YoutubeService] Search error: $e');
+      throw Exception('Search failed: $e');
+    }
+  }
+
   /// Fetches summary info for a playlist URL.
   static Future<Map<String, dynamic>?> getPlaylistInfo(String url) async {
     final details = await getPlaylistDetails(url);

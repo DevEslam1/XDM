@@ -133,6 +133,7 @@ class AdBlocker {
   ];
 
   static Future<void>? _initFuture;
+  static bool _isUpdating = false;
 
   /// Asynchronously loads local hosts from cache file or triggers background download
   static Future<void> initialize() {
@@ -158,13 +159,20 @@ class AdBlocker {
       _blockedPatterns.addAll(patterns.map((p) => RegExp(p)));
       debugPrint('AdBlocker loaded ${domains.length} custom domains and ${patterns.length} regex patterns from local cache.');
       } else {
-        // Trigger background download
-        updateHosts();
+        // First install — download filters immediately (awaited so they're
+        // ready before the user opens a page).
+        await updateHosts();
       }
       _initialized = true;
     } catch (e) {
       debugPrint('AdBlocker initialization error: $e');
     }
+
+    // Automatically check for stale cache (>24h) and update in background.
+    // This ensures filters stay fresh without requiring manual action or
+    // waiting for the user to open the browser tab.
+    // ignore: unawaited_futures
+    autoUpdateHosts();
   }
 
   static Map<String, dynamic> _loadAndParseHostsFile(String filePath) {
@@ -182,56 +190,62 @@ class AdBlocker {
 
   /// Downloads fresh lists, parses domains, updates memory list, and caches to disk
   static Future<void> updateHosts() async {
-    final dio = Dio();
-    final Set<String> newDomains = {};
-    final List<String> newPatterns = [];
+    if (_isUpdating) return;
+    _isUpdating = true;
+    try {
+      final dio = Dio();
+      final Set<String> newDomains = {};
+      final List<String> newPatterns = [];
 
-    for (final source in hostsSources) {
-      try {
-        final response = await dio.get<String>(
-          source,
-          options: Options(
-            responseType: ResponseType.plain,
-            validateStatus: (_) => true,
-          ),
-        );
-        if (response.data != null) {
-          final result = _parseHostsWithPatterns(response.data!);
-          final domains = result['domains'] as Set<String>;
-          final patterns = (result['patterns'] as List).cast<String>();
-          newDomains.addAll(domains);
-          newPatterns.addAll(patterns);
-          debugPrint('AdBlocker: Downloaded ${domains.length} domains and ${patterns.length} patterns from $source');
+      for (final source in hostsSources) {
+        try {
+          final response = await dio.get<String>(
+            source,
+            options: Options(
+              responseType: ResponseType.plain,
+              validateStatus: (_) => true,
+            ),
+          );
+          if (response.data != null) {
+            final result = _parseHostsWithPatterns(response.data!);
+            final domains = result['domains'] as Set<String>;
+            final patterns = (result['patterns'] as List).cast<String>();
+            newDomains.addAll(domains);
+            newPatterns.addAll(patterns);
+            debugPrint('AdBlocker: Downloaded ${domains.length} domains and ${patterns.length} patterns from $source');
+          }
+        } catch (e) {
+          debugPrint('AdBlocker: Error downloading hosts from $source: $e');
         }
-      } catch (e) {
-        debugPrint('AdBlocker: Error downloading hosts from $source: $e');
       }
-    }
 
-    dio.close();
+      dio.close();
 
-    if (newDomains.isNotEmpty) {
-      _invalidateCache();
-      _precomputeParentDomains(newDomains);
-      final updated = <String>{..._fallbackDomains, ...newDomains};
-      _blockedDomains
-        ..clear()
-        ..addAll(updated);
-      _blockedPatterns
-        ..clear()
-        ..addAll(newPatterns.map((p) => RegExp(p)));
+      if (newDomains.isNotEmpty) {
+        _invalidateCache();
+        _precomputeParentDomains(newDomains);
+        final updated = <String>{..._fallbackDomains, ...newDomains};
+        _blockedDomains
+          ..clear()
+          ..addAll(updated);
+        _blockedPatterns
+          ..clear()
+          ..addAll(newPatterns.map((p) => RegExp(p)));
 
-      try {
-        final file = await _getHostsFile();
-        final lines = <String>[
-          ...newDomains,
-          ...newPatterns.map((p) => '/$p/'),
-        ];
-        await file.writeAsString(lines.join('\n'));
-        debugPrint('AdBlocker: Successfully saved ${_blockedDomains.length} total domains and ${_blockedPatterns.length} patterns.');
-      } catch (e) {
-        debugPrint('AdBlocker: Error caching hosts to file: $e');
+        try {
+          final file = await _getHostsFile();
+          final lines = <String>[
+            ...newDomains,
+            ...newPatterns.map((p) => '/$p/'),
+          ];
+          await file.writeAsString(lines.join('\n'));
+          debugPrint('AdBlocker: Successfully saved ${_blockedDomains.length} total domains and ${_blockedPatterns.length} patterns.');
+        } catch (e) {
+          debugPrint('AdBlocker: Error caching hosts to file: $e');
+        }
       }
+    } finally {
+      _isUpdating = false;
     }
   }
 
@@ -535,109 +549,136 @@ class AdBlocker {
     });
   }
 
-  // 5. Intercept Fetch API calls
-  try {
-    const originalFetch = window.fetch;
-    window.fetch = async function(input, init) {
-      const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : '');
-      if (url) {
-        const isBlocked = await checkBlockedAsync(url);
-        if (isBlocked) {
-          console.log('[AdBlocker] Blocked fetch to: ' + url);
-          return Promise.reject(new TypeError('Failed to fetch (blocked by AdBlocker)'));
+  // 5. Intercept Fetch API calls (skip on YouTube to preserve native [native code] integrity)
+  if (!ytHost) {
+    try {
+      const originalFetch = window.fetch;
+      window.fetch = async function(input, init) {
+        const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : '');
+        if (url) {
+          const isBlocked = await checkBlockedAsync(url);
+          if (isBlocked) {
+            console.log('[AdBlocker] Blocked fetch to: ' + url);
+            return Promise.reject(new TypeError('Failed to fetch (blocked by AdBlocker)'));
+          }
         }
-      }
-      return originalFetch.apply(this, arguments);
-    };
-  } catch(e) {}
+        return originalFetch.apply(this, arguments);
+      };
+    } catch(e) {}
 
-  // 6. Intercept XMLHttpRequest (XHR) calls
-  try {
-    const originalOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url) {
-      this.__url = url;
-      return originalOpen.apply(this, arguments);
-    };
+    // 6. Intercept XMLHttpRequest (XHR) calls (skip on YouTube)
+    try {
+      const originalOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
+        this.__url = url;
+        return originalOpen.apply(this, arguments);
+      };
 
-    const originalSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.send = async function(body) {
-      if (this.__url) {
-        const isBlocked = await checkBlockedAsync(this.__url);
-        if (isBlocked) {
-          console.log('[AdBlocker] Blocked XHR to: ' + this.__url);
-          Object.defineProperty(this, 'readyState', { value: 4, writable: true });
-          Object.defineProperty(this, 'status', { value: 0, writable: true });
-          Object.defineProperty(this, 'statusText', { value: 'Blocked by AdBlocker', writable: true });
-          this.dispatchEvent(new Event('error'));
-          return;
+      const originalSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = async function(body) {
+        if (this.__url) {
+          const isBlocked = await checkBlockedAsync(this.__url);
+          if (isBlocked) {
+            console.log('[AdBlocker] Blocked XHR to: ' + this.__url);
+            Object.defineProperty(this, 'readyState', { value: 4, writable: true });
+            Object.defineProperty(this, 'status', { value: 0, writable: true });
+            Object.defineProperty(this, 'statusText', { value: 'Blocked by AdBlocker', writable: true });
+            this.dispatchEvent(new Event('error'));
+            return;
+          }
         }
-      }
-      return originalSend.apply(this, arguments);
-    };
-  } catch(e) {}
+        return originalSend.apply(this, arguments);
+      };
+    } catch(e) {}
 
-  // 7. Intercept Script Tag Creation synchronously to block ad script loads
-  try {
-    const originalCreateElement = document.createElement;
-    document.createElement = function(tagName) {
-      const el = originalCreateElement.apply(this, arguments);
-      if (tagName.toLowerCase() === 'script') {
-        const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
-        Object.defineProperty(el, 'src', {
-          set: function(val) {
-            if (shouldBlockSync(val)) {
-              console.log('[AdBlocker] Blocked script injection synchronously: ' + val);
-              val = 'data:text/javascript,console.log("script ad blocked")';
-            }
-            if (descriptor && descriptor.set) {
-              descriptor.set.call(this, val);
-            } else {
-              this.setAttribute('src', val);
-            }
-          },
-          get: function() {
-            if (descriptor && descriptor.get) {
-              return descriptor.get.call(this);
-            }
-            return this.getAttribute('src') || '';
-          },
-          configurable: true
-        });
-      }
-      return el;
-    };
-  } catch(e) {}
+    // 7. Intercept Script Tag Creation synchronously to block ad script loads
+    try {
+      const originalCreateElement = document.createElement;
+      document.createElement = function(tagName) {
+        const el = originalCreateElement.apply(this, arguments);
+        if (tagName && tagName.toLowerCase() === 'script') {
+          const descriptor = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+          Object.defineProperty(el, 'src', {
+            set: function(val) {
+              if (shouldBlockSync(val)) {
+                console.log('[AdBlocker] Blocked script injection synchronously: ' + val);
+                val = 'data:text/javascript,console.log("script ad blocked")';
+              }
+              if (descriptor && descriptor.set) {
+                descriptor.set.call(this, val);
+              } else {
+                this.setAttribute('src', val);
+              }
+            },
+            get: function() {
+              if (descriptor && descriptor.get) {
+                return descriptor.get.call(this);
+              }
+              return this.getAttribute('src') || '';
+            },
+            configurable: true
+          });
+        }
+        return el;
+      };
+    } catch(e) {}
+  }
 
-  // 8. Inject CSS selector hiding stylesheet
+  // 8. Inject CSS selector hiding stylesheet (exclude player modules on YouTube to prevent anti-adblock detection)
   try {
     const style = document.createElement('style');
-    style.innerHTML = `
-      iframe[src*="doubleclick.net"], iframe[src*="googleads"], .ad-box, .ad-banner, .pub_300x250, div[id^="google_ads_iframe"],
-      .video-ads, .ytp-ad-module, .ytp-ad-overlay-container, ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer {
-        display: none !important;
-        height: 0 !important;
-        width: 0 !important;
-      }
-    `;
+    if (ytHost) {
+      style.innerHTML = `
+        iframe[src*="doubleclick.net"], iframe[src*="googleads"], .ad-box, .ad-banner, .pub_300x250, div[id^="google_ads_iframe"],
+        ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer {
+          display: none !important;
+          height: 0 !important;
+          width: 0 !important;
+        }
+      `;
+    } else {
+      style.innerHTML = `
+        iframe[src*="doubleclick.net"], iframe[src*="googleads"], .ad-box, .ad-banner, .pub_300x250, div[id^="google_ads_iframe"],
+        .video-ads, .ytp-ad-module, .ytp-ad-overlay-container, ytd-promoted-sparkles-web-renderer, ytd-display-ad-renderer, ytd-statement-banner-renderer, ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer {
+          display: none !important;
+          height: 0 !important;
+          width: 0 !important;
+        }
+      `;
+    }
     document.head.appendChild(style);
   } catch(e) {}
 
-  // 9. Dedicated YouTube Ad Skipping & Black Screen Fast-Forward Engine
+  // 9. Dedicated YouTube Ad Skipping Engine (safe 16x speedup & auto-click, restores 1.0x speed & audio when ad ends)
   try {
-    if (window.location.hostname.includes('youtube.com') || window.location.hostname.includes('youtu.be')) {
+    if (ytHost) {
+      let isAdMuted = false;
       setInterval(() => {
         try {
           const video = document.querySelector('video');
-          const adContainer = document.querySelector('.ad-showing, .ad-interrupting');
+          const adContainer = document.querySelector('.ad-showing, .ad-interrupting, .video-ads');
+          const adText = document.querySelector('.ytp-ad-text, .ytp-ad-preview-text, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
           
-          // Fast-forward video ad if detected
-          if (adContainer && video && !isNaN(video.duration)) {
-            video.muted = true;
-            video.currentTime = video.duration || 99999;
+          if (video) {
+            if (adContainer && adText) {
+              try {
+                if (!isAdMuted) {
+                  video.muted = true;
+                  isAdMuted = true;
+                }
+                video.playbackRate = 16.0;
+              } catch (err) {}
+            } else if (isAdMuted || video.playbackRate > 2.0) {
+              try {
+                video.playbackRate = 1.0;
+                video.muted = false;
+                isAdMuted = false;
+              } catch (err) {}
+            }
           }
 
           // Click 'Skip Ad' button as soon as it appears
-          const skipButtons = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-skip-button-slot');
+          const skipButtons = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-skip-button-slot, .yt-spec-button-shape-next');
           skipButtons.forEach(btn => {
             if (btn && typeof btn.click === 'function') {
               btn.click();
