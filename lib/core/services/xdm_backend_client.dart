@@ -85,8 +85,7 @@ class XdmBackendClient {
   }
 
   /// Refreshes the backend configuration from SettingsProvider
-  Future<void> refreshConfig() async {
-    await SettingsProvider.instance.load();
+  void refreshConfig() {
     _updateDioFromSettings();
   }
 

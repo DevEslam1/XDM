@@ -54,10 +54,10 @@ Future<void> main(List<String> args) async {
         final databaseService = DatabaseService();
         await databaseService.init();
 
-        final settingsProvider = SettingsProvider();
+        final settingsProvider = SettingsProvider.instance;
         await settingsProvider.load();
 
-        await XdmBackendClient().refreshConfig();
+        XdmBackendClient().refreshConfig();
 
         await YoutubeService.init();
 

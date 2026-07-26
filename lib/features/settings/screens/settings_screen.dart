@@ -965,7 +965,7 @@ class _SettingsScreenState extends State<SettingsScreen> with HapticHelper {
                             );
 
                             try {
-                              await XdmBackendClient().refreshConfig();
+                              XdmBackendClient().refreshConfig();
                               final response = await XdmBackendClient().health();
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).hideCurrentSnackBar();

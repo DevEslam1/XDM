@@ -9,9 +9,11 @@ class SettingsProvider extends ChangeNotifier {
   /// Used by services like [YoutubeService] that need access to settings
   /// without receiving the instance via dependency injection.
   static SettingsProvider? _instance;
+  static bool _instanceLoaded = false;
   static SettingsProvider get instance {
-    if (_instance == null) {
-      _instance = SettingsProvider();
+    _instance ??= SettingsProvider();
+    if (!_instanceLoaded) {
+      _instanceLoaded = true;
       _instance!.load();
     }
     return _instance!;
@@ -570,14 +572,14 @@ class SettingsProvider extends ChangeNotifier {
   Future<void> setBackendUrl(String value) async {
     backendUrl = value;
     await _prefs.setString(_backendUrlKey, value);
-    await XdmBackendClient().refreshConfig();
+    XdmBackendClient().refreshConfig();
     notifyListeners();
   }
 
   Future<void> setBackendToken(String value) async {
     backendToken = value;
     await _secureStorage.write(key: _backendTokenKey, value: value);
-    await XdmBackendClient().refreshConfig();
+    XdmBackendClient().refreshConfig();
     notifyListeners();
   }
 
