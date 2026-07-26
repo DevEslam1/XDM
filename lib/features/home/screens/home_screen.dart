@@ -22,16 +22,47 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with HapticHelper {
+class _HomeScreenState extends State<HomeScreen>
+    with HapticHelper, TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
   bool _showAnalytics = false;
-  int _selectedTab = 0; // 0: Active, 1: Completed
+  int _selectedTab = 0;
+
+  late final AnimationController _tabIndicatorController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+  );
+  late final Animation<double> _tabIndicatorAnimation =
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _tabIndicatorController,
+          curve: Curves.easeInOutCubic,
+        ),
+      );
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabIndicatorController.dispose();
     super.dispose();
+  }
+
+  void _switchTab(int index) {
+    if (_selectedTab == index) return;
+    triggerHaptic(context.read<SettingsProvider>());
+    setState(() => _selectedTab = index);
+    if (index == 1) {
+      _tabIndicatorController.forward();
+    } else {
+      _tabIndicatorController.reverse();
+    }
+    context.read<DownloadProvider>().setStatusFilter('All');
   }
 
   @override
@@ -53,108 +84,13 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
             extendBody: true,
             floatingActionButtonLocation:
                 FloatingActionButtonLocation.endDocked,
-            appBar: AppBar(
-              backgroundColor: classicUi
-                  ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                  : Colors.transparent,
-              elevation: 0,
-              shape: classicUi
-                  ? Border(
-                      bottom: BorderSide(
-                        color: isDark ? AppTheme.border : AppTheme.lightBorder,
-                        width: 1.0,
-                      ),
-                    )
-                  : null,
-              title: _isSearching
-                  ? Container(
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF0F0F16)
-                            : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isDark
-                              ? const Color(0x15FFFFFF)
-                              : const Color(0x0D000000),
-                          width: 0.8,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        style: TextStyle(color: textClr, fontSize: 16),
-                        decoration: InputDecoration(
-                          hintText: L10n.of(
-                            context,
-                            'search_placeholder',
-                          ).toUpperCase(),
-                          hintStyle: TextStyle(
-                            color: isDark
-                                ? AppTheme.textMuted
-                                : AppTheme.lightTextMuted,
-                            fontSize: 14,
-                          ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                          ),
-                        ),
-                        onChanged: (val) => context
-                            .read<DownloadProvider>()
-                            .setSearchQuery(val),
-                      ),
-                    )
-                  : Text(
-                      'XDM',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            color: textClr,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.5,
-                            fontSize: 18,
-                          ),
-                    ),
-              actions: [
-                if (!_isSearching)
-                  IconButton(
-                    icon: Icon(
-                      _showAnalytics
-                          ? Icons.analytics
-                          : Icons.analytics_outlined,
-                      color: _showAnalytics ? accentClr : textClr,
-                    ),
-                    tooltip: isRtl ? 'تحليل التخزين' : 'STORAGE ANALYTICS',
-                    onPressed: () {
-                      triggerHaptic(context.read<SettingsProvider>());
-                      setState(() {
-                        _showAnalytics = !_showAnalytics;
-                      });
-                    },
-                  ),
-                IconButton(
-                  icon: Icon(
-                    _isSearching ? Icons.close : Icons.search,
-                    color: textClr,
-                  ),
-                  onPressed: () {
-                    triggerHaptic(context.read<SettingsProvider>());
-                    setState(() {
-                      if (_isSearching) {
-                        _isSearching = false;
-                        _searchController.clear();
-                        context.read<DownloadProvider>().setSearchQuery('');
-                      } else {
-                        _isSearching = true;
-                      }
-                    });
-                  },
-                ),
-                const SizedBox(width: 8),
-              ],
+            appBar: _buildAppBar(
+              context,
+              isDark: isDark,
+              classicUi: classicUi,
+              textClr: textClr,
+              accentClr: accentClr,
+              isRtl: isRtl,
             ),
             body: SafeArea(
               child: Center(
@@ -163,18 +99,23 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Sliding Segmented Tab Selector
-                      _buildSegmentedControl(context, isDark, isRtl),
-
-                      // Storage & Category Analytics Panel
+                      const SizedBox(height: 12),
+                      _buildAnimatedSegmentedControl(
+                        context,
+                        isDark: isDark,
+                        isRtl: isRtl,
+                      ),
+                      const SizedBox(height: 12),
+                      // Analytics Panel
                       AnimatedSize(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOutCubic,
+                        duration: const Duration(milliseconds: 350),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
                         child: _showAnalytics
                             ? Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16.0,
-                                  vertical: 8.0,
+                                  vertical: 4.0,
                                 ),
                                 child:
                                     Selector<
@@ -195,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                                         return false;
                                       },
                                       builder: (context, categorySizes, _) =>
-                                          _DonutChartPanel(
+                                          _RedesignedAnalyticsPanel(
                                             categorySizes: categorySizes,
                                             settings: context
                                                 .read<SettingsProvider>(),
@@ -204,11 +145,10 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                               )
                             : const SizedBox.shrink(),
                       ),
-
-                      // Download Speed Statistics (only show for Active Downloads)
+                      // Stats Panel (Active tab only)
                       AnimatedSize(
                         duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOutCubic,
+                        curve: Curves.easeOutCubic,
                         child: _selectedTab == 0
                             ? const Padding(
                                 padding: EdgeInsets.symmetric(
@@ -219,48 +159,20 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                               )
                             : const SizedBox.shrink(),
                       ),
-
                       // Filter Chips
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: FilterChipsBar(isHistory: _selectedTab == 1),
                       ),
-                      const SizedBox(height: 16),
-
-                      // Title "DOWNLOADS OVERVIEW"
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Text(
-                          _selectedTab == 0
-                              ? (isRtl
-                                    ? 'التنزيلات النشطة'
-                                    : 'ACTIVE DOWNLOADS')
-                              : (isRtl
-                                    ? 'سجل التنزيلات المكتملة'
-                                    : 'COMPLETED DOWNLOADS'),
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: isDark
-                                    ? AppTheme.textSecondary
-                                    : AppTheme.lightTextSecondary,
-                                fontSize: 10,
-                                letterSpacing: 1.0,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Controls Row: Sort Option on the Left, Delete Sweep/Task count on the Right
-                      _DownloadControlsRow(
-                        selectedTab: _selectedTab,
+                      const SizedBox(height: 12),
+                      // Section Header + Controls
+                      _buildSectionHeader(
+                        context,
                         isDark: isDark,
                         isRtl: isRtl,
-                        settings: context.read<SettingsProvider>(),
                       ),
-                      const SizedBox(height: 10),
-
-                      // Download Tasks list with Pull-to-Refresh
+                      const SizedBox(height: 8),
+                      // Task List
                       Expanded(
                         child: _DownloadTaskList(
                           selectedTab: _selectedTab,
@@ -274,226 +186,337 @@ class _HomeScreenState extends State<HomeScreen> with HapticHelper {
                 ),
               ),
             ),
-            floatingActionButton: Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).padding.bottom + 76.0,
-              ),
-              child: classicUi
-                  ? FloatingActionButton(
-                      heroTag: null,
-                      backgroundColor: isDark
-                          ? AppTheme.neonViolet
-                          : AppTheme.lightNeonViolet,
-                      foregroundColor: isDark
-                          ? AppTheme.background
-                          : AppTheme.lightBackground,
-                      shape: const CircleBorder(
-                        side: BorderSide(color: Colors.white24, width: 0.8),
-                      ),
-                      child: const Icon(Icons.add, size: 28),
-                      onPressed: () {
-                        triggerHaptic(context.read<SettingsProvider>());
-                        showDialog(
-                          context: context,
-                          builder: (_) => const AddDownloadDialog(),
-                        );
-                      },
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                (isDark
-                                        ? AppTheme.neonViolet
-                                        : AppTheme.lightNeonViolet)
-                                    .withValues(alpha: 0.3),
-                            blurRadius: 16.0,
-                            spreadRadius: 0,
-                          ),
-                        ],
-                      ),
-                      child: FloatingActionButton(
-                        heroTag: null,
-                        backgroundColor: isDark
-                            ? AppTheme.neonViolet
-                            : AppTheme.lightNeonViolet,
-                        foregroundColor: isDark
-                            ? AppTheme.background
-                            : AppTheme.lightBackground,
-                        shape: const CircleBorder(
-                          side: BorderSide(color: Colors.white24, width: 0.8),
-                        ),
-                        child: const Icon(Icons.add, size: 28),
-                        onPressed: () {
-                          triggerHaptic(context.read<SettingsProvider>());
-                          showDialog(
-                            context: context,
-                            builder: (_) => const AddDownloadDialog(),
-                          );
-                        },
-                      ),
-                    ),
-            ),
+            floatingActionButton: _buildFAB(context, isDark, classicUi),
           ),
         );
       },
     );
   }
 
-  Widget _buildSegmentedControl(BuildContext context, bool isDark, bool isRtl) {
-    final activeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final inactiveClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final provider = Provider.of<DownloadProvider>(context, listen: false);
+  PreferredSizeWidget _buildAppBar(
+    BuildContext context, {
+    required bool isDark,
+    required bool classicUi,
+    required Color textClr,
+    required Color accentClr,
+    required bool isRtl,
+  }) {
+    return AppBar(
+      backgroundColor: classicUi
+          ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+          : Colors.transparent,
+      elevation: 0,
+      shape: classicUi
+          ? Border(
+              bottom: BorderSide(
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                width: 1.0,
+              ),
+            )
+          : null,
+      titleSpacing: 16,
+      title: _isSearching
+          ? _buildSearchField(context, textClr, isDark)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'XDM',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: textClr,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2.0,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+      actions: [
+        if (!_isSearching)
+          _AppBarIconButton(
+            icon: _showAnalytics
+                ? Icons.pie_chart_rounded
+                : Icons.pie_chart_outline_rounded,
+            color: _showAnalytics ? accentClr : textClr,
+            tooltip: isRtl ? 'تحليل التخزين' : 'Storage Analytics',
+            onPressed: () {
+              triggerHaptic(context.read<SettingsProvider>());
+              setState(() => _showAnalytics = !_showAnalytics);
+            },
+          ),
+        _AppBarIconButton(
+          icon: _isSearching ? Icons.close_rounded : Icons.search_rounded,
+          color: textClr,
+          onPressed: () {
+            triggerHaptic(context.read<SettingsProvider>());
+            setState(() {
+              if (_isSearching) {
+                _isSearching = false;
+                _searchController.clear();
+                context.read<DownloadProvider>().setSearchQuery('');
+              } else {
+                _isSearching = true;
+              }
+            });
+          },
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
 
+  Widget _buildSearchField(BuildContext context, Color textClr, bool isDark) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      height: 44,
+      height: 40,
       decoration: BoxDecoration(
-        color: settings.classicUi
-            ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-            : (isDark ? const Color(0x1A000000) : const Color(0x0A000000)),
-        borderRadius: BorderRadius.circular(22),
+        color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: settings.classicUi
-              ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-              : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+          color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
           width: 0.8,
         ),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Row(
         children: [
+          Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+          ),
+          const SizedBox(width: 8),
           Expanded(
-            child: GestureDetector(
-              onTap: () {
-                triggerHaptic(settings);
-                setState(() {
-                  _selectedTab = 0;
-                });
-                provider.setStatusFilter('All');
-              },
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _selectedTab == 0
-                      ? (settings.classicUi
-                            ? (isDark
-                                  ? AppTheme.background
-                                  : AppTheme.lightBackground)
-                            : (isDark
-                                  ? AppTheme.glassBg
-                                  : AppTheme.lightGlassBg))
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(22),
-                  border: _selectedTab == 0
-                      ? Border.all(
-                          color: settings.classicUi
-                              ? (isDark
-                                    ? AppTheme.border
-                                    : AppTheme.lightBorder)
-                              : activeClr.withValues(alpha: 0.3),
-                          width: 0.8,
-                        )
-                      : null,
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              style: TextStyle(color: textClr, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: L10n.of(context, 'search_placeholder'),
+                hintStyle: TextStyle(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  fontSize: 13,
                 ),
-                child: Text(
-                  isRtl ? 'النشطة' : 'ACTIVE',
-                  style: TextStyle(
-                    color: _selectedTab == 0 ? activeClr : inactiveClr,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                isDense: true,
               ),
+              onChanged: (val) =>
+                  context.read<DownloadProvider>().setSearchQuery(val),
             ),
           ),
-          Expanded(
-            child: GestureDetector(
+          if (_searchController.text.isNotEmpty)
+            GestureDetector(
               onTap: () {
-                triggerHaptic(settings);
-                setState(() {
-                  _selectedTab = 1;
-                });
-                provider.setStatusFilter('All');
+                _searchController.clear();
+                context.read<DownloadProvider>().setSearchQuery('');
               },
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _selectedTab == 1
-                      ? (settings.classicUi
-                            ? (isDark
-                                  ? AppTheme.background
-                                  : AppTheme.lightBackground)
-                            : (isDark
-                                  ? AppTheme.glassBg
-                                  : AppTheme.lightGlassBg))
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(22),
-                  border: _selectedTab == 1
-                      ? Border.all(
-                          color: settings.classicUi
-                              ? (isDark
-                                    ? AppTheme.border
-                                    : AppTheme.lightBorder)
-                              : activeClr.withValues(alpha: 0.3),
-                          width: 0.8,
-                        )
-                      : null,
-                ),
-                child: Text(
-                  isRtl ? 'المكتملة' : 'COMPLETED',
-                  style: TextStyle(
-                    color: _selectedTab == 1 ? activeClr : inactiveClr,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+              child: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
               ),
             ),
-          ),
         ],
       ),
     );
   }
-}
 
-class _DownloadControlsRow extends StatelessWidget {
-  final int selectedTab;
-  final bool isDark;
-  final bool isRtl;
-  final SettingsProvider settings;
+  Widget _buildAnimatedSegmentedControl(
+    BuildContext context, {
+    required bool isDark,
+    required bool isRtl,
+  }) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final activeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final inactiveClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
+    final bgClr = settings.classicUi
+        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+        : (isDark ? const Color(0x1A000000) : const Color(0x0A000000));
+    final borderClr = settings.classicUi
+        ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+        : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder);
 
-  const _DownloadControlsRow({
-    required this.selectedTab,
-    required this.isDark,
-    required this.isRtl,
-    required this.settings,
-  });
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: bgClr,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderClr, width: 0.8),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final itemWidth = constraints.maxWidth / 2;
+            return Stack(
+              children: [
+                // Sliding indicator
+                AnimatedBuilder(
+                  animation: _tabIndicatorAnimation,
+                  builder: (context, child) {
+                    final offset = isRtl
+                        ? (1 - _tabIndicatorAnimation.value) * itemWidth
+                        : _tabIndicatorAnimation.value * itemWidth;
+                    return Positioned(
+                      left: offset + 3,
+                      top: 3,
+                      bottom: 3,
+                      width: itemWidth - 6,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: activeClr.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: activeClr.withValues(alpha: 0.35),
+                            width: 1.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: activeClr.withValues(alpha: 0.08),
+                              blurRadius: 8,
+                              spreadRadius: -2,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Tab buttons
+                Row(
+                  children: [
+                    _buildTabButton(
+                      context,
+                      label: isRtl ? 'النشطة' : 'ACTIVE',
+                      icon: Icons.download_rounded,
+                      isActive: _selectedTab == 0,
+                      activeColor: activeClr,
+                      inactiveColor: inactiveClr,
+                      onTap: () => _switchTab(0),
+                    ),
+                    _buildTabButton(
+                      context,
+                      label: isRtl ? 'المكتملة' : 'COMPLETED',
+                      icon: Icons.check_circle_outline_rounded,
+                      isActive: _selectedTab == 1,
+                      activeColor: activeClr,
+                      inactiveColor: inactiveClr,
+                      onTap: () => _switchTab(1),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+  Widget _buildTabButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required bool isActive,
+    required Color activeColor,
+    required Color inactiveColor,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  icon,
+                  key: ValueKey('$label-$isActive'),
+                  size: 15,
+                  color: isActive ? activeColor : inactiveColor,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive ? activeColor : inactiveColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(
+    BuildContext context, {
+    required bool isDark,
+    required bool isRtl,
+  }) {
     final provider = context.read<DownloadProvider>();
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // Section title
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _selectedTab == 0
+                      ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
+                      : (isRtl ? 'سجل المكتملة' : 'COMPLETED'),
+                  style: TextStyle(
+                    color: textClr,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Selector<DownloadProvider, int>(
+                  selector: (_, p) => p.filteredTasks.length,
+                  builder: (context, count, _) => Text(
+                    '$count ${isRtl ? 'عنصر' : 'items'}',
+                    style: TextStyle(
+                      color: mutedClr,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Sort button
           Selector<DownloadProvider, ({SortOption option, bool ascending})>(
             selector: (_, p) =>
                 (option: p.sortOption, ascending: p.sortAscending),
             builder: (context, sortState, _) {
               return PopupMenuButton<SortOption>(
-                tooltip: 'SORT CHANNELS',
+                tooltip: 'Sort',
                 color: isDark ? AppTheme.surface : AppTheme.lightSurface,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
                     color: isDark
                         ? AppTheme.glassBorder
@@ -501,54 +524,48 @@ class _DownloadControlsRow extends StatelessWidget {
                     width: 0.6,
                   ),
                 ),
+                offset: const Offset(0, 40),
                 onSelected: (option) {
-                  final p = context.read<DownloadProvider>();
-                  if (p.sortOption == option) {
-                    p.toggleSortDirection();
+                  if (provider.sortOption == option) {
+                    provider.toggleSortDirection();
                   } else {
-                    p.setSortOption(option);
+                    provider.setSortOption(option);
                   }
                 },
                 itemBuilder: (context) => [
-                  _buildSortMenuItem(
-                    option: SortOption.dateAdded,
-                    label: L10n.of(context, 'sort_date'),
-                    currentOption: sortState.option,
-                    ascending: sortState.ascending,
-                    isDark: isDark,
+                  _sortMenuItem(
+                    SortOption.dateAdded,
+                    L10n.of(context, 'sort_date'),
+                    sortState,
+                    isDark,
                   ),
-                  _buildSortMenuItem(
-                    option: SortOption.fileSize,
-                    label: L10n.of(context, 'details_size'),
-                    currentOption: sortState.option,
-                    ascending: sortState.ascending,
-                    isDark: isDark,
+                  _sortMenuItem(
+                    SortOption.fileSize,
+                    L10n.of(context, 'details_size'),
+                    sortState,
+                    isDark,
                   ),
-                  _buildSortMenuItem(
-                    option: SortOption.fileName,
-                    label: L10n.of(context, 'details_filename'),
-                    currentOption: sortState.option,
-                    ascending: sortState.ascending,
-                    isDark: isDark,
+                  _sortMenuItem(
+                    SortOption.fileName,
+                    L10n.of(context, 'details_filename'),
+                    sortState,
+                    isDark,
                   ),
-                  _buildSortMenuItem(
-                    option: SortOption.status,
-                    label: L10n.of(context, 'sort_status'),
-                    currentOption: sortState.option,
-                    ascending: sortState.ascending,
-                    isDark: isDark,
+                  _sortMenuItem(
+                    SortOption.status,
+                    L10n.of(context, 'sort_status'),
+                    sortState,
+                    isDark,
                   ),
                 ],
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
-                    vertical: 6,
+                    vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0x1F000000)
-                        : const Color(0x0A000000),
-                    borderRadius: BorderRadius.circular(12),
+                    color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isDark
                           ? AppTheme.glassBorder
@@ -559,45 +576,52 @@ class _DownloadControlsRow extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.sort_rounded, color: textClr, size: 14),
-                      const SizedBox(width: 6),
-                      Text(
-                        isRtl ? 'فرز' : 'SORT',
-                        style: TextStyle(
-                          color: textClr,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
+                      Icon(
+                        sortState.ascending
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded,
+                        color: secClr,
+                        size: 13,
                       ),
+                      const SizedBox(width: 5),
+                      Icon(Icons.sort_rounded, color: secClr, size: 14),
                     ],
                   ),
                 ),
               );
             },
           ),
+          const SizedBox(width: 8),
+          // Clear history button (Completed tab only)
           Selector<DownloadProvider, int>(
             selector: (_, p) => p.filteredTasks.length,
             builder: (context, length, _) {
-              if (selectedTab == 1 && length > 0) {
-                return IconButton(
-                  icon: Icon(
+              if (_selectedTab != 1 || length == 0) {
+                return const SizedBox.shrink();
+              }
+              return GestureDetector(
+                onTap: () =>
+                    _showClearHistoryDialog(context, provider, isDark, isRtl),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                        .withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                          .withValues(alpha: 0.25),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(
                     Icons.delete_sweep_outlined,
                     color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                    size: 20,
+                    size: 16,
                   ),
-                  constraints: const BoxConstraints(),
-                  padding: EdgeInsets.zero,
-                  tooltip: isRtl ? 'مسح كل السجل' : 'CLEAR ALL HISTORY',
-                  onPressed: () =>
-                      _showClearHistoryDialog(context, provider, isDark, isRtl),
-                );
-              }
-              return Text(
-                '$length ${isRtl ? 'ملفات' : 'TASKS'}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                  fontSize: 10,
                 ),
               );
             },
@@ -606,286 +630,237 @@ class _DownloadControlsRow extends StatelessWidget {
       ),
     );
   }
-}
 
-PopupMenuItem<SortOption> _buildSortMenuItem({
-  required SortOption option,
-  required String label,
-  required SortOption currentOption,
-  required bool ascending,
-  required bool isDark,
-}) {
-  final isSelected = currentOption == option;
-  final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-  final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-
-  return PopupMenuItem<SortOption>(
-    value: option,
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            color: isSelected ? activeColor : textColor,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 12,
+  PopupMenuItem<SortOption> _sortMenuItem(
+    SortOption option,
+    String label,
+    ({SortOption option, bool ascending}) sortState,
+    bool isDark,
+  ) {
+    final isSelected = sortState.option == option;
+    final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    return PopupMenuItem<SortOption>(
+      value: option,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: isSelected ? activeColor : textColor,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 12,
+            ),
           ),
+          if (isSelected)
+            Icon(
+              sortState.ascending
+                  ? Icons.arrow_upward_rounded
+                  : Icons.arrow_downward_rounded,
+              color: activeColor,
+              size: 14,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFAB(BuildContext context, bool isDark, bool classicUi) {
+    final accentClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).padding.bottom + 76.0,
+      ),
+      child: Container(
+        decoration: classicUi
+            ? null
+            : BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: accentClr.withValues(alpha: 0.35),
+                    blurRadius: 20.0,
+                    spreadRadius: -2,
+                  ),
+                ],
+              ),
+        child: FloatingActionButton(
+          heroTag: null,
+          backgroundColor: accentClr,
+          foregroundColor: Colors.white,
+          elevation: classicUi ? 4 : 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(
+              color: Colors.white.withValues(alpha: 0.2),
+              width: 0.8,
+            ),
+          ),
+          child: const Icon(Icons.add_rounded, size: 26),
+          onPressed: () {
+            triggerHaptic(context.read<SettingsProvider>());
+            showDialog(
+              context: context,
+              builder: (_) => const AddDownloadDialog(),
+            );
+          },
         ),
-        if (isSelected)
-          Icon(
-            ascending ? Icons.arrow_upward : Icons.arrow_downward,
-            color: activeColor,
-            size: 16,
-          ),
-      ],
-    ),
-  );
-}
+      ),
+    );
+  }
 
-class _DownloadTaskList extends StatelessWidget {
-  final int selectedTab;
-  final bool isDark;
-  final bool isRtl;
-  final SettingsProvider settings;
+  void _showClearHistoryDialog(
+    BuildContext context,
+    DownloadProvider provider,
+    bool isDark,
+    bool isRtl,
+  ) {
+    final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
+    final glassBorder = isDark
+        ? AppTheme.glassBorder
+        : AppTheme.lightGlassBorder;
+    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
 
-  const _DownloadTaskList({
-    required this.selectedTab,
-    required this.isDark,
-    required this.isRtl,
-    required this.settings,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Selector<DownloadProvider, List<DownloadTask>>(
-      shouldRebuild: (prev, next) {
-        if (prev.length != next.length) return true;
-        for (var i = 0; i < prev.length; i++) {
-          if (prev[i].id != next[i].id ||
-              prev[i].status != next[i].status ||
-              prev[i].downloadedBytes != next[i].downloadedBytes ||
-              prev[i].speed != next[i].speed ||
-              prev[i].eta != next[i].eta ||
-              !identical(prev[i].chunks, next[i].chunks)) {
-            return true;
-          }
-        }
-        return false;
-      },
-      selector: (_, provider) => provider.filteredTasks,
-      builder: (context, fullList, _) {
-        final displayTasks = fullList.where((task) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final tasksToClear = provider.filteredTasks.where((task) {
           final isSeeding =
               task.status == DownloadStatus.completed &&
               task.isTorrent &&
               task.seedingEnabled;
-          if (selectedTab == 0) {
-            return (task.status != DownloadStatus.completed &&
-                    task.status != DownloadStatus.failed) ||
-                isSeeding;
-          } else {
-            return (task.status == DownloadStatus.completed ||
-                    task.status == DownloadStatus.failed) &&
-                !isSeeding;
-          }
+          return (task.status == DownloadStatus.completed ||
+                  task.status == DownloadStatus.failed) &&
+              !isSeeding;
         }).toList();
 
-        if (displayTasks.isEmpty) {
-          return _EmptyState(
-            selectedTab: selectedTab,
-            isDark: isDark,
-            isRtl: isRtl,
-            settings: settings,
-          );
-        }
-
-        return RefreshIndicator(
-          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          onRefresh: () async {
-            await context.read<DownloadProvider>().load(
-              pauseOrphanDownloads: false,
-            );
-            if (context.mounted) {
-              ThemedSnackbar.show(
-                context,
-                message: isRtl
-                    ? 'تم إعادة تحميل سجلات الاتصال'
-                    : 'Transmission logs reloaded',
-                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                icon: Icons.sync,
-                isDarkMode: isDark,
-              );
-            }
-          },
-          child: isTablet(context)
-              ? GridView.builder(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: screenPadding(context).left,
-                    vertical: 8,
+        return Directionality(
+          textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+          child: AlertDialog(
+            backgroundColor: surfaceClr.withValues(alpha: 0.95),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(color: glassBorder, width: 0.8),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: redClr.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: gridChildAspectRatio(context, columns: 2),
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
+                  child: Icon(
+                    Icons.delete_sweep_rounded,
+                    color: redClr,
+                    size: 20,
                   ),
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  itemCount: displayTasks.length,
-                  itemBuilder: (context, index) => RepaintBoundary(
-                    child: DownloadCard(
-                      task: displayTasks[index],
-                      compact: true,
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: screenPadding(context).left,
-                  ),
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  itemCount: displayTasks.length,
-                  itemBuilder: (context, index) => RepaintBoundary(
-                    child: DownloadCard(
-                      task: displayTasks[index],
-                      compact: true,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    isRtl ? 'مسح السجل' : 'Clear History',
+                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                      color: redClr,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
+              ],
+            ),
+            content: Text(
+              isRtl
+                  ? 'هل أنت متأكد من حذف جميع ${tasksToClear.length} سجل مكتمل؟'
+                  : 'Delete all ${tasksToClear.length} completed records? This cannot be undone.',
+              style: Theme.of(
+                ctx,
+              ).textTheme.bodyMedium?.copyWith(color: secClr, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                style: TextButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  L10n.of(ctx, 'cancel_btn'),
+                  style: TextStyle(color: secClr),
+                ),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: redClr.withValues(alpha: 0.1),
+                  foregroundColor: redClr,
+                  side: BorderSide(color: redClr.withValues(alpha: 0.4)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  isRtl ? 'مسح الكل' : 'Clear All',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                onPressed: () async {
+                  for (final task in tasksToClear) {
+                    await provider.deleteTask(task.id);
+                  }
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                },
+              ),
+            ],
+          ),
         );
       },
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  final int selectedTab;
-  final bool isDark;
-  final bool isRtl;
-  final SettingsProvider settings;
+// ─────────────────────────────────────────────────────────────────────────────
+// App Bar Icon Button
+// ─────────────────────────────────────────────────────────────────────────────
+class _AppBarIconButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String? tooltip;
+  final VoidCallback onPressed;
 
-  const _EmptyState({
-    required this.selectedTab,
-    required this.isDark,
-    required this.isRtl,
-    required this.settings,
+  const _AppBarIconButton({
+    required this.icon,
+    required this.color,
+    this.tooltip,
+    required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DownloadProvider>();
-    final query = provider.searchQuery;
-
-    if (query.isNotEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.search_off_rounded,
-                size: 48,
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'No results for "$query"',
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: () => provider.setSearchQuery(''),
-                icon: const Icon(Icons.clear, size: 16),
-                label: const Text('CLEAR SEARCH'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final icon = selectedTab == 1
-        ? Icons.history_toggle_off_outlined
-        : Icons.portable_wifi_off_outlined;
-    final title = selectedTab == 1
-        ? L10n.of(context, 'history_empty')
-        : L10n.of(context, 'empty_transmissions');
-    final subtitle = selectedTab == 1
-        ? (isRtl
-              ? 'سيتم تصنيف السجلات المكتملة هنا.'
-              : 'Finished downloads will be cataloged here.')
-        : (isRtl
-              ? 'أدخل رابطاً لبدء التنزيل.'
-              : 'Insert a URL to start downloading.');
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: settings.classicUi
-                  ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                  : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
-              border: Border.all(
-                color: settings.classicUi
-                    ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                    : (isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder),
-                width: 0.8,
-              ),
-            ),
-            child: Icon(
-              icon,
-              size: 40,
-              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
-              letterSpacing: 1.0,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-              fontSize: 11,
-            ),
-          ),
-        ],
+    return IconButton(
+      icon: Icon(icon, color: color, size: 20),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
 }
 
-class _DonutChartPanel extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────────────────────
+// Redesigned Analytics Panel
+// ─────────────────────────────────────────────────────────────────────────────
+class _RedesignedAnalyticsPanel extends StatelessWidget {
   final Map<String, double> categorySizes;
   final SettingsProvider settings;
 
-  const _DonutChartPanel({required this.categorySizes, required this.settings});
+  const _RedesignedAnalyticsPanel({
+    required this.categorySizes,
+    required this.settings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -893,38 +868,48 @@ class _DonutChartPanel extends StatelessWidget {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final isRtl = L10n.isRtl(context);
+
     final sizes = categorySizes;
     final totalSizeMb = sizes.values.fold(0.0, (sum, val) => sum + val);
-
-    final categoryCards = [
-      {
-        'name': 'Video',
-        'color': isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-      },
-      {
-        'name': 'Audio',
-        'color': isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-      },
-      {
-        'name': 'Document',
-        'color': isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-      },
-      {
-        'name': 'Archive',
-        'color': isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-      },
-      {'name': 'APK', 'color': const Color(0xFFF15BB5)},
-      {
-        'name': 'Other',
-        'color': isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-      },
-    ];
+    final hasNoData = totalSizeMb == 0.0;
 
     final totalSizeText = totalSizeMb >= 1024
         ? '${(totalSizeMb / 1024).toStringAsFixed(2)} GB'
         : '${totalSizeMb.toStringAsFixed(1)} MB';
 
-    final hasNoData = totalSizeMb == 0.0;
+    final categoryCards = [
+      {
+        'name': 'Video',
+        'color': isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+        'icon': Icons.movie_rounded,
+      },
+      {
+        'name': 'Audio',
+        'color': isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+        'icon': Icons.audiotrack_rounded,
+      },
+      {
+        'name': 'Document',
+        'color': isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+        'icon': Icons.description_rounded,
+      },
+      {
+        'name': 'Archive',
+        'color': isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+        'icon': Icons.folder_zip_rounded,
+      },
+      {
+        'name': 'APK',
+        'color': const Color(0xFFF15BB5),
+        'icon': Icons.android_rounded,
+      },
+      {
+        'name': 'Other',
+        'color': isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+        'icon': Icons.insert_drive_file_rounded,
+      },
+    ];
+
     final activeCategoryNames = hasNoData
         ? <String>[]
         : categoryCards
@@ -935,9 +920,10 @@ class _DonutChartPanel extends StatelessWidget {
     final sections = hasNoData
         ? [
             PieChartSectionData(
-              color: isDark ? AppTheme.border : AppTheme.lightBorder,
+              color: (isDark ? AppTheme.border : AppTheme.lightBorder)
+                  .withValues(alpha: 0.4),
               value: 1.0,
-              radius: 16,
+              radius: 14,
               title: '',
             ),
           ]
@@ -950,8 +936,8 @@ class _DonutChartPanel extends StatelessWidget {
             return PieChartSectionData(
               color: card['color'] as Color,
               value: sizeMb,
-              radius: 16,
-              title: percentage >= 10
+              radius: 14,
+              title: percentage >= 12
                   ? '${percentage.toStringAsFixed(0)}%'
                   : '',
               titleStyle: const TextStyle(
@@ -962,13 +948,9 @@ class _DonutChartPanel extends StatelessWidget {
             );
           }).toList();
 
-    final isTabletDevice = isTablet(context);
-    final containerHeight = isTabletDevice ? 120.0 : 145.0;
-
-    final chartBody = Container(
+    return Container(
       width: double.infinity,
-      height: containerHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: settings.classicUi
           ? BoxDecoration(
               color: isDark ? AppTheme.surface : AppTheme.lightSurface,
@@ -979,194 +961,181 @@ class _DonutChartPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             )
           : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: isTabletDevice ? 110 : 96,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                PieChart(
-                  PieChartData(
-                    pieTouchData: PieTouchData(
-                      touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                        if (!event.isInterestedForInteractions ||
-                            pieTouchResponse?.touchedSection == null) {
-                          return;
-                        }
-                        final touchedIndex = pieTouchResponse!
-                            .touchedSection!
-                            .touchedSectionIndex;
-                        if (touchedIndex >= 0 &&
-                            touchedIndex < activeCategoryNames.length) {
-                          context.read<DownloadProvider>().toggleCategoryFilter(
-                            activeCategoryNames[touchedIndex],
-                          );
-                        }
-                      },
-                    ),
-                    sections: sections,
-                    centerSpaceRadius: 28,
-                    sectionsSpace: 2.5,
-                  ),
+          // Header
+          Row(
+            children: [
+              Icon(
+                Icons.storage_rounded,
+                size: 14,
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'تحليل التخزين' : 'STORAGE ANALYTICS',
+                style: TextStyle(
+                  color: mutedClr,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+              const Spacer(),
+              Text(
+                totalSizeText,
+                style: TextStyle(
+                  color: textClr,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'Space Grotesk',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Chart + Legend
+          Row(
+            children: [
+              // Donut chart
+              SizedBox(
+                width: 90,
+                height: 90,
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    Text(
-                      isRtl ? 'الإجمالي' : 'TOTAL',
-                      style: TextStyle(
-                        color: mutedClr,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
+                    PieChart(
+                      PieChartData(
+                        pieTouchData: PieTouchData(
+                          touchCallback:
+                              (FlTouchEvent event, pieTouchResponse) {
+                                if (!event.isInterestedForInteractions ||
+                                    pieTouchResponse?.touchedSection == null) {
+                                  return;
+                                }
+                                final touchedIndex = pieTouchResponse!
+                                    .touchedSection!
+                                    .touchedSectionIndex;
+                                if (touchedIndex >= 0 &&
+                                    touchedIndex < activeCategoryNames.length) {
+                                  context
+                                      .read<DownloadProvider>()
+                                      .toggleCategoryFilter(
+                                        activeCategoryNames[touchedIndex],
+                                      );
+                                }
+                              },
+                        ),
+                        sections: sections,
+                        centerSpaceRadius: 26,
+                        sectionsSpace: 2.0,
                       ),
                     ),
-                    Text(
-                      totalSizeText,
-                      style: TextStyle(
-                        color: textClr,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    // Center label
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.donut_large_rounded,
+                          size: 14,
+                          color: mutedClr.withValues(alpha: 0.5),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: hasNoData
-                ? Center(
-                    child: Text(
-                      isRtl ? 'لا توجد بيانات' : 'NO DATA AVAILABLE',
-                      style: TextStyle(
-                        color: mutedClr,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  )
-                : isTabletDevice
-                ? Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: categoryCards.take(3).map((card) {
-                            return _buildLegendItem(
-                              card,
-                              sizes,
-                              totalSizeMb,
-                              textClr,
-                              isDark,
-                              isRtl,
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: categoryCards.skip(3).map((card) {
-                            return _buildLegendItem(
-                              card,
-                              sizes,
-                              totalSizeMb,
-                              textClr,
-                              isDark,
-                              isRtl,
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ],
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: categoryCards.map((card) {
-                      return _buildLegendItem(
-                        card,
-                        sizes,
-                        totalSizeMb,
-                        textClr,
-                        isDark,
-                        isRtl,
-                      );
-                    }).toList(),
-                  ),
-          ),
-        ],
-      ),
-    );
-
-    return chartBody;
-  }
-
-  Widget _buildLegendItem(
-    Map<String, dynamic> card,
-    Map<String, double> sizes,
-    double totalSizeMb,
-    Color textClr,
-    bool isDark,
-    bool isRtl,
-  ) {
-    final name = card['name'] as String;
-    final sizeMb = sizes[name] ?? 0.0;
-    final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
-    final sizeText = sizeMb >= 1024
-        ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
-        : '${sizeMb.toStringAsFixed(0)}M';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.0),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: card['color'] as Color,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              isRtl ? _translateCat(name) : name,
-              style: TextStyle(
-                color: textClr,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text(
-            '$percentage%',
-            style: TextStyle(
-              color: card['color'] as Color,
-              fontSize: 9,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            sizeText,
-            style: TextStyle(
-              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-              fontSize: 9,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w600,
-            ),
+              const SizedBox(width: 16),
+              // Legend items
+              Expanded(
+                child: hasNoData
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            isRtl ? 'لا توجد بيانات' : 'No data available',
+                            style: TextStyle(
+                              color: mutedClr,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: categoryCards
+                            .where((card) => (sizes[card['name']] ?? 0.0) > 0)
+                            .take(4)
+                            .map((card) {
+                              final name = card['name'] as String;
+                              final sizeMb = sizes[name] ?? 0.0;
+                              final pct = totalSizeMb > 0
+                                  ? (sizeMb / totalSizeMb) * 100
+                                  : 0.0;
+                              final sizeText = sizeMb >= 1024
+                                  ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
+                                  : '${sizeMb.toStringAsFixed(0)}M';
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: card['color'] as Color,
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      card['icon'] as IconData,
+                                      size: 11,
+                                      color: (card['color'] as Color)
+                                          .withValues(alpha: 0.7),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        isRtl ? _translateCat(name) : name,
+                                        style: TextStyle(
+                                          color: textClr,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${pct.toStringAsFixed(0)}%',
+                                      style: TextStyle(
+                                        color: card['color'] as Color,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      sizeText,
+                                      style: TextStyle(
+                                        color: mutedClr,
+                                        fontSize: 9,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            })
+                            .toList(),
+                      ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1191,85 +1160,270 @@ class _DonutChartPanel extends StatelessWidget {
   }
 }
 
-void _showClearHistoryDialog(
-  BuildContext context,
-  DownloadProvider provider,
-  bool isDark,
-  bool isRtl,
-) {
-  final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
-  final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-  final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-  final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+// ─────────────────────────────────────────────────────────────────────────────
+// Download Task List
+// ─────────────────────────────────────────────────────────────────────────────
+class _DownloadTaskList extends StatelessWidget {
+  final int selectedTab;
+  final bool isDark;
+  final bool isRtl;
+  final SettingsProvider settings;
 
-  showDialog(
-    context: context,
-    builder: (ctx) {
-      final tasksToClear = provider.filteredTasks.where((task) {
-        final isSeeding =
-            task.status == DownloadStatus.completed &&
-            task.isTorrent &&
-            task.seedingEnabled;
-        return (task.status == DownloadStatus.completed ||
-                task.status == DownloadStatus.failed) &&
-            !isSeeding;
-      }).toList();
+  const _DownloadTaskList({
+    required this.selectedTab,
+    required this.isDark,
+    required this.isRtl,
+    required this.settings,
+  });
 
-      return Directionality(
-        textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-        child: AlertDialog(
-          backgroundColor: surfaceClr.withValues(alpha: 0.92),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(color: glassBorder, width: 0.8),
+  @override
+  Widget build(BuildContext context) {
+    return Selector<DownloadProvider, List<DownloadTask>>(
+      shouldRebuild: (prev, next) {
+        if (prev.length != next.length) return true;
+        for (var i = 0; i < prev.length; i++) {
+          if (prev[i].id != next[i].id ||
+              prev[i].status != next[i].status ||
+              prev[i].downloadedBytes != next[i].downloadedBytes ||
+              prev[i].progress != next[i].progress ||
+              prev[i].speed != next[i].speed ||
+              prev[i].eta != next[i].eta ||
+              prev[i].chunks.length != next[i].chunks.length) {
+            return true;
+          }
+        }
+        return false;
+      },
+      selector: (_, provider) => provider.filteredTasks,
+      builder: (context, fullList, _) {
+        final displayTasks = fullList.where((task) {
+          final isSeeding =
+              task.status == DownloadStatus.completed &&
+              task.isTorrent &&
+              task.seedingEnabled;
+          if (selectedTab == 0) {
+            return (task.status != DownloadStatus.completed &&
+                    task.status != DownloadStatus.failed) ||
+                isSeeding;
+          } else {
+            return (task.status == DownloadStatus.completed ||
+                    task.status == DownloadStatus.failed) &&
+                !isSeeding;
+          }
+        }).toList();
+
+        final groups = <String, List<DownloadTask>>{};
+        final singles = <DownloadTask>[];
+        for (final t in displayTasks) {
+          if (t.isPlaylistItem) {
+            groups.putIfAbsent(t.playlistId!, () => []).add(t);
+          } else {
+            singles.add(t);
+          }
+        }
+
+        // Build a mixed list preserving order: playlists first-seen, then singles
+        final renderItems = <Widget>[];
+        final seenPlaylists = <String>{};
+        for (final t in displayTasks) {
+          if (t.isPlaylistItem) {
+            if (seenPlaylists.contains(t.playlistId!)) continue;
+            seenPlaylists.add(t.playlistId!);
+            renderItems.add(PlaylistGroupCard(
+              playlistId: t.playlistId!,
+              title: t.playlistTitle ?? 'Playlist',
+              items: groups[t.playlistId!]!,
+            ));
+          } else {
+            renderItems.add(DownloadCard(task: t, compact: true));
+          }
+        }
+
+        if (displayTasks.isEmpty) {
+          return _EmptyState(
+            selectedTab: selectedTab,
+            isDark: isDark,
+            isRtl: isRtl,
+            settings: settings,
+          );
+        }
+
+        return RefreshIndicator(
+          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          strokeWidth: 2.5,
+          onRefresh: () async {
+            await context.read<DownloadProvider>().load(
+              pauseOrphanDownloads: false,
+            );
+            if (context.mounted) {
+              ThemedSnackbar.show(
+                context,
+                message: isRtl
+                    ? 'تم إعادة تحميل السجلات'
+                    : 'Transmission logs reloaded',
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                icon: Icons.sync_rounded,
+                isDarkMode: isDark,
+              );
+            }
+          },
+          child: ListView.separated(
+            padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            itemCount: renderItems.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) => RepaintBoundary(child: renderItems[index]),
           ),
-          title: Text(
-            isRtl ? 'مسح سجل التاريخ' : 'CLEAR HISTORY LOGS',
-            style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-              color: redClr,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-            ),
-          ),
-          content: Text(
-            isRtl
-                ? 'هل أنت متأكد من حذف جميع سجلات التاريخ البالغ عددها ${tasksToClear.length}؟'
-                : 'Are you sure you want to delete all ${tasksToClear.length} completed history records?',
-            style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: secClr),
-          ),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Empty State
+// ─────────────────────────────────────────────────────────────────────────────
+class _EmptyState extends StatelessWidget {
+  final int selectedTab;
+  final bool isDark;
+  final bool isRtl;
+  final SettingsProvider settings;
+
+  const _EmptyState({
+    required this.selectedTab,
+    required this.isDark,
+    required this.isRtl,
+    required this.settings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<DownloadProvider>();
+    final query = provider.searchQuery;
+    final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
+    if (query.isNotEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accentClr.withValues(alpha: 0.06),
+                  border: Border.all(color: accentClr.withValues(alpha: 0.15)),
+                ),
+                child: Icon(
+                  Icons.search_off_rounded,
+                  size: 36,
+                  color: accentClr.withValues(alpha: 0.6),
                 ),
               ),
-              child: Text(
-                L10n.of(ctx, 'cancel_btn'),
-                style: TextStyle(color: secClr),
-              ),
-              onPressed: () => Navigator.of(ctx).pop(),
-            ),
-            TextButton(
-              style: TextButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+              const SizedBox(height: 16),
+              Text(
+                isRtl ? 'لا نتائج لـ "$query"' : 'No results for "$query"',
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textPrimary
+                      : AppTheme.lightTextPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
                 ),
               ),
-              child: Text(
-                isRtl ? 'مسح الكل' : 'CLEAR ALL',
-                style: TextStyle(color: redClr, fontWeight: FontWeight.bold),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () => provider.setSearchQuery(''),
+                icon: const Icon(Icons.clear_rounded, size: 16),
+                label: Text(isRtl ? 'مسح البحث' : 'Clear Search'),
+                style: TextButton.styleFrom(foregroundColor: accentClr),
               ),
-              onPressed: () async {
-                for (final task in tasksToClear) {
-                  await provider.deleteTask(task.id);
-                }
-                if (ctx.mounted) Navigator.of(ctx).pop();
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       );
-    },
-  );
+    }
+
+    final icon = selectedTab == 1
+        ? Icons.inventory_2_outlined
+        : Icons.cloud_download_outlined;
+    final title = selectedTab == 1
+        ? L10n.of(context, 'history_empty')
+        : L10n.of(context, 'empty_transmissions');
+    final subtitle = selectedTab == 1
+        ? (isRtl
+              ? 'سيتم تصنيف السجلات المكتملة هنا.'
+              : 'Finished downloads will be cataloged here.')
+        : (isRtl
+              ? 'أدخل رابطاً لبدء التنزيل.'
+              : 'Insert a URL to start downloading.');
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: settings.classicUi
+                  ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                  : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
+              border: Border.all(
+                color: settings.classicUi
+                    ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                    : (isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder),
+                width: 0.8,
+              ),
+              boxShadow: isDark && !settings.classicUi
+                  ? [
+                      BoxShadow(
+                        color: accentClr.withValues(alpha: 0.04),
+                        blurRadius: 24,
+                        spreadRadius: 4,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Icon(
+              icon,
+              size: 40,
+              color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
+                  .withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
+              letterSpacing: 0.5,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -374,6 +374,28 @@ class $DownloadTasksTable extends DownloadTasks
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _playlistIdMeta = const VerificationMeta(
+    'playlistId',
+  );
+  @override
+  late final GeneratedColumn<String> playlistId = GeneratedColumn<String>(
+    'playlist_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _playlistTitleMeta = const VerificationMeta(
+    'playlistTitle',
+  );
+  @override
+  late final GeneratedColumn<String> playlistTitle = GeneratedColumn<String>(
+    'playlist_title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -408,6 +430,8 @@ class $DownloadTasksTable extends DownloadTasks
     pausedByUser,
     youtubeQualityPreset,
     notes,
+    playlistId,
+    playlistTitle,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -671,6 +695,21 @@ class $DownloadTasksTable extends DownloadTasks
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('playlist_id')) {
+      context.handle(
+        _playlistIdMeta,
+        playlistId.isAcceptableOrUnknown(data['playlist_id']!, _playlistIdMeta),
+      );
+    }
+    if (data.containsKey('playlist_title')) {
+      context.handle(
+        _playlistTitleMeta,
+        playlistTitle.isAcceptableOrUnknown(
+          data['playlist_title']!,
+          _playlistTitleMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -812,6 +851,14 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      playlistId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}playlist_id'],
+      ),
+      playlistTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}playlist_title'],
+      ),
     );
   }
 
@@ -861,6 +908,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final bool pausedByUser;
   final String? youtubeQualityPreset;
   final String? notes;
+  final String? playlistId;
+  final String? playlistTitle;
   const DbDownloadTask({
     required this.id,
     required this.fileName,
@@ -894,6 +943,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     required this.pausedByUser,
     this.youtubeQualityPreset,
     this.notes,
+    this.playlistId,
+    this.playlistTitle,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -954,6 +1005,12 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
+    if (!nullToAbsent || playlistId != null) {
+      map['playlist_id'] = Variable<String>(playlistId);
+    }
+    if (!nullToAbsent || playlistTitle != null) {
+      map['playlist_title'] = Variable<String>(playlistTitle);
+    }
     return map;
   }
 
@@ -1009,6 +1066,12 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      playlistId: playlistId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(playlistId),
+      playlistTitle: playlistTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(playlistTitle),
     );
   }
 
@@ -1054,6 +1117,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         json['youtubeQualityPreset'],
       ),
       notes: serializer.fromJson<String?>(json['notes']),
+      playlistId: serializer.fromJson<String?>(json['playlistId']),
+      playlistTitle: serializer.fromJson<String?>(json['playlistTitle']),
     );
   }
   @override
@@ -1094,6 +1159,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'pausedByUser': serializer.toJson<bool>(pausedByUser),
       'youtubeQualityPreset': serializer.toJson<String?>(youtubeQualityPreset),
       'notes': serializer.toJson<String?>(notes),
+      'playlistId': serializer.toJson<String?>(playlistId),
+      'playlistTitle': serializer.toJson<String?>(playlistTitle),
     };
   }
 
@@ -1130,6 +1197,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     bool? pausedByUser,
     Value<String?> youtubeQualityPreset = const Value.absent(),
     Value<String?> notes = const Value.absent(),
+    Value<String?> playlistId = const Value.absent(),
+    Value<String?> playlistTitle = const Value.absent(),
   }) => DbDownloadTask(
     id: id ?? this.id,
     fileName: fileName ?? this.fileName,
@@ -1169,6 +1238,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         ? youtubeQualityPreset.value
         : this.youtubeQualityPreset,
     notes: notes.present ? notes.value : this.notes,
+    playlistId: playlistId.present ? playlistId.value : this.playlistId,
+    playlistTitle: playlistTitle.present
+        ? playlistTitle.value
+        : this.playlistTitle,
   );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1240,6 +1313,12 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? data.youtubeQualityPreset.value
           : this.youtubeQualityPreset,
       notes: data.notes.present ? data.notes.value : this.notes,
+      playlistId: data.playlistId.present
+          ? data.playlistId.value
+          : this.playlistId,
+      playlistTitle: data.playlistTitle.present
+          ? data.playlistTitle.value
+          : this.playlistTitle,
     );
   }
 
@@ -1277,7 +1356,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('audioProgress: $audioProgress, ')
           ..write('pausedByUser: $pausedByUser, ')
           ..write('youtubeQualityPreset: $youtubeQualityPreset, ')
-          ..write('notes: $notes')
+          ..write('notes: $notes, ')
+          ..write('playlistId: $playlistId, ')
+          ..write('playlistTitle: $playlistTitle')
           ..write(')'))
         .toString();
   }
@@ -1316,6 +1397,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     pausedByUser,
     youtubeQualityPreset,
     notes,
+    playlistId,
+    playlistTitle,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1352,7 +1435,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.audioProgress == this.audioProgress &&
           other.pausedByUser == this.pausedByUser &&
           other.youtubeQualityPreset == this.youtubeQualityPreset &&
-          other.notes == this.notes);
+          other.notes == this.notes &&
+          other.playlistId == this.playlistId &&
+          other.playlistTitle == this.playlistTitle);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1388,6 +1473,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<bool> pausedByUser;
   final Value<String?> youtubeQualityPreset;
   final Value<String?> notes;
+  final Value<String?> playlistId;
+  final Value<String?> playlistTitle;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1422,6 +1509,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.pausedByUser = const Value.absent(),
     this.youtubeQualityPreset = const Value.absent(),
     this.notes = const Value.absent(),
+    this.playlistId = const Value.absent(),
+    this.playlistTitle = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -1457,6 +1546,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.pausedByUser = const Value.absent(),
     this.youtubeQualityPreset = const Value.absent(),
     this.notes = const Value.absent(),
+    this.playlistId = const Value.absent(),
+    this.playlistTitle = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        fileName = Value(fileName),
@@ -1502,6 +1593,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<bool>? pausedByUser,
     Expression<String>? youtubeQualityPreset,
     Expression<String>? notes,
+    Expression<String>? playlistId,
+    Expression<String>? playlistTitle,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1538,6 +1631,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (youtubeQualityPreset != null)
         'youtube_quality_preset': youtubeQualityPreset,
       if (notes != null) 'notes': notes,
+      if (playlistId != null) 'playlist_id': playlistId,
+      if (playlistTitle != null) 'playlist_title': playlistTitle,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1575,6 +1670,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Value<bool>? pausedByUser,
     Value<String?>? youtubeQualityPreset,
     Value<String?>? notes,
+    Value<String?>? playlistId,
+    Value<String?>? playlistTitle,
     Value<int>? rowid,
   }) {
     return DownloadTasksCompanion(
@@ -1610,6 +1707,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       pausedByUser: pausedByUser ?? this.pausedByUser,
       youtubeQualityPreset: youtubeQualityPreset ?? this.youtubeQualityPreset,
       notes: notes ?? this.notes,
+      playlistId: playlistId ?? this.playlistId,
+      playlistTitle: playlistTitle ?? this.playlistTitle,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1719,6 +1818,12 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (playlistId.present) {
+      map['playlist_id'] = Variable<String>(playlistId.value);
+    }
+    if (playlistTitle.present) {
+      map['playlist_title'] = Variable<String>(playlistTitle.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1760,6 +1865,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('pausedByUser: $pausedByUser, ')
           ..write('youtubeQualityPreset: $youtubeQualityPreset, ')
           ..write('notes: $notes, ')
+          ..write('playlistId: $playlistId, ')
+          ..write('playlistTitle: $playlistTitle, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2475,6 +2582,8 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<bool> pausedByUser,
       Value<String?> youtubeQualityPreset,
       Value<String?> notes,
+      Value<String?> playlistId,
+      Value<String?> playlistTitle,
       Value<int> rowid,
     });
 typedef $$DownloadTasksTableUpdateCompanionBuilder =
@@ -2511,6 +2620,8 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<bool> pausedByUser,
       Value<String?> youtubeQualityPreset,
       Value<String?> notes,
+      Value<String?> playlistId,
+      Value<String?> playlistTitle,
       Value<int> rowid,
     });
 
@@ -2688,6 +2799,16 @@ class $$DownloadTasksTableFilterComposer
     column: $table.notes,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get playlistId => $composableBuilder(
+    column: $table.playlistId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get playlistTitle => $composableBuilder(
+    column: $table.playlistTitle,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -2858,6 +2979,16 @@ class $$DownloadTasksTableOrderingComposer
     column: $table.notes,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get playlistId => $composableBuilder(
+    column: $table.playlistId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get playlistTitle => $composableBuilder(
+    column: $table.playlistTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3001,6 +3132,16 @@ class $$DownloadTasksTableAnnotationComposer
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get playlistId => $composableBuilder(
+    column: $table.playlistId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get playlistTitle => $composableBuilder(
+    column: $table.playlistTitle,
+    builder: (column) => column,
+  );
 }
 
 class $$DownloadTasksTableTableManager
@@ -3067,6 +3208,8 @@ class $$DownloadTasksTableTableManager
                 Value<bool> pausedByUser = const Value.absent(),
                 Value<String?> youtubeQualityPreset = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> playlistId = const Value.absent(),
+                Value<String?> playlistTitle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion(
                 id: id,
@@ -3101,6 +3244,8 @@ class $$DownloadTasksTableTableManager
                 pausedByUser: pausedByUser,
                 youtubeQualityPreset: youtubeQualityPreset,
                 notes: notes,
+                playlistId: playlistId,
+                playlistTitle: playlistTitle,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3138,6 +3283,8 @@ class $$DownloadTasksTableTableManager
                 Value<bool> pausedByUser = const Value.absent(),
                 Value<String?> youtubeQualityPreset = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> playlistId = const Value.absent(),
+                Value<String?> playlistTitle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion.insert(
                 id: id,
@@ -3172,6 +3319,8 @@ class $$DownloadTasksTableTableManager
                 pausedByUser: pausedByUser,
                 youtubeQualityPreset: youtubeQualityPreset,
                 notes: notes,
+                playlistId: playlistId,
+                playlistTitle: playlistTitle,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

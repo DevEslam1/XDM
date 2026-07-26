@@ -461,6 +461,8 @@ class DownloadProvider extends ChangeNotifier
     String? youtubeQualityPreset,
     int? torrentId,
     bool isAppUpdate = false,
+    String? playlistId,
+    String? playlistTitle,
   }) async {
     _lastError = null;
     final urls = url
@@ -509,6 +511,8 @@ class DownloadProvider extends ChangeNotifier
             youtubeQualityPreset: youtubeQualityPreset,
             torrentId: torrentId,
             isAppUpdate: isAppUpdate,
+            playlistId: playlistId,
+            playlistTitle: playlistTitle,
           );
           addedCount++;
         }
@@ -538,6 +542,8 @@ class DownloadProvider extends ChangeNotifier
           youtubeQualityPreset: youtubeQualityPreset,
           torrentId: torrentId,
           isAppUpdate: isAppUpdate,
+          playlistId: playlistId,
+          playlistTitle: playlistTitle,
         );
       }
     } catch (e) {
@@ -561,6 +567,8 @@ class DownloadProvider extends ChangeNotifier
     String? youtubeQualityPreset,
     int? torrentId,
     bool isAppUpdate = false,
+    String? playlistId,
+    String? playlistTitle,
   }) async {
     final exists = _tasks.any((t) {
       if (t.status == DownloadStatus.failed ||
@@ -696,6 +704,8 @@ class DownloadProvider extends ChangeNotifier
       audioSize: audioSize,
       youtubeQualityPreset: youtubeQualityPreset,
       isAppUpdate: isAppUpdate,
+      playlistId: playlistId,
+      playlistTitle: playlistTitle,
     );
 
     _tasks.insert(0, task);
@@ -912,6 +922,8 @@ class DownloadProvider extends ChangeNotifier
     _lastDbSaveBytes.remove(id);
     _pendingProgressUpdates.remove(id);
     _retryCounts.remove(id);
+    _ytLowSpeedCounts.remove(id);
+    _ytThrottlingRefreshing.remove(id);
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
     final savedNotificationId = _notificationIds[id];
@@ -1108,11 +1120,9 @@ class DownloadProvider extends ChangeNotifier
     _startWidgetTimer();
     _updateTelemetryWidget();
 
-    // Periodic cleanup of stale cookie cache entries
-    if (_cookieCache.length > _cookieCacheMaxSize ~/ 2) {
-      final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
-      _cookieCache.removeWhere((_, entry) => entry.timestamp.isBefore(cutoff));
-    }
+    // Proactive cleanup of stale cookie cache entries
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
+    _cookieCache.removeWhere((_, entry) => entry.timestamp.isBefore(cutoff));
 
     // Extract cookies from native WebView for authentication (using a 5-minute TTL cache)
     String cookieString = '';
@@ -2123,7 +2133,11 @@ class DownloadProvider extends ChangeNotifier
       notifyListeners();
     } catch (e) {
       debugPrint('Error saving task to database: $e');
-      // Still notify so UI doesn't freeze, but log the inconsistency
+      // Roll back in-memory state on DB failure to preserve sync with DB
+      final rollBackIndex = _tasks.indexWhere((task) => task.id == updated.id);
+      if (rollBackIndex != -1) {
+        _tasks[rollBackIndex] = prev;
+      }
       notifyListeners();
     } finally {
       completer.complete();
@@ -2471,7 +2485,8 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _checkScheduledDownloads() async {
-    final now = DateTime.now();
+    // Compare in UTC so device timezone changes do not affect trigger timing.
+    final nowUtc = DateTime.now().toUtc();
     var hasChanges = false;
     final saves = <Future<void>>[];
     for (var i = 0; i < _tasks.length; i++) {
@@ -2479,7 +2494,7 @@ class DownloadProvider extends ChangeNotifier
       if (task.status == DownloadStatus.paused &&
           !task.pausedByUser &&
           task.scheduledAt != null &&
-          task.scheduledAt!.isBefore(now)) {
+          task.scheduledAt!.toUtc().isBefore(nowUtc)) {
         _tasks[i] = task.copyWith(
           status: DownloadStatus.queued,
           clearError: true,
@@ -2491,11 +2506,15 @@ class DownloadProvider extends ChangeNotifier
       }
     }
     if (saves.isNotEmpty) {
-      try {
-        await Future.wait(saves);
-      } catch (e) {
-        debugPrint('Failed to save scheduled tasks: $e');
-      }
+      // Run all saves concurrently; eagerError: false ensures every save is
+      // attempted even if an earlier one fails (unlike the default behaviour
+      // which stops at the first error and silently drops remaining saves).
+      await Future.wait(
+        saves.map((f) => f.catchError((Object e) {
+          debugPrint('Failed to save a scheduled task: $e');
+        })),
+        eagerError: false,
+      );
     }
     if (hasChanges) {
       updateActualTorrentUploadLimit();

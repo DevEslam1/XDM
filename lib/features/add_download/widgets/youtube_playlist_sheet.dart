@@ -70,7 +70,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _hasMoreVideos = true;
-  int? _nextPageToken;
+  // Use `dynamic` because the backend may return either an int or a String
+  // cursor token for playlist pagination. Casting to `int?` would throw at
+  // runtime when the backend returns a String.
+  dynamic _nextPageToken;
   bool _isDownloading = false;
   bool _isCancelled = false;
   String? _errorMessage;
@@ -145,7 +148,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       setState(() {
         _videos.addAll(videos);
         _hasMoreVideos = videos.isNotEmpty;
-        _nextPageToken = details?['nextPageToken'] as int?;
+        // No cast: token may be int or String depending on backend.
+        _nextPageToken = details?['nextPageToken'];
         _isLoadingMore = false;
       });
     } catch (e) {
@@ -169,7 +173,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         _playlistInfo = info;
         _videos = videos;
         _isLoading = false;
-        _nextPageToken = details?['nextPageToken'] as int?;
+        // No cast: token may be int or String depending on backend.
+        _nextPageToken = details?['nextPageToken'];
         _hasMoreVideos = _nextPageToken != null || videos.length >= 50;
         if (videos.isEmpty && info != null) {
           final count = info['videoCount'] as int? ?? 0;
@@ -221,6 +226,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final isDark = settings.isDarkMode;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
 
+    final playlistId = YoutubeService.extractPlaylistId(widget.playlistUrl) ?? widget.playlistUrl;
+    final playlistTitle = _playlistInfo?['title'] as String? ?? 'Playlist';
+
     int completed = 0;
     int failed = 0;
     int consecutiveErrors = 0;
@@ -252,6 +260,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
           savePath: savePath,
           downloadPageUrl: videoUrl,
           youtubeQualityPreset: _qualityPreset,
+          playlistId: playlistId,
+          playlistTitle: playlistTitle,
         );
         enqueuedVideos.add(video);
         completed++;

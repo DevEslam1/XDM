@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/app_theme.dart';
 import '../models/browser_tab.dart';
 
@@ -24,89 +25,244 @@ class BrowserTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (tabs.isEmpty) return const SizedBox.shrink();
 
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+
     return Container(
-      height: 40,
-      color: isDark
-          ? AppTheme.background.withValues(alpha: 0.95)
-          : AppTheme.lightBackground.withValues(alpha: 0.95),
+      height: 46,
+      decoration: BoxDecoration(
+        color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
+          alpha: 0.92,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? AppTheme.border : AppTheme.lightBorder,
+            width: 1,
+          ),
+        ),
+      ),
       child: Row(
         children: [
+          // Tab counter block
+          Container(
+            margin: const EdgeInsets.only(left: 10, right: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: accent.withValues(alpha: 0.3)),
+            ),
+            child: Text(
+              '${tabs.length}',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                color: accent,
+              ),
+            ),
+          ),
+          // Scrollable tab strip
           Expanded(
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(vertical: 7),
               itemCount: tabs.length,
               itemBuilder: (context, index) {
                 final tab = tabs[index];
                 final isActive = index == currentIndex;
-                return GestureDetector(
-                  onTap: () => onTabSelected(index),
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 160),
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: isActive
-                              ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          tab.isIncognito ? Icons.visibility_off_rounded : Icons.language_rounded,
-                          size: 12,
-                          color: isActive
-                              ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                              : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            tab.title.isNotEmpty ? tab.title : tab.url,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isActive
-                                  ? (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary)
-                                  : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
-                            ),
-                          ),
-                        ),
-                        if (tabs.length > 1) ...[
-                          const SizedBox(width: 4),
-                          GestureDetector(
-                            onTap: () => onCloseTab(index),
-                            child: Icon(
-                              Icons.close_rounded,
-                              size: 14,
-                              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                final tabAccent = tab.isIncognito ? violet : accent;
+                return _TabChip(
+                  tab: tab,
+                  isActive: isActive,
+                  accent: tabAccent,
+                  isDark: isDark,
+                  showClose: tabs.length > 1,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    onTabSelected(index);
+                  },
+                  onClose: () {
+                    HapticFeedback.lightImpact();
+                    onCloseTab(index);
+                  },
                 );
               },
             ),
           ),
-          GestureDetector(
-            onTap: onAddTab,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Icon(
-                Icons.add_rounded,
-                size: 20,
-                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+          // Add tab
+          _BarIconButton(
+            icon: Icons.add_rounded,
+            isDark: isDark,
+            tooltip: 'New tab',
+            onTap: () {
+              HapticFeedback.lightImpact();
+              onAddTab();
+            },
+          ),
+          const SizedBox(width: 6),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabChip extends StatelessWidget {
+  final BrowserTab tab;
+  final bool isActive;
+  final Color accent;
+  final bool isDark;
+  final bool showClose;
+  final VoidCallback onTap;
+  final VoidCallback onClose;
+
+  const _TabChip({
+    required this.tab,
+    required this.isActive,
+    required this.accent,
+    required this.isDark,
+    required this.showClose,
+    required this.onTap,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        constraints: const BoxConstraints(maxWidth: 170, minWidth: 90),
+        margin: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: isActive
+              ? accent.withValues(alpha: isDark ? 0.14 : 0.10)
+              : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg).withValues(
+                  alpha: 0.5,
+                ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive
+                ? accent.withValues(alpha: 0.5)
+                : (isDark ? AppTheme.border : AppTheme.lightBorder),
+            width: isActive ? 1.2 : 0.8,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              tab.isIncognito
+                  ? Icons.visibility_off_rounded
+                  : tab.isHome
+                  ? Icons.home_rounded
+                  : tab.isSecure
+                  ? Icons.lock_rounded
+                  : Icons.language_rounded,
+              size: 13,
+              color: isActive ? accent : muted,
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tab.stripLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 11,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: isActive
+                          ? (isDark
+                                ? AppTheme.textPrimary
+                                : AppTheme.lightTextPrimary)
+                          : muted,
+                    ),
+                  ),
+                  if (tab.isLoading)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: tab.progressNotifier,
+                        builder: (_, value, _) => ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: value,
+                            minHeight: 2,
+                            backgroundColor: accent.withValues(alpha: 0.15),
+                            valueColor: AlwaysStoppedAnimation(accent),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
+            if (showClose)
+              GestureDetector(
+                onTap: onClose,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Icon(Icons.close_rounded, size: 14, color: muted),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BarIconButton extends StatelessWidget {
+  final IconData icon;
+  final bool isDark;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _BarIconButton({
+    required this.icon,
+    required this.isDark,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(9),
+          child: Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: (isDark ? AppTheme.cardBg : AppTheme.lightCardBg)
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                width: 0.8,
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: isDark
+                  ? AppTheme.textSecondary
+                  : AppTheme.lightTextSecondary,
+            ),
           ),
-        ],
+        ),
       ),
     );
   }

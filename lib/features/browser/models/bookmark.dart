@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 class Bookmark {
   final String id;
   final String title;
@@ -13,11 +15,39 @@ class Bookmark {
     required this.createdAt,
   });
 
-  Bookmark copyWith({
-    String? title,
-    String? url,
-    String? folder,
-  }) {
+  /// Hostname stripped of `www.` — used for compact displays.
+  String get domain {
+    try {
+      var host = Uri.parse(url).host;
+      if (host.startsWith('www.')) host = host.substring(4);
+      return host.isEmpty ? url : host;
+    } catch (_) {
+      return url;
+    }
+  }
+
+  /// First glyph for the avatar tile.
+  String get initial {
+    final source = title.trim().isNotEmpty ? title.trim() : domain;
+    return source.isEmpty ? '?' : source[0].toUpperCase();
+  }
+
+  /// Deterministic accent hue derived from the domain, so every bookmark
+  /// gets its own stable identity color.
+  Color get accentColor {
+    const palette = [
+      Color(0xFF3B82F6), // blue
+      Color(0xFF8B5CF6), // violet
+      Color(0xFF10B981), // green
+      Color(0xFFF59E0B), // amber
+      Color(0xFFEF4444), // red
+      Color(0xFF06B6D4), // cyan
+      Color(0xFFFACC15), // yellow
+    ];
+    return palette[domain.hashCode.abs() % palette.length];
+  }
+
+  Bookmark copyWith({String? title, String? url, String? folder}) {
     return Bookmark(
       id: id,
       title: title ?? this.title,
@@ -43,7 +73,8 @@ class Bookmark {
       title: map['title'] as String? ?? '',
       url: map['url'] as String? ?? '',
       folder: map['folder'] as String?,
-      createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+      createdAt:
+          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
           DateTime.now(),
     );
   }

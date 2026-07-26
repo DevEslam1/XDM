@@ -6,7 +6,8 @@ import 'package:flutter/foundation.dart';
 import '../utils/url_utils.dart';
 
 class SingleInstanceService {
-  static final SingleInstanceService _instance = SingleInstanceService._internal();
+  static final SingleInstanceService _instance =
+      SingleInstanceService._internal();
   factory SingleInstanceService() => _instance;
   SingleInstanceService._internal();
 
@@ -19,8 +20,54 @@ class SingleInstanceService {
 
   String? get initialUrl => _initialUrl;
 
-  static File get _tokenFile =>
-      File('${Directory.systemTemp.path}/xdm_instance_$_port.token');
+  static File get _tokenFile {
+    Directory targetDir = Directory.systemTemp;
+    if (Platform.isLinux || Platform.isMacOS) {
+      final userHome =
+          Platform.environment['HOME'] ?? Directory.systemTemp.path;
+      final configDir = Directory('$userHome/.config/xdm');
+      if (!configDir.existsSync()) {
+        try {
+          configDir.createSync(recursive: true);
+          Process.runSync('chmod', ['700', configDir.path]);
+        } catch (e) {
+          debugPrint(
+            '[SingleInstanceService] Warning: Failed to create user config dir with 0700 perms: $e',
+          );
+        }
+      }
+      if (configDir.existsSync()) {
+        targetDir = configDir;
+      } else {
+        debugPrint(
+          '[SingleInstanceService] WARNING: Could not use ~/.config/xdm; '
+          'falling back to system temp (${Directory.systemTemp.path}). '
+          'Token may be readable by other users on this system.',
+        );
+      }
+    } else if (Platform.isWindows) {
+      // On Windows, use APPDATA which is restricted to the current user by default ACLs
+      final appData =
+          Platform.environment['APPDATA'] ??
+          Platform.environment['LOCALAPPDATA'];
+      if (appData != null && appData.isNotEmpty) {
+        final configDir = Directory('$appData\\xdm');
+        if (!configDir.existsSync()) {
+          try {
+            configDir.createSync(recursive: true);
+          } catch (e) {
+            debugPrint(
+              '[SingleInstanceService] Warning: Failed to create user AppData dir: $e',
+            );
+          }
+        }
+        if (configDir.existsSync()) {
+          targetDir = configDir;
+        }
+      }
+    }
+    return File('${targetDir.path}/xdm_instance_$_port.token');
+  }
 
   String _generateSecurityToken() {
     final random = Random.secure();
@@ -28,13 +75,11 @@ class SingleInstanceService {
     return base64Url.encode(bytes);
   }
 
-  /// Call this in `main(List<String> args)`.
-  /// Returns `true` if this instance should continue running,
-  /// or `false` if this was a secondary instance that forwarded its args and exited.
   Future<bool> initialize(List<String> args) async {
     final candidateUrl = extractLaunchUrl(args);
 
-    if (kIsWeb || (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)) {
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)) {
       _initialUrl = candidateUrl;
       return true;
     }
@@ -45,8 +90,26 @@ class SingleInstanceService {
       _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
       _initialUrl = candidateUrl;
 
-      // Write token to file so secondary instances can read it
-      await _tokenFile.writeAsString(_securityToken!);
+      final tokenF = _tokenFile;
+      if (!Platform.isWindows) {
+        final tempTokenF = File('${tokenF.path}.tmp');
+        try {
+          await tempTokenF.writeAsString(_securityToken!);
+          await Process.run('chmod', ['600', tempTokenF.path]);
+          await tempTokenF.rename(tokenF.path);
+        } catch (e) {
+          debugPrint(
+            '[SingleInstanceService] Warning: Atomic token write failed ($e); falling back to direct write.',
+          );
+          await tokenF.writeAsString(_securityToken!);
+          try {
+            await Process.run('chmod', ['600', tokenF.path]);
+          } catch (_) {}
+        }
+      } else {
+        // AppData directory is already restricted to the user by default ACLs on Windows
+        await tokenF.writeAsString(_securityToken!);
+      }
 
       _serverSubscription = _server?.listen((HttpRequest request) async {
         try {
@@ -72,7 +135,6 @@ class SingleInstanceService {
 
       return true;
     } on SocketException {
-      // Server already running in primary instance! Forward candidateUrl if present.
       if (candidateUrl != null && candidateUrl.isNotEmpty) {
         final client = HttpClient();
         try {
@@ -94,7 +156,7 @@ class SingleInstanceService {
           client.close();
         }
       }
-      return false; // Exit secondary instance
+      return false;
     } catch (e) {
       debugPrint('SingleInstanceService init error: $e');
       _initialUrl = candidateUrl;
@@ -119,7 +181,9 @@ class SingleInstanceService {
     try {
       if (_tokenFile.existsSync()) _tokenFile.deleteSync();
     } catch (e) {
-      debugPrint('[SingleInstanceService] Failed to delete token file on dispose: $e');
+      debugPrint(
+        '[SingleInstanceService] Failed to delete token file on dispose: $e',
+      );
     }
   }
 

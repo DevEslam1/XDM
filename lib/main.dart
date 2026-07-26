@@ -76,7 +76,7 @@ Future<void> main(List<String> args) async {
         await BackgroundService.initialize();
 
         final packageInfo = await PackageInfo.fromPlatform();
-        kAppVersion = packageInfo.version;
+        setAppVersion(packageInfo.version);
 
         final downloadProvider = DownloadProvider(
           databaseService: databaseService,

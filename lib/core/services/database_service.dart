@@ -237,6 +237,8 @@ class DatabaseService {
       pausedByUser: drift.Value(task.pausedByUser),
       youtubeQualityPreset: drift.Value(task.youtubeQualityPreset),
       notes: drift.Value(task.notes),
+      playlistId: drift.Value(task.playlistId),
+      playlistTitle: drift.Value(task.playlistTitle),
     );
   }
 
@@ -299,6 +301,8 @@ class DatabaseService {
       pausedByUser: row.pausedByUser,
       youtubeQualityPreset: row.youtubeQualityPreset,
       notes: row.notes,
+      playlistId: row.playlistId,
+      playlistTitle: row.playlistTitle,
     );
   }
 

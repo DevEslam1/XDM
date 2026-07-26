@@ -147,12 +147,15 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
 
 String _base32ToHex(String base32) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  final clean = base32.toUpperCase().replaceAll(RegExp(r'[^A-Z2-7]'), '');
+  if (clean.isEmpty) return '';
+
   var bits = 0;
   var value = BigInt.zero;
   final hex = StringBuffer();
 
-  for (var i = 0; i < base32.length; i++) {
-    final idx = alphabet.indexOf(base32[i].toUpperCase());
+  for (var i = 0; i < clean.length; i++) {
+    final idx = alphabet.indexOf(clean[i]);
     if (idx == -1) continue;
     value = (value << 5) | BigInt.from(idx);
     bits += 5;

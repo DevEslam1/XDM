@@ -1,977 +1,1103 @@
-import '../../../../core/utils/file_utils.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../../../../core/utils/file_opener.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/app_theme.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../../core/utils/haptic_helper.dart';
+import '../../../../core/utils/file_utils.dart';
+import '../../../../core/utils/file_opener.dart';
 import '../../../../shared/widgets/themed_snackbar.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../models/download_task.dart';
-import '../provider/download_provider.dart';
-import 'status_chip.dart';
+import '../../downloads/models/download_task.dart';
+import '../../downloads/provider/download_provider.dart';
 import '../../details/screens/details_screen.dart';
-import '../../../../core/utils/premium_route.dart';
 
+/// Adaptive download card. Detects the download kind and renders a
+/// purpose-built variant:
+///   • Torrent / magnet  -> _TorrentCard   (seeds/peers, upload, files, seeding)
+///   • Media / playlist  -> _MediaCard     (quality badge, audio track, merge)
+///   • Single file       -> _FileCard      (chunked multi-thread progress)
+///
+/// Playlist videos (task.playlistId set) are grouped by the home screen into
+/// a [PlaylistGroupCard]; individual items still render as _MediaCard when
+/// expanded.
 class DownloadCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
-
   const DownloadCard({super.key, required this.task, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    if (task.isTorrent) {
+      return _TorrentCard(task: task, compact: compact);
+    }
+    if (task.youtubeQualityPreset != null || task.mergedAudioUrl != null) {
+      return _MediaCard(task: task, compact: compact);
+    }
+    return _FileCard(task: task, compact: compact);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Shared helpers
+// ═══════════════════════════════════════════════════════════════
+Color _statusColor(DownloadStatus status, bool isDark) {
+  return switch (status) {
+    DownloadStatus.queued =>
+      isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+    DownloadStatus.downloading =>
+      isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+    DownloadStatus.paused =>
+      isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+    DownloadStatus.completed =>
+      isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+    DownloadStatus.failed => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+  };
+}
+
+IconData _categoryIcon(String category) {
+  return switch (category) {
+    'Video' => Icons.movie_outlined,
+    'Audio' => Icons.audiotrack_outlined,
+    'Document' => Icons.description_outlined,
+    'Archive' => Icons.folder_zip_outlined,
+    'APK' => Icons.android_outlined,
+    _ => Icons.insert_drive_file_outlined,
+  };
+}
+
+String _statusLabel(BuildContext context, DownloadStatus status) {
+  return L10n.translateStatusName(context, status);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Shared sub-widgets
+// ═══════════════════════════════════════════════════════════════
+
+/// Card shell with a signature cockpit notch + status accent rail.
+class _CardShell extends StatelessWidget {
+  final Widget child;
+  final Color accent;
+  final bool isDark;
+  final VoidCallback? onTap;
+  const _CardShell({
+    required this.child,
+    required this.accent,
+    required this.isDark,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          decoration: AppTheme.panel(
+            isDark: isDark,
+            radius: 18,
+            accentColor: accent,
+            accentAlpha: 0.18,
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // status accent rail
+                Container(
+                  width: 4,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(18),
+                      bottomLeft: Radius.circular(18),
+                    ),
+                  ),
+                ),
+                Expanded(child: child),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Status chip that pulses while downloading/seeding.
+class _StatusChip extends StatefulWidget {
+  final DownloadTask task;
+  final bool isDark;
+  final String? overrideLabel;
+  const _StatusChip({
+    required this.task,
+    required this.isDark,
+    this.overrideLabel,
+  });
+
+  @override
+  State<_StatusChip> createState() => _StatusChipState();
+}
+
+class _StatusChipState extends State<_StatusChip>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  );
+
+  bool get _isActive =>
+      widget.task.status == DownloadStatus.downloading ||
+      (widget.task.status == DownloadStatus.completed &&
+          widget.task.isTorrent &&
+          widget.task.seedingEnabled);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isActive) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _StatusChip old) {
+    super.didUpdateWidget(old);
+    if (_isActive && !_pulse.isAnimating) _pulse.repeat(reverse: true);
+    if (!_isActive && _pulse.isAnimating) _pulse.stop();
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _statusColor(widget.task.status, widget.isDark);
+    final label =
+        widget.overrideLabel ?? _statusLabel(context, widget.task.status);
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: color.withValues(
+                alpha: _isActive ? 0.35 + _pulse.value * 0.3 : 0.3,
+              ),
+              width: 0.8,
+            ),
+          ),
+          child: Text(
+            label.toUpperCase(),
+            style: AppTheme.microLabel(
+              isDark: widget.isDark,
+              color: color,
+              size: 8.5,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Multi-thread chunked progress bar — one segment per thread.
+class _ChunkedProgressBar extends StatelessWidget {
+  final DownloadTask task;
+  final bool isDark;
+  final Color color;
+  const _ChunkedProgressBar({
+    required this.task,
+    required this.isDark,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chunks = task.chunks;
+    if (chunks.length <= 1) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          children: [
+            Container(
+              height: 6,
+              decoration: AppTheme.progressTrack(isDark: isDark),
+            ),
+            FractionallySizedBox(
+              widthFactor: task.progress.clamp(0.0, 1.0),
+              child: Container(
+                height: 6,
+                decoration: AppTheme.progressFill(color),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Row(
+      children: List.generate(chunks.length, (i) {
+        final p = chunks[i].clamp(0.0, 1.0);
+        return Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: i == 0 ? 0 : 2.5,
+              right: i == chunks.length - 1 ? 0 : 2.5,
+            ),
+            child: Stack(
+              children: [
+                Container(
+                  height: 6,
+                  decoration: AppTheme.progressTrack(isDark: isDark, radius: 3),
+                ),
+                FractionallySizedBox(
+                  widthFactor: p,
+                  child: Container(
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Icon control button with press-scale micro-interaction.
+class _ControlButton extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onPressed;
+  final String tooltip;
+  final bool filled;
+  const _ControlButton({
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+    required this.tooltip,
+    this.filled = false,
+  });
+
+  @override
+  State<_ControlButton> createState() => _ControlButtonState();
+}
+
+class _ControlButtonState extends State<_ControlButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTap: widget.onPressed,
+        child: AnimatedScale(
+          scale: _pressed ? 0.85 : 1.0,
+          duration: AppTheme.motionFast,
+          curve: AppTheme.motionSpring,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: widget.filled
+                  ? widget.color
+                  : widget.color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: widget.color.withValues(alpha: widget.filled ? 0 : 0.25),
+                width: 0.8,
+              ),
+            ),
+            child: Icon(
+              widget.icon,
+              size: 17,
+              color: widget.filled
+                  ? AppTheme.inkOn(widget.color)
+                  : widget.color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Standard control cluster shared by all variants.
+class _ControlCluster extends StatelessWidget with HapticHelper {
+  final DownloadTask task;
+  const _ControlCluster({required this.task});
 
   @override
   Widget build(BuildContext context) {
     final provider = context.read<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
 
-    return Selector<DownloadProvider, _CardSnapshot>(
-      selector: (_, p) {
-        final t = p.findTaskById(task.id) ?? task;
-        return _CardSnapshot.fromTask(t);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (task.status == DownloadStatus.downloading)
+          _ControlButton(
+            icon: Icons.pause_rounded,
+            color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+            tooltip: L10n.of(context, 'pause_btn'),
+            onPressed: () {
+              triggerHaptic(settings);
+              provider.pauseTask(task.id);
+            },
+          )
+        else if (task.status == DownloadStatus.paused ||
+            task.status == DownloadStatus.queued)
+          _ControlButton(
+            icon: Icons.play_arrow_rounded,
+            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            filled: true,
+            tooltip: task.status == DownloadStatus.queued
+                ? (isRtl ? 'بدء' : 'Start')
+                : (isRtl ? 'استئناف' : 'Resume'),
+            onPressed: () {
+              triggerHaptic(settings);
+              provider.resumeTask(task.id);
+            },
+          )
+        else if (task.status == DownloadStatus.failed)
+          _ControlButton(
+            icon: Icons.refresh_rounded,
+            color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+            filled: true,
+            tooltip: isRtl ? 'إعادة' : 'Retry',
+            onPressed: () {
+              triggerHaptic(settings);
+              provider.retryTask(task.id);
+            },
+          )
+        else if (task.status == DownloadStatus.completed)
+          _ControlButton(
+            icon: Icons.folder_open_rounded,
+            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            filled: true,
+            tooltip: isRtl ? 'فتح الملف' : 'Open',
+            onPressed: () {
+              triggerHaptic(settings);
+              openFile(context, task.localFilePath, settings);
+            },
+          ),
+        const SizedBox(width: 6),
+        _ControlButton(
+          icon: Icons.delete_outline_rounded,
+          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          tooltip: L10n.of(context, 'delete_btn'),
+          onPressed: () async {
+            triggerHaptic(settings);
+            final deleteFiles = await showDeleteConfirmationDialog(
+              context,
+              task,
+              settings,
+            );
+            if (deleteFiles != null) {
+              provider.deleteTask(task.id, deleteFiles: deleteFiles);
+              if (context.mounted) {
+                ThemedSnackbar.show(
+                  context,
+                  message: isRtl ? 'تم حذف التنزيل بنجاح' : 'Download deleted',
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  icon: Icons.delete_outline,
+                  isDarkMode: isDark,
+                );
+              }
+            }
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Data readout (speed / size / eta) in the display face.
+class _DataReadout extends StatelessWidget {
+  final String value;
+  final Color color;
+  final bool isDark;
+  final double size;
+  const _DataReadout({
+    required this.value,
+    required this.color,
+    required this.isDark,
+    this.size = 12,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value,
+      style: AppTheme.dataStyle(isDark: isDark, color: color, size: size),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Variant 1 — Single file
+// ═══════════════════════════════════════════════════════════════
+class _FileCard extends StatelessWidget with HapticHelper {
+  final DownloadTask task;
+  final bool compact;
+  const _FileCard({required this.task, required this.compact});
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.read<SettingsProvider>();
+    final isDark = settings.isDarkMode;
+    final statusColor = _statusColor(task.status, isDark);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+
+    return _CardShell(
+      accent: statusColor,
+      isDark: isDark,
+      onTap: () {
+        triggerHaptic(settings);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => DetailsScreen(taskId: task.id)),
+        );
       },
-      builder: (context, snapshot, child) {
-        final task = snapshot.task;
-
-        // Determine status colors
-        Color statusColor;
-        switch (task.status) {
-          case DownloadStatus.queued:
-            statusColor = isDark
-                ? AppTheme.neonViolet
-                : AppTheme.lightNeonViolet;
-            break;
-          case DownloadStatus.downloading:
-            statusColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-            break;
-          case DownloadStatus.paused:
-            statusColor = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-            break;
-          case DownloadStatus.completed:
-            statusColor = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-            break;
-          case DownloadStatus.failed:
-            statusColor = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-            break;
-        }
-
-        // Determine category icon
-        IconData categoryIcon;
-        switch (task.category) {
-          case 'Video':
-            categoryIcon = Icons.movie_outlined;
-            break;
-          case 'Audio':
-            categoryIcon = Icons.audiotrack_outlined;
-            break;
-          case 'Document':
-            categoryIcon = Icons.description_outlined;
-            break;
-          case 'Archive':
-            categoryIcon = Icons.folder_zip_outlined;
-            break;
-          case 'APK':
-            categoryIcon = Icons.android_outlined;
-            break;
-          default:
-            categoryIcon = Icons.insert_drive_file_outlined;
-        }
-
-        final cardBg = settings.classicUi
-            ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-            : (task.status == DownloadStatus.downloading
-                  ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                        .withValues(alpha: 0.06)
-                  : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg));
-        final cardBorder = settings.classicUi
-            ? Border.all(
-                color: isDark ? AppTheme.border : AppTheme.lightBorder,
-                width: 1.0,
-              )
-            : Border.all(
-                color: task.status == DownloadStatus.downloading
-                    ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                          .withValues(alpha: 0.2)
-                    : (isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder),
-                width: 0.8,
-              );
-        final cardShadow =
-            (settings.classicUi ||
-                task.status != DownloadStatus.downloading ||
-                !isDark)
-            ? null
-            : [
-                BoxShadow(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.06),
-                  blurRadius: 16.0,
-                  spreadRadius: 0,
-                ),
-              ];
-
-        final cardBody = RepaintBoundary(
-          child: Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(compact ? 16 : 20),
-              border: cardBorder,
-              boxShadow: cardShadow,
-            ),
-            child: Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(compact ? 16 : 20),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(compact ? 16 : 20),
-                onTap: () {
-                  triggerHaptic(settings);
-                  Navigator.push(
-                    context,
-                    PremiumPageRoute(
-                      type: PageTransitionType.slideRight,
-                      child: DetailsScreen(taskId: task.id),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: compact ? 38 : 44,
+                  height: compact ? 38 : 44,
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.15),
+                      width: 0.8,
                     ),
-                  );
-                },
-                onLongPress: () {
-                  triggerHaptic(settings);
-                  _showAdvancedOptionsSheet(context, task, provider, settings);
-                },
-                child: Padding(
-                  padding: EdgeInsets.all(compact ? 12.0 : 16.0),
+                  ),
+                  child: Icon(
+                    _categoryIcon(task.category),
+                    color: statusColor,
+                    size: compact ? 18 : 21,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Top row: File info + Control buttons
+                      Text(
+                        task.fileName,
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: compact ? 13 : 14,
+                          weight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // File category icon
+                          _StatusChip(task: task, isDark: isDark),
+                          const SizedBox(width: 8),
+                          Text(
+                            L10n.translateCategory(
+                              context,
+                              task.category,
+                            ).toUpperCase(),
+                            style: AppTheme.microLabel(
+                              isDark: isDark,
+                              size: 8.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                _ControlCluster(task: task),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _ChunkedProgressBar(task: task, isDark: isDark, color: statusColor),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _DataReadout(
+                  value:
+                      '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                  color: mutedClr,
+                  isDark: isDark,
+                  size: 11,
+                ),
+                const Spacer(),
+                if (task.status == DownloadStatus.downloading) ...[
+                  Icon(
+                    Icons.arrow_downward_rounded,
+                    size: 12,
+                    color: statusColor,
+                  ),
+                  const SizedBox(width: 3),
+                  _DataReadout(
+                    value: task.speedFormatted,
+                    color: statusColor,
+                    isDark: isDark,
+                    size: 11,
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                _DataReadout(
+                  value: task.progressPercentString,
+                  color: textClr,
+                  isDark: isDark,
+                  size: 12,
+                ),
+              ],
+            ),
+            if (task.status == DownloadStatus.downloading &&
+                task.etaFormatted.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  L10n.translateStatus(context, task.status, task.etaFormatted),
+                  style: AppTheme.microLabel(isDark: isDark, size: 9),
+                ),
+              ),
+            ],
+            if (task.status == DownloadStatus.failed &&
+                task.errorMessage != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                task.errorMessage!,
+                style: AppTheme.microLabel(
+                  isDark: isDark,
+                  color: statusColor,
+                  size: 9,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Variant 2 — Media (single video / audio / playlist item)
+// ═══════════════════════════════════════════════════════════════
+class _MediaCard extends StatelessWidget with HapticHelper {
+  final DownloadTask task;
+  final bool compact;
+  const _MediaCard({required this.task, required this.compact});
+
+  String get _qualityLabel {
+    final preset = task.youtubeQualityPreset ?? '';
+    if (preset == 'audio_only') return 'AUDIO';
+    if (preset == 'best_combined' || preset == 'best') return 'BEST';
+    if (preset == 'best_muxed') return 'MP4';
+    return preset.toUpperCase();
+  }
+
+  bool get _hasAudioTrack =>
+      task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
+  bool get _isAudioOnly => task.youtubeQualityPreset == 'audio_only';
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.read<SettingsProvider>();
+    final isDark = settings.isDarkMode;
+    final statusColor = _statusColor(task.status, isDark);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final qualityColor = _isAudioOnly
+        ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+        : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed);
+
+    return _CardShell(
+      accent: statusColor,
+      isDark: isDark,
+      onTap: () {
+        triggerHaptic(settings);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => DetailsScreen(taskId: task.id)),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // media thumbnail placeholder
+                Container(
+                  width: compact ? 46 : 56,
+                  height: compact ? 34 : 40,
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.15),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(
+                    _isAudioOnly
+                        ? Icons.audiotrack_rounded
+                        : Icons.play_arrow_rounded,
+                    color: statusColor,
+                    size: compact ? 18 : 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        task.fileName,
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: compact ? 13 : 14,
+                          weight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          _StatusChip(task: task, isDark: isDark),
+                          const SizedBox(width: 6),
+                          // quality badge
                           Container(
-                            width: compact ? 36 : 46,
-                            height: compact ? 36 : 46,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2.5,
+                            ),
                             decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(
-                                compact ? 10 : 14,
-                              ),
+                              color: qualityColor.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(7),
                               border: Border.all(
-                                color: statusColor.withValues(alpha: 0.15),
+                                color: qualityColor.withValues(alpha: 0.3),
                                 width: 0.8,
                               ),
                             ),
-                            child: Icon(
-                              categoryIcon,
-                              color: statusColor.withValues(alpha: 0.85),
-                              size: compact ? 18 : 22,
-                            ),
-                          ),
-                          SizedBox(width: compact ? 10 : 12),
-                          // File name and status chip
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  task.fileName,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        fontSize: compact ? 13 : 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark
-                                            ? AppTheme.textPrimary
-                                            : AppTheme.lightTextPrimary,
-                                      ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                SizedBox(height: compact ? 4 : 6),
-                                Wrap(
-                                  spacing: compact ? 6 : 8,
-                                  runSpacing: compact ? 2 : 4,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    StatusChip(task: task),
-                                    Text(
-                                      L10n.translateCategory(
-                                        context,
-                                        task.category,
-                                      ).toUpperCase(),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            fontSize: compact ? 8.5 : 9,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.8,
-                                            color: isDark
-                                                ? AppTheme.textSecondary
-                                                : AppTheme.lightTextSecondary,
-                                          ),
-                                    ),
-                                    if (task.isTorrent &&
-                                        (task.status ==
-                                                DownloadStatus.downloading ||
-                                            (task.status ==
-                                                    DownloadStatus.completed &&
-                                                task.seedingEnabled))) ...[
-                                      Text(
-                                        '|',
-                                        style: TextStyle(
-                                          fontSize: compact ? 8.5 : 9,
-                                          color: isDark
-                                              ? AppTheme.textMuted
-                                              : AppTheme.lightTextMuted,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${L10n.of(context, 'seeds')}: ${provider.getTorrentSeeds(task.id)}',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              fontSize: compact ? 8.5 : 9,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark
-                                                  ? AppTheme.neonGreen
-                                                  : AppTheme.lightNeonGreen,
-                                            ),
-                                      ),
-                                      Text(
-                                        '${L10n.of(context, 'peers')}: ${provider.getTorrentPeers(task.id)}',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              fontSize: compact ? 8.5 : 9,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark
-                                                  ? AppTheme.neonBlue
-                                                  : AppTheme.lightNeonBlue,
-                                            ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Action controls
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (task.status == DownloadStatus.downloading)
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.pause,
-                                    color: isDark
-                                        ? AppTheme.textSecondary
-                                        : AppTheme.lightTextSecondary,
-                                    size: compact ? 18 : 20,
-                                  ),
-                                  onPressed: () {
-                                    triggerHaptic(settings);
-                                    provider.pauseTask(task.id);
-                                  },
-                                  tooltip: 'Pause Download',
-                                  constraints: compact
-                                      ? const BoxConstraints()
-                                      : null,
-                                  padding: compact
-                                      ? const EdgeInsets.all(4)
-                                      : const EdgeInsets.all(8),
-                                )
-                              else if (task.status == DownloadStatus.paused ||
-                                  task.status == DownloadStatus.queued)
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.play_arrow,
-                                    color: isDark
-                                        ? AppTheme.neonBlue
-                                        : AppTheme.lightNeonBlue,
-                                    size: compact ? 18 : 20,
-                                  ),
-                                  onPressed: () {
-                                    triggerHaptic(settings);
-                                    provider.resumeTask(task.id);
-                                  },
-                                  tooltip: 'Resume Download',
-                                  constraints: compact
-                                      ? const BoxConstraints()
-                                      : null,
-                                  padding: compact
-                                      ? const EdgeInsets.all(4)
-                                      : const EdgeInsets.all(8),
-                                )
-                              else if (task.status == DownloadStatus.failed)
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.refresh,
-                                    color: isDark
-                                        ? AppTheme.neonViolet
-                                        : AppTheme.lightNeonViolet,
-                                    size: compact ? 18 : 20,
-                                  ),
-                                  onPressed: () {
-                                    triggerHaptic(settings);
-                                    provider.retryTask(task.id);
-                                  },
-                                  tooltip: 'Retry Download',
-                                  constraints: compact
-                                      ? const BoxConstraints()
-                                      : null,
-                                  padding: compact
-                                      ? const EdgeInsets.all(4)
-                                      : const EdgeInsets.all(8),
-                                )
-                              else if (task.status ==
-                                  DownloadStatus.completed) ...[
-                                if (task.isTorrent)
-                                  IconButton(
-                                    icon: Icon(
-                                      task.seedingEnabled
-                                          ? Icons.pause
-                                          : Icons.play_arrow,
-                                      color: task.seedingEnabled
-                                          ? (isDark
-                                                ? AppTheme.textSecondary
-                                                : AppTheme.lightTextSecondary)
-                                          : (isDark
-                                                ? AppTheme.neonBlue
-                                                : AppTheme.lightNeonBlue),
-                                      size: compact ? 18 : 20,
-                                    ),
-                                    onPressed: () {
-                                      triggerHaptic(settings);
-                                      provider.updateTaskSeeding(
-                                        task.id,
-                                        enabled: !task.seedingEnabled,
-                                      );
-                                    },
-                                    tooltip: task.seedingEnabled
-                                        ? 'Pause Seeding'
-                                        : 'Start Seeding',
-                                    constraints: compact
-                                        ? const BoxConstraints()
-                                        : null,
-                                    padding: compact
-                                        ? const EdgeInsets.all(4)
-                                        : const EdgeInsets.all(8),
-                                  ),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.folder_open_outlined,
-                                    color: isDark
-                                        ? AppTheme.neonGreen
-                                        : AppTheme.lightNeonGreen,
-                                    size: compact ? 18 : 20,
-                                  ),
-                                  onPressed: () {
-                                    triggerHaptic(settings);
-                                    openFile(
-                                      context,
-                                      task.localFilePath,
-                                      settings,
-                                    );
-                                  },
-                                  tooltip: 'Open File',
-                                  constraints: compact
-                                      ? const BoxConstraints()
-                                      : null,
-                                  padding: compact
-                                      ? const EdgeInsets.all(4)
-                                      : const EdgeInsets.all(8),
-                                ),
-                              ],
-                              IconButton(
-                                icon: Icon(
-                                  Icons.close,
-                                  color: isDark
-                                      ? AppTheme.neonRed
-                                      : AppTheme.lightNeonRed,
-                                  size: compact ? 16 : 18,
-                                ),
-                                onPressed: () async {
-                                  triggerHaptic(settings);
-                                  final deleteFiles =
-                                      await _showDeleteConfirmationDialog(
-                                        context,
-                                        task,
-                                        settings,
-                                      );
-                                  if (deleteFiles != null) {
-                                    provider.deleteTask(
-                                      task.id,
-                                      deleteFiles: deleteFiles,
-                                    );
-                                    if (context.mounted) {
-                                      ThemedSnackbar.show(
-                                        context,
-                                        message: L10n.isRtl(context)
-                                            ? 'تم حذف التنزيل بنجاح'
-                                            : 'Download deleted successfully',
-                                        color: isDark
-                                            ? AppTheme.neonRed
-                                            : AppTheme.lightNeonRed,
-                                        icon: Icons.delete,
-                                        isDarkMode: isDark,
-                                      );
-                                    }
-                                  }
-                                },
-                                tooltip: 'Delete Task',
-                                constraints: compact
-                                    ? const BoxConstraints()
-                                    : null,
-                                padding: compact
-                                    ? const EdgeInsets.all(4)
-                                    : const EdgeInsets.all(8),
+                            child: Text(
+                              _qualityLabel,
+                              style: AppTheme.microLabel(
+                                isDark: isDark,
+                                color: qualityColor,
+                                size: 8,
                               ),
+                            ),
+                          ),
+                          if (_hasAudioTrack && !_isAudioOnly) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.audio_file_rounded,
+                              size: 12,
+                              color: mutedClr,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'A/V',
+                              style: AppTheme.microLabel(
+                                isDark: isDark,
+                                size: 8,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                _ControlCluster(task: task),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _ChunkedProgressBar(task: task, isDark: isDark, color: statusColor),
+            // separate audio-track progress when merging
+            if (_hasAudioTrack &&
+                !_isAudioOnly &&
+                task.status == DownloadStatus.downloading &&
+                task.audioProgress > 0) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.audio_file_rounded, size: 11, color: mutedClr),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Stack(
+                        children: [
+                          Container(
+                            height: 4,
+                            decoration: AppTheme.progressTrack(
+                              isDark: isDark,
+                              radius: 2,
+                            ),
+                          ),
+                          FractionallySizedBox(
+                            widthFactor: task.audioProgress.clamp(0.0, 1.0),
+                            child: Container(
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.lightNeonGreen,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    task.audioProgressPercentString,
+                    style: AppTheme.microLabel(isDark: isDark, size: 8.5),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _DataReadout(
+                  value:
+                      '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                  color: mutedClr,
+                  isDark: isDark,
+                  size: 11,
+                ),
+                const Spacer(),
+                if (task.status == DownloadStatus.downloading) ...[
+                  Icon(
+                    Icons.arrow_downward_rounded,
+                    size: 12,
+                    color: statusColor,
+                  ),
+                  const SizedBox(width: 3),
+                  _DataReadout(
+                    value: task.speedFormatted,
+                    color: statusColor,
+                    isDark: isDark,
+                    size: 11,
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                _DataReadout(
+                  value: task.progressPercentString,
+                  color: textClr,
+                  isDark: isDark,
+                  size: 12,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Variant 3 — Torrent / magnet
+// ═══════════════════════════════════════════════════════════════
+class _TorrentCard extends StatefulWidget {
+  final DownloadTask task;
+  final bool compact;
+  const _TorrentCard({required this.task, required this.compact});
+
+  @override
+  State<_TorrentCard> createState() => _TorrentCardState();
+}
+
+class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.read<SettingsProvider>();
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final statusColor = _statusColor(widget.task.status, isDark);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final isMagnet = widget.task.url.startsWith('magnet:');
+    final isSeeding =
+        widget.task.status == DownloadStatus.completed &&
+        widget.task.seedingEnabled;
+
+    return Consumer<DownloadProvider>(
+      builder: (context, provider, _) {
+        final seeds = provider.getTorrentSeeds(widget.task.id);
+        final peers = provider.getTorrentPeers(widget.task.id);
+        final uploadSpeed = provider.getTorrentUploadSpeed(widget.task.id);
+        final fileCount = widget.task.torrentFiles?.length ?? 0;
+        final selectedCount =
+            widget.task.torrentFiles
+                ?.where((f) => f['selected'] == true)
+                .length ??
+            0;
+
+        return _CardShell(
+          accent: statusColor,
+          isDark: isDark,
+          onTap: () {
+            triggerHaptic(settings);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DetailsScreen(taskId: widget.task.id),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: widget.compact ? 38 : 44,
+                      height: widget.compact ? 38 : 44,
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.15),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Icon(
+                        isMagnet
+                            ? Icons.link_rounded
+                            : Icons.cloud_download_rounded,
+                        color: statusColor,
+                        size: widget.compact ? 18 : 21,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.task.fileName,
+                            style: AppTheme.dataStyle(
+                              isDark: isDark,
+                              size: widget.compact ? 13 : 14,
+                              weight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 5),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              _StatusChip(
+                                task: widget.task,
+                                isDark: isDark,
+                                overrideLabel: isSeeding
+                                    ? (isRtl ? 'مشاركة' : 'SEEDING')
+                                    : null,
+                              ),
+                              _PeerChip(
+                                icon: Icons.arrow_upward_rounded,
+                                label: '$seeds',
+                                color: greenClr,
+                                isDark: isDark,
+                              ),
+                              _PeerChip(
+                                icon: Icons.arrow_downward_rounded,
+                                label: '$peers',
+                                color: violetClr,
+                                isDark: isDark,
+                              ),
+                              if (fileCount > 0)
+                                _PeerChip(
+                                  icon: Icons.folder_outlined,
+                                  label: '$selectedCount/$fileCount',
+                                  color: mutedClr,
+                                  isDark: isDark,
+                                ),
                             ],
                           ),
                         ],
                       ),
-                      SizedBox(height: compact ? 10 : 14),
-                      _ProgressBar(
-                        task: task,
-                        compact: compact,
-                        isDark: isDark,
-                        statusColor: statusColor,
-                      ),
-                      SizedBox(height: compact ? 8 : 10),
-                      // Footer metadata
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Size progress
-                          Flexible(
-                            child: Text(
-                              '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: isDark
-                                        ? AppTheme.textSecondary
-                                        : AppTheme.lightTextSecondary,
-                                    fontSize: compact ? 10 : 11,
-                                  ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          // Progress percent
-                          Text(
-                            task.progressPercentString,
-                            style: Theme.of(context).textTheme.labelMedium
-                                ?.copyWith(
-                                  color: isDark
-                                      ? AppTheme.textPrimary
-                                      : AppTheme.lightTextPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: compact ? 10 : 11,
-                                ),
-                          ),
-                          const SizedBox(width: 4),
-                          // ETA or status message
-                          Flexible(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerRight,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (task.status ==
-                                      DownloadStatus.downloading) ...[
-                                    Icon(
-                                      Icons.download,
-                                      size: compact ? 11 : 12,
-                                      color: isDark
-                                          ? AppTheme.neonBlue
-                                          : AppTheme.lightNeonBlue,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      task.speedFormatted,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: isDark
-                                                ? AppTheme.neonBlue
-                                                : AppTheme.lightNeonBlue,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: compact ? 10 : 11,
-                                          ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    if (task.isTorrent) ...[
-                                      Icon(
-                                        Icons.upload,
-                                        size: compact ? 11 : 12,
-                                        color: isDark
-                                            ? AppTheme.neonViolet
-                                            : AppTheme.lightNeonViolet,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${formatBytes(provider.getTorrentUploadSpeed(task.id))}/s',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: isDark
-                                                  ? AppTheme.neonViolet
-                                                  : AppTheme.lightNeonViolet,
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: compact ? 10 : 11,
-                                            ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                  ] else if (task.status ==
-                                          DownloadStatus.completed &&
-                                      task.isTorrent &&
-                                      task.seedingEnabled) ...[
-                                    Icon(
-                                      Icons.upload,
-                                      size: compact ? 11 : 12,
-                                      color: isDark
-                                          ? AppTheme.neonViolet
-                                          : AppTheme.lightNeonViolet,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      task.speedFormatted,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: isDark
-                                                ? AppTheme.neonViolet
-                                                : AppTheme.lightNeonViolet,
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: compact ? 10 : 11,
-                                          ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  Icon(
-                                    (task.status == DownloadStatus.completed &&
-                                            task.isTorrent &&
-                                            task.seedingEnabled)
-                                        ? Icons.cloud_upload_outlined
-                                        : (task.status ==
-                                                  DownloadStatus.completed
-                                              ? Icons.check_circle_outline
-                                              : Icons.schedule),
-                                    size: compact ? 11 : 12,
-                                    color:
-                                        (task.status ==
-                                                DownloadStatus.completed &&
-                                            task.isTorrent &&
-                                            task.seedingEnabled)
-                                        ? (isDark
-                                              ? AppTheme.neonViolet
-                                              : AppTheme.lightNeonViolet)
-                                        : (task.status ==
-                                                  DownloadStatus.completed
-                                              ? (isDark
-                                                    ? AppTheme.neonGreen
-                                                    : AppTheme.lightNeonGreen)
-                                              : (isDark
-                                                    ? AppTheme.textMuted
-                                                    : AppTheme.lightTextMuted)),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    L10n.translateStatus(
-                                      context,
-                                      task.status,
-                                      task.etaFormatted,
-                                    ),
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color:
-                                              (task.status ==
-                                                      DownloadStatus
-                                                          .completed &&
-                                                  task.isTorrent &&
-                                                  task.seedingEnabled)
-                                              ? (isDark
-                                                    ? AppTheme.neonViolet
-                                                    : AppTheme.lightNeonViolet)
-                                              : (task.status ==
-                                                        DownloadStatus.completed
-                                                    ? (isDark
-                                                          ? AppTheme.neonGreen
-                                                          : AppTheme
-                                                                .lightNeonGreen)
-                                                    : (isDark
-                                                          ? AppTheme
-                                                                .textSecondary
-                                                          : AppTheme
-                                                                .lightTextSecondary)),
-                                          fontSize: compact ? 10 : 11,
-                                        ),
-                                  ),
-                                ],
+                    ),
+                    Column(
+                      children: [
+                        _ControlCluster(task: widget.task),
+                        if (fileCount > 0) ...[
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () {
+                              triggerHaptic(settings);
+                              setState(() => _expanded = !_expanded);
+                            },
+                            child: AnimatedRotation(
+                              turns: _expanded ? 0.5 : 0,
+                              duration: AppTheme.motionBase,
+                              child: Icon(
+                                Icons.keyboard_arrow_up_rounded,
+                                size: 18,
+                                color: mutedClr,
                               ),
                             ),
                           ),
                         ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-
-        return Dismissible(
-          key: Key(task.id),
-          direction: DismissDirection.horizontal,
-          background: Container(
-            margin: EdgeInsets.only(bottom: compact ? 8 : 12),
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(left: 24.0),
-            decoration: BoxDecoration(
-              color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                  .withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(compact ? 16 : 20),
-            ),
-            child: Icon(
-              task.status == DownloadStatus.downloading
-                  ? Icons.pause
-                  : Icons.play_arrow,
-              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-            ),
-          ),
-          secondaryBackground: Container(
-            margin: EdgeInsets.only(bottom: compact ? 8 : 12),
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 24.0),
-            decoration: BoxDecoration(
-              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
-                  .withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(compact ? 16 : 20),
-            ),
-            child: Icon(
-              Icons.delete_outline,
-              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-            ),
-          ),
-          confirmDismiss: (direction) async {
-            triggerHaptic(settings);
-            if (direction == DismissDirection.endToStart) {
-              final deleteFiles = await _showDeleteConfirmationDialog(
-                context,
-                task,
-                settings,
-              );
-              if (deleteFiles != null) {
-                provider.deleteTask(task.id, deleteFiles: deleteFiles);
-                if (context.mounted) {
-                  ThemedSnackbar.show(
-                    context,
-                    message: L10n.isRtl(context)
-                        ? 'تم حذف التنزيل بنجاح'
-                        : 'Download deleted successfully',
-                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                    icon: Icons.delete,
-                    isDarkMode: isDark,
-                  );
-                }
-                return true;
-              }
-              return false;
-            } else {
-              if (task.status == DownloadStatus.downloading) {
-                provider.pauseTask(task.id);
-              } else if (task.status == DownloadStatus.paused ||
-                  task.status == DownloadStatus.queued) {
-                provider.resumeTask(task.id);
-              } else if (task.status == DownloadStatus.failed) {
-                provider.retryTask(task.id);
-              }
-              return false;
-            }
-          },
-          child: Padding(
-            padding: EdgeInsets.only(bottom: compact ? 8.0 : 12.0),
-            child: RepaintBoundary(child: cardBody),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showAdvancedOptionsSheet(
-    BuildContext context,
-    DownloadTask task,
-    DownloadProvider provider,
-    SettingsProvider settings,
-  ) {
-    final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border(
-              top: BorderSide(
-                color: isDark
-                    ? AppTheme.glassBorder
-                    : AppTheme.lightGlassBorder,
-                width: 0.8,
-              ),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color:
-                          (isDark
-                                  ? AppTheme.textMuted
-                                  : AppTheme.lightTextMuted)
-                              .withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
+                      ],
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
-                    children: [
+                const SizedBox(height: 14),
+                _ChunkedProgressBar(
+                  task: widget.task,
+                  isDark: isDark,
+                  color: statusColor,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    _DataReadout(
+                      value:
+                          '${widget.task.downloadedSizeFormatted} / ${widget.task.sizeFormatted}',
+                      color: mutedClr,
+                      isDark: isDark,
+                      size: 11,
+                    ),
+                    const Spacer(),
+                    if (widget.task.status == DownloadStatus.downloading) ...[
                       Icon(
-                        Icons.tune_rounded,
-                        color: isDark
-                            ? AppTheme.neonBlue
-                            : AppTheme.lightNeonBlue,
-                        size: 20,
+                        Icons.arrow_downward_rounded,
+                        size: 12,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 3),
+                      _DataReadout(
+                        value: widget.task.speedFormatted,
+                        color: statusColor,
+                        isDark: isDark,
+                        size: 11,
                       ),
                       const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          task.fileName,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? AppTheme.textPrimary
-                                    : AppTheme.lightTextPrimary,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                    ],
+                    if (isSeeding || uploadSpeed > 0) ...[
+                      Icon(
+                        Icons.arrow_upward_rounded,
+                        size: 12,
+                        color: violetClr,
+                      ),
+                      const SizedBox(width: 3),
+                      _DataReadout(
+                        value: '${formatBytes(uploadSpeed)}/s',
+                        color: violetClr,
+                        isDark: isDark,
+                        size: 11,
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    _DataReadout(
+                      value: widget.task.progressPercentString,
+                      color: textClr,
+                      isDark: isDark,
+                      size: 12,
+                    ),
+                  ],
+                ),
+                // seeding toggle when completed
+                if (widget.task.status == DownloadStatus.completed) ...[
+                  const SizedBox(height: 10),
+                  Divider(
+                    color: isDark
+                        ? AppTheme.borderSubtle
+                        : AppTheme.lightBorderSubtle,
+                    height: 1,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.cloud_upload_outlined,
+                        size: 14,
+                        color: violetClr,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        isRtl ? 'مشاركة التورنت' : 'Seed this torrent',
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: 11,
+                          weight: FontWeight.w600,
                         ),
+                      ),
+                      const Spacer(),
+                      Switch(
+                        value: widget.task.seedingEnabled,
+                        onChanged: (val) {
+                          triggerHaptic(settings);
+                          provider.updateTaskSeeding(
+                            widget.task.id,
+                            enabled: val,
+                          );
+                        },
+                        activeThumbColor: violetClr,
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: Icon(
-                    Icons.info_outline,
-                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                ],
+                // expandable file list
+                AnimatedCrossFade(
+                  firstChild: const SizedBox(width: double.infinity),
+                  secondChild: _TorrentFileList(
+                    task: widget.task,
+                    isDark: isDark,
                   ),
-                  title: Text(
-                    isRtl ? 'عرض التفاصيل المتقدمة' : 'View Full Details',
-                  ),
-                  subtitle: Text(
-                    isRtl
-                        ? 'معلومات الملف والسرعة والأجزاء'
-                        : 'File stats, threads & headers',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      PremiumPageRoute(
-                        type: PageTransitionType.slideRight,
-                        child: DetailsScreen(taskId: task.id),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.language_rounded,
-                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  ),
-                  title: Text(
-                    isRtl
-                        ? 'فتح في تبويب المتصفح'
-                        : 'Open Source in Browser Tab',
-                  ),
-                  subtitle: Text(
-                    isRtl
-                        ? 'فتح صفحة التنزيل بالمتصفح'
-                        : 'Loads target site in built-in browser',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    final targetUrl = task.downloadPageUrl ?? task.url;
-                    provider.openUrlInBrowser(targetUrl);
-                    provider.setActiveTabIndex(1);
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.link,
-                    color: isDark
-                        ? AppTheme.neonViolet
-                        : AppTheme.lightNeonViolet,
-                  ),
-                  title: Text(
-                    isRtl ? 'تحديث رابط التنزيل' : 'Update Download Link',
-                  ),
-                  subtitle: Text(
-                    isRtl
-                        ? 'استبدال الرابط المنتهي برابط جديد'
-                        : 'Replace expired link to resume download',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _showUpdateUrlDialog(context, task, provider, settings);
-                  },
-                ),
-                ListTile(
-                  leading: Icon(
-                    Icons.copy_rounded,
-                    color: isDark
-                        ? AppTheme.neonGreen
-                        : AppTheme.lightNeonGreen,
-                  ),
-                  title: Text(
-                    isRtl ? 'نسخ رابط التحميل' : 'Copy Download Link',
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Clipboard.setData(ClipboardData(text: task.url));
-                    ThemedSnackbar.show(
-                      context,
-                      message: isRtl
-                          ? 'تم نسخ الرابط'
-                          : 'URL copied to clipboard',
-                      color: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
-                      icon: Icons.check,
-                      isDarkMode: isDark,
-                    );
-                  },
-                ),
-                if (task.status == DownloadStatus.completed)
-                  ListTile(
-                    leading: Icon(
-                      Icons.folder_open_rounded,
-                      color: isDark
-                          ? AppTheme.neonAmber
-                          : AppTheme.lightNeonAmber,
-                    ),
-                    title: Text(
-                      isRtl ? 'فتح الملف أو المجلد' : 'Open File or Folder',
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      openFile(context, task.localFilePath, settings);
-                    },
-                  ),
-                if (task.status == DownloadStatus.downloading ||
-                    task.status == DownloadStatus.paused)
-                  ListTile(
-                    leading: Icon(
-                      task.status == DownloadStatus.downloading
-                          ? Icons.pause_circle_outline
-                          : Icons.play_circle_outline,
-                      color: isDark
-                          ? AppTheme.neonViolet
-                          : AppTheme.lightNeonViolet,
-                    ),
-                    title: Text(
-                      task.status == DownloadStatus.downloading
-                          ? (isRtl ? 'إيقاف مؤقت' : 'Pause Download')
-                          : (isRtl ? 'استئناف التحميل' : 'Resume Download'),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      if (task.status == DownloadStatus.downloading) {
-                        provider.pauseTask(task.id);
-                      } else {
-                        provider.resumeTask(task.id);
-                      }
-                    },
-                  ),
-                if (task.status == DownloadStatus.failed)
-                  ListTile(
-                    leading: Icon(
-                      Icons.refresh_rounded,
-                      color: isDark
-                          ? AppTheme.neonBlue
-                          : AppTheme.lightNeonBlue,
-                    ),
-                    title: Text(isRtl ? 'إعادة المحاولة' : 'Retry Download'),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      provider.retryTask(task.id);
-                    },
-                  ),
-                ListTile(
-                  leading: Icon(
-                    Icons.delete_outline_rounded,
-                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                  ),
-                  title: Text(
-                    isRtl ? 'حذف التنزيل' : 'Delete Task',
-                    style: TextStyle(
-                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                    ),
-                  ),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final deleteFiles = await _showDeleteConfirmationDialog(
-                      context,
-                      task,
-                      settings,
-                    );
-                    if (deleteFiles != null) {
-                      provider.deleteTask(task.id, deleteFiles: deleteFiles);
-                      if (context.mounted) {
-                        ThemedSnackbar.show(
-                          context,
-                          message: isRtl
-                              ? 'تم حذف التنزيل بنجاح'
-                              : 'Download deleted successfully',
-                          color: isDark
-                              ? AppTheme.neonRed
-                              : AppTheme.lightNeonRed,
-                          icon: Icons.delete,
-                          isDarkMode: isDark,
-                        );
-                      }
-                    }
-                  },
+                  crossFadeState: _expanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: AppTheme.motionBase,
+                  firstCurve: AppTheme.motionCurve,
+                  secondCurve: AppTheme.motionCurve,
+                  sizeCurve: AppTheme.motionCurve,
                 ),
               ],
             ),
@@ -980,436 +1106,516 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       },
     );
   }
+}
 
-  void _showUpdateUrlDialog(
-    BuildContext context,
-    DownloadTask task,
-    DownloadProvider provider,
-    SettingsProvider settings,
-  ) {
-    final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
-    final textController = TextEditingController(text: task.url);
+class _PeerChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool isDark;
+  const _PeerChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.isDark,
+  });
 
-    showDialog(
-      context: context,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: AppTheme.dataStyle(isDark: isDark, color: color, size: 9),
           ),
-          title: Row(
-            children: [
-              Icon(
-                Icons.link,
-                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  isRtl ? 'تحديث رابط التنزيل' : 'Update Download Link',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isRtl
-                    ? 'أدخل الرابط الجديد المباشر للتنزيل لاستئناف التحميل:'
-                    : 'Enter the new direct stream / download link to resume:',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: textController,
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
-                  fontSize: 13,
-                ),
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'https://...',
-                  filled: true,
-                  fillColor:
-                      (isDark ? AppTheme.background : AppTheme.lightBackground)
-                          .withValues(alpha: 0.6),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark
-                    ? AppTheme.neonBlue
-                    : AppTheme.lightNeonBlue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () async {
-                final newUrl = textController.text.trim();
-                if (newUrl.isNotEmpty) {
-                  Navigator.pop(dialogCtx);
-                  await provider.updateTaskUrl(task.id, newUrl);
-                  if (context.mounted) {
-                    ThemedSnackbar.show(
-                      context,
-                      message: isRtl
-                          ? 'تم تحديث رابط التنزيل بنجاح'
-                          : 'Download URL updated successfully',
-                      color: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
-                      icon: Icons.check_circle_outline,
-                      isDarkMode: isDark,
-                    );
-                  }
-                }
-              },
-              child: Text(isRtl ? 'حفظ الرابط' : 'Save Link'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
+}
 
-  Future<bool?> _showDeleteConfirmationDialog(
-    BuildContext context,
-    DownloadTask task,
-    SettingsProvider settings,
-  ) {
-    final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
-    bool deleteFiles = false;
+class _TorrentFileList extends StatelessWidget {
+  final DownloadTask task;
+  final bool isDark;
+  const _TorrentFileList({required this.task, required this.isDark});
 
-    return showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Directionality(
-              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-              child: AlertDialog(
-                backgroundColor:
-                    (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                        .withValues(alpha: 0.92),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  side: BorderSide(
-                    color: isDark
-                        ? AppTheme.glassBorder
-                        : AppTheme.lightGlassBorder,
-                    width: 0.8,
-                  ),
+  @override
+  Widget build(BuildContext context) {
+    final files = task.torrentFiles ?? [];
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        children: files.map((f) {
+          final selected = f['selected'] == true;
+          final length = (f['length'] as num?)?.toInt() ?? 0;
+          final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+          final p = length > 0 ? (downloaded / length).clamp(0.0, 1.0) : 0.0;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(
+                  selected
+                      ? Icons.insert_drive_file_rounded
+                      : Icons.block_rounded,
+                  size: 13,
+                  color: selected
+                      ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                      : mutedClr,
                 ),
-                title: Text(
-                  L10n.of(context, 'delete_title'),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isRtl
-                          ? 'هل أنت متأكد من حذف "${task.fileName}" من القائمة؟'
-                          : 'Are you sure you want to remove "${task.fileName}" from the list?',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: isDark
-                            ? AppTheme.textSecondary
-                            : AppTheme.lightTextSecondary,
-                      ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    (f['name'] as String? ?? '').replaceAll('+', ' '),
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 10.5,
+                      weight: selected ? FontWeight.w600 : FontWeight.w400,
                     ),
-                    const SizedBox(height: 16),
-                    Row(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 70,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: Stack(
                       children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: deleteFiles,
-                            activeColor: isDark
-                                ? AppTheme.neonRed
-                                : AppTheme.lightNeonRed,
-                            side: BorderSide(
-                              color: isDark
-                                  ? AppTheme.glassBorder
-                                  : AppTheme.lightGlassBorder,
-                              width: 1.0,
-                            ),
-                            onChanged: (val) {
-                              if (val != null) {
-                                triggerHaptic(settings);
-                                setState(() {
-                                  deleteFiles = val;
-                                });
-                              }
-                            },
+                        Container(
+                          height: 3,
+                          decoration: AppTheme.progressTrack(
+                            isDark: isDark,
+                            radius: 2,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              triggerHaptic(settings);
-                              setState(() {
-                                deleteFiles = !deleteFiles;
-                              });
-                            },
-                            child: Text(
-                              L10n.of(context, 'delete_files_label'),
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: isDark
-                                        ? AppTheme.textPrimary
-                                        : AppTheme.lightTextPrimary,
-                                    fontSize: 12,
-                                  ),
+                        FractionallySizedBox(
+                          widthFactor: p,
+                          child: Container(
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-                actions: [
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      L10n.of(context, 'cancel_btn'),
-                      style: TextStyle(
-                        color: isDark
-                            ? AppTheme.textSecondary
-                            : AppTheme.lightTextSecondary,
-                      ),
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      L10n.of(context, 'delete_btn'),
-                      style: TextStyle(
-                        color: isDark
-                            ? AppTheme.neonRed
-                            : AppTheme.lightNeonRed,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    onPressed: () => Navigator.of(
-                      context,
-                    ).pop({'confirmed': true, 'deleteFiles': deleteFiles}),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    ).then((result) {
-      if (result != null && result['confirmed'] == true) {
-        return result['deleteFiles'] as bool;
-      }
-      return null;
-    });
-  }
-}
-
-class _ProgressBar extends StatelessWidget {
-  final DownloadTask task;
-  final bool compact;
-  final bool isDark;
-  final Color statusColor;
-
-  const _ProgressBar({
-    required this.task,
-    required this.compact,
-    required this.isDark,
-    required this.statusColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isMergedDownload =
-        task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
-    final showSplitBar =
-        !isMergedDownload &&
-        (task.status == DownloadStatus.downloading ||
-            task.status == DownloadStatus.paused) &&
-        task.chunks.isNotEmpty &&
-        task.chunks.length > 1;
-
-    if (showSplitBar) {
-      return Row(
-        children: List.generate(task.chunks.length, (index) {
-          final chunkProgress = task.chunks[index].clamp(0.0, 1.0);
-          return Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(
-                left: index == 0 ? 0.0 : 2.0,
-                right: index == task.chunks.length - 1 ? 0.0 : 2.0,
-              ),
-              child: Stack(
-                children: [
-                  Container(
-                    height: compact ? 4 : 6,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder,
-                      borderRadius: BorderRadius.circular(4),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 52,
+                  child: Text(
+                    formatBytes(length.toDouble()),
+                    textAlign: TextAlign.end,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 9,
+                      color: mutedClr,
                     ),
                   ),
-                  if (chunkProgress > 0)
-                    AnimatedFractionallySizedBox(
-                      widthFactor: chunkProgress,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                      child: Container(
-                        height: compact ? 4 : 6,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          color: statusColor.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
-        }),
-      );
-    }
-
-    return Stack(
-      children: [
-        Container(
-          height: compact ? 4 : 6,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        if (task.progress > 0)
-          FractionallySizedBox(
-            widthFactor: task.progress.clamp(0.0, 1.0),
-            child: Container(
-              height: compact ? 4 : 6,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: statusColor.withValues(alpha: 0.85),
-              ),
-            ),
-          ),
-      ],
+        }).toList(),
+      ),
     );
   }
 }
 
-/// Value-type snapshot used with [Selector] to detect task changes
-/// despite [DownloadTask] using id-based equality.
-class _CardSnapshot {
-  final DownloadTask task;
-
-  const _CardSnapshot({required this.task});
-
-  factory _CardSnapshot.fromTask(DownloadTask t) => _CardSnapshot(task: t);
-
-  DownloadStatus get status => task.status;
-  String get category => task.category;
-  String? get errorMessage => task.errorMessage;
-  double get progress => task.progress;
-  double get audioProgress => task.audioProgress;
-  double get speed => task.speed;
-  int? get eta => task.eta;
-  int get downloadedBytes => task.downloadedBytes;
-  int get fileSize => task.fileSize;
-  bool get isTorrent => task.isTorrent;
-  bool get seedingEnabled => task.seedingEnabled;
+// ═══════════════════════════════════════════════════════════════
+// Playlist group card — groups playlist videos into one card
+// ═══════════════════════════════════════════════════════════════
+class PlaylistGroupCard extends StatefulWidget {
+  final String playlistId;
+  final String title;
+  final List<DownloadTask> items;
+  const PlaylistGroupCard({
+    super.key,
+    required this.playlistId,
+    required this.title,
+    required this.items,
+  });
 
   @override
-  bool operator ==(Object other) =>
-      other is _CardSnapshot &&
-      other.task.id == task.id &&
-      other.status == status &&
-      other.category == category &&
-      other.errorMessage == errorMessage &&
-      other.progress == progress &&
-      other.audioProgress == audioProgress &&
-      other.speed == speed &&
-      other.eta == eta &&
-      other.downloadedBytes == downloadedBytes &&
-      other.fileSize == fileSize &&
-      other.isTorrent == isTorrent &&
-      other.seedingEnabled == seedingEnabled &&
-      _listEquals(other.task.chunks, task.chunks);
+  State<PlaylistGroupCard> createState() => _PlaylistGroupCardState();
+}
 
-  static bool _listEquals(List<double>? a, List<double>? b) {
-    if (identical(a, b)) return true;
-    if (a == null || b == null) return false;
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
+class _PlaylistGroupCardState extends State<PlaylistGroupCard>
+    with HapticHelper {
+  bool _expanded = false;
+
+  int get _completedCount =>
+      widget.items.where((t) => t.status == DownloadStatus.completed).length;
+
+  double get _overallProgress {
+    final total = widget.items.fold<int>(0, (s, t) => s + t.fileSize);
+    if (total <= 0) return 0.0;
+    final done = widget.items.fold<int>(0, (s, t) => s + t.downloadedBytes);
+    return (done / total).clamp(0.0, 1.0);
   }
 
+  bool get _anyDownloading =>
+      widget.items.any((t) => t.status == DownloadStatus.downloading);
+
+  bool get _allDone => _completedCount == widget.items.length;
+
   @override
-  int get hashCode => Object.hash(
-    task.id,
-    status,
-    category,
-    errorMessage,
-    progress,
-    audioProgress,
-    speed,
-    eta,
-    downloadedBytes,
-    fileSize,
-    isTorrent,
-    seedingEnabled,
-  );
+  Widget build(BuildContext context) {
+    final settings = context.read<SettingsProvider>();
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final provider = context.read<DownloadProvider>();
+    final accent = _allDone
+        ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+        : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+
+    return _CardShell(
+      accent: accent,
+      isDark: isDark,
+      onTap: () {
+        triggerHaptic(settings);
+        setState(() => _expanded = !_expanded);
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.15),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.queue_music_rounded,
+                    color: accent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: 14,
+                          weight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: accent.withValues(alpha: 0.3),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              isRtl
+                                  ? 'قائمة تشغيل • ${widget.items.length} فيديو'
+                                  : 'PLAYLIST • ${widget.items.length} VIDEOS',
+                              style: AppTheme.microLabel(
+                                isDark: isDark,
+                                color: accent,
+                                size: 8,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$_completedCount/${widget.items.length}',
+                            style: AppTheme.dataStyle(
+                              isDark: isDark,
+                              size: 11,
+                              color: mutedClr,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // bulk controls
+                if (_anyDownloading)
+                  _ControlButton(
+                    icon: Icons.pause_rounded,
+                    color: isDark
+                        ? AppTheme.neonAmber
+                        : AppTheme.lightNeonAmber,
+                    tooltip: isRtl ? 'إيقاف الكل' : 'Pause all',
+                    onPressed: () {
+                      triggerHaptic(settings);
+                      for (final t in widget.items) {
+                        if (t.status == DownloadStatus.downloading) {
+                          provider.pauseTask(t.id);
+                        }
+                      }
+                    },
+                  )
+                else if (!_allDone)
+                  _ControlButton(
+                    icon: Icons.play_arrow_rounded,
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    filled: true,
+                    tooltip: isRtl ? 'استئناف الكل' : 'Resume all',
+                    onPressed: () {
+                      triggerHaptic(settings);
+                      for (final t in widget.items) {
+                        if (t.status == DownloadStatus.paused ||
+                            t.status == DownloadStatus.queued) {
+                          provider.resumeTask(t.id);
+                        }
+                      }
+                    },
+                  ),
+                const SizedBox(width: 6),
+                AnimatedRotation(
+                  turns: _expanded ? 0.5 : 0,
+                  duration: AppTheme.motionBase,
+                  child: Icon(
+                    Icons.keyboard_arrow_up_rounded,
+                    size: 20,
+                    color: mutedClr,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // aggregate progress
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Stack(
+                children: [
+                  Container(
+                    height: 6,
+                    decoration: AppTheme.progressTrack(isDark: isDark),
+                  ),
+                  AnimatedFractionallySizedBox(
+                    widthFactor: _overallProgress,
+                    duration: const Duration(milliseconds: 400),
+                    curve: AppTheme.motionCurve,
+                    child: Container(
+                      height: 6,
+                      decoration: AppTheme.progressFill(accent),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  '${(_overallProgress * 100).toStringAsFixed(0)}%',
+                  style: AppTheme.dataStyle(
+                    isDark: isDark,
+                    size: 12,
+                    color: textClr,
+                  ),
+                ),
+                const Spacer(),
+                if (_anyDownloading)
+                  Icon(Icons.downloading_rounded, size: 13, color: accent),
+              ],
+            ),
+            // expanded item list
+            AnimatedCrossFade(
+              firstChild: const SizedBox(width: double.infinity),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  children: [
+                    Divider(
+                      color: isDark
+                          ? AppTheme.borderSubtle
+                          : AppTheme.lightBorderSubtle,
+                      height: 1,
+                    ),
+                    const SizedBox(height: 10),
+                    ...widget.items.map(
+                      (t) => _MediaCard(task: t, compact: true),
+                    ),
+                  ],
+                ),
+              ),
+              crossFadeState: _expanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: AppTheme.motionBase,
+              firstCurve: AppTheme.motionCurve,
+              secondCurve: AppTheme.motionCurve,
+              sizeCurve: AppTheme.motionCurve,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Delete confirmation (shared)
+// ═══════════════════════════════════════════════════════════════
+Future<bool?> showDeleteConfirmationDialog(
+  BuildContext context,
+  DownloadTask task,
+  SettingsProvider settings,
+) {
+  final isDark = settings.isDarkMode;
+  final isRtl = L10n.isRtl(context);
+  bool deleteFiles = false;
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (BuildContext context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return Directionality(
+            textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+            child: AlertDialog(
+              backgroundColor:
+                  (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                      .withValues(alpha: 0.95),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: isDark
+                      ? AppTheme.borderStrong
+                      : AppTheme.lightBorderStrong,
+                  width: 0.8,
+                ),
+              ),
+              title: Text(
+                L10n.of(context, 'delete_title'),
+                style: TextStyle(
+                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isRtl
+                        ? 'هل أنت متأكد من حذف "${task.fileName}" من القائمة؟'
+                        : 'Remove "${task.fileName}" from the list?',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: Checkbox(
+                          value: deleteFiles,
+                          activeColor: isDark
+                              ? AppTheme.neonRed
+                              : AppTheme.lightNeonRed,
+                          onChanged: (val) =>
+                              setState(() => deleteFiles = val ?? false),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => deleteFiles = !deleteFiles),
+                          child: Text(
+                            L10n.of(context, 'delete_files_label'),
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppTheme.textPrimary
+                                  : AppTheme.lightTextPrimary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  child: Text(
+                    L10n.of(context, 'cancel_btn'),
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                TextButton(
+                  child: Text(
+                    L10n.of(context, 'delete_btn'),
+                    style: TextStyle(
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pop({'confirmed': true, 'deleteFiles': deleteFiles}),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  ).then((result) {
+    if (result != null && result['confirmed'] == true) {
+      return result['deleteFiles'] as bool;
+    }
+    return null;
+  });
 }

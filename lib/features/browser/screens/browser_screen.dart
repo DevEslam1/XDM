@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -10,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-
 import '../../../core/app_theme.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
@@ -40,7 +38,6 @@ import '../widgets/browser_home_page.dart';
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
-
   @override
   State<BrowserScreen> createState() => _BrowserScreenState();
 }
@@ -48,28 +45,24 @@ class BrowserScreen extends StatefulWidget {
 class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final List<BrowserTab> _tabs = [];
   int _currentTabIndex = 0;
-
   final TextEditingController _urlController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-
   bool _isFocused = false;
   bool _showBars = true;
   double _lastScrollY = 0;
 
-  // Custom JS and CSS Injections
   String _customJs = '';
   String _customCss = '';
 
-  // Sniffer and detected media
-  final Map<String, String> _detectedDownloadUrls = {}; // tab.id -> url
-  final Map<String, List<Map<String, dynamic>>> _detectedMediaSources =
-      {}; // tab.id -> sources
-  final Map<String, int> _detectedPlaylistUrls = {}; // tab.id -> video count
-  final Set<String> _ytDetectionFailed = {}; // tab.url -> yt fetch failed
-
-  DateTime? _lastYoutubeAuthTime;
+  final Map<String, String> _detectedDownloadUrls = {};
+  final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {};
+  final Map<String, int> _detectedPlaylistUrls = {};
+  final Set<String> _ytDetectionFailed = {};
+  // Per-tab YouTube auth cooldown — prevents one tab's auth suppressing others.
+  final Map<String, DateTime> _lastYoutubeAuthTimes = {};
   static const _youtubeAuthCooldown = Duration(seconds: 30);
   final Map<String, Timer> _mediaScanTimers = {};
+
   DownloadProvider? _downloadProvider;
   String? _lastHistoryEntryUrl;
   String? _lastHistoryEntryId;
@@ -78,17 +71,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final ScrollController _dashboardScrollController = ScrollController();
   final List<Timer> _pendingTimers = [];
   Timer? _navDebounce;
+
   static const String _snifferPrefKey = 'browserSnifferEnabled';
   bool _isSnifferEnabled = true;
-  bool _lastZoomEnabled = false; // Cached to avoid redundant enableZoom calls
-  // URL the user was on when they pressed back past the first page (home
-  // fallback). Stored so Forward can restore the page without clobbering the
-  // native WebView history stack.
+  bool _lastZoomEnabled = false;
   String? _homeReturnUrl;
 
   static const String _longPressChannel = 'XDM_LongPress';
-  /// Overrides setTimeout/setInterval to cap delays at 250ms, making
-  /// countdown timers on download sites finish almost instantly.
+
   static const String _kTimerSpeedScript = '''
 (function() {
   if (window.__xdmTimerSpeed) return;
@@ -111,7 +101,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   window.__xdmLongPressBound = true;
   let touchTimer = null;
   let startX = 0, startY = 0;
-
   function isMedia(el) {
     if (!el) return null;
     if (el.tagName === 'A' && el.href) {
@@ -134,13 +123,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
     return null;
   }
-
   function notify(url, type, text) {
     if (window.XDM_LongPress) {
       window.XDM_LongPress.postMessage(JSON.stringify({ url: url, type: type, text: text }));
     }
   }
-
   document.addEventListener('contextmenu', function(e) {
     const target = isMedia(e.target);
     if (target) {
@@ -148,7 +135,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       notify(target.url, target.type, target.text);
     }
   }, true);
-
   document.addEventListener('touchstart', function(e) {
     if (e.touches.length !== 1) return;
     startX = e.touches[0].clientX;
@@ -160,11 +146,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }, 600);
     }
   }, { passive: true });
-
   document.addEventListener('touchend', function() {
     if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
   }, true);
-
   document.addEventListener('touchmove', function(e) {
     if (!touchTimer) return;
     const dx = Math.abs(e.touches[0].clientX - startX);
@@ -177,6 +161,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 })();
 ''';
 
+  // ─────────────────────────────────────────────────────────────
+  // Tab persistence
+  // ─────────────────────────────────────────────────────────────
   Future<void> _saveTabs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -184,32 +171,22 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       int savedIndex = 0;
       int normalTabCount = 0;
       bool currentTabFound = false;
-
       for (int i = 0; i < _tabs.length; i++) {
         final tab = _tabs[i];
         if (tab.isIncognito) continue;
-
         if (i == _currentTabIndex) {
           savedIndex = normalTabCount;
           currentTabFound = true;
         }
-        tabList.add({
-          'url': tab.url,
-          'title': tab.title,
-          'isIncognito': false,
-        });
+        tabList.add({'url': tab.url, 'title': tab.title, 'isIncognito': false});
         normalTabCount++;
       }
-
-      // If current tab was incognito (not found in normal tabs), use last valid index
       if (!currentTabFound && normalTabCount > 0) {
         savedIndex = normalTabCount - 1;
       }
-      // Clamp savedIndex to valid range in case all tabs were incognito
       if (normalTabCount > 0) {
         savedIndex = savedIndex.clamp(0, normalTabCount - 1);
       }
-
       await prefs.setString('persisted_browser_tabs', jsonEncode(tabList));
       await prefs.setInt('persisted_browser_tab_index', savedIndex);
     } catch (e) {
@@ -221,9 +198,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final prefs = await SharedPreferences.getInstance();
     final String? tabsJson = prefs.getString('persisted_browser_tabs');
     final int savedTabIndex = prefs.getInt('persisted_browser_tab_index') ?? 0;
-
-    final fallbackTitle = mounted ? L10n.of(context, 'browser_new_tab') : 'New Tab';
-
+    final fallbackTitle =
+        mounted ? L10n.of(context, 'browser_new_tab') : 'New Tab';
     if (tabsJson != null && tabsJson.isNotEmpty) {
       try {
         final List<dynamic> decoded = jsonDecode(tabsJson);
@@ -232,8 +208,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           if (item is Map<String, dynamic>) {
             final String url = item['url'] as String? ?? 'about:blank';
             final String title = item['title'] as String? ?? fallbackTitle;
-
-            // Validate URL scheme to prevent javascript: or file:// injection
             final uri = Uri.tryParse(url);
             final isSafeScheme = uri == null ||
                 url == 'about:blank' ||
@@ -244,13 +218,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               debugPrint('[Browser] Skipping unsafe restored URL: $url');
               continue;
             }
-
             final tab = _createNewTab(initialUrl: url, isIncognito: false);
             tab.title = title;
             loadedTabs.add(tab);
           }
         }
-
         if (loadedTabs.isNotEmpty) {
           if (mounted) {
             setState(() {
@@ -269,8 +241,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         debugPrint('Error restoring tabs: $e');
       }
     }
-
-    // Fallback: create a new blank tab
     if (mounted) {
       final fallback = _createNewTab();
       setState(() {
@@ -302,14 +272,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     });
     _loadSnifferPref();
     _loadCustomJsCss();
-
     _dashboardScrollController.addListener(_onDashboardScroll);
-
-    // Create the first tab
-    // Restore tabs from previous session; _restoreTabs() creates tabs as needed
     _restoreTabs();
-
-    // Initialize adblock filters on browser launch
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
       AdBlocker.initialize();
@@ -332,13 +296,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       id: id,
       controller: controller,
       url: cleanInitialUrl == 'about:blank' ? '' : cleanInitialUrl,
-      title: cleanInitialUrl == 'about:blank' ? L10n.of(context, 'browser_new_tab') : cleanInitialUrl,
+      title: cleanInitialUrl == 'about:blank'
+          ? L10n.of(context, 'browser_new_tab')
+          : cleanInitialUrl,
       isIncognito: isIncognito,
       isHome: cleanInitialUrl == 'about:blank',
     );
-
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-
     controller
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent)
@@ -368,13 +332,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       ..setUserAgent(
         tab.isIncognito
             ? (settings.desktopMode
-                  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                  : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')
+                ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')
             : (settings.desktopMode
-                  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                  : (settings.customUserAgent.isNotEmpty
-                        ? settings.customUserAgent
-                        : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')),
+                ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                : (settings.customUserAgent.isNotEmpty
+                    ? settings.customUserAgent
+                    : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')),
       )
       ..enableZoom(settings.pinchToZoom)
       ..setNavigationDelegate(
@@ -402,15 +366,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 }
                 _showBars = true;
                 _lastScrollY = 0;
-
-                // Update URL text field if this is the active tab
                 if (_currentTabIndex >= 0 &&
                     _currentTabIndex < _tabs.length &&
                     _tabs[_currentTabIndex].id == tab.id) {
                   _urlController.text = tab.url;
                 }
-
-                // Clear stale detected download and media links from previous page
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedPlaylistUrls.remove(tab.id);
                 _detectedMediaSources.remove(tab.id);
@@ -423,8 +383,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _updateNavState();
-            // Re-check after 500 ms and 1200 ms: back/forward navigations need
-            // extra time for the WebView history stack to settle.
             _delayed(const Duration(milliseconds: 500), _updateNavState);
             _delayed(const Duration(milliseconds: 1200), _updateNavState);
           },
@@ -435,13 +393,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedMediaSources.remove(tab.id);
               });
-
               tab.controller.getTitle().then((t) {
                 if (t != null && t.isNotEmpty && mounted) {
                   setState(() {
                     tab.title = t;
                   });
-
                   if (!tab.isIncognito &&
                       !settings.incognitoEnabled &&
                       settings.saveBrowserHistory) {
@@ -450,70 +406,54 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 }
               });
             }
-
-            // Inject CSS + JS on Google sign-in pages to ensure the
-            // form/Next button is not hidden behind the on-screen keyboard.
             if (url.contains('accounts.google.com') ||
                 url.contains('google.com/ServiceLogin') ||
                 url.contains('google.com/accounts')) {
               tab.controller.runJavaScript('''
-                (function() {
-                  // Add generous bottom padding so the page can scroll
-                  // past the area the keyboard will cover.
-                  var style = document.createElement('style');
-                  style.textContent = 'body, html { padding-bottom: 350px !important; }';
-                  document.head.appendChild(style);
-
-                  // When any input/button gets focus, scroll it into view
-                  // after a short delay (keyboard animation takes ~250ms).
-                  document.addEventListener('focusin', function(e) {
-                    if (e.target && e.target.scrollIntoView) {
-                      setTimeout(function() {
-                        e.target.scrollIntoView({behavior:'smooth', block:'center'});
-                      }, 350);
-                    }
-                  });
-
-                  // Also watch for the visual viewport resize (keyboard
-                  // opening) and re-scroll the active element into view.
-                  if (window.visualViewport) {
-                    window.visualViewport.addEventListener('resize', function() {
-                      var el = document.activeElement;
-                      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
-                        setTimeout(function() {
-                          el.scrollIntoView({behavior:'smooth', block:'center'});
-                        }, 100);
-                      }
-                    });
-                  }
-                })();
-              ''');
+(function() {
+  var style = document.createElement('style');
+  style.textContent = 'body, html { padding-bottom: 350px !important; }';
+  document.head.appendChild(style);
+  document.addEventListener('focusin', function(e) {
+    if (e.target && e.target.scrollIntoView) {
+      setTimeout(function() {
+        e.target.scrollIntoView({behavior:'smooth', block:'center'});
+      }, 350);
+    }
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', function() {
+      var el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+        setTimeout(function() {
+          el.scrollIntoView({behavior:'smooth', block:'center'});
+        }, 100);
+      }
+    });
+  }
+})();
+''');
             }
-
-
             if (!tab.isIncognito && !settings.incognitoEnabled) {
               final isYoutubeDomain = url.contains('youtube.com') ||
                   url.contains('accounts.google.com') ||
                   url.contains('google.com');
               if (isYoutubeDomain) {
                 final now = DateTime.now();
-                // Short cooldown (30s) so sign-in retries work quickly
-                if (_lastYoutubeAuthTime == null ||
-                    now.difference(_lastYoutubeAuthTime!) >
-                        _youtubeAuthCooldown) {
-                  _lastYoutubeAuthTime = now;
+                final lastAuth = _lastYoutubeAuthTimes[tab.id];
+                if (lastAuth == null ||
+                    now.difference(lastAuth) > _youtubeAuthCooldown) {
+                  _lastYoutubeAuthTimes[tab.id] = now;
                   YoutubeService.authenticateFromBrowser();
                 }
               }
             }
-
             _updateNavState();
             _delayed(const Duration(milliseconds: 500), _updateNavState);
             _delayed(const Duration(milliseconds: 1200), _updateNavState);
-
-            // Trigger background DOM media scanner
             _mediaScanTimers[tab.id]?.cancel();
-            _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
+            _mediaScanTimers[tab.id] =
+                Timer(const Duration(milliseconds: 1500), () {
               _scanPageMedia(tab);
             });
           },
@@ -535,19 +475,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     _urlController.text = tab.url;
                   }
                 });
-
-                // Clear cached download/playlist tags on dynamic navigation
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedPlaylistUrls.remove(tab.id);
                 _detectedMediaSources.remove(tab.id);
                 _ytDetectionFailed.remove(tab.url);
-
-                // Re-scan media for SPA pages (YouTube, etc.)
                 _mediaScanTimers[tab.id]?.cancel();
-                _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
+                _mediaScanTimers[tab.id] =
+                    Timer(const Duration(milliseconds: 1500), () {
                   _scanPageMedia(tab);
                 });
-
                 _delayed(const Duration(milliseconds: 1000), () {
                   if (mounted) {
                     tab.controller.getTitle().then((t) {
@@ -559,7 +495,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     });
                   }
                 });
-
                 _updateNavState();
                 _delayed(const Duration(milliseconds: 500), _updateNavState);
                 _delayed(const Duration(milliseconds: 1200), _updateNavState);
@@ -602,7 +537,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         }
       });
     }
-
     return tab;
   }
 
@@ -611,9 +545,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final clean = _cleanUrl(url);
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.incognitoEnabled) return;
-
     final now = DateTime.now();
-
     if (clean == _lastHistoryEntryUrl) {
       if (title != null && title.isNotEmpty && title != clean) {
         if (_lastHistoryEntryId != null) {
@@ -621,7 +553,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             final db = Provider.of<DatabaseService>(context, listen: false);
             db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
           } catch (e) {
-            // Fails silently if DB is busy/uninitialized, which is safe to ignore for best-effort title updating.
             debugPrint('[DMX Browser] Failed to update browser history title: $e');
           }
         } else {
@@ -630,11 +561,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }
       return;
     }
-
     _lastHistoryEntryUrl = clean;
     _lastHistoryEntryId = null;
     _pendingTitleUpdate = title;
-
     try {
       final db = Provider.of<DatabaseService>(context, listen: false);
       db
@@ -659,8 +588,38 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
   }
 
+  // Domains where injecting the timer-speed and long-press scripts is safe.
+  // Restricting to media-heavy sites prevents breaking banking, auth, and
+  // WebSocket-heavy apps that rely on accurate timer intervals.
+  static const _kMediaDomains = [
+    'youtube.com',
+    'youtu.be',
+    'vimeo.com',
+    'dailymotion.com',
+    'twitch.tv',
+    'bilibili.com',
+    'tiktok.com',
+    'instagram.com',
+    'facebook.com',
+    'twitter.com',
+    'x.com',
+    'reddit.com',
+    'streamable.com',
+    'rumble.com',
+    'odysee.com',
+    'peertube',
+  ];
+
+  bool _isMediaDomain(String url) {
+    final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
+    return _kMediaDomains.any((d) => host.contains(d));
+  }
+
   Future<void> _injectTimerSpeedScript(BrowserTab tab) async {
     if (!mounted) return;
+    // Only inject on known media-heavy domains to avoid breaking timers on
+    // banking, WebSocket, and session-management pages.
+    if (!_isMediaDomain(tab.url)) return;
     try {
       await tab.controller.runJavaScript(_kTimerSpeedScript);
     } catch (e) {
@@ -670,10 +629,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   Future<void> _injectLongPressScriptToTab(BrowserTab tab) async {
     if (!mounted) return;
+    // Only override contextmenu on known media sites — prevents breaking
+    // right-click / context menus on banking and productivity pages.
+    if (!_isMediaDomain(tab.url)) return;
     try {
       await tab.controller.runJavaScript(_kLongPressScript);
     } catch (e) {
-      // WebView controller might not be fully initialized or page already closed
       debugPrint('[DMX Browser] Failed to inject long press script: $e');
     }
   }
@@ -688,6 +649,19 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         debugPrint('AdBlocker script injection failed: $e');
       }
     }
+  }
+
+  /// Removes all per-tab state when a tab is closed or navigated away.
+  /// Call this from every tab-close path to prevent unbounded map growth.
+  void _cleanupTabState(String tabId) {
+    _mediaScanTimers[tabId]?.cancel();
+    _mediaScanTimers.remove(tabId);
+    _detectedDownloadUrls.remove(tabId);
+    _detectedMediaSources.remove(tabId);
+    _detectedPlaylistUrls.remove(tabId);
+    _lastYoutubeAuthTimes.remove(tabId);
+    // _ytDetectionFailed is keyed by URL (not tabId), so we don't remove here;
+    // it has its own size-capped eviction at 100 entries (_scanPageMedia).
   }
 
   void _handleLongPressMessageForTab(
@@ -730,7 +704,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }
       _lastScrollY = y;
     } else if (y - _lastScrollY > 40) {
-      // URL bar stays visible; only hide bottom navbar on scroll down
       if (_showBars) {
         downloadProvider.setNavbarVisible(false);
       }
@@ -758,12 +731,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         tab.controller.clearCache();
         tab.controller.clearLocalStorage();
       } catch (e) {
-        // Safe to ignore if controller is already disposed or uninitialized
+        // ignore
       }
       try {
         tab.progressNotifier.dispose();
       } catch (e) {
-        // Safe to ignore if notifier is already disposed
+        // ignore
       }
     }
     _tabs.clear();
@@ -837,26 +810,17 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || _tabs.isEmpty) return;
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
-
-    // Skip native state sync when in virtual home state (set by _goBack fallback)
     if (activeTab.isHome && _homeReturnUrl != null) return;
-
     try {
       final canBack = await activeTab.controller.canGoBack();
       final canForward = await activeTab.controller.canGoForward();
       final currentUrl = await activeTab.controller.currentUrl();
-
       if (mounted) {
         setState(() {
           if (currentUrl != null && currentUrl.isNotEmpty) {
             final clean = _cleanUrl(currentUrl);
-            // Only update url/isHome when NOT in the virtual home state.
-            // When isHome was set by _goBack()'s fallback (without loading
-            // about:blank), currentUrl still returns the last real page URL.
-            // We must NOT overwrite isHome=true in that case.
             final isBlank = clean == 'about:blank' || clean.isEmpty;
             if (!activeTab.isHome || isBlank) {
-              // Normal case: sync url and isHome from the actual WebView URL.
               activeTab.url = clean;
               activeTab.isHome = isBlank;
               if (_tabs[_currentTabIndex].id == activeTab.id) {
@@ -864,11 +828,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               }
             }
             if (activeTab.isHome) {
-              // On the home screen the native back must stay disabled so that
-              // pressing Back doesn't re-enter old pages shown as "forward".
-              // Forward is allowed: _homeReturnUrl tracks where to go.
               activeTab.canGoBack = false;
-              activeTab.canGoForward = _homeReturnUrl != null && _homeReturnUrl!.isNotEmpty;
+              activeTab.canGoForward =
+                  _homeReturnUrl != null && _homeReturnUrl!.isNotEmpty;
             } else {
               activeTab.canGoBack = canBack;
               activeTab.canGoForward = canForward;
@@ -882,51 +844,48 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         });
       }
     } catch (e) {
-      // Normal if webview controller is not attached yet during navigation/load
+      // ignore
     }
   }
 
   Future<void> _goBack() async {
-    if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+    if (_tabs.isEmpty ||
+        _currentTabIndex < 0 ||
+        _currentTabIndex >= _tabs.length) {
+      return;
+    }
     final activeTab = _tabs[_currentTabIndex];
-    // Trust the cached canGoBack state (set by _updateNavState) to avoid a
-    // redundant async round-trip that can race with an in-progress page load.
     if (activeTab.canGoBack) {
-      _homeReturnUrl = null; // Entering real WebView history — clear home return
+      _homeReturnUrl = null;
       await activeTab.controller.goBack();
-      // Give the WebView enough time to commit the history navigation before
-      // we query canGoBack/canGoForward again (150 ms was too short).
       await Future.delayed(const Duration(milliseconds: 400));
       if (!mounted) return;
       await _updateNavState();
     } else if (!activeTab.isHome && activeTab.url.isNotEmpty) {
-      // Show the home screen WITHOUT loading about:blank into the WebView.
-      // Loading about:blank would push a new entry onto the history stack and
-      // destroy the forward stack. Instead, we just flip the Flutter state and
-      // remember the current URL so Forward can restore the page later.
       if (mounted) {
-        _homeReturnUrl = activeTab.url; // remember where we came from
+        _homeReturnUrl = activeTab.url;
         setState(() {
           activeTab.isHome = true;
           activeTab.url = '';
           activeTab.canGoBack = false;
-          // Forward stays enabled so the user can return to the last page.
           activeTab.canGoForward = true;
           _urlController.clear();
         });
-        // No loadRequest here — the WebView history is left intact.
       }
     }
   }
 
   Future<void> _goForward() async {
-    if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+    if (_tabs.isEmpty ||
+        _currentTabIndex < 0 ||
+        _currentTabIndex >= _tabs.length) {
+      return;
+    }
     final activeTab = _tabs[_currentTabIndex];
     if (!activeTab.canGoForward) return;
-
-    if (activeTab.isHome && _homeReturnUrl != null && _homeReturnUrl!.isNotEmpty) {
-      // We're on the virtual home screen (no about:blank was loaded).
-      // Restore the last page by navigating to it directly.
+    if (activeTab.isHome &&
+        _homeReturnUrl != null &&
+        _homeReturnUrl!.isNotEmpty) {
       final returnUrl = _homeReturnUrl!;
       _homeReturnUrl = null;
       if (mounted) {
@@ -937,10 +896,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       _navigateToUrl(returnUrl);
       return;
     }
-
-    // Normal forward navigation in the WebView history stack.
     await activeTab.controller.goForward();
-    // Give the WebView enough time to commit the history navigation.
     await Future.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
     await _updateNavState();
@@ -949,7 +905,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   void _navigateToUrl(String input) {
     var url = input.trim();
     if (url.isEmpty) return;
-
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final engine = settings.searchEngine;
     String searchPrefix = 'https://google.com/search?q=';
@@ -960,7 +915,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     } else if (engine == 'Yahoo') {
       searchPrefix = 'https://search.yahoo.com/search?p=';
     }
-
     final lowerUrl = url.toLowerCase();
     if (lowerUrl.startsWith('http://') ||
         lowerUrl.startsWith('https://') ||
@@ -972,7 +926,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     } else {
       url = 'https://$url';
     }
-
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
     setState(() {
@@ -987,9 +940,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme) return url;
     var clean = uri.toString();
-    // Remove trailing slash for any path, not just root, to ensure
-    // consistent history deduplication (https://example.com/path/ ->
-    // https://example.com/path).
     if (clean.endsWith('/') && clean.length > uri.scheme.length + 3) {
       clean = clean.substring(0, clean.length - 1);
     }
@@ -1004,11 +954,21 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   ) {
     return PopupMenuItem<String>(
       value: value,
+      height: 44,
       child: Row(
         children: [
           Icon(icon, size: 16, color: textClr),
           const SizedBox(width: 12),
-          Text(label, style: TextStyle(color: textClr, fontSize: 12)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: textClr,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1018,7 +978,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final settings = context.read<SettingsProvider>();
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
-
     switch (value) {
       case 'show_bookmarks':
         _openBookmarks();
@@ -1039,7 +998,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           await db.saveBookmark(
             Bookmark(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
-              title: activeTab.title.isNotEmpty ? activeTab.title : currentUrl,
+              title: activeTab.title.isNotEmpty
+                  ? activeTab.title
+                  : currentUrl,
               url: currentUrl,
               createdAt: DateTime.now(),
             ),
@@ -1048,7 +1009,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             ThemedSnackbar.show(
               context,
               message: L10n.of(context, 'browser_bookmark_saved'),
-              color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              color: settings.isDarkMode
+                  ? AppTheme.neonBlue
+                  : AppTheme.lightNeonBlue,
               icon: Icons.bookmark_added,
               isDarkMode: settings.isDarkMode,
             );
@@ -1065,7 +1028,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             ThemedSnackbar.show(
               context,
               message: L10n.of(context, 'browser_url_copied'),
-              color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              color: settings.isDarkMode
+                  ? AppTheme.neonBlue
+                  : AppTheme.lightNeonBlue,
               icon: Icons.copy,
               isDarkMode: settings.isDarkMode,
             );
@@ -1075,7 +1040,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       case 'share':
         final url = _urlController.text.trim();
         if (url.isNotEmpty) {
-          await SharePlus.instance.share(ShareParams(text: url, subject: activeTab.title));
+          await SharePlus.instance.share(
+            ShareParams(text: url, subject: activeTab.title),
+          );
         }
         break;
       case 'desktop':
@@ -1086,18 +1053,21 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             message: settings.desktopMode
                 ? L10n.of(context, 'browser_desktop_mode_reload')
                 : L10n.of(context, 'browser_mobile_mode_reload'),
-            color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            color: settings.isDarkMode
+                ? AppTheme.neonBlue
+                : AppTheme.lightNeonBlue,
             icon: Icons.desktop_windows,
             isDarkMode: settings.isDarkMode,
           );
-
           for (final t in _tabs) {
             await t.controller.setUserAgent(
               settings.desktopMode
                   ? 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
                   : (t.isIncognito
                         ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-                        : (settings.customUserAgent.isNotEmpty ? settings.customUserAgent : null)),
+                        : (settings.customUserAgent.isNotEmpty
+                              ? settings.customUserAgent
+                              : null)),
             );
             if (!t.isHome) {
               await t.controller.reload();
@@ -1113,8 +1083,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             message: settings.adBlockerEnabled
                 ? L10n.of(context, 'browser_ad_blocker_on')
                 : L10n.of(context, 'browser_ad_blocker_off'),
-            color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-            icon: settings.adBlockerEnabled ? Icons.check_circle_outline : Icons.block,
+            color: settings.isDarkMode
+                ? AppTheme.neonGreen
+                : AppTheme.lightNeonGreen,
+            icon: settings.adBlockerEnabled
+                ? Icons.check_circle_outline
+                : Icons.block,
             isDarkMode: settings.isDarkMode,
           );
         }
@@ -1127,8 +1101,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             message: _isSnifferEnabled
                 ? L10n.of(context, 'browser_media_detector_on')
                 : L10n.of(context, 'browser_media_detector_off'),
-            color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-            icon: _isSnifferEnabled ? Icons.check_circle_outline : Icons.block,
+            color: settings.isDarkMode
+                ? AppTheme.neonGreen
+                : AppTheme.lightNeonGreen,
+            icon: _isSnifferEnabled
+                ? Icons.check_circle_outline
+                : Icons.block,
             isDarkMode: settings.isDarkMode,
           );
         }
@@ -1141,12 +1119,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             message: settings.incognitoEnabled
                 ? L10n.of(context, 'browser_incognito_on')
                 : L10n.of(context, 'browser_incognito_off'),
-            color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            color: settings.isDarkMode
+                ? AppTheme.neonBlue
+                : AppTheme.lightNeonBlue,
             icon: Icons.security,
             isDarkMode: settings.isDarkMode,
           );
           if (settings.incognitoEnabled) {
-            // Clear current tabs cookies, cache, local storage
             final cookieManager = WebViewCookieManager();
             await cookieManager.clearCookies();
             for (final t in _tabs) {
@@ -1168,21 +1147,32 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   void _showLongPressSheet(BuildContext context, String url, String type) {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
-    final hasMultipleQualities = _detectedMediaSources[activeTab.id]?.isNotEmpty ?? false;
+    final hasMultipleQualities =
+        _detectedMediaSources[activeTab.id]?.isNotEmpty ?? false;
     BrowserDownloadSheet.show(
       context,
       url,
       type: type,
       downloadPageUrl: activeTab.isHome ? null : activeTab.url,
-      onQuality: hasMultipleQualities ? () => _showQualityPicker(activeTab.id, fallbackUrl: url) : null,
+      onQuality: hasMultipleQualities
+          ? () => _showQualityPicker(activeTab.id, fallbackUrl: url)
+          : null,
     );
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // INTERCEPTION SHEET — targeting-reticle design
+  // ─────────────────────────────────────────────────────────────
   void _showInterceptionSheet(BuildContext context, String downloadUrl) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     triggerHaptic(settings);
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final detected = BrowserDetector.detect(downloadUrl);
+    final kindLabel = detected == null
+        ? 'FILE'
+        : detected.kind.name.toUpperCase();
 
     showModalBottomSheet(
       context: context,
@@ -1194,35 +1184,25 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         return Directionality(
           textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
           child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(28),
+            ),
             child: DmxBackdropFilter(
               sigmaX: 15,
               sigmaY: 15,
               child: Container(
                 decoration: BoxDecoration(
-                  color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                      .withValues(alpha: 0.85),
+                  color: (isDark
+                          ? AppTheme.surface
+                          : AppTheme.lightSurface)
+                      .withValues(alpha: 0.88),
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(28),
                   ),
                   border: Border(
                     top: BorderSide(
-                      color: isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder,
-                      width: 0.8,
-                    ),
-                    left: BorderSide(
-                      color: isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder,
-                      width: 0.8,
-                    ),
-                    right: BorderSide(
-                      color: isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder,
-                      width: 0.8,
+                      color: accent.withValues(alpha: 0.4),
+                      width: 1.2,
                     ),
                   ),
                 ),
@@ -1239,92 +1219,119 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             height: 4,
                             margin: const EdgeInsets.only(bottom: 20),
                             decoration: BoxDecoration(
-                              color:
-                                  (isDark
-                                          ? AppTheme.textMuted
-                                          : AppTheme.lightTextMuted)
-                                      .withValues(alpha: 0.4),
+                              color: accent.withValues(alpha: 0.5),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
                         ),
+                        // Header with pulsing radar icon
                         Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color:
-                                    (isDark
-                                            ? AppTheme.neonBlue
-                                            : AppTheme.lightNeonBlue)
-                                        .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Icon(
-                                Icons.download_for_offline_outlined,
-                                color: isDark
-                                    ? AppTheme.neonBlue
-                                    : AppTheme.lightNeonBlue,
-                                size: 22,
-                              ),
+                            _PulsingIconBadge(
+                              icon: Icons.radar_rounded,
+                              color: accent,
+                              isDark: isDark,
                             ),
-                            const SizedBox(width: 12),
-                            Text(
-                              isRtl
-                                  ? L10n.of(context, 'browser_intercepted_signal')
-                                  : L10n.of(context, 'browser_intercepted_signal'),
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color: isDark
-                                        ? AppTheme.neonBlue
-                                        : AppTheme.lightNeonBlue,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    L10n.of(
+                                      context,
+                                      'browser_intercepted_signal',
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          color: accent,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.3,
+                                          fontSize: 14,
+                                        ),
                                   ),
+                                  const SizedBox(height: 3),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 7,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: accent.withValues(
+                                            alpha: 0.12,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                        ),
+                                        child: Text(
+                                          kindLabel,
+                                          style: TextStyle(
+                                            color: accent,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.3,
+                                            fontFamily: 'Space Grotesk',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        isRtl
+                                            ? 'إشارة قابلة للتنزيل'
+                                            : 'Downloadable stream',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.textMuted
+                                              : AppTheme.lightTextMuted,
+                                          fontSize: 12,
+                                          letterSpacing: 0.3,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          isRtl
-                              ? L10n.of(context, 'browser_xdm_scanner')
-                              : L10n.of(context, 'browser_xdm_scanner'),
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: isDark
-                                    ? AppTheme.textSecondary
-                                    : AppTheme.lightTextSecondary,
-                              ),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color:
-                                (isDark
-                                        ? AppTheme.background
-                                        : AppTheme.lightBackground)
-                                    .withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isDark
-                                  ? AppTheme.glassBorder
-                                  : AppTheme.lightGlassBorder,
-                              width: 0.8,
+                        const SizedBox(height: 18),
+                        // URL readout with corner brackets
+                        _CornerBracketBox(
+                          color: accent,
+                          isDark: isDark,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.link_rounded,
+                                  size: 14,
+                                  color: accent.withValues(alpha: 0.7),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    downloadUrl,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? AppTheme.textPrimary
+                                          : AppTheme.lightTextPrimary,
+                                      fontSize: 11,
+                                      fontFamily: 'monospace',
+                                      height: 1.5,
+                                    ),
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          child: Text(
-                            downloadUrl,
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppTheme.textPrimary
-                                  : AppTheme.lightTextPrimary,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -1342,7 +1349,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                       ? AppTheme.textSecondary
                                       : AppTheme.lightTextSecondary,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(24),
+                                    borderRadius: BorderRadius.circular(14),
                                   ),
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 14,
@@ -1350,8 +1357,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                 ),
                                 onPressed: () {
                                   Navigator.pop(context);
-                                  if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
-                                    final activeTab = _tabs[_currentTabIndex];
+                                  if (_currentTabIndex >= 0 &&
+                                      _currentTabIndex < _tabs.length) {
+                                    final activeTab =
+                                        _tabs[_currentTabIndex];
                                     _bypassedSniffUrls.add(downloadUrl);
                                     activeTab.controller.loadRequest(
                                       Uri.parse(downloadUrl),
@@ -1359,7 +1368,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   }
                                 },
                                 child: Text(
-                                  isRtl ? L10n.of(context, 'browser_continue_browsing') : L10n.of(context, 'browser_continue_browsing'),
+                                  L10n.of(
+                                    context,
+                                    'browser_continue_browsing',
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1367,14 +1383,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                             Expanded(
                               child: NeonGlowButton(
                                 isFilled: true,
-                                color: isDark
-                                    ? AppTheme.neonBlue
-                                    : AppTheme.lightNeonBlue,
+                                color: accent,
                                 onPressed: () {
                                   Navigator.pop(context);
                                   _startDirectDownload(downloadUrl);
                                 },
-                                text: isRtl ? L10n.of(context, 'browser_download_btn') : L10n.of(context, 'browser_download_btn'),
+                                text: L10n.of(
+                                  context,
+                                  'browser_download_btn',
+                                ),
+                                icon: Icons.download_rounded,
                               ),
                             ),
                           ],
@@ -1393,11 +1411,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   // DOM Page Media Scanner
   Future<void> _scanPageMedia(BrowserTab tab) async {
-    if (!mounted || !_tabs.contains(tab) || tab.isHome || !_isSnifferEnabled) return;
-
+    if (!mounted ||
+        !_tabs.contains(tab) ||
+        tab.isHome ||
+        !_isSnifferEnabled) {
+      return;
+    }
     final scannedUrl = tab.url;
-
-    // Clean up stale media sources from removed tabs
     final activeIds = _tabs.map((t) => t.id).toSet();
     final staleKeys = _detectedMediaSources.keys
         .where((key) => !activeIds.contains(key))
@@ -1405,8 +1425,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     for (final key in staleKeys) {
       _detectedMediaSources.remove(key);
     }
-
-    // YouTube Playlist detection — do this first before single video
     if (YoutubeService.isPlaylistUrl(scannedUrl)) {
       try {
         final info = await YoutubeService.getPlaylistInfo(scannedUrl);
@@ -1414,19 +1432,18 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           final count = info['videoCount'] as int? ?? 0;
           setState(() {
             _detectedPlaylistUrls[tab.id] = count;
-            // Also set a download URL so the FAB shows
             _detectedDownloadUrls[tab.id] = scannedUrl;
           });
         }
       } catch (e) {
         debugPrint('YouTube playlist scan error: $e');
       }
-      // If it also has a video ID (e.g. watch?v=xxx&list=yyy),
-      // still try to fetch the single video streams too
       if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
           final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
-          if (youtubeStreams.isNotEmpty && mounted && tab.url == scannedUrl) {
+          if (youtubeStreams.isNotEmpty &&
+              mounted &&
+              tab.url == scannedUrl) {
             setState(() {
               _detectedMediaSources[tab.id] = youtubeStreams;
             });
@@ -1437,8 +1454,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }
       return;
     }
-
-    // Direct YouTube single video streams capture
     if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
       try {
         final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
@@ -1450,7 +1465,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               _detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
             }
           });
-          return; // Skip normal DOM scanning since we retrieved streams via YouTube API
+          return;
         }
       } catch (e) {
         debugPrint('YouTube stream detection error: $e');
@@ -1464,71 +1479,61 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         });
       }
     }
-
     try {
       final result = await tab.controller.runJavaScriptReturningResult('''
-        (function() {
-          var sources = [];
-          var videos = document.getElementsByTagName('video');
-          for (var i = 0; i < videos.length; i++) {
-            var v = videos[i];
-            if (v.src && v.src.trim() !== '' && !v.src.startsWith('blob:')) {
-              sources.push({ src: v.src, label: 'Video Stream (Default)' });
-            }
-            var childSources = v.getElementsByTagName('source');
-            for (var j = 0; j < childSources.length; j++) {
-              var s = childSources[j];
-              if (s.src && s.src.trim() !== '' && !s.src.startsWith('blob:')) {
-                var label = s.getAttribute('label') || s.getAttribute('res') || s.getAttribute('type') || ('Resolution ' + (j + 1));
-                sources.push({ src: s.src, label: label });
-              }
-            }
-            
-            // Scan for poster images
-            var poster = v.getAttribute('poster');
-            if (poster && poster.trim() !== '') {
-              sources.push({ src: poster, label: 'Video Poster Image' });
-            }
-          }
-          var audios = document.getElementsByTagName('audio');
-          for (var i = 0; i < audios.length; i++) {
-            var a = audios[i];
-            if (a.src && a.src.trim() !== '' && !a.src.startsWith('blob:')) {
-              sources.push({ src: a.src, label: 'Audio Stream' });
-            }
-          }
-          
-          // Scan for lazy-loaded video sources
-          var lazyVideos = document.querySelectorAll('[data-src],[data-video-src]');
-          for (var i = 0; i < lazyVideos.length; i++) {
-            var src = lazyVideos[i].getAttribute('data-src') || lazyVideos[i].getAttribute('data-video-src');
-            if (src && src.trim() !== '' && !src.startsWith('blob:') && (src.includes('.mp4') || src.includes('.webm') || src.includes('.m3u8'))) {
-              sources.push({ src: src, label: 'Lazy-Loaded Video' });
-            }
-          }
-          
-          // Scan for iframe embedded videos
-          var iframes = document.getElementsByTagName('iframe');
-          for (var i = 0; i < iframes.length; i++) {
-            var src = iframes[i].src;
-            if (src && src.trim() !== '') {
-              if (src.includes('youtube.com/embed/') || src.includes('player.vimeo.com/video/') || src.includes('.mp4') || src.includes('.m3u8')) {
-                sources.push({ src: src, label: 'Embedded Video' });
-              }
-            }
-          }
-          
-          return JSON.stringify(sources);
-        })();
-      ''');
-
+(function() {
+  var sources = [];
+  var videos = document.getElementsByTagName('video');
+  for (var i = 0; i < videos.length; i++) {
+    var v = videos[i];
+    if (v.src && v.src.trim() !== '' && !v.src.startsWith('blob:')) {
+      sources.push({ src: v.src, label: 'Video Stream (Default)' });
+    }
+    var childSources = v.getElementsByTagName('source');
+    for (var j = 0; j < childSources.length; j++) {
+      var s = childSources[j];
+      if (s.src && s.src.trim() !== '' && !s.src.startsWith('blob:')) {
+        var label = s.getAttribute('label') || s.getAttribute('res') || s.getAttribute('type') || ('Resolution ' + (j + 1));
+        sources.push({ src: s.src, label: label });
+      }
+    }
+    var poster = v.getAttribute('poster');
+    if (poster && poster.trim() !== '') {
+      sources.push({ src: poster, label: 'Video Poster Image' });
+    }
+  }
+  var audios = document.getElementsByTagName('audio');
+  for (var i = 0; i < audios.length; i++) {
+    var a = audios[i];
+    if (a.src && a.src.trim() !== '' && !a.src.startsWith('blob:')) {
+      sources.push({ src: a.src, label: 'Audio Stream' });
+    }
+  }
+  var lazyVideos = document.querySelectorAll('[data-src],[data-video-src]');
+  for (var i = 0; i < lazyVideos.length; i++) {
+    var src = lazyVideos[i].getAttribute('data-src') || lazyVideos[i].getAttribute('data-video-src');
+    if (src && src.trim() !== '' && !src.startsWith('blob:') && (src.includes('.mp4') || src.includes('.webm') || src.includes('.m3u8'))) {
+      sources.push({ src: src, label: 'Lazy-Loaded Video' });
+    }
+  }
+  var iframes = document.getElementsByTagName('iframe');
+  for (var i = 0; i < iframes.length; i++) {
+    var src = iframes[i].src;
+    if (src && src.trim() !== '') {
+      if (src.includes('youtube.com/embed/') || src.includes('player.vimeo.com/video/') || src.includes('.mp4') || src.includes('.m3u8')) {
+        sources.push({ src: src, label: 'Embedded Video' });
+      }
+    }
+  }
+  return JSON.stringify(sources);
+})();
+''');
       if (result is String && result.isNotEmpty && result != 'null') {
         var cleanResult = result;
         if (cleanResult.startsWith('"') && cleanResult.endsWith('"')) {
           try {
             cleanResult = jsonDecode(cleanResult);
           } catch (_) {
-            // Expected fallback if result is a raw quoted string rather than a JSON structure
             if (cleanResult.length > 2) {
               cleanResult = cleanResult.substring(1, cleanResult.length - 1);
             }
@@ -1554,18 +1559,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         }
       }
     } catch (e) {
-      // Occurs if the page is currently redirecting or WebView is not fully ready
       debugPrint('[DMX Browser] Failed to run media scan JavaScript: $e');
     }
   }
 
-  // Show dialog to choose quality
   void _showQualityPicker(String tabId, {String? fallbackUrl}) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final detectedSources = _detectedMediaSources[tabId] ?? [];
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1607,29 +1609,39 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           height: 4,
                           margin: const EdgeInsets.only(bottom: 20),
                           decoration: BoxDecoration(
-                            color:
-                                (isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted)
-                                    .withValues(alpha: 0.4),
+                            color: (isDark
+                                    ? AppTheme.textMuted
+                                    : AppTheme.lightTextMuted)
+                                .withValues(alpha: 0.4),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
-                      Text(
-                        L10n.of(context, 'browser_select_video_quality'),
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: accent,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.tune_rounded,
+                            color: accent,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            L10n.of(context, 'browser_select_video_quality'),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: accent,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.0,
+                                  fontSize: 14,
+                                ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       if (detectedSources.isNotEmpty) ...[
                         ...detectedSources.map((src) {
-                          final label =
-                              src['label'] as String? ?? L10n.of(context, 'browser_alternative_stream');
+                          final label = src['label'] as String? ??
+                              L10n.of(context, 'browser_alternative_stream');
                           final srcUrl = src['src'] as String? ?? '';
                           return _buildQualityTile(
                             context,
@@ -1641,11 +1653,20 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                         }),
                       ] else ...[
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           child: Text(
                             L10n.isRtl(context)
-                                ? L10n.of(context, 'browser_no_alternative_streams')
-                                : L10n.of(context, 'browser_no_alternative_streams'),
+                                ? L10n.of(
+                                    context,
+                                    'browser_no_alternative_streams',
+                                  )
+                                : L10n.of(
+                                    context,
+                                    'browser_no_alternative_streams',
+                                  ),
                             style: TextStyle(
                               color: accent,
                               fontSize: 13,
@@ -1672,27 +1693,68 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     bool isDark,
     SettingsProvider settings,
   ) {
-    return ListTile(
-      leading: Icon(
-        Icons.video_settings,
-        color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () {
+            Navigator.pop(context);
+            _startDirectDownload(streamUrl, type: 'video');
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg)
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
+                width: 0.7,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.video_settings,
+                    color: accent,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Icon(Icons.download_rounded, color: accent, size: 16),
+              ],
+            ),
+          ),
         ),
       ),
-      onTap: () {
-        Navigator.pop(context);
-        _startDirectDownload(streamUrl, type: 'video');
-      },
     );
   }
 
-  // Shows all detected streams from FAB
   void _showDetectedMediaSheet(BuildContext context, String tabId) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
@@ -1702,7 +1764,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         .where((t) => t.id == tabId)
         .map((t) => t.url)
         .firstOrNull;
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1724,10 +1785,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 ),
                 border: Border(
                   top: BorderSide(
-                    color: isDark
-                        ? AppTheme.glassBorder
-                        : AppTheme.lightGlassBorder,
-                    width: 0.8,
+                    color: accent.withValues(alpha: 0.4),
+                    width: 1.2,
                   ),
                 ),
               ),
@@ -1744,23 +1803,51 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           height: 4,
                           margin: const EdgeInsets.only(bottom: 20),
                           decoration: BoxDecoration(
-                            color:
-                                (isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted)
-                                    .withValues(alpha: 0.4),
+                            color: accent.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
-                      Text(
-                        L10n.of(context, 'browser_detected_media'),
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: accent,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
+                      Row(
+                        children: [
+                          _PulsingIconBadge(
+                            icon: Icons.sensors_rounded,
+                            color: accent,
+                            isDark: isDark,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  L10n.of(context, 'browser_detected_media'),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        color: accent,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                        fontSize: 14,
+                                      ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${detectedSources.length} ${L10n.isRtl(context) ? "إشارة" : "streams detected"}',
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? AppTheme.textMuted
+                                        : AppTheme.lightTextMuted,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       ConstrainedBox(
@@ -1774,65 +1861,109 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               const SizedBox(height: 8),
                           itemBuilder: (context, i) {
                             final src = detectedSources[i];
-                            final label =
-                                src['label'] as String? ??
+                            final label = src['label'] as String? ??
                                 '${L10n.of(context, 'browser_media_stream')} ${i + 1}';
                             final srcUrl = src['src'] as String? ?? '';
-                            return ListTile(
-                              leading: Icon(
-                                Icons.play_circle_fill,
-                                color: accent,
-                              ),
-                              title: Text(
-                                label,
-                                style: TextStyle(
-                                  color: isDark
-                                      ? AppTheme.textPrimary
-                                      : AppTheme.lightTextPrimary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
+                            final isAudio = label
+                                .toLowerCase()
+                                .contains('audio');
+                            final tileClr = isAudio
+                                ? (isDark
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.lightNeonGreen)
+                                : accent;
+                            return Material(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.circular(14),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  final title = src['title'] as String?;
+                                  final ext = src['ext'] as String?;
+                                  String? filename;
+                                  if (title != null && title.isNotEmpty) {
+                                    filename = ext != null
+                                        ? "$title.$ext"
+                                        : title;
+                                  }
+                                  BrowserDownloadSheet.show(
+                                    context,
+                                    srcUrl,
+                                    suggestedName: filename,
+                                    type: isAudio ? 'audio' : 'video',
+                                    onQuality: () => _showQualityPicker(
+                                      tabId,
+                                      fallbackUrl: srcUrl,
+                                    ),
+                                    downloadPageUrl: downloadPageUrl,
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: tileClr.withValues(alpha: 0.06),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: tileClr.withValues(alpha: 0.2),
+                                      width: 0.7,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isAudio
+                                            ? Icons.audiotrack_rounded
+                                            : Icons.play_circle_fill,
+                                        color: tileClr,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              label,
+                                              style: TextStyle(
+                                                color: isDark
+                                                    ? AppTheme.textPrimary
+                                                    : AppTheme.lightTextPrimary,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              srcUrl,
+                                              maxLines: 1,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: isDark
+                                                    ? AppTheme.textMuted
+                                                    : AppTheme.lightTextMuted,
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Icon(
+                                        Icons.download_rounded,
+                                        size: 16,
+                                        color: tileClr,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              subtitle: Text(
-                                srcUrl,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: isDark
-                                      ? AppTheme.textMuted
-                                      : AppTheme.lightTextMuted,
-                                  fontSize: 10,
-                                ),
-                              ),
-                              trailing: Icon(
-                                Icons.download,
-                                size: 18,
-                                color: accent,
-                              ),
-                              onTap: () {
-                                Navigator.pop(context);
-                                final title = src['title'] as String?;
-                                final ext = src['ext'] as String?;
-                                final label =
-                                    src['label'] as String? ??
-                                    '${L10n.of(context, 'browser_media_stream')} ${i + 1}';
-                                String? filename;
-                                if (title != null && title.isNotEmpty) {
-                                  filename = ext != null
-                                      ? "$title.$ext"
-                                      : title;
-                                }
-                                BrowserDownloadSheet.show(
-                                  context,
-                                  srcUrl,
-                                  suggestedName: filename,
-                                  type: label.toLowerCase().contains('audio')
-                                      ? 'audio'
-                                      : 'video',
-                                  onQuality: () => _showQualityPicker(tabId, fallbackUrl: srcUrl),
-                                  downloadPageUrl: downloadPageUrl,
-                                );
-                              },
                             );
                           },
                         ),
@@ -1848,7 +1979,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     );
   }
 
-  // JS/CSS Injector Dialog
   void _showJsCssInjectorDialog() {
     showDialog(
       context: context,
@@ -1864,8 +1994,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('browser_custom_js', js);
             await prefs.setString('browser_custom_css', css);
-
-            // Apply immediately to the active tab
             if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
               _injectCustomJsCss(_tabs[_currentTabIndex]);
             }
@@ -1877,22 +2005,22 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   Future<void> _hideWebViewFingerprints(BrowserTab tab) async {
     const js = r'''
-      (function() {
-        try {
-          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-          delete window.WebViewJavascriptBridge;
-          delete window.flutter_inappwebview;
-          Object.defineProperty(navigator, 'plugins', {
-            get: () => [
-              { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-              { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-              { name: 'Native Client', filename: 'internal-nacl-plugin' },
-            ],
-          });
-          Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-        } catch(e) {}
-      })();
-    ''';
+(function() {
+  try {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    delete window.WebViewJavascriptBridge;
+    delete window.flutter_inappwebview;
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [
+        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+        { name: 'Native Client', filename: 'internal-nacl-plugin' },
+      ],
+    });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+  } catch(e) {}
+})();
+''';
     try {
       await tab.controller.runJavaScript(js);
     } catch (e) {
@@ -1905,13 +2033,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (_customJs.isNotEmpty) {
       try {
         final jsWrapper = """
-          if (!window._xdmCustomJsInjected) {
-            window._xdmCustomJsInjected = true;
-            (function() {
-              $_customJs
-            })();
-          }
-        """;
+if (!window._xdmCustomJsInjected) {
+  window._xdmCustomJsInjected = true;
+  (function() {
+$_customJs
+  })();
+}
+""";
         await tab.controller.runJavaScript(jsWrapper);
       } catch (e) {
         debugPrint('[DMX Browser] Failed to inject custom JS: $e');
@@ -1920,18 +2048,17 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (_customCss.isNotEmpty) {
       try {
         final jsonCss = jsonEncode(_customCss);
-        final cssScript =
-            """
-          (function() {
-            var style = document.getElementById('xdm-custom-css');
-            if (!style) {
-              style = document.createElement('style');
-              style.id = 'xdm-custom-css';
-              document.head.appendChild(style);
-            }
-            style.textContent = $jsonCss;
-          })();
-        """;
+        final cssScript = """
+(function() {
+  var style = document.getElementById('xdm-custom-css');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'xdm-custom-css';
+    document.head.appendChild(style);
+  }
+  style.textContent = $jsonCss;
+})();
+""";
         await tab.controller.runJavaScript(cssScript);
       } catch (e) {
         debugPrint('[DMX Browser] Failed to inject custom CSS: $e');
@@ -1939,12 +2066,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
   }
 
-  // Save Page Offline
   Future<void> _savePageOffline(BrowserTab tab) async {
     if (tab.isHome) return;
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     triggerHaptic(settings);
-
     try {
       final result = await tab.controller.runJavaScriptReturningResult(
         "document.documentElement.outerHTML",
@@ -1956,43 +2081,39 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           try {
             rawHtml = jsonDecode(rawHtml) as String;
           } catch (_) {
-            // Expected fallback if result is a raw quoted string rather than a JSON structure
             if (rawHtml.length > 2) {
               rawHtml = rawHtml.substring(1, rawHtml.length - 1);
             }
           }
         }
       }
-
       if (rawHtml.isEmpty) {
         if (mounted) {
           ThemedSnackbar.show(
             context,
             message: L10n.of(context, 'browser_save_page_failed'),
-            color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            color: settings.isDarkMode
+                ? AppTheme.neonRed
+                : AppTheme.lightNeonRed,
             icon: Icons.error_outline,
             isDarkMode: settings.isDarkMode,
           );
         }
         return;
       }
-
-      final offlineTitle = mounted ? L10n.of(context, 'browser_offline_page') : 'Offline Page';
+      final offlineTitle = mounted
+          ? L10n.of(context, 'browser_offline_page')
+          : 'Offline Page';
       String title = tab.title.isNotEmpty ? tab.title : offlineTitle;
       title = title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
-
       final path = settings.customDownloadPath?.isNotEmpty == true
           ? settings.customDownloadPath!
           : await PermissionService().defaultDownloadDirectory();
-
       final filePath = p.join(path, "$title.html");
       final file = File(filePath);
       await file.writeAsString(rawHtml);
-
-      // Create a finished DownloadTask in local Hive database
       final id = DateTime.now().millisecondsSinceEpoch.toString();
       final size = utf8.encode(rawHtml).length;
-
       final task = DownloadTask(
         id: id,
         fileName: "$title.html",
@@ -2010,12 +2131,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         updatedAt: DateTime.now(),
         completedAt: DateTime.now(),
       );
-
       if (!mounted) return;
       final db = context.read<DatabaseService>();
       await db.saveTask(task);
-
-      // Reload provider tasks
       if (mounted) {
         await context.read<DownloadProvider>().load(
           pauseOrphanDownloads: false,
@@ -2023,8 +2141,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         if (mounted) {
           ThemedSnackbar.show(
             context,
-            message: '${L10n.of(context, 'browser_page_saved')} - $title.html',
-            color: settings.isDarkMode ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            message:
+                '${L10n.of(context, 'browser_page_saved')} - $title.html',
+            color: settings.isDarkMode
+                ? AppTheme.neonGreen
+                : AppTheme.lightNeonGreen,
             icon: Icons.check_circle_outline,
             isDarkMode: settings.isDarkMode,
           );
@@ -2035,7 +2156,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         ThemedSnackbar.show(
           context,
           message: '${L10n.of(context, 'browser_page_save_error')}: $e',
-          color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          color: settings.isDarkMode
+              ? AppTheme.neonRed
+              : AppTheme.lightNeonRed,
           icon: Icons.error_outline,
           isDarkMode: settings.isDarkMode,
         );
@@ -2043,10 +2166,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // TAB SWITCHER — grid with incognito styling
+  // ─────────────────────────────────────────────────────────────
   void _showTabSwitcher(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2069,9 +2196,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     sigmaY: 15,
                     child: Container(
                       decoration: BoxDecoration(
-                        color:
-                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                                .withValues(alpha: 0.95),
+                        color: (isDark
+                                ? AppTheme.surface
+                                : AppTheme.lightSurface)
+                            .withValues(alpha: 0.95),
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(28),
                         ),
@@ -2087,7 +2215,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                       child: SafeArea(
                         child: Column(
                           children: [
-                            // Header
                             Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 24.0,
@@ -2095,6 +2222,19 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               ),
                               child: Row(
                                 children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      Icons.tab_rounded,
+                                      color: accent,
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
                                   Text(
                                     L10n.of(context, 'active_tabs'),
                                     style: Theme.of(context)
@@ -2103,25 +2243,47 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                         ?.copyWith(
                                           color: accent,
                                           fontWeight: FontWeight.bold,
-                                          letterSpacing: 1.0,
+                                          letterSpacing: 0.3,
+                                          fontSize: 14,
                                         ),
                                   ),
-                                  const Spacer(),
-                                  // New Incognito Tab button
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.visibility_off,
-                                      color: isDark
-                                          ? AppTheme.neonViolet
-                                          : AppTheme.lightNeonViolet,
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
                                     ),
-                                    tooltip: L10n.of(context, 'browser_new_incognito_tab'),
+                                    decoration: BoxDecoration(
+                                      color: accent.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${_tabs.length}',
+                                      style: TextStyle(
+                                        color: accent,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        fontFamily: 'Space Grotesk',
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  _TabSwitcherAction(
+                                    icon: Icons.visibility_off_rounded,
+                                    color: violet,
+                                    tooltip: L10n.of(
+                                      context,
+                                      'browser_new_incognito_tab',
+                                    ),
                                     onPressed: () {
                                       triggerHaptic(settings);
                                       if (_tabs.length >= 10) {
                                         ThemedSnackbar.show(
                                           context,
-                                          message: L10n.of(context, 'browser_max_tabs'),
+                                          message: L10n.of(
+                                            context,
+                                            'browser_max_tabs',
+                                          ),
                                           color: Colors.red,
                                           icon: Icons.warning_amber_rounded,
                                           isDarkMode: isDark,
@@ -2142,16 +2304,22 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     },
                                   ),
                                   const SizedBox(width: 8),
-                                  // New Tab button
-                                  IconButton(
-                                    icon: Icon(Icons.add, color: accent),
-                                    tooltip: L10n.of(context, 'browser_new_tab'),
+                                  _TabSwitcherAction(
+                                    icon: Icons.add_rounded,
+                                    color: accent,
+                                    tooltip: L10n.of(
+                                      context,
+                                      'browser_new_tab',
+                                    ),
                                     onPressed: () {
                                       triggerHaptic(settings);
                                       if (_tabs.length >= 10) {
                                         ThemedSnackbar.show(
                                           context,
-                                          message: L10n.of(context, 'browser_max_tabs'),
+                                          message: L10n.of(
+                                            context,
+                                            'browser_max_tabs',
+                                          ),
                                           color: Colors.red,
                                           icon: Icons.warning_amber_rounded,
                                           isDarkMode: isDark,
@@ -2172,8 +2340,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                 ],
                               ),
                             ),
-
-                            // Grid of tabs
                             Expanded(
                               child: GridView.builder(
                                 controller: controller,
@@ -2189,7 +2355,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                 itemBuilder: (context, index) {
                                   final tab = _tabs[index];
                                   final isActive = index == _currentTabIndex;
-
+                                  final tabClr = tab.isIncognito
+                                      ? violet
+                                      : accent;
                                   return GestureDetector(
                                     onTap: () {
                                       triggerHaptic(settings);
@@ -2203,113 +2371,159 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                       _saveTabs();
                                       Navigator.pop(context);
                                     },
-                                    child: GlassCard(
-                                      borderRadius: 16,
-                                      padding: const EdgeInsets.all(16),
-                                      isDarkMode: isDark,
-                                      border: isActive
-                                          ? Border.all(
-                                              color: tab.isIncognito
-                                                  ? (isDark
-                                                        ? AppTheme.neonViolet
-                                                        : AppTheme
-                                                              .lightNeonViolet)
-                                                  : accent,
-                                              width: 2,
-                                            )
-                                          : null,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: tab.isIncognito
+                                            ? (isDark
+                                                  ? const Color(0xFF16121F)
+                                                  : const Color(0xFFF3EEFA))
+                                            : (isDark
+                                                  ? AppTheme.cardBg
+                                                  : AppTheme.lightCardBg),
+                                        borderRadius: BorderRadius.circular(
+                                          16,
+                                        ),
+                                        border: Border.all(
+                                          color: isActive
+                                              ? tabClr.withValues(alpha: 0.8)
+                                              : tabClr.withValues(alpha: 0.15),
+                                          width: isActive ? 1.5 : 0.8,
+                                        ),
+                                        boxShadow: isActive
+                                            ? [
+                                                BoxShadow(
+                                                  color: tabClr.withValues(
+                                                    alpha: 0.15,
+                                                  ),
+                                                  blurRadius: 12,
+                                                  spreadRadius: -2,
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
                                       child: Column(
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                tab.isIncognito
-                                                    ? Icons.visibility_off
-                                                    : Icons.language,
-                                                size: 14,
-                                                color: tab.isIncognito
-                                                    ? (isDark
-                                                          ? AppTheme.neonViolet
-                                                          : AppTheme
-                                                                .lightNeonViolet)
-                                                    : accent,
+                                          // Tab header strip
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: tabClr.withValues(
+                                                alpha: isActive ? 0.12 : 0.05,
                                               ),
-                                              const Spacer(),
-                                              IconButton(
-                                                icon: const Icon(
-                                                  Icons.close,
-                                                  size: 16,
+                                              borderRadius:
+                                                  const BorderRadius.vertical(
+                                                    top: Radius.circular(15),
+                                                  ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  tab.isIncognito
+                                                      ? Icons
+                                                            .visibility_off_rounded
+                                                      : Icons.language_rounded,
+                                                  size: 13,
+                                                  color: tabClr,
                                                 ),
-                                                padding: EdgeInsets.zero,
-                                                constraints:
-                                                    const BoxConstraints(),
-                                                  onPressed: () {
-                                                  triggerHaptic(settings);
-                                                  _mediaScanTimers[tab.id]
-                                                      ?.cancel();
-                                                  _mediaScanTimers
-                                                      .remove(tab.id);
-                                                  setModalState(() {
-                                                    setState(() {
-                                                      _detectedDownloadUrls
-                                                          .remove(tab.id);
-                                                      _tabs.removeAt(index);
-
-                                                      if (_currentTabIndex >=
-                                                          _tabs.length) {
-                                                        _currentTabIndex =
-                                                            _tabs.length - 1;
-                                                      }
-                                                      if (_tabs.isEmpty) {
-                                                        _tabs.add(
-                                                          _createNewTab(),
-                                                        );
-                                                        _currentTabIndex = 0;
-                                                      }
-                                                      final activeTab =
-                                                          _tabs[_currentTabIndex];
-                                                      _urlController.text =
-                                                          activeTab.isHome
-                                                          ? ''
-                                                          : activeTab.url;
+                                                const Spacer(),
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    triggerHaptic(settings);
+                                                    setModalState(() {
+                                                      setState(() {
+                                                        // Centralised cleanup of all per-tab state.
+                                                        _cleanupTabState(tab.id);
+                                                        _tabs.removeAt(index);
+                                                        if (_currentTabIndex >=
+                                                            _tabs.length) {
+                                                          _currentTabIndex =
+                                                              _tabs.length - 1;
+                                                        }
+                                                        if (_tabs.isEmpty) {
+                                                          _tabs.add(
+                                                            _createNewTab(),
+                                                          );
+                                                          _currentTabIndex = 0;
+                                                        }
+                                                        final activeTab =
+                                                            _tabs[
+                                                              _currentTabIndex
+                                                            ];
+                                                        _urlController.text =
+                                                            activeTab.isHome
+                                                            ? ''
+                                                            : activeTab.url;
+                                                      });
+                                                      _saveTabs();
                                                     });
-                                                    _saveTabs();
-                                                  });
-                                                },
-                                              ),
-                                            ],
+                                                  },
+                                                  child: Icon(
+                                                    Icons.close_rounded,
+                                                    size: 15,
+                                                    color: isDark
+                                                        ? AppTheme.textMuted
+                                                        : AppTheme
+                                                              .lightTextMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                          const SizedBox(height: 12),
+                                          const SizedBox(height: 10),
                                           Expanded(
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                  ),
+                                              child: Text(
+                                                tab.title.isEmpty
+                                                    ? 'New Tab'
+                                                    : tab.title,
+                                                maxLines: 2,
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  color: isDark
+                                                      ? AppTheme.textPrimary
+                                                      : AppTheme
+                                                            .lightTextPrimary,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                            ),
                                             child: Text(
-                                              tab.title.isEmpty
-                                                  ? 'New Tab'
-                                                  : tab.title,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
+                                              tab.isHome
+                                                  ? 'Dashboard'
+                                                  : tab.url,
+                                              maxLines: 1,
+                                              overflow:
+                                                  TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 color: isDark
-                                                    ? AppTheme.textPrimary
-                                                    : AppTheme.lightTextPrimary,
+                                                    ? AppTheme.textMuted
+                                                    : AppTheme.lightTextMuted,
                                                 fontSize: 12,
-                                                fontWeight: FontWeight.bold,
+                                                fontFamily: 'monospace',
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            tab.isHome ? 'Dashboard' : tab.url,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: isDark
-                                                  ? AppTheme.textMuted
-                                                  : AppTheme.lightTextMuted,
-                                              fontSize: 9,
-                                            ),
-                                          ),
+                                          const SizedBox(height: 10),
                                         ],
                                       ),
                                     ),
@@ -2331,19 +2545,25 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     );
   }
 
-  Widget _buildHomeDashboard(BuildContext context, SettingsProvider settings, {ScrollController? scrollController}) {
+  // ─────────────────────────────────────────────────────────────
+  // HOME DASHBOARD — radar, live stats, speed dial
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildHomeDashboard(
+    BuildContext context,
+    SettingsProvider settings, {
+    ScrollController? scrollController,
+  }) {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final accentColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     return SingleChildScrollView(
       controller: scrollController,
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           BrowserHomePage(
             onSearchTap: () {
               _focusNode.requestFocus();
@@ -2363,7 +2583,91 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ),
           const SizedBox(height: 24),
 
-          // Central Search Bar
+          // ── Sniffer Radar Card ──
+          _SnifferRadarCard(
+            settings: settings,
+            isEnabled: _isSnifferEnabled,
+            onToggle: (val) {
+              triggerHaptic(settings);
+              _setSnifferEnabled(val);
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // ── Live Engine Stats ──
+          Selector<DownloadProvider, ({int active, String speed})>(
+            selector: (_, p) => (
+              active: p.downloadingTasksCount,
+              speed: p.currentDownloadSpeedFormatted,
+            ),
+            builder: (context, stats, _) {
+              if (stats.active == 0) return const SizedBox.shrink();
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: (isDark
+                          ? AppTheme.neonGreen
+                          : AppTheme.lightNeonGreen)
+                      .withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: (isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen)
+                        .withValues(alpha: 0.25),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    _LiveDot(
+                      color: isDark
+                          ? AppTheme.neonGreen
+                          : AppTheme.lightNeonGreen,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '${stats.active} ${isRtl ? "تنزيل نشط" : "Active downloads"}',
+                      style: TextStyle(
+                        color: isDark
+                            ? AppTheme.textPrimary
+                            : AppTheme.lightTextPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      Icons.speed_rounded,
+                      size: 14,
+                      color: isDark
+                          ? AppTheme.neonGreen
+                          : AppTheme.lightNeonGreen,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      stats.speed,
+                      style: TextStyle(
+                        color: isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'Space Grotesk',
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+
+          // ── Central Search Bar ──
           GlassCard(
             borderRadius: 24,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -2372,22 +2676,30 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               children: [
                 Icon(
                   Icons.search,
-                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                      hintText: isRtl ? 'ابحث في الويب...' : 'Search the web...',
+                      hintText: isRtl
+                          ? 'ابحث في الويب...'
+                          : 'Search the web...',
                       hintStyle: TextStyle(
-                        color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                        fontSize: 14,
+                        color: isDark
+                            ? AppTheme.textMuted
+                            : AppTheme.lightTextMuted,
+                        fontSize: 12,
                       ),
                       border: InputBorder.none,
                       isDense: true,
                     ),
                     style: TextStyle(
-                      color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
                     ),
                     onSubmitted: (val) {
                       if (val.trim().isNotEmpty) {
@@ -2401,29 +2713,39 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           ),
           const SizedBox(height: 16),
 
-          // Search Engine Selector
+          // ── Search Engine Selector ──
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                isRtl ? 'محرك البحث:' : 'Search Engine:',
+                isRtl ? 'محرك البحث:' : 'Search engine:',
                 style: TextStyle(
-                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
                   fontSize: 12,
                 ),
               ),
               const SizedBox(width: 8),
               DropdownButton<String>(
                 value: settings.searchEngine,
-                dropdownColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                dropdownColor: isDark
+                    ? AppTheme.surface
+                    : AppTheme.lightSurface,
                 underline: const SizedBox(),
                 style: TextStyle(
                   color: accentColor,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
-                icon: Icon(Icons.arrow_drop_down, color: accentColor, size: 16),
-                items: ['Google', 'DuckDuckGo', 'Bing', 'Yahoo'].map((engine) {
+                icon: Icon(
+                  Icons.arrow_drop_down,
+                  color: accentColor,
+                  size: 16,
+                ),
+                items: ['Google', 'DuckDuckGo', 'Bing', 'Yahoo'].map((
+                  engine,
+                ) {
                   return DropdownMenuItem<String>(
                     value: engine,
                     child: Text(engine),
@@ -2438,86 +2760,32 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
 
-          // Sniffer Toggle Card
-          GlassCard(
-            borderRadius: 20,
-            padding: const EdgeInsets.all(16),
-            isDarkMode: isDark,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isRtl
-                            ? 'حالة كاشف الملفات (Sniffer)'
-                            : 'STREAM SNIFFER STATUS',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: accentColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 9,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _isSnifferEnabled
-                            ? (isRtl
-                                  ? 'الاعتراض التلقائي نشط'
-                                  : 'AUTO-INTERCEPT ACTIVE')
-                            : (isRtl
-                                  ? 'الاعتراض التلقائي متوقف'
-                                  : 'AUTO-INTERCEPT DEACTIVATED'),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: isDark
-                              ? AppTheme.textPrimary
-                              : AppTheme.lightTextPrimary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isRtl
-                            ? 'يكتشف روابط التحميل المباشرة والوسائط تلقائياً'
-                            : 'Sniffs media files and documents dynamically',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppTheme.textMuted
-                              : AppTheme.lightTextMuted,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
+          // ── Speed Dial ──
+          Row(
+            children: [
+              Container(
+                width: 3,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                Switch(
-                  value: _isSnifferEnabled,
-                  activeThumbColor: accentColor,
-                  onChanged: (val) {
-                    triggerHaptic(settings);
-                    _setSnifferEnabled(val);
-                  },
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isRtl ? 'إشارات سريعة (روابط)' : 'Quick access',
+                style: TextStyle(
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  fontSize: 12,
                 ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 30),
-
-          Text(
-            isRtl ? 'إشارات سريعة (روابط)' : 'QUICK SIGNALS (BOOKMARKS)',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-              fontSize: 10,
-            ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           GridView.count(
@@ -2526,8 +2794,34 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 2.2,
+            childAspectRatio: 2.5,
             children: [
+              _buildShortcutCard(
+                context,
+                title: isRtl ? 'العلامات' : 'Bookmarks',
+                url: '',
+                icon: Icons.bookmark_rounded,
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                settings: settings,
+                onTap: () async {
+                  final cleared = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BookmarkManagerScreen(),
+                    ),
+                  );
+                  if (cleared == true && mounted) setState(() {});
+                },
+              ),
+              _buildShortcutCard(
+                context,
+                title: isRtl ? 'السجل' : 'History',
+                url: '',
+                icon: Icons.history_rounded,
+                color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                settings: settings,
+                onTap: _openHistory,
+              ),
               _buildShortcutCard(
                 context,
                 title: 'Google',
@@ -2547,7 +2841,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               _buildShortcutCard(
                 context,
                 title: 'TikTok',
-                url: 'https://tiktok.com',
+                url: 'https://www.tiktok.com',
                 icon: Icons.music_note,
                 color: isDark
                     ? const Color(0xFFFE2C55)
@@ -2567,7 +2861,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 title: 'Archive.org',
                 url: 'https://archive.org',
                 icon: Icons.history_edu,
-                color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                color: isDark
+                    ? AppTheme.neonViolet
+                    : AppTheme.lightNeonViolet,
                 settings: settings,
               ),
               _buildShortcutCard(
@@ -2592,12 +2888,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     required IconData icon,
     required Color color,
     required SettingsProvider settings,
+    VoidCallback? onTap,
   }) {
     final isDark = settings.isDarkMode;
     final textPrimary = isDark
         ? AppTheme.textPrimary
         : AppTheme.lightTextPrimary;
-
     return GlassCard(
       borderRadius: 16,
       padding: EdgeInsets.zero,
@@ -2609,14 +2905,18 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         child: InkWell(
           onTap: () {
             triggerHaptic(settings);
-            final activeTab = _tabs[_currentTabIndex];
-            setState(() {
-              activeTab.isHome = false;
-            });
-            _navigateToUrl(url);
+            if (onTap != null) {
+              onTap();
+            } else {
+              final activeTab = _tabs[_currentTabIndex];
+              setState(() {
+                activeTab.isHome = false;
+              });
+              _navigateToUrl(url);
+            }
           },
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
                 Container(
@@ -2624,8 +2924,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.2),
+                      width: 0.7,
+                    ),
                   ),
-                  child: Icon(icon, color: color, size: 20),
+                  child: Icon(icon, color: color, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -2635,21 +2939,24 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     children: [
                       Text(
                         title,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: textPrimary,
-                          fontSize: 12,
-                        ),
+                        style: Theme.of(context).textTheme.bodyMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: textPrimary,
+                              fontSize: 13,
+                            ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         url.replaceAll('https://', ''),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppTheme.textMuted
-                              : AppTheme.lightTextMuted,
-                          fontSize: 9,
-                        ),
+                        style: Theme.of(context).textTheme.bodySmall
+                            ?.copyWith(
+                              color: isDark
+                                  ? AppTheme.textMuted
+                                  : AppTheme.lightTextMuted,
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                            ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -2667,37 +2974,44 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
+    final downloadProvider = Provider.of<DownloadProvider>(
+      context,
+      listen: false,
+    );
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final statusBarHeight = MediaQuery.of(context).padding.top;
-
-    if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) {
+    if (_tabs.isEmpty ||
+        _currentTabIndex < 0 ||
+        _currentTabIndex >= _tabs.length) {
       return const SizedBox.shrink();
     }
     final activeTab = _tabs[_currentTabIndex];
-    final showFab =
-        !activeTab.isHome &&
+    final showFab = !activeTab.isHome &&
         (_detectedDownloadUrls[activeTab.id] != null ||
             (_detectedMediaSources[activeTab.id]?.isNotEmpty ?? false) ||
             _detectedPlaylistUrls.containsKey(activeTab.id));
-
-    // Reactively ensure zoom configuration matches settings changes
     if (settings.pinchToZoom != _lastZoomEnabled) {
       _lastZoomEnabled = settings.pinchToZoom;
       for (final tab in _tabs) {
         tab.controller.enableZoom(settings.pinchToZoom);
       }
     }
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        // Only handle back when the browser tab is actually active.
-        if (downloadProvider.activeTabIndex != 1) return;
-        if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+        if (didPop) {
+          return;
+        }
+        if (downloadProvider.activeTabIndex != 1) {
+          return;
+        }
+        if (_tabs.isEmpty ||
+            _currentTabIndex < 0 ||
+            _currentTabIndex >= _tabs.length) {
+          return;
+        }
         if (Navigator.canPop(context)) {
           Navigator.pop(context);
           return;
@@ -2713,581 +3027,497 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       child: GeometricGridBackground(
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          // Let the WebView's native Android view handle keyboard
-          // scrolling. If Flutter resizes the Scaffold body when the
-          // keyboard appears, the platform view re-layouts and loses
-          // focus, causing an infinite show/hide keyboard cycle.
           resizeToAvoidBottomInset: false,
-
           floatingActionButton: showFab
               ? _buildDownloadFab(context, settings)
               : null,
-          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+          floatingActionButtonLocation:
+              FloatingActionButtonLocation.endFloat,
           body: Column(
             children: [
-              // Custom collapsing App Bar
+              // ── Cockpit URL Bar ──
               RepaintBoundary(
                 child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                height: _showBars ? (kToolbarHeight + statusBarHeight) : 0,
-                clipBehavior: Clip.hardEdge,
-                decoration: const BoxDecoration(),
-                child: DmxBackdropFilter(
-                  sigmaX: 12,
-                  sigmaY: 12,
-                  child: Container(
-                    padding: EdgeInsets.only(top: statusBarHeight),
-                    height: kToolbarHeight + statusBarHeight,
-                    decoration: BoxDecoration(
-                      color: settings.classicUi
-                          ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                          : (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                                .withValues(alpha: 0.5),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: settings.classicUi
-                              ? (isDark
-                                    ? AppTheme.border
-                                    : AppTheme.lightBorder)
-                              : (isDark
-                                    ? AppTheme.glassBorder
-                                    : AppTheme.lightGlassBorder),
-                          width: settings.classicUi ? 1.0 : 0.8,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  height: _showBars
+                      ? (kToolbarHeight + statusBarHeight)
+                      : 0,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: const BoxDecoration(),
+                  child: DmxBackdropFilter(
+                    sigmaX: 12,
+                    sigmaY: 12,
+                    child: Container(
+                      padding: EdgeInsets.only(top: statusBarHeight),
+                      height: kToolbarHeight + statusBarHeight,
+                      decoration: BoxDecoration(
+                        color: settings.classicUi
+                            ? (isDark
+                                  ? AppTheme.surface
+                                  : AppTheme.lightSurface)
+                            : (isDark
+                                  ? AppTheme.surface
+                                  : AppTheme.lightSurface)
+                                  .withValues(alpha: 0.88),
+                        border: Border(
+                          bottom: BorderSide(
+                            color: settings.classicUi
+                                ? (isDark
+                                      ? AppTheme.border
+                                      : AppTheme.lightBorder)
+                                : (isDark
+                                      ? AppTheme.glassBorder
+                                      : AppTheme.lightGlassBorder),
+                            width: settings.classicUi ? 1.0 : 0.8,
+                          ),
                         ),
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                      child: Row(
-                        children: [
-                          // Close Browser Button
-                          IconButton(
-                            icon: Icon(
-                              Icons.close,
-                              size: 20,
-                              color: textClr,
-                            ),
-                            tooltip: isRtl ? 'إغلاق المتصفح' : 'Close browser',
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              if (Navigator.canPop(context)) {
-                                Navigator.pop(context);
-                              } else {
-                                downloadProvider.setActiveTabIndex(0);
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 4),
-
-                          // Address bar
-                          Expanded(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? (_isFocused
-                                          ? const Color(0xFF141424)
-                                          : const Color(0xFF0F0F16))
-                                    : (_isFocused
-                                          ? AppTheme.lightNeonBlue.withValues(
-                                              alpha: 0.08,
-                                            )
-                                          : const Color(0xFFF1F5F9)),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: _isFocused
-                                      ? (isDark
-                                                ? AppTheme.neonBlue
-                                                : AppTheme.lightNeonBlue)
-                                            .withValues(alpha: 0.5)
-                                      : (isDark
-                                            ? const Color(0x15FFFFFF)
-                                            : const Color(0x0D000000)),
-                                  width: _isFocused ? 1.2 : 0.8,
-                                ),
-                                boxShadow:
-                                    (_isFocused &&
-                                        isDark &&
-                                        settings.enableGlow)
-                                    ? [
-                                        BoxShadow(
-                                          color:
-                                              (isDark
-                                                      ? AppTheme.neonBlue
-                                                      : AppTheme.lightNeonBlue)
-                                                  .withValues(alpha: 0.25),
-                                          blurRadius: 8,
-                                          spreadRadius: 0.5,
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              child: Row(
-                                children: [
-                                  if (activeTab.isIncognito) ...[
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.visibility_off,
-                                      size: 14,
-                                      color: isDark
-                                          ? AppTheme.neonViolet
-                                          : AppTheme.lightNeonViolet,
-                                    ),
-                                    const SizedBox(width: 4),
-                                  ],
-                                  Expanded(
-                                    child: ValueListenableBuilder<TextEditingValue>(
-                                      valueListenable: _urlController,
-                                      builder: (context, value, child) {
-                                        return TextField(
-                                          controller: _urlController,
-                                          focusNode: _focusNode,
-                                          textAlignVertical:
-                                              TextAlignVertical.center,
-                                          style: TextStyle(
-                                            color: textClr,
-                                            fontSize: 13,
-                                          ),
-                                          decoration: InputDecoration(
-                                            isDense: true,
-                                            prefixIcon: Icon(
-                                              activeTab.isHome
-                                                  ? Icons.search
-                                                  : Icons.language,
-                                              color: _isFocused
-                                                  ? (isDark
-                                                        ? AppTheme.neonBlue
-                                                        : AppTheme.lightNeonBlue)
-                                                  : (isDark
-                                                        ? AppTheme.textSecondary
-                                                        : AppTheme
-                                                              .lightTextSecondary),
-                                              size: 16,
-                                            ),
-                                            prefixIconConstraints:
-                                                const BoxConstraints(
-                                                  minWidth: 32,
-                                                  minHeight: 32,
-                                                ),
-                                            suffixIcon: IconButton(
-                                              padding: EdgeInsets.zero,
-                                              constraints:
-                                                  const BoxConstraints(
-                                                    minWidth: 32,
-                                                    minHeight: 32,
-                                                  ),
-                                              icon: Icon(
-                                                activeTab.isLoading
-                                                    ? Icons.close
-                                                    : (_isFocused && value.text.isNotEmpty
-                                                          ? Icons.clear
-                                                          : Icons.refresh),
-                                                size: 16,
-                                                color: _isFocused
-                                                    ? (isDark
-                                                          ? AppTheme.neonBlue
-                                                          : AppTheme.lightNeonBlue)
-                                                    : (isDark
-                                                          ? AppTheme.textSecondary
-                                                          : AppTheme.lightTextSecondary),
-                                              ),
-                                              tooltip: activeTab.isLoading
-                                                  ? (isRtl
-                                                        ? 'إلغاء التحميل'
-                                                        : 'Stop loading')
-                                                  : (_isFocused && value.text.isNotEmpty
-                                                        ? (isRtl ? 'مسح' : 'Clear')
-                                                        : (isRtl
-                                                              ? 'إعادة تحميل الصفحة'
-                                                              : 'Refresh page')),
-                                              onPressed: () {
-                                                triggerHaptic(settings);
-                                                if (activeTab.isLoading) {
-                                                  activeTab.controller
-                                                      .runJavaScript('window.stop();');
-                                                  setState(() {
-                                                    activeTab.isLoading = false;
-                                                  });
-                                                } else if (_isFocused && value.text.isNotEmpty) {
-                                                  _urlController.clear();
-                                                } else {
-                                                  if (!activeTab.isHome) {
-                                                    activeTab.controller.reload();
-                                                  }
-                                                }
-                                              },
-                                            ),
-                                            suffixIconConstraints:
-                                                const BoxConstraints(
-                                                  minWidth: 32,
-                                                  minHeight: 32,
-                                                ),
-                                            hintText: isRtl
-                                                ? 'ابحث أو ادخل الرابط...'
-                                                : 'SEARCH OR SCAN SIGNAL...',
-                                            hintStyle: TextStyle(
-                                              color: isDark
-                                                  ? AppTheme.textMuted
-                                                  : AppTheme.lightTextMuted,
-                                              fontSize: 11,
-                                            ),
-                                            filled: false,
-                                            border: InputBorder.none,
-                                            enabledBorder: InputBorder.none,
-                                            focusedBorder: InputBorder.none,
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 6,
-                                                ),
-                                          ),
-                                          onSubmitted: (val) {
-                                            _navigateToUrl(val);
-                                          },
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-
-                          // YouTube download button in appbar
-                          if (!activeTab.isHome &&
-                              (YoutubeService.isYoutubeVideoUrl(
-                                    activeTab.url,
-                                  ) ||
-                                  YoutubeService.isPlaylistUrl(
-                                    activeTab.url,
-                                  ))) ...[
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Row(
+                          children: [
                             IconButton(
-                              icon: Container(
-                                padding: const EdgeInsets.all(6),
+                              icon: Icon(
+                                Icons.close,
+                                size: 20,
+                                color: textClr,
+                              ),
+                              tooltip: isRtl
+                                  ? 'إغلاق المتصفح'
+                                  : 'Close browser',
+                              onPressed: () {
+                                triggerHaptic(settings);
+                                if (Navigator.canPop(context)) {
+                                  Navigator.pop(context);
+                                } else {
+                                  downloadProvider.setActiveTabIndex(0);
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 4),
+                            // Address bar with security readout
+                            Expanded(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                height: 38,
                                 decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.2),
-                                  shape: BoxShape.circle,
+                                  color: isDark
+                                      ? (_isFocused
+                                            ? const Color(0xFF141424)
+                                            : const Color(0xFF0F0F16))
+                                      : (_isFocused
+                                            ? AppTheme.lightNeonBlue
+                                                  .withValues(alpha: 0.08)
+                                            : const Color(0xFFF1F5F9)),
+                                  borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: Colors.red,
-                                    width: 1.2,
+                                    color: _isFocused
+                                        ? (isDark
+                                              ? AppTheme.neonBlue
+                                              : AppTheme.lightNeonBlue)
+                                              .withValues(alpha: 0.5)
+                                        : (isDark
+                                              ? const Color(0x15FFFFFF)
+                                              : const Color(0x0D000000)),
+                                    width: _isFocused ? 1.2 : 0.8,
                                   ),
-                                  boxShadow: settings.enableGlow
+                                  boxShadow: (_isFocused &&
+                                          isDark &&
+                                          settings.enableGlow)
                                       ? [
                                           BoxShadow(
-                                            color: Colors.red.withValues(
-                                              alpha: 0.4,
-                                            ),
-                                            blurRadius: 6,
+                                            color: (isDark
+                                                    ? AppTheme.neonBlue
+                                                    : AppTheme.lightNeonBlue)
+                                                .withValues(alpha: 0.25),
+                                            blurRadius: 8,
                                             spreadRadius: 0.5,
                                           ),
                                         ]
                                       : null,
                                 ),
-                                child: Icon(
-                                  YoutubeService.isPlaylistUrl(activeTab.url)
-                                      ? Icons.playlist_play_rounded
-                                      : Icons.download_rounded,
-                                  size: 16,
-                                  color: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Security / mode indicator
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      child: Icon(
+                                        activeTab.isIncognito
+                                            ? Icons.visibility_off_rounded
+                                            : activeTab.isHome
+                                            ? Icons.search_rounded
+                                            : activeTab.url.startsWith(
+                                                'https',
+                                              )
+                                            ? Icons.lock_rounded
+                                            : Icons.info_outline_rounded,
+                                        size: 14,
+                                        color: activeTab.isIncognito
+                                            ? (isDark
+                                                  ? AppTheme.neonViolet
+                                                  : AppTheme.lightNeonViolet)
+                                            : activeTab.url.startsWith('https')
+                                            ? (isDark
+                                                  ? AppTheme.neonGreen
+                                                  : AppTheme.lightNeonGreen)
+                                            : _isFocused
+                                            ? (isDark
+                                                  ? AppTheme.neonBlue
+                                                  : AppTheme.lightNeonBlue)
+                                            : (isDark
+                                                  ? AppTheme.textSecondary
+                                                  : AppTheme
+                                                        .lightTextSecondary),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child:
+                                          ValueListenableBuilder<
+                                            TextEditingValue
+                                          >(
+                                            valueListenable: _urlController,
+                                            builder: (context, value, child) {
+                                              return TextField(
+                                                controller: _urlController,
+                                                focusNode: _focusNode,
+                                                textAlignVertical:
+                                                    TextAlignVertical.center,
+                                                style: TextStyle(
+                                                  color: textClr,
+                                                  fontSize: 13,
+                                                ),
+                                                decoration: InputDecoration(
+                                                  isDense: true,
+                                                  suffixIcon: IconButton(
+                                                    padding: EdgeInsets.zero,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 32,
+                                                          minHeight: 32,
+                                                        ),
+                                                    icon: Icon(
+                                                      activeTab.isLoading
+                                                          ? Icons.close
+                                                          : (_isFocused &&
+                                                                value.text
+                                                                    .isNotEmpty)
+                                                          ? Icons.clear
+                                                          : Icons.refresh,
+                                                      size: 16,
+                                                      color: _isFocused
+                                                          ? (isDark
+                                                                ? AppTheme
+                                                                      .neonBlue
+                                                                : AppTheme
+                                                                      .lightNeonBlue)
+                                                          : (isDark
+                                                                ? AppTheme
+                                                                      .textSecondary
+                                                                : AppTheme
+                                                                      .lightTextSecondary),
+                                                    ),
+                                                    tooltip: activeTab
+                                                            .isLoading
+                                                        ? (isRtl
+                                                              ? 'إلغاء التحميل'
+                                                              : 'Stop loading')
+                                                        : (_isFocused &&
+                                                              value.text
+                                                                  .isNotEmpty)
+                                                        ? (isRtl
+                                                              ? 'مسح'
+                                                              : 'Clear')
+                                                        : (isRtl
+                                                              ? 'إعادة تحميل الصفحة'
+                                                              : 'Refresh page'),
+                                                    onPressed: () {
+                                                      triggerHaptic(settings);
+                                                      if (activeTab
+                                                          .isLoading) {
+                                                        activeTab.controller
+                                                            .runJavaScript(
+                                                              'window.stop();',
+                                                            );
+                                                        setState(() {
+                                                          activeTab
+                                                              .isLoading = false;
+                                                        });
+                                                      } else if (_isFocused &&
+                                                          value.text
+                                                              .isNotEmpty) {
+                                                        _urlController.clear();
+                                                      } else {
+                                                        if (!activeTab
+                                                            .isHome) {
+                                                          activeTab.controller
+                                                              .reload();
+                                                        }
+                                                      }
+                                                    },
+                                                  ),
+                                                  suffixIconConstraints:
+                                                      const BoxConstraints(
+                                                        minWidth: 32,
+                                                        minHeight: 32,
+                                                      ),
+                                                  hintText: isRtl
+                                                      ? 'ابحث أو ادخل الرابط...'
+                                                      : 'Search or enter URL...',
+                                                  hintStyle: TextStyle(
+                                                    color: isDark
+                                                        ? AppTheme.textMuted
+                                                        : AppTheme
+                                                              .lightTextMuted,
+                                                    fontSize: 11,
+                                                  ),
+                                                  filled: false,
+                                                  border: InputBorder.none,
+                                                  enabledBorder:
+                                                      InputBorder.none,
+                                                  focusedBorder:
+                                                      InputBorder.none,
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                        horizontal: 4,
+                                                        vertical: 6,
+                                                      ),
+                                                ),
+                                                onSubmitted: (val) {
+                                                  _navigateToUrl(val);
+                                                },
+                                              );
+                                            },
+                                          ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              tooltip:
-                                  YoutubeService.isPlaylistUrl(activeTab.url)
-                                  ? (isRtl
-                                        ? 'تحميل قائمة التشغيل'
-                                        : 'Download Playlist')
-                                  : (isRtl
-                                        ? 'تحميل الفيديو'
-                                        : 'Download Video'),
-                              onPressed: () async {
-                                triggerHaptic(settings);
-                                final tabUrl = activeTab.url;
-                                final isPlaylist = YoutubeService.isPlaylistUrl(tabUrl);
-                                final isVideo = YoutubeService.isYoutubeVideoUrl(tabUrl);
-                                final isMixed = isPlaylist && isVideo;
-
-                                if (isMixed) {
-                                  // Mixed URL: ask user whether to download single video or full playlist
-                                  final choice = await showDialog<String>(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                                      title: Text(isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
-                                          style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16, fontWeight: FontWeight.bold)),
-                                      content: Text(isRtl ? 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.' : 'This link contains both a single video and a playlist.',
-                                          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13)),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(ctx, 'video'),
-                                          child: Text(isRtl ? 'فيديو واحد فقط' : 'Single Video',
-                                              style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(ctx, 'playlist'),
-                                          child: Text(isRtl ? 'قائمة التشغيل كاملة' : 'Entire Playlist',
-                                              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (!context.mounted) return;
-                                  if (choice == 'playlist') {
-                                    final result = await YoutubePlaylistSheet.show(context, tabUrl);
-                                    if (result != null && context.mounted) {
-                                      ThemedSnackbar.show(
-                                        context,
-                                        message: isRtl
-                                            ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
-                                            : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
-                                        color: AppTheme.neonGreen,
-                                        icon: Icons.playlist_add_check,
-                                        isDarkMode: isDark,
-                                      );
-                                    }
-                                    return;
-                                  } else if (choice != 'video') {
-                                    return; // dismissed
-                                  }
-                                  // choice == 'video': fall through to single-video download
-                                } else if (isPlaylist) {
-                                  // Pure playlist URL
-                                  final result = await YoutubePlaylistSheet.show(context, tabUrl);
-                                  if (result != null && context.mounted) {
-                                    ThemedSnackbar.show(
-                                      context,
-                                      message: isRtl
-                                          ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
-                                          : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
-                                      color: AppTheme.neonGreen,
-                                      icon: Icons.playlist_add_check,
-                                      isDarkMode: isDark,
-                                    );
-                                  }
-                                  return;
-                                }
-
-                                // Single-video download
-                                final stream = await YoutubeQualitySheet.show(context, tabUrl);
-                                if (stream != null && context.mounted) {
-                                  final title = stream['title'] as String? ?? 'YouTube Video';
-                                  final ext = stream['ext'] as String? ?? 'mp4';
-                                  _startDirectDownload(
-                                    stream['src'] as String,
-                                    suggestedName: '$title.$ext',
-                                    type: 'video',
-                                    audioUrl: stream['audioSrc'] as String?,
-                                    videoSize: stream['videoSize'] as int?,
-                                    audioSize: stream['audioSize'] as int?,
-                                  );
-                                }
-                              },
                             ),
                             const SizedBox(width: 4),
-                          ],
-
-                          // Back navigation
-                          IconButton(
-                            icon: Icon(
-                              Icons.arrow_back_ios_new,
-                              size: 15,
-                              color: (activeTab.canGoBack || !activeTab.isHome)
-                                  ? textClr
-                                  : (isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted),
-                            ),
-                            onPressed: (activeTab.canGoBack || !activeTab.isHome)
-                                ? () async {
-                                    triggerHaptic(settings);
-                                    await _goBack();
-                                  }
-                                : null,
-                          ),
-                          // Forward navigation
-                          IconButton(
-                            icon: Icon(
-                              Icons.arrow_forward_ios,
-                              size: 15,
-                              color: activeTab.canGoForward
-                                  ? textClr
-                                  : (isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted),
-                            ),
-                            onPressed: activeTab.canGoForward
-                                ? () async {
-                                    triggerHaptic(settings);
-                                    await _goForward();
-                                  }
-                                : null,
-                          ),
-
-                          // Tab Switcher Button
-                          GestureDetector(
-                            onTap: () {
-                              triggerHaptic(settings);
-                              _showTabSwitcher(context);
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 6),
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                border: Border.all(color: textClr, width: 1.8),
-                                borderRadius: BorderRadius.circular(6),
+                            // YouTube grab button
+                            if (!activeTab.isHome &&
+                                (YoutubeService.isYoutubeVideoUrl(
+                                      activeTab.url,
+                                    ) ||
+                                    YoutubeService.isPlaylistUrl(
+                                      activeTab.url,
+                                    ))) ...[
+                              _YouTubeGrabButton(
+                                isPlaylist: YoutubeService.isPlaylistUrl(
+                                  activeTab.url,
+                                ),
+                                isRtl: isRtl,
+                                isDark: isDark,
+                                enableGlow: settings.enableGlow,
+                                onPressed: () =>
+                                    _handleYouTubeGrab(activeTab, settings),
                               ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${_tabs.length}',
-                                style: TextStyle(
-                                  color: textClr,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                              const SizedBox(width: 4),
+                            ],
+                            IconButton(
+                              icon: Icon(
+                                Icons.arrow_back_ios_new,
+                                size: 15,
+                                color: (activeTab.canGoBack ||
+                                        !activeTab.isHome)
+                                    ? textClr
+                                    : (isDark
+                                          ? AppTheme.textMuted
+                                          : AppTheme.lightTextMuted),
+                              ),
+                              onPressed: (activeTab.canGoBack ||
+                                      !activeTab.isHome)
+                                  ? () async {
+                                      triggerHaptic(settings);
+                                      await _goBack();
+                                    }
+                                  : null,
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.arrow_forward_ios,
+                                size: 15,
+                                color: activeTab.canGoForward
+                                    ? textClr
+                                    : (isDark
+                                          ? AppTheme.textMuted
+                                          : AppTheme.lightTextMuted),
+                              ),
+                              onPressed: activeTab.canGoForward
+                                  ? () async {
+                                      triggerHaptic(settings);
+                                      await _goForward();
+                                    }
+                                  : null,
+                            ),
+                            // Tab counter
+                            GestureDetector(
+                              onTap: () {
+                                triggerHaptic(settings);
+                                _showTabSwitcher(context);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                                width: 26,
+                                height: 26,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: textClr,
+                                    width: 1.8,
+                                  ),
+                                  borderRadius: BorderRadius.circular(7),
+                                  color: _tabs.length > 1
+                                      ? (isDark
+                                            ? AppTheme.neonBlue
+                                            : AppTheme.lightNeonBlue)
+                                            .withValues(alpha: 0.1)
+                                      : Colors.transparent,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${_tabs.length}',
+                                  style: TextStyle(
+                                    color: textClr,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    fontFamily: 'Space Grotesk',
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-
-                          // More menu options
-                          PopupMenuButton<String>(
-                            icon: Icon(
-                              Icons.more_vert,
-                              size: 18,
-                              color: textClr,
+                            PopupMenuButton<String>(
+                              icon: Icon(
+                                Icons.more_vert,
+                                size: 18,
+                                color: textClr,
+                              ),
+                              color: (isDark
+                                  ? AppTheme.surface
+                                  : AppTheme.lightSurface),
+                              onSelected: (value) async {
+                                triggerHaptic(settings);
+                                await _handleMenuAction(value);
+                              },
+                              itemBuilder: (_) => [
+                                _menuItem(
+                                  Icons.refresh,
+                                  'Reload',
+                                  'reload',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  Icons.bookmark_add_outlined,
+                                  'Bookmark this page',
+                                  'bookmark',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  Icons.bookmarks_outlined,
+                                  'Bookmarks Manager',
+                                  'show_bookmarks',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  Icons.history,
+                                  'Browser History',
+                                  'show_history',
+                                  textClr,
+                                ),
+                                _menuItem(Icons.copy, 'Copy URL', 'copy', textClr),
+                                _menuItem(
+                                  Icons.share,
+                                  'Share URL',
+                                  'share',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  Icons.save_alt,
+                                  'Save Page Offline',
+                                  'offline',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  Icons.code,
+                                  'Inject JS / CSS',
+                                  'injector',
+                                  textClr,
+                                ),
+                                const PopupMenuDivider(),
+                                _menuItem(
+                                  settings.desktopMode
+                                      ? Icons.smartphone
+                                      : Icons.desktop_mac,
+                                  settings.desktopMode
+                                      ? 'Mobile mode'
+                                      : 'Desktop mode',
+                                  'desktop',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  settings.adBlockerEnabled
+                                      ? Icons.shield
+                                      : Icons.shield_outlined,
+                                  settings.adBlockerEnabled
+                                      ? 'Ad blocker: ON'
+                                      : 'Ad blocker: OFF',
+                                  'adblock',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  _isSnifferEnabled
+                                      ? Icons.radar
+                                      : Icons.radar_outlined,
+                                  _isSnifferEnabled
+                                      ? (L10n.isRtl(context)
+                                            ? 'كاشف الوسائط: مفعل'
+                                            : 'Media detector: ON')
+                                      : (L10n.isRtl(context)
+                                            ? 'كاشف الوسائط: معطل'
+                                            : 'Media detector: OFF'),
+                                  'sniffer',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  settings.incognitoEnabled
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  settings.incognitoEnabled
+                                      ? 'Exit incognito'
+                                      : 'New incognito tab',
+                                  'incognito',
+                                  textClr,
+                                ),
+                              ],
                             ),
-                            color: (isDark
-                                ? AppTheme.surface
-                                : AppTheme.lightSurface),
-                            onSelected: (value) async {
-                              triggerHaptic(settings);
-                              await _handleMenuAction(value);
-                            },
-                            itemBuilder: (_) => [
-                              _menuItem(
-                                Icons.refresh,
-                                'Reload',
-                                'reload',
-                                textClr,
-                              ),
-                              _menuItem(
-                                Icons.bookmark_add_outlined,
-                                'Bookmark this page',
-                                'bookmark',
-                                textClr,
-                              ),
-                              _menuItem(
-                                Icons.bookmarks_outlined,
-                                'Bookmarks Manager',
-                                'show_bookmarks',
-                                textClr,
-                              ),
-                              _menuItem(
-                                Icons.history,
-                                'Browser History',
-                                'show_history',
-                                textClr,
-                              ),
-                              _menuItem(
-                                Icons.copy,
-                                'Copy URL',
-                                'copy',
-                                textClr,
-                              ),
-                              _menuItem(
-                                Icons.share,
-                                'Share URL',
-                                'share',
-                                textClr,
-                              ),
-                              _menuItem(
-                                Icons.save_alt,
-                                'Save Page Offline',
-                                'offline',
-                                textClr,
-                              ),
-                              _menuItem(
-                                Icons.code,
-                                'Inject JS / CSS',
-                                'injector',
-                                textClr,
-                              ),
-                              const PopupMenuDivider(),
-                              _menuItem(
-                                settings.desktopMode
-                                    ? Icons.smartphone
-                                    : Icons.desktop_mac,
-                                settings.desktopMode
-                                    ? 'Mobile mode'
-                                    : 'Desktop mode',
-                                'desktop',
-                                textClr,
-                              ),
-                              _menuItem(
-                                settings.adBlockerEnabled
-                                    ? Icons.shield
-                                    : Icons.shield_outlined,
-                                settings.adBlockerEnabled
-                                    ? 'Ad blocker: ON'
-                                    : 'Ad blocker: OFF',
-                                'adblock',
-                                textClr,
-                              ),
-                              _menuItem(
-                                _isSnifferEnabled
-                                    ? Icons.radar
-                                    : Icons.radar_outlined,
-                                _isSnifferEnabled
-                                    ? (L10n.isRtl(context) ? 'كاشف الوسائط: مفعل' : 'Media detector: ON')
-                                    : (L10n.isRtl(context) ? 'كاشف الوسائط: معطل' : 'Media detector: OFF'),
-                                'sniffer',
-                                textClr,
-                              ),
-                              _menuItem(
-                                settings.incognitoEnabled
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                                settings.incognitoEnabled
-                                    ? 'Exit incognito'
-                                    : 'New incognito tab',
-                                'incognito',
-                                textClr,
-                              ),
-                            ],
-                            onOpened: () {
-                              // Helper logic: since bookmarks & history sheets are pushed separately,
-                              // we handle their callbacks when they are selected.
-                            },
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
+                  ),
+                ),
               ),
-            ),
-          ),
-              ),
-
-              // Loading Progress line
+              // ── Scanline loading progress ──
               if (activeTab.isLoading && !activeTab.isHome)
                 ValueListenableBuilder<double>(
                   valueListenable: activeTab.progressNotifier,
                   builder: (context, progressValue, child) {
-                    return LinearProgressIndicator(
-                      value: progressValue,
-                      minHeight: 2.0,
-                      backgroundColor: Colors.transparent,
-                      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    return _ScanlineProgress(
+                      progress: progressValue,
+                      isDark: isDark,
                     );
                   },
                 ),
-
-              // Main browser view (preserving controllers state with IndexedStack)
+              // Main browser view
               Expanded(
                 child: Stack(
                   children: [
@@ -3297,27 +3527,25 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                       child: _tabs.isEmpty
                           ? const SizedBox.shrink()
                           : IndexedStack(
-                              index: _currentTabIndex >= 0 && _currentTabIndex < _tabs.length
+                              index: _currentTabIndex >= 0 &&
+                                      _currentTabIndex < _tabs.length
                                   ? _currentTabIndex
                                   : 0,
                               children: _tabs.asMap().entries.map((entry) {
                                 final tabIndex = entry.key;
                                 final tab = entry.value;
-                                final isActiveTab = tabIndex == _currentTabIndex;
+                                final isActiveTab =
+                                    tabIndex == _currentTabIndex;
                                 if (tab.isHome) {
                                   return SizedBox(
                                     width: double.infinity,
                                     height: double.infinity,
-                                    // Only pass the shared ScrollController to the
-                                    // active tab's dashboard. Passing it to every
-                                    // isHome tab in the IndexedStack would attach
-                                    // the same controller to multiple ScrollViews
-                                    // and crash with the '_positions.length == 1'
-                                    // assertion.
                                     child: _buildHomeDashboard(
                                       context,
                                       settings,
-                                      scrollController: isActiveTab ? _dashboardScrollController : null,
+                                      scrollController: isActiveTab
+                                          ? _dashboardScrollController
+                                          : null,
                                     ),
                                   );
                                 } else {
@@ -3326,11 +3554,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                     height: double.infinity,
                                     child: RepaintBoundary(
                                       child: RefreshIndicator(
-                                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                                        color: isDark
+                                            ? AppTheme.neonBlue
+                                            : AppTheme.lightNeonBlue,
                                         onRefresh: () async {
                                           await tab.controller.reload();
                                         },
-                                        child: WebViewWidget(controller: tab.controller),
+                                        child: WebViewWidget(
+                                          controller: tab.controller,
+                                        ),
                                       ),
                                     ),
                                   );
@@ -3338,8 +3570,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               }).toList(),
                             ),
                     ),
-
-                    // Left edge gesture zone (Swipe edge -> Go Back)
                     if (!activeTab.isHome)
                       Positioned(
                         left: 0,
@@ -3359,8 +3589,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           },
                         ),
                       ),
-
-                    // Right edge gesture zone (Swipe edge -> Go Forward)
                     if (!activeTab.isHome)
                       Positioned(
                         right: 0,
@@ -3390,7 +3618,127 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     );
   }
 
-  // Intercept bookmark and history opens from popups
+  Future<void> _handleYouTubeGrab(
+    BrowserTab activeTab,
+    SettingsProvider settings,
+  ) async {
+    triggerHaptic(settings);
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final tabUrl = activeTab.url;
+    final isPlaylist = YoutubeService.isPlaylistUrl(tabUrl);
+    final isVideo = YoutubeService.isYoutubeVideoUrl(tabUrl);
+    final isMixed = isPlaylist && isVideo;
+    if (isMixed) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: isDark
+              ? AppTheme.surface
+              : AppTheme.lightSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Text(
+            isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            isRtl
+                ? 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.'
+                : 'This link contains both a single video and a playlist.',
+            style: TextStyle(
+              color: isDark ? Colors.white70 : Colors.black54,
+              fontSize: 13,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'video'),
+              child: Text(
+                isRtl ? 'فيديو واحد فقط' : 'Single video',
+                style: const TextStyle(
+                  color: Colors.blue,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'playlist'),
+              child: Text(
+                isRtl ? 'قائمة التشغيل كاملة' : 'Entire playlist',
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      if (choice == 'playlist') {
+        final result = await YoutubePlaylistSheet.show(context, tabUrl);
+        if (!mounted) {
+          return;
+        }
+        if (result != null) {
+          ThemedSnackbar.show(
+            context,
+            message: isRtl
+                ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
+                : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
+            color: AppTheme.neonGreen,
+            icon: Icons.playlist_add_check,
+            isDarkMode: isDark,
+          );
+        }
+        return;
+      } else if (choice != 'video') {
+        return;
+      }
+    } else if (isPlaylist) {
+      final result = await YoutubePlaylistSheet.show(context, tabUrl);
+      if (!mounted) {
+        return;
+      }
+      if (result != null) {
+        ThemedSnackbar.show(
+          context,
+          message: isRtl
+              ? 'تمت إضافة ${result.selectedVideos.length} فيديو إلى قائمة الانتظار'
+              : '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
+          color: AppTheme.neonGreen,
+          icon: Icons.playlist_add_check,
+          isDarkMode: isDark,
+        );
+      }
+      return;
+    }
+    final stream = await YoutubeQualitySheet.show(context, tabUrl);
+    if (!mounted) {
+      return;
+    }
+    if (stream != null) {
+      final title = stream['title'] as String? ?? 'YouTube video';
+      final ext = stream['ext'] as String? ?? 'mp4';
+      _startDirectDownload(
+        stream['src'] as String,
+        suggestedName: '$title.$ext',
+        type: 'video',
+        audioUrl: stream['audioSrc'] as String?,
+        videoSize: stream['videoSize'] as int?,
+        audioSize: stream['audioSize'] as int?,
+      );
+    }
+  }
+
   void _openBookmarks() async {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     triggerHaptic(settings);
@@ -3431,7 +3779,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
   }
 
-  // Handle manual navigation callbacks
+  // ─────────────────────────────────────────────────────────────
+  // DOWNLOAD FAB — with live signal pulse
+  // ─────────────────────────────────────────────────────────────
   Widget _buildDownloadFab(BuildContext context, SettingsProvider settings) {
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
@@ -3440,13 +3790,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final isPlaylist = _detectedPlaylistUrls.containsKey(activeTab.id);
     final playlistCount = _detectedPlaylistUrls[activeTab.id] ?? 0;
 
-    // YouTube Playlist FAB
     if (isPlaylist) {
-      return FloatingActionButton.extended(
-        heroTag: null,
-        backgroundColor: Colors.red,
-        foregroundColor: Colors.white,
-        elevation: 4,
+      return _SignalFab(
+        color: Colors.red,
+        icon: Icons.playlist_play_rounded,
+        label: 'Playlist${playlistCount > 0 ? ' ($playlistCount)' : ''}',
+        pulse: true,
+        isDark: isDark,
         onPressed: () async {
           triggerHaptic(settings);
           final result = await YoutubePlaylistSheet.show(
@@ -3456,26 +3806,26 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           if (result != null && context.mounted) {
             ThemedSnackbar.show(
               context,
-              message: '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
+              message:
+                  '${result.selectedVideos.length} videos enqueued from "${result.playlistTitle}"',
               color: AppTheme.neonGreen,
               icon: Icons.playlist_add_check,
               isDarkMode: isDark,
             );
           }
         },
-        icon: const Icon(Icons.playlist_play_rounded),
-        label: Text('PLAYLIST${playlistCount > 0 ? ' ($playlistCount)' : ''}'),
       );
     }
-
-    // Single video / media — show quality picker directly
     if (YoutubeService.isExtractableMediaUrl(activeTab.url) &&
         detectedSources.isNotEmpty) {
-      return FloatingActionButton.extended(
-        heroTag: null,
-        backgroundColor: Colors.red,
-        foregroundColor: Colors.white,
-        elevation: 4,
+      return _SignalFab(
+        color: Colors.red,
+        icon: Icons.play_circle_filled,
+        label: detectedSources.length > 1
+            ? 'Media (${detectedSources.length})'
+            : 'Media',
+        pulse: true,
+        isDark: isDark,
         onPressed: () async {
           triggerHaptic(settings);
           if (detectedSources.length > 1) {
@@ -3486,7 +3836,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               activeTab.url,
             );
             if (stream != null && context.mounted) {
-              final title = stream['title'] as String? ?? 'Media Video';
+              final title = stream['title'] as String? ?? 'Media video';
               final ext = stream['ext'] as String? ?? 'mp4';
               _startDirectDownload(
                 stream['src'] as String,
@@ -3499,23 +3849,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
           }
         },
-        icon: const Icon(Icons.play_circle_filled),
-        label: Text(
-          detectedSources.length > 1
-              ? 'MEDIA (${detectedSources.length})'
-              : 'MEDIA',
-        ),
       );
     }
-
-    // YouTube detected but stream fetch failed — show retry FAB
     if (YoutubeService.isYoutubeVideoUrl(activeTab.url) &&
         _ytDetectionFailed.contains(activeTab.url)) {
-      return FloatingActionButton.extended(
-        heroTag: null,
-        backgroundColor: Colors.red.withValues(alpha: 0.6),
-        foregroundColor: Colors.white70,
-        elevation: 4,
+      return _SignalFab(
+        color: Colors.red.withValues(alpha: 0.6),
+        icon: Icons.refresh_rounded,
+        label: 'YouTube (retry)',
+        pulse: false,
+        isDark: isDark,
         onPressed: () async {
           triggerHaptic(settings);
           setState(() {
@@ -3523,17 +3866,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           });
           _scanPageMedia(activeTab);
         },
-        icon: const Icon(Icons.refresh_rounded, size: 18),
-        label: const Text('YOUTUBE (RETRY)'),
       );
     }
-
-    // Normal download FAB
-    return FloatingActionButton.extended(
-      heroTag: null,
-      backgroundColor: accent,
-      foregroundColor: Colors.black,
-      elevation: 4,
+    return _SignalFab(
+      color: accent,
+      icon: Icons.download_rounded,
+      label: detectedSources.length > 1
+          ? 'Downloads (${detectedSources.length})'
+          : 'Download',
+      pulse: detectedSources.isNotEmpty,
+      isDark: isDark,
       onPressed: () {
         triggerHaptic(settings);
         if (detectedSources.length > 1) {
@@ -3557,17 +3899,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             context,
             url,
             suggestedName: filename,
-            onQuality: () => _showQualityPicker(activeTab.id, fallbackUrl: url),
+            onQuality: () =>
+                _showQualityPicker(activeTab.id, fallbackUrl: url),
             downloadPageUrl: activeTab.isHome ? null : activeTab.url,
           );
         }
       },
-      icon: const Icon(Icons.download_rounded),
-      label: Text(
-        detectedSources.length > 1
-            ? 'DOWNLOADS (${detectedSources.length})'
-            : 'DOWNLOAD',
-      ),
     );
   }
 
@@ -3590,8 +3927,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     );
     final isRtl = L10n.isRtl(context);
     final isDark = settingsProvider.isDarkMode;
-
-    // 1. Check if the exact same URL is already present in task list
     final existingTasks = downloadProvider.tasks
         .where((t) => t.url == url)
         .toList();
@@ -3630,19 +3965,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }
       return;
     }
-
-    // 2. Resolve default filename
     String finalFileName = suggestedName ?? '';
     if (finalFileName.isEmpty) {
       if (url.startsWith('magnet:')) {
         final parsed = parseMagnetUrl(url);
-        finalFileName = parsed['name'] ?? 'Torrent Download';
+        finalFileName = parsed['name'] ?? 'Torrent download';
       } else {
         finalFileName = fileNameFromUrl(url);
       }
     }
-
-    // 3. Deduplicate filename to prevent conflicts
     String numberedName = finalFileName;
     final ext = p.extension(finalFileName);
     final base = p.basenameWithoutExtension(finalFileName);
@@ -3654,8 +3985,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       counter++;
     }
     finalFileName = numberedName;
-
-    // 4. Determine category
     String resolvedCategory = '';
     if (type == 'video') {
       resolvedCategory = 'Video';
@@ -3666,8 +3995,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     } else {
       resolvedCategory = categoryFromFileName(finalFileName);
     }
-
-    // 5. Trigger download in background
     try {
       if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
       final activeTab = _tabs[_currentTabIndex];
@@ -3678,12 +4005,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         url: url,
         size: videoSize ?? 0,
         category: resolvedCategory,
-        savePath: '', // Falls back to default directory
+        savePath: '',
         downloadPageUrl: resolvedOriginUrl,
         mergedAudioUrl: audioUrl,
         audioSize: audioSize ?? 0,
       );
-
       if (mounted) {
         if (downloadProvider.lastError != null) {
           ThemedSnackbar.show(
@@ -3698,7 +4024,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             context,
             message: isRtl
                 ? 'تم إنشاء الاتصال. القنوات متصلة.'
-                : 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
+                : 'Download queued successfully.',
             color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             icon: Icons.rocket_launch_outlined,
             isDarkMode: isDark,
@@ -3719,18 +4045,742 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// NEW UI COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+
+/// Pulsing live-status dot.
+class _LiveDot extends StatefulWidget {
+  final Color color;
+  const _LiveDot({required this.color});
+  @override
+  State<_LiveDot> createState() => _LiveDotState();
+}
+
+class _LiveDotState extends State<_LiveDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    // Two-cycle pulse on build.
+    _c.forward().then((_) {
+      if (mounted) {
+        _c.reverse().then((_) {
+          if (mounted) {
+            _c.forward().then((_) {
+              if (mounted) _c.reverse();
+            });
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) => Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: widget.color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: 0.3 + _c.value * 0.4),
+              blurRadius: 4 + _c.value * 4,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Icon badge with animated pulse ring — used in sheet headers.
+class _PulsingIconBadge extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  final bool isDark;
+  const _PulsingIconBadge({
+    required this.icon,
+    required this.color,
+    required this.isDark,
+  });
+  @override
+  State<_PulsingIconBadge> createState() => _PulsingIconBadgeState();
+}
+
+class _PulsingIconBadgeState extends State<_PulsingIconBadge>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    );
+    _runTwoCycles();
+  }
+
+  void _runTwoCycles() {
+    _c.forward().then((_) {
+      if (mounted) {
+        _c.reverse().then((_) {
+          if (mounted) {
+            _c.forward().then((_) {
+              if (mounted) _c.reverse();
+            });
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) => Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 44 + _c.value * 10,
+            height: 44 + _c.value * 10,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: widget.color.withValues(alpha: 0.35 * (1 - _c.value)),
+                width: 1.2,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: widget.color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(widget.icon, color: widget.color, size: 20),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Corner-bracket frame for URL readouts — targeting UI feel.
+class _CornerBracketBox extends StatelessWidget {
+  final Widget child;
+  final Color color;
+  final bool isDark;
+  const _CornerBracketBox({
+    required this.child,
+    required this.color,
+    required this.isDark,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final bracket = BorderSide(color: color.withValues(alpha: 0.6), width: 1.5);
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: (isDark ? AppTheme.background : AppTheme.lightBackground)
+                .withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark
+                  ? AppTheme.glassBorder
+                  : AppTheme.lightGlassBorder,
+              width: 0.7,
+            ),
+          ),
+          child: child,
+        ),
+        // Corner brackets
+        Positioned(
+          top: 0,
+          left: 0,
+          child: _Corner(side: _CornerSide.tl, border: bracket),
+        ),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: _Corner(side: _CornerSide.tr, border: bracket),
+        ),
+        Positioned(
+          bottom: 0,
+          left: 0,
+          child: _Corner(side: _CornerSide.bl, border: bracket),
+        ),
+        Positioned(
+          bottom: 0,
+          right: 0,
+          child: _Corner(side: _CornerSide.br, border: bracket),
+        ),
+      ],
+    );
+  }
+}
+
+enum _CornerSide { tl, tr, bl, br }
+
+class _Corner extends StatelessWidget {
+  final _CornerSide side;
+  final BorderSide border;
+  const _Corner({required this.side, required this.border});
+  @override
+  Widget build(BuildContext context) {
+    const s = 12.0;
+    return CustomPaint(
+      size: const Size(s, s),
+      painter: _CornerPainter(side: side, border: border),
+    );
+  }
+}
+
+class _CornerPainter extends CustomPainter {
+  final _CornerSide side;
+  final BorderSide border;
+  _CornerPainter({required this.side, required this.border});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = border.toPaint();
+    final w = size.width;
+    final h = size.height;
+    switch (side) {
+      case _CornerSide.tl:
+        canvas.drawLine(Offset(0, h), Offset(0, 0), paint);
+        canvas.drawLine(Offset(0, 0), Offset(w, 0), paint);
+        break;
+      case _CornerSide.tr:
+        canvas.drawLine(Offset(w, h), Offset(w, 0), paint);
+        canvas.drawLine(Offset(w, 0), Offset(0, 0), paint);
+        break;
+      case _CornerSide.bl:
+        canvas.drawLine(Offset(0, 0), Offset(0, h), paint);
+        canvas.drawLine(Offset(0, h), Offset(w, h), paint);
+        break;
+      case _CornerSide.br:
+        canvas.drawLine(Offset(w, 0), Offset(w, h), paint);
+        canvas.drawLine(Offset(w, h), Offset(0, h), paint);
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Scanline-style loading bar with animated shimmer.
+class _ScanlineProgress extends StatefulWidget {
+  final double progress;
+  final bool isDark;
+  const _ScanlineProgress({required this.progress, required this.isDark});
+  @override
+  State<_ScanlineProgress> createState() => _ScanlineProgressState();
+}
+
+class _ScanlineProgressState extends State<_ScanlineProgress>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.isDark
+        ? AppTheme.neonBlue
+        : AppTheme.lightNeonBlue;
+    return SizedBox(
+      height: 3,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, child) => Stack(
+          children: [
+            LinearProgressIndicator(
+              value: widget.progress,
+              minHeight: 3,
+              backgroundColor: Colors.transparent,
+              color: accent.withValues(alpha: 0.85),
+            ),
+            Positioned(
+              left: (widget.progress * MediaQuery.of(context).size.width *
+                      _c.value) -
+                  30,
+              child: Container(
+                width: 30,
+                height: 3,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      accent.withValues(alpha: 0.9),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Animated radar sweep for the sniffer dashboard card.
+class _RadarSweep extends StatefulWidget {
+  final Color color;
+  final bool active;
+  const _RadarSweep({required this.color, required this.active});
+  @override
+  State<_RadarSweep> createState() => _RadarSweepState();
+}
+
+class _RadarSweepState extends State<_RadarSweep>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    );
+    if (widget.active) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_RadarSweep old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !_c.isAnimating) _c.repeat();
+    if (!widget.active && _c.isAnimating) _c.stop();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) => CustomPaint(
+        size: const Size(72, 72),
+        painter: _RadarPainter(
+          sweep: _c.value * 2 * pi,
+          color: widget.color,
+          active: widget.active,
+        ),
+      ),
+    );
+  }
+}
+
+class _RadarPainter extends CustomPainter {
+  final double sweep;
+  final Color color;
+  final bool active;
+  _RadarPainter({
+    required this.sweep,
+    required this.color,
+    required this.active,
+  });
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxR = size.width / 2;
+    final ringPaint = Paint()
+      ..color = color.withValues(alpha: active ? 0.25 : 0.1)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    for (final r in [maxR * 0.4, maxR * 0.7, maxR]) {
+      canvas.drawCircle(center, r, ringPaint);
+    }
+    // Crosshair
+    canvas.drawLine(
+      Offset(center.dx - maxR, center.dy),
+      Offset(center.dx + maxR, center.dy),
+      ringPaint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - maxR),
+      Offset(center.dx, center.dy + maxR),
+      ringPaint,
+    );
+    if (active) {
+      // Sweep wedge
+      final sweepPaint = Paint()
+        ..shader = SweepGradient(
+          startAngle: sweep - 0.9,
+          endAngle: sweep,
+          colors: [Colors.transparent, color.withValues(alpha: 0.35)],
+        ).createShader(Rect.fromCircle(center: center, radius: maxR));
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: maxR),
+        sweep - 0.9,
+        0.9,
+        true,
+        sweepPaint,
+      );
+      // Sweep leading line
+      final linePaint = Paint()
+        ..color = color.withValues(alpha: 0.8)
+        ..strokeWidth = 1.2;
+      canvas.drawLine(
+        center,
+        Offset(
+          center.dx + maxR * cos(sweep),
+          center.dy + maxR * sin(sweep),
+        ),
+        linePaint,
+      );
+      // Blips
+      final blipPaint = Paint()
+        ..color = color.withValues(alpha: 0.7)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+      canvas.drawCircle(
+        Offset(center.dx + maxR * 0.55 * cos(sweep - 0.5),
+            center.dy + maxR * 0.55 * sin(sweep - 0.5)),
+        2,
+        blipPaint,
+      );
+      canvas.drawCircle(
+        Offset(center.dx + maxR * 0.8 * cos(sweep - 1.2),
+            center.dy + maxR * 0.8 * sin(sweep - 1.2)),
+        1.5,
+        blipPaint,
+      );
+    }
+    // Center dot
+    final dotPaint = Paint()..color = color.withValues(alpha: active ? 0.9 : 0.3);
+    canvas.drawCircle(center, 2.5, dotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RadarPainter old) =>
+      old.sweep != sweep || old.active != active;
+}
+
+/// Dashboard sniffer card with live radar.
+class _SnifferRadarCard extends StatelessWidget {
+  final SettingsProvider settings;
+  final bool isEnabled;
+  final ValueChanged<bool> onToggle;
+  const _SnifferRadarCard({
+    required this.settings,
+    required this.isEnabled,
+    required this.onToggle,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final isDark = settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final statusClr = isEnabled ? green : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted);
+    return GlassCard(
+      borderRadius: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      isDarkMode: isDark,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _RadarSweep(color: isEnabled ? green : accent, active: isEnabled),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isRtl
+                      ? 'كاشف الملفات (Sniffer)'
+                      : 'Stream sniffer',
+                  style: TextStyle(
+                    fontFamily: 'Space Grotesk',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 0.3,
+                    color: accent,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    _LiveDot(color: statusClr),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isEnabled
+                            ? (isRtl ? 'الاعتراض التلقائي نشط' : 'AUTO-INTERCEPT ACTIVE')
+                            : (isRtl ? 'الاعتراض التلقائي متوقف' : 'AUTO-INTERCEPT DEACTIVATED'),
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontWeight: FontWeight.w800,
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                          fontSize: 12.5,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isRtl
+                      ? 'يكتشف روابط التحميل المباشرة والوسائط تلقائياً'
+                      : 'Sniffs media files and documents dynamically',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Transform.scale(
+            scale: 0.82,
+            child: Switch(
+              value: isEnabled,
+              activeThumbColor: Colors.white,
+              activeTrackColor: green,
+              inactiveThumbColor: isDark ? const Color(0xFF7F7F90) : const Color(0xFF94A3B8),
+              inactiveTrackColor: isDark ? const Color(0x1AFFFFFF) : const Color(0x0D000000),
+              trackOutlineColor: WidgetStateProperty.resolveWith((states) => Colors.transparent),
+              onChanged: onToggle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// FAB with pulsing signal ring when media is detected.
+class _SignalFab extends StatefulWidget {
+  final Color color;
+  final IconData icon;
+  final String label;
+  final bool pulse;
+  final bool isDark;
+  final VoidCallback onPressed;
+  const _SignalFab({
+    required this.color,
+    required this.icon,
+    required this.label,
+    required this.pulse,
+    required this.isDark,
+    required this.onPressed,
+  });
+  @override
+  State<_SignalFab> createState() => _SignalFabState();
+}
+
+class _SignalFabState extends State<_SignalFab>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    if (widget.pulse) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_SignalFab old) {
+    super.didUpdateWidget(old);
+    if (widget.pulse && !_c.isAnimating) _c.repeat();
+    if (!widget.pulse && _c.isAnimating) _c.stop();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (widget.pulse)
+          AnimatedBuilder(
+            animation: _c,
+            builder: (context, child) => Container(
+              width: 52 + _c.value * 22,
+              height: 52 + _c.value * 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: widget.color.withValues(
+                    alpha: 0.5 * (1 - _c.value),
+                  ),
+                  width: 1.5,
+                ),
+              ),
+            ),
+          ),
+        FloatingActionButton.extended(
+          heroTag: null,
+          backgroundColor: widget.color,
+          foregroundColor: Colors.white,
+          elevation: 4,
+          onPressed: widget.onPressed,
+          icon: Icon(widget.icon),
+          label: Text(
+            widget.label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              fontFamily: 'Space Grotesk',
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// YouTube grab button in the URL bar.
+class _YouTubeGrabButton extends StatelessWidget {
+  final bool isPlaylist;
+  final bool isRtl;
+  final bool isDark;
+  final bool enableGlow;
+  final VoidCallback onPressed;
+  const _YouTubeGrabButton({
+    required this.isPlaylist,
+    required this.isRtl,
+    required this.isDark,
+    required this.enableGlow,
+    required this.onPressed,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.2),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.red, width: 1.2),
+          boxShadow: enableGlow
+              ? [
+                  BoxShadow(
+                    color: Colors.red.withValues(alpha: 0.4),
+                    blurRadius: 6,
+                    spreadRadius: 0.5,
+                  ),
+                ]
+              : null,
+        ),
+        child: Icon(
+          isPlaylist ? Icons.playlist_play_rounded : Icons.download_rounded,
+          size: 16,
+          color: Colors.white,
+        ),
+      ),
+      tooltip: isPlaylist
+          ? (isRtl ? 'تحميل قائمة التشغيل' : 'Download Playlist')
+          : (isRtl ? 'تحميل الفيديو' : 'Download Video'),
+      onPressed: onPressed,
+    );
+  }
+}
+
+/// Small action button in the tab switcher header.
+class _TabSwitcherAction extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onPressed;
+  const _TabSwitcherAction({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onPressed,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onPressed,
+        child: Tooltip(
+          message: tooltip,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withValues(alpha: 0.25), width: 0.7),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // Stateful Dialog Editor for Injecting CSS & JavaScript
 class _JsCssInjectorDialog extends StatefulWidget {
   final String initialJs;
   final String initialCss;
   final Function(String, String) onSave;
-
   const _JsCssInjectorDialog({
     required this.initialJs,
     required this.initialCss,
     required this.onSave,
   });
-
   @override
   State<_JsCssInjectorDialog> createState() => _JsCssInjectorDialogState();
 }
@@ -3738,8 +4788,7 @@ class _JsCssInjectorDialog extends StatefulWidget {
 class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
   late final TextEditingController _jsController;
   late final TextEditingController _cssController;
-  int _activeTab = 0; // 0: JS, 1: CSS
-
+  int _activeTab = 0;
   @override
   void initState() {
     super.initState();
@@ -3759,19 +4808,24 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
     final settings = Provider.of<SettingsProvider>(context);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     return AlertDialog(
       backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface)
           .withValues(alpha: 0.95),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: Text(
-        'JS / CSS INJECTOR',
-        style: TextStyle(
-          color: accent,
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.0,
-        ),
+      title: Row(
+        children: [
+          Icon(Icons.code_rounded, color: accent, size: 20),
+          const SizedBox(width: 10),
+          Text(
+            'JS / CSS INJECTOR',
+            style: TextStyle(
+              color: accent,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
       ),
       content: SizedBox(
         width: MediaQuery.of(context).size.width * 0.85,
@@ -3781,23 +4835,33 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.12),
+                color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                    .withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.3),
+                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                      .withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed, size: 18),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: isDark
+                        ? AppTheme.neonRed
+                        : AppTheme.lightNeonRed,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       L10n.isRtl(context)
-                          ? 'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.'
+                          ? 'تنبيه: هذا الكود ينفذ على صفحات الويب. لا تدخل بيانات حساسة.'
                           : 'WARNING: Code runs on web pages. Do not enter sensitive data.',
                       style: TextStyle(
-                        color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        color: isDark
+                            ? AppTheme.neonRed
+                            : AppTheme.lightNeonRed,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -3820,12 +4884,16 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
                 children: [
                   _buildCodeEditor(
                     _jsController,
-                    '// Write your Custom Javascript here\n// Automatically runs on page loads...',
+                    '''// Write your Custom Javascript here
+// Automatically runs on page loads...''',
                     isDark,
                   ),
                   _buildCodeEditor(
                     _cssController,
-                    '/* Write your Custom CSS here */\nbody {\n  /* background-color: #000; */\n}',
+                    '''/* Write your Custom CSS here */
+body {
+  /* background-color: #000; */
+}''',
                     isDark,
                   ),
                 ],
@@ -3888,6 +4956,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
                       : AppTheme.lightTextSecondary),
             fontWeight: FontWeight.bold,
             fontSize: 12,
+            fontFamily: 'Space Grotesk',
           ),
         ),
       ),

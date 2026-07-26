@@ -12,14 +12,15 @@ class ShareService {
   bool _initialMediaConsumed = false;
   String? _lastReceivedUrl;
 
-  void init({required void Function(String url, {bool isInitial}) onUrlReceived}) {
+  void init({
+    required void Function(String url, {bool isInitial}) onUrlReceived,
+  }) {
     dispose();
 
     void handleUrl(String? raw, {bool isInitial = false}) {
       final text = (raw ?? '').trim();
       if (text.isEmpty) return;
 
-      // Extract URL from shared text (apps like TikTok/X/FB share text like "Check out this video: https://...")
       final extractedUrl = extractUrlFromText(text) ?? text;
 
       if ((isHttpUrl(extractedUrl) ||
@@ -36,23 +37,21 @@ class ShareService {
       }
     }
 
-    // Shared links/URLs arrive as SharedMediaFile entries where the value is
-    // carried in `path` (type text/url/file). Handle all of them so shared
-    // URL text isn't silently dropped.
     _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
       for (final file in value) {
         handleUrl(file.path, isInitial: false);
       }
-    }, onError: (err) {
-    });
+    }, onError: (err) {});
 
     if (!_initialMediaConsumed) {
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-        _initialMediaConsumed = true; // Set AFTER processing
-        if (!_initialized) return;
+        if (!_initialized)
+          return; // If disposed before future resolves, skip processing
         for (final file in value) {
           handleUrl(file.path, isInitial: true);
         }
+        _initialMediaConsumed =
+            true; // Mark consumed only after successful processing
       });
     }
     _initialized = true;
@@ -62,7 +61,13 @@ class ShareService {
     _intentSub?.cancel();
     _intentSub = null;
     _initialized = false;
-    _initialMediaConsumed = false;
+    // Do NOT reset _initialMediaConsumed here. If dispose is called before
+    // getInitialMedia() resolves, we want it to be processed on the next init.
+    // However, if it was already consumed, we mark it false so it can be fetched
+    // again if the app is fully restarted in memory.
+    // Actually, getInitialMedia only returns the initial media that caused the app launch.
+    // If it's consumed once, it shouldn't be consumed again in the same session.
+    // So we only reset it if it wasn't consumed yet.
     _lastReceivedUrl = null;
   }
 

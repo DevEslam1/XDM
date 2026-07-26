@@ -7,14 +7,12 @@ import 'package:logging/logging.dart';
 class FFmpegMuxService {
   static final _log = Logger('FFmpegMuxService');
 
-  /// Merges a video-only file and an audio-only file into a single output file
-  /// using FFmpeg. This uses `-c copy` so there is no re-encoding, making it
-  /// extremely fast and preserving original quality.
-  /// 
-  /// Returns `true` if the merge was successful.
   static Future<bool> mergeVideoAudio(
-      String videoPath, String audioPath, String outputPath,
-      {bool deleteInputsIfTemp = true}) async {
+    String videoPath,
+    String audioPath,
+    String outputPath, {
+    bool deleteInputsIfTemp = true,
+  }) async {
     bool isTempFile(String path) {
       final name = p.basename(path).toLowerCase();
       return name.endsWith('.tmp') ||
@@ -23,10 +21,33 @@ class FFmpegMuxService {
           name.endsWith('.temp');
     }
 
-    try {
-      _log.info('Starting merge:\nVideo: $videoPath\nAudio: $audioPath\nOutput: $outputPath');
+    final videoFile = File(videoPath);
+    final audioFile = File(audioPath);
 
-      final videoFile = File(videoPath);
+    Future<void> cleanUpInputs() async {
+      if (deleteInputsIfTemp) {
+        if (isTempFile(videoPath)) {
+          try {
+            await videoFile.delete();
+          } catch (e) {
+            _log.warning('Failed to delete temp video input file: $e');
+          }
+        }
+        if (isTempFile(audioPath)) {
+          try {
+            await audioFile.delete();
+          } catch (e) {
+            _log.warning('Failed to delete temp audio input file: $e');
+          }
+        }
+      }
+    }
+
+    try {
+      _log.info(
+        'Starting merge:\nVideo: $videoPath\nAudio: $audioPath\nOutput: $outputPath',
+      );
+
       if (!await videoFile.exists()) {
         _log.severe('Video file does not exist: $videoPath');
         return false;
@@ -34,7 +55,6 @@ class FFmpegMuxService {
       final videoSize = await videoFile.length();
       _log.info('Video file size: $videoSize bytes');
 
-      final audioFile = File(audioPath);
       if (!await audioFile.exists()) {
         _log.severe('Audio file does not exist: $audioPath');
         return false;
@@ -54,36 +74,35 @@ class FFmpegMuxService {
       }
 
       final arguments = [
-        '-i', videoPath,
-        '-i', audioPath,
-        '-c', 'copy',
-        '-map', '0:v:0',
-        '-map', '1:a:0',
+        '-i',
+        videoPath,
+        '-i',
+        audioPath,
+        '-c',
+        'copy',
+        '-map',
+        '0:v:0',
+        '-map',
+        '1:a:0',
         '-shortest',
         '-y',
-        outputPath
+        outputPath,
       ];
 
-      _log.info('FFmpeg arguments: $arguments');
-      final session = await FFmpegKit
-          .executeWithArguments(arguments)
-          .timeout(const Duration(minutes: 10));
-      final returnCode = await session.getReturnCode();
+      int totalInputBytes = videoSize + audioSize;
+      final calculatedMinutes =
+          (totalInputBytes / (200 * 1024 * 1024)).ceil() + 15;
+      final timeoutDuration = Duration(
+        minutes: calculatedMinutes.clamp(15, 300),
+      );
 
-      Future<void> cleanUpInputs() async {
-        if (deleteInputsIfTemp) {
-          if (isTempFile(videoPath)) {
-            try { await videoFile.delete(); } catch (e) {
-              _log.warning('Failed to delete temp video input file: $e');
-            }
-          }
-          if (isTempFile(audioPath)) {
-            try { await audioFile.delete(); } catch (e) {
-              _log.warning('Failed to delete temp audio input file: $e');
-            }
-          }
-        }
-      }
+      _log.info(
+        'FFmpeg arguments: $arguments (Timeout: ${timeoutDuration.inMinutes} mins)',
+      );
+      final session = await FFmpegKit.executeWithArguments(
+        arguments,
+      ).timeout(timeoutDuration);
+      final returnCode = await session.getReturnCode();
 
       if (ReturnCode.isSuccess(returnCode)) {
         final outputFile = File(outputPath);
@@ -93,43 +112,57 @@ class FFmpegMuxService {
           await cleanUpInputs();
           return true;
         } else {
-          _log.warning('Merge reported success but output file not found: $outputPath');
+          _log.warning(
+            'Merge reported success but output file not found: $outputPath',
+          );
           return false;
         }
       } else {
         final logs = await session.getLogsAsString();
         _log.severe('Merge failed with return code $returnCode.\nLogs:\n$logs');
-        
+
         _log.info('Retrying merge with AAC audio encoding...');
         final fallbackArguments = [
-          '-i', videoPath,
-          '-i', audioPath,
-          '-c:v', 'copy',
-          '-c:a', 'aac',
-          '-b:a', '192k',
-          '-map', '0:v:0',
-          '-map', '1:a:0',
+          '-i',
+          videoPath,
+          '-i',
+          audioPath,
+          '-c:v',
+          'copy',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-map',
+          '0:v:0',
+          '-map',
+          '1:a:0',
           '-shortest',
           '-y',
-          outputPath
+          outputPath,
         ];
-        
-        final fallbackSession = await FFmpegKit.executeWithArguments(fallbackArguments)
-            .timeout(const Duration(minutes: 10));
+
+        final fallbackSession = await FFmpegKit.executeWithArguments(
+          fallbackArguments,
+        ).timeout(timeoutDuration);
         final fallbackReturnCode = await fallbackSession.getReturnCode();
-        
+
         if (ReturnCode.isSuccess(fallbackReturnCode)) {
           final outputFile = File(outputPath);
           if (await outputFile.exists()) {
             final outputSize = await outputFile.length();
-            _log.info('Fallback merge successful: $outputPath ($outputSize bytes)');
+            _log.info(
+              'Fallback merge successful: $outputPath ($outputSize bytes)',
+            );
             await cleanUpInputs();
             return true;
           }
         }
-        
+
         final fallbackLogs = await fallbackSession.getLogsAsString();
-        _log.severe('Fallback merge failed with return code $fallbackReturnCode.\nLogs:\n$fallbackLogs');
+        _log.severe(
+          'Fallback merge failed with return code $fallbackReturnCode.\nLogs:\n$fallbackLogs',
+        );
 
         try {
           final outputFile = File(outputPath);
@@ -141,6 +174,8 @@ class FFmpegMuxService {
       }
     } catch (e, stackTrace) {
       _log.severe('Exception during FFmpeg merge: $e\n$stackTrace');
+      // Clean up temp inputs even if an exception (like timeout) occurs
+      await cleanUpInputs();
       rethrow;
     }
   }

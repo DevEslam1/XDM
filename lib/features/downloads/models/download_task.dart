@@ -56,6 +56,8 @@ class DownloadTask {
   final String? youtubeQualityPreset;
   final String? notes;
   final bool isAppUpdate;
+  final String? playlistId;      // groups playlist videos into one card
+  final String? playlistTitle;
 
   DownloadTask({
     required this.id,
@@ -92,9 +94,12 @@ class DownloadTask {
     this.youtubeQualityPreset,
     this.notes,
     this.isAppUpdate = false,
+    this.playlistId,
+    this.playlistTitle,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
+  bool get isPlaylistItem => playlistId != null && playlistId!.isNotEmpty;
 
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
@@ -201,6 +206,9 @@ class DownloadTask {
     bool clearYoutubeQualityPreset = false,
     String? notes,
     bool? isAppUpdate,
+    String? playlistId,
+    String? playlistTitle,
+    bool clearPlaylist = false,
   }) {
     return DownloadTask(
       id: id,
@@ -239,6 +247,8 @@ class DownloadTask {
       youtubeQualityPreset: clearYoutubeQualityPreset ? null : youtubeQualityPreset ?? this.youtubeQualityPreset,
       notes: notes ?? this.notes,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
+      playlistId: clearPlaylist ? null : playlistId ?? this.playlistId,
+      playlistTitle: clearPlaylist ? null : playlistTitle ?? this.playlistTitle,
     );
   }
 
@@ -278,6 +288,8 @@ class DownloadTask {
       'youtubeQualityPreset': youtubeQualityPreset,
       'notes': notes,
       'isAppUpdate': isAppUpdate,
+      'playlistId': playlistId,
+      'playlistTitle': playlistTitle,
     };
   }
 
@@ -371,6 +383,8 @@ class DownloadTask {
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
       notes: map['notes'] as String?,
       isAppUpdate: map['isAppUpdate'] as bool? ?? false,
+      playlistId: map['playlistId'] as String?,
+      playlistTitle: map['playlistTitle'] as String?,
     );
   }
 
@@ -380,10 +394,14 @@ class DownloadTask {
   // will be considered equal under this operator.
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is DownloadTask && other.id == id);
+      identical(this, other) ||
+      (other is DownloadTask &&
+          other.id == id &&
+          other.playlistId == playlistId &&
+          other.playlistTitle == playlistTitle);
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, playlistId, playlistTitle);
 }
 
 // TODO: Add unit tests for DownloadTask

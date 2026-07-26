@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/permission_service.dart';
@@ -21,14 +22,14 @@ class PermissionRequestScreen extends StatefulWidget {
 class _PermissionRequestScreenState extends State<PermissionRequestScreen>
     with WidgetsBindingObserver {
   final PermissionService _permissionService = PermissionService();
-  bool _storageRequested = false;
   bool _storageGranted = false;
-  bool _notificationsRequested = false;
+  bool _storageOpening = false;
+  bool _storagePermanentlyDenied = false;
   bool _notificationsGranted = false;
-  bool _batteryRequested = false;
+  bool _notificationsOpening = false;
+  bool _notificationsPermanentlyDenied = false;
   bool _batteryGranted = false;
   bool _isNavigating = false;
-  bool _pendingBatteryCheck = false;
   bool _batteryOpening = false;
 
   @override
@@ -36,11 +37,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
     super.initState();
     // Non-Android platforms don't need these permissions; auto-mark as granted.
     if (kIsWeb || !Platform.isAndroid) {
-      _storageRequested = true;
       _storageGranted = true;
-      _notificationsRequested = true;
       _notificationsGranted = true;
-      _batteryRequested = true;
       _batteryGranted = true;
       return;
     }
@@ -49,16 +47,38 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    if (!kIsWeb && Platform.isAndroid) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _pendingBatteryCheck) {
-      _pendingBatteryCheck = false;
-      PermissionService().requestBatteryOptimizationExemption().then((granted) {
-        if (mounted) setState(() => _batteryGranted = granted);
+    if (state == AppLifecycleState.resumed) {
+      _checkAllPermissions();
+    }
+  }
+
+  Future<void> _checkAllPermissions() async {
+    if (!_isAndroidPlatform()) return;
+    final storageGranted = (await Permission.storage.isGranted) ||
+        (await Permission.photos.isGranted &&
+            await Permission.videos.isGranted &&
+            await Permission.audio.isGranted);
+    final notificationsGranted = await Permission.notification.isGranted;
+    final batteryGranted = await _permissionService.isBatteryOptimizationExempt();
+
+    final storagePermanentlyDenied = await _permissionService.isStoragePermanentlyDenied();
+    final notificationsPermanentlyDenied = await Permission.notification.isPermanentlyDenied;
+
+    if (mounted) {
+      setState(() {
+        _storageGranted = storageGranted;
+        _notificationsGranted = notificationsGranted;
+        _batteryGranted = batteryGranted;
+        _storagePermanentlyDenied = storagePermanentlyDenied;
+        _notificationsPermanentlyDenied = notificationsPermanentlyDenied;
       });
     }
   }
@@ -68,56 +88,91 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
   }
 
   Future<void> _requestStorage() async {
-    if (_storageRequested || !_isAndroidPlatform()) return;
-    setState(() => _storageRequested = true);
+    if (_storageOpening || !_isAndroidPlatform()) return;
+    setState(() {
+      _storageOpening = true;
+    });
     try {
-      final granted = await _permissionService.ensureStorageAccess();
-      if (mounted) setState(() => _storageGranted = granted);
+      final isPermanentlyDenied = await _permissionService.isStoragePermanentlyDenied();
+      if (isPermanentlyDenied) {
+        setState(() => _storagePermanentlyDenied = true);
+        await openAppSettings();
+      } else {
+        final granted = await _permissionService.ensureStorageAccess();
+        if (mounted) {
+          setState(() {
+            _storageGranted = granted;
+            if (!granted) {
+              _permissionService.isStoragePermanentlyDenied().then((denied) {
+                if (mounted) setState(() => _storagePermanentlyDenied = denied);
+              });
+            }
+          });
+        }
+      }
     } catch (_) {
-      if (mounted) setState(() => _storageGranted = false);
+    } finally {
+      if (mounted) setState(() => _storageOpening = false);
     }
   }
 
   Future<void> _requestNotifications() async {
-    if (_notificationsRequested || !_isAndroidPlatform()) return;
-    setState(() => _notificationsRequested = true);
+    if (_notificationsOpening || !_isAndroidPlatform()) return;
+    setState(() {
+      _notificationsOpening = true;
+    });
     try {
-      final granted = await NotificationService().requestNotificationPermission();
-      if (mounted) setState(() => _notificationsGranted = granted);
+      final isPermanentlyDenied = await Permission.notification.isPermanentlyDenied;
+      if (isPermanentlyDenied) {
+        setState(() => _notificationsPermanentlyDenied = true);
+        await openAppSettings();
+      } else {
+        final granted = await NotificationService().requestNotificationPermission();
+        if (mounted) {
+          setState(() {
+            _notificationsGranted = granted;
+            if (!granted) {
+              Permission.notification.isPermanentlyDenied.then((denied) {
+                if (mounted) setState(() => _notificationsPermanentlyDenied = denied);
+              });
+            }
+          });
+        }
+      }
     } catch (_) {
-      if (mounted) setState(() => _notificationsGranted = false);
+    } finally {
+      if (mounted) setState(() => _notificationsOpening = false);
     }
   }
 
   Future<void> _requestBattery() async {
-    if (_batteryRequested || !_isAndroidPlatform()) return;
+    if (_batteryOpening || !_isAndroidPlatform()) return;
     setState(() {
-      _batteryRequested = true;
       _batteryOpening = true;
     });
-    // Opens system battery-optimization settings page — the user must toggle
-    // it manually. Detect the return via WidgetsBindingObserver below.
-    final granted = await _permissionService.requestBatteryOptimizationExemption();
-    if (granted) {
+    try {
+      final granted = await _permissionService.requestBatteryOptimizationExemption();
       if (mounted) {
         setState(() {
-          _batteryGranted = true;
+          _batteryGranted = granted;
+        });
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) {
+        setState(() {
           _batteryOpening = false;
         });
       }
-    } else {
-      // User was sent to system settings; re-check when they come back.
-      if (mounted) {
-        setState(() => _batteryOpening = false);
-      }
-      _pendingBatteryCheck = true;
     }
   }
 
   void _continueToApp() {
     if (_isNavigating) return;
     _isNavigating = true;
-    HapticFeedback.mediumImpact();
+    if (context.read<SettingsProvider>().vibration) {
+      HapticFeedback.mediumImpact();
+    }
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -170,9 +225,9 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                   icon: Icons.folder_outlined,
                   title: L10n.of(context, 'permission_storage_title'),
                   description: L10n.of(context, 'permission_storage_desc'),
-                  isLoading: _storageRequested && !_storageGranted,
+                  isLoading: _storageOpening,
                   isGranted: _storageGranted,
-                  isRequested: _storageRequested,
+                  isPermanentlyDenied: _storagePermanentlyDenied,
                   onRequest: _requestStorage,
                   accentColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                   isDark: isDark,
@@ -182,9 +237,9 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                   icon: Icons.notifications_outlined,
                   title: L10n.of(context, 'permission_notifications_title'),
                   description: L10n.of(context, 'permission_notifications_desc'),
-                  isLoading: _notificationsRequested && !_notificationsGranted,
+                  isLoading: _notificationsOpening,
                   isGranted: _notificationsGranted,
-                  isRequested: _notificationsRequested,
+                  isPermanentlyDenied: _notificationsPermanentlyDenied,
                   onRequest: _requestNotifications,
                   accentColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                   isDark: isDark,
@@ -198,7 +253,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                       : L10n.of(context, 'permission_battery_desc'),
                   isLoading: _batteryOpening,
                   isGranted: _batteryGranted,
-                  isRequested: _batteryRequested,
+                  isPermanentlyDenied: false,
                   onRequest: _requestBattery,
                   accentColor: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                   isDark: isDark,
@@ -248,7 +303,7 @@ class _PermissionCard extends StatelessWidget {
   final String description;
   final bool isLoading;
   final bool isGranted;
-  final bool isRequested;
+  final bool isPermanentlyDenied;
   final VoidCallback onRequest;
   final Color accentColor;
   final bool isDark;
@@ -259,7 +314,7 @@ class _PermissionCard extends StatelessWidget {
     required this.description,
     required this.isLoading,
     required this.isGranted,
-    required this.isRequested,
+    required this.isPermanentlyDenied,
     required this.onRequest,
     required this.accentColor,
     required this.isDark,
@@ -350,7 +405,11 @@ class _PermissionCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                child: const Text('Allow'),
+                child: Text(
+                  isPermanentlyDenied
+                      ? (L10n.isRtl(context) ? 'مرفوض — فتح الإعدادات' : 'Denied — Open Settings')
+                      : L10n.of(context, 'permission_allow'),
+                ),
               ),
             ),
         ],

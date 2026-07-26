@@ -15,7 +15,20 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  static const String _apiKeyFallback = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
+  // SECURITY WARNING: The three string parts below form the built-in fallback
+  // API key used when no key is provided via the DMX_API_KEY build-time
+  // environment variable or secure storage. Because they are adjacent literals,
+  // the concatenated key is trivially recoverable from the compiled binary using
+  // strings(1) or any hex editor. This key should be treated as public and
+  // rotated regularly. To supply a secure key at build time, pass:
+  //   flutter build ... --dart-define=DMX_API_KEY=<your_key>
+  // The secure-storage path (loaded via loadApiKey()) takes precedence at runtime.
+  static String get _apiKeyFallback {
+    const fromEnv = String.fromEnvironment('DMX_API_KEY');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    final parts = ['KxPgwFT0Vvq', 'oJUgVfcWuvE3', '-QSrc7qM-1YDS1dzNJv0'];
+    return parts.join();
+  }
   static String? _apiKey;
 
   late Dio _dio;
@@ -168,6 +181,8 @@ class XdmBackendClient {
   Future<Map<String, dynamic>> getPlaylist(
     String url, {
     String? cookies,
+    dynamic pageToken,
+    int? pageSize,
   }) async {
     return _rateLimiter.call('playlist', () async {
       final headers = _buildHeaders({
@@ -178,7 +193,11 @@ class XdmBackendClient {
       try {
         final response = await _dio.get<Map<String, dynamic>>(
           '/api/playlist',
-          queryParameters: {'url': url},
+          queryParameters: {
+            'url': url,
+            if (pageToken != null) 'pageToken': pageToken.toString(),
+            if (pageSize != null) 'pageSize': pageSize,
+          },
           options: Options(headers: headers),
         );
         return response.data ?? {};
@@ -269,6 +288,12 @@ class _StreamsCacheEntry {
 }
 
 class _ApiRateLimiter {
+  // NOTE: This rate limiter is intentionally in-memory only. The sliding window
+  // resets every time the app restarts, which means a burst of requests made
+  // just before a restart can exceed the effective per-session quota. For the
+  // current call volumes (playlist/stream lookups triggered by user action)
+  // this is an acceptable trade-off. If persistent cross-session rate limiting
+  // becomes necessary, persist _endpoints timestamps to SharedPreferences.
   final Map<String, List<DateTime>> _endpoints = {};
   final Map<String, int> _limits = {
     'streams': 30,

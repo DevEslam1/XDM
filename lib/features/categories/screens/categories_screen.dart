@@ -14,10 +14,9 @@ class CategoriesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<DownloadProvider>(context);
+    final counts = context.select<DownloadProvider, Map<String, int>>((p) => p.categoryCounts);
+    final sizes = context.select<DownloadProvider, Map<String, double>>((p) => p.categorySizes);
     final settings = Provider.of<SettingsProvider>(context);
-    final counts = provider.categoryCounts;
-    final sizes = provider.categorySizes;
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
@@ -171,6 +170,7 @@ class CategoriesScreen extends StatelessWidget {
                           if (settings.vibration) {
                             HapticFeedback.lightImpact();
                           }
+                          final provider = context.read<DownloadProvider>();
                           provider.setCategoryFilter(name);
                           provider.setActiveTabIndex(0);
                         },
@@ -439,7 +439,15 @@ class CategoriesScreen extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: categoryCards.take(3).map((card) {
+                  children: (() {
+                    final sortedCards = List<Map<String, dynamic>>.from(categoryCards)
+                      ..sort((a, b) {
+                        final sizeA = sizes[a['name']] ?? 0.0;
+                        final sizeB = sizes[b['name']] ?? 0.0;
+                        return sizeB.compareTo(sizeA);
+                      });
+                    return sortedCards.take(3);
+                  })().map((card) {
                     final String name = card['name'];
                     final Color color = card['color'];
                     final sizeMb = sizes[name] ?? 0.0;

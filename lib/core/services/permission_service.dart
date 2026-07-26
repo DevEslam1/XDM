@@ -19,7 +19,9 @@ class PermissionService {
       _cachedSdkLevel = androidInfo.version.sdkInt;
       return _cachedSdkLevel!;
     } catch (e) {
-      debugPrint('[PermissionService] Error getting SDK level via DeviceInfo: $e');
+      debugPrint(
+        '[PermissionService] Error getting SDK level via DeviceInfo: $e',
+      );
       try {
         final version = Platform.operatingSystemVersion;
         final apiMatch = RegExp(r'API\s+(\d+)').firstMatch(version);
@@ -78,7 +80,9 @@ class PermissionService {
           return pth;
         }
       } catch (e) {
-        debugPrint('[PermissionService] Error getting desktop downloads directory: $e');
+        debugPrint(
+          '[PermissionService] Error getting desktop downloads directory: $e',
+        );
         String? home;
         if (Platform.isWindows) {
           home = Platform.environment['USERPROFILE'];
@@ -96,16 +100,9 @@ class PermissionService {
       }
     }
 
-    // On Android:
-    // - API 30+ (Android 11+): use scoped storage APIs only (hardcoded paths don't work)
-    // - API 29 and below: try shared Downloads folder first, fall back to scoped storage
     if (!kIsWeb && Platform.isAndroid) {
       final sdk = await _androidSdkLevel();
 
-      // On API 30+ (Android 11+), direct write to the public Downloads folder (/storage/emulated/0/Download)
-      // is restricted without MediaStore API or Manage External Storage permission.
-      // Therefore, we default to the app-specific external directory, which is deleted
-      // when the app is uninstalled. Users should be aware of this location.
       if (sdk >= 30) {
         try {
           final extDirs = await getExternalStorageDirectories(
@@ -120,9 +117,10 @@ class PermissionService {
             return pth;
           }
         } catch (e) {
-          debugPrint('[PermissionService] Failed to get external storage directories: $e');
+          debugPrint(
+            '[PermissionService] Failed to get external storage directories: $e',
+          );
         }
-        // Fallback to app-specific directory
         try {
           final dir = await getDownloadsDirectory();
           if (dir != null) {
@@ -134,10 +132,11 @@ class PermissionService {
             return pth;
           }
         } catch (e) {
-          debugPrint('[PermissionService] Failed to get app downloads directory: $e');
+          debugPrint(
+            '[PermissionService] Failed to get app downloads directory: $e',
+          );
         }
       } else if (await _isStorageGranted()) {
-        // API 29 and below with storage granted: the hardcoded public path is accessible
         const publicPath = '/storage/emulated/0/Download/XDM';
         try {
           final dir = Directory(publicPath);
@@ -150,7 +149,6 @@ class PermissionService {
         }
       }
 
-      // Fallback for API 29- or when above paths fail: try app-specific directories
       try {
         final dir = await getDownloadsDirectory();
         if (dir != null) {
@@ -162,7 +160,9 @@ class PermissionService {
           return pth;
         }
       } catch (e) {
-        debugPrint('[PermissionService] Failed to get downloads directory fallback: $e');
+        debugPrint(
+          '[PermissionService] Failed to get downloads directory fallback: $e',
+        );
       }
       try {
         final extDir = await getExternalStorageDirectory();
@@ -175,7 +175,9 @@ class PermissionService {
           return pth;
         }
       } catch (e) {
-        debugPrint('[PermissionService] Failed to get external storage directory fallback: $e');
+        debugPrint(
+          '[PermissionService] Failed to get external storage directory fallback: $e',
+        );
       }
     }
 
@@ -194,14 +196,26 @@ class PermissionService {
 
     final sdk = await _androidSdkLevel();
     if (sdk >= 33) {
-      // Only request permissions that are not already granted
+      bool photosGranted = await Permission.photos.isGranted;
+      bool videosGranted = await Permission.videos.isGranted;
+      bool audioGranted = await Permission.audio.isGranted;
+
       final permissions = [
-        if (!await Permission.photos.isGranted) Permission.photos,
-        if (!await Permission.videos.isGranted) Permission.videos,
-        if (!await Permission.audio.isGranted) Permission.audio,
+        if (!photosGranted) Permission.photos,
+        if (!videosGranted) Permission.videos,
+        if (!audioGranted) Permission.audio,
       ];
+
       if (permissions.isNotEmpty) {
         await permissions.request();
+        photosGranted = await Permission.photos.isGranted;
+        videosGranted = await Permission.videos.isGranted;
+        audioGranted = await Permission.audio.isGranted;
+      }
+
+      // If none of the media permissions are granted, we cannot reliably save files.
+      if (!photosGranted && !videosGranted && !audioGranted) {
+        return false;
       }
     } else if (sdk >= 29) {
       final status = await Permission.storage.status;
@@ -235,7 +249,9 @@ class PermissionService {
       }
       return true;
     } catch (e) {
-      debugPrint('ensureStorageAccess: failed to create download directory: $e');
+      debugPrint(
+        'ensureStorageAccess: failed to create download directory: $e',
+      );
       try {
         final dir = await getDownloadsDirectory();
         if (dir != null) {
@@ -246,10 +262,14 @@ class PermissionService {
           return true;
         }
       } catch (err) {
-        debugPrint('[PermissionService] ensureStorageAccess downloads dir fallback failed: $err');
+        debugPrint(
+          '[PermissionService] ensureStorageAccess downloads dir fallback failed: $err',
+        );
       }
       try {
-        final extDirs = await getExternalStorageDirectories(type: StorageDirectory.downloads);
+        final extDirs = await getExternalStorageDirectories(
+          type: StorageDirectory.downloads,
+        );
         if (extDirs != null && extDirs.isNotEmpty) {
           final dir = extDirs.first;
           if (!await dir.exists()) {
@@ -258,13 +278,14 @@ class PermissionService {
           return true;
         }
       } catch (err) {
-        debugPrint('[PermissionService] ensureStorageAccess external dir fallback failed: $err');
+        debugPrint(
+          '[PermissionService] ensureStorageAccess external dir fallback failed: $err',
+        );
       }
       return false;
     }
   }
 
-  /// Returns `true` if storage permission was permanently denied by the user.
   Future<bool> isStoragePermanentlyDenied() async {
     if (kIsWeb || !Platform.isAndroid) return false;
     final sdk = await _androidSdkLevel();
@@ -276,7 +297,6 @@ class PermissionService {
     return (await Permission.storage.status).isPermanentlyDenied;
   }
 
-  /// Checks if battery optimization is currently ignored/exempted.
   Future<bool> isBatteryOptimizationExempt() async {
     if (kIsWeb || !Platform.isAndroid) return true;
     try {
@@ -286,10 +306,6 @@ class PermissionService {
     }
   }
 
-  /// Requests a one-time battery optimization exemption (ignore battery
-  /// optimizations). Returns `true` if already exempt or the user granted
-  /// the exemption. Returns `false` if the user denied it or the platform
-  /// doesn't support the permission.
   Future<bool> requestBatteryOptimizationExemption() async {
     if (kIsWeb || !Platform.isAndroid) return true;
     try {
@@ -298,14 +314,14 @@ class PermissionService {
       final result = await Permission.ignoreBatteryOptimizations.request();
       if (result.isGranted) return true;
 
-      // Fallback: If direct system prompt failed or was denied/restricted by vendor ROM,
-      // open App Settings so user can manually allow background battery usage.
       if (result.isPermanentlyDenied || result.isDenied) {
         await openAppSettings();
       }
       return (await Permission.ignoreBatteryOptimizations.status).isGranted;
     } catch (e) {
-      debugPrint('[PermissionService] Battery optimization exemption request failed: $e');
+      debugPrint(
+        '[PermissionService] Battery optimization exemption request failed: $e',
+      );
       return false;
     }
   }

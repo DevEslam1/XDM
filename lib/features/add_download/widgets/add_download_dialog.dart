@@ -5,9 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-
 import 'package:path/path.dart' as p;
-
 import '../../../core/app_theme.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/youtube_service.dart';
@@ -18,14 +16,11 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/services/download_engine.dart';
-
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
-import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
-
 import '../widgets/media_quality_sheet.dart';
 import '../widgets/youtube_playlist_sheet.dart';
 
@@ -46,18 +41,13 @@ class AddDownloadDialog extends StatefulWidget {
   @override
   State<AddDownloadDialog> createState() => _AddDownloadDialogState();
 
-  /// Session-level tracking of recently added URLs (within the last 30 s).
-  /// Prevents accidental double-queues when the user shares the same link
-  /// twice in quick succession. Entries older than 30 s are pruned on access.
   static final Map<String, DateTime> _recentlyAddedUrls = {};
 
-  /// Returns `true` if [url] was already added in the current session window.
   static bool wasRecentlyAdded(String url) {
     _pruneRecentUrls();
     return _recentlyAddedUrls.containsKey(url.trim().toLowerCase());
   }
 
-  /// Records [url] as having been added in the current session.
   static void recordAddedUrl(String url) {
     _recentlyAddedUrls[url.trim().toLowerCase()] = DateTime.now();
   }
@@ -69,37 +59,39 @@ class AddDownloadDialog extends StatefulWidget {
 }
 
 class _AddDownloadDialogState extends State<AddDownloadDialog>
-    with HapticHelper {
+    with HapticHelper, TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _referrerController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _extController = TextEditingController();
   final TextEditingController _pathController = TextEditingController();
+  final FocusNode _urlFocus = FocusNode();
+
   String _selectedCategory = 'Auto';
   int _selectedThreads = 5;
 
-  // UI Checkboxes
   bool _wifiOnly = false;
   bool _retry = true;
   bool _useProxy = false;
-
   bool _isScheduled = false;
+  bool _showAdvanced = false;
   DateTime? _scheduledDateTime;
+
   String? _resolvedYoutubeQualityPreset;
   String? _resolvedAudioUrl;
   int? _resolvedAudioSize;
-
   bool _isMetadataResolved = false;
   bool _isResolvingLink = false;
   String _resolvedFileName = '';
   int _resolvedFileSize = 0;
   int? _resolvedTorrentId;
   String _resolvedCategory = 'Auto';
-
   List<Map<String, dynamic>> _torrentFiles = [];
   String _lastCheckedUrl = '';
   Timer? _ytDebounceTimer;
+
+  late final AnimationController _scanController;
 
   final List<String> _categories = [
     'Auto',
@@ -115,13 +107,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   @override
   void initState() {
     super.initState();
+    _scanController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat();
+
     final settings = context.read<SettingsProvider>();
     if (_threadsList.contains(settings.defaultThreadCount)) {
       _selectedThreads = settings.defaultThreadCount;
     }
     _wifiOnly = settings.wifiOnly;
     _useProxy = settings.enableProxy;
-
     _loadDefaultPath();
     _urlController.addListener(_onUrlChanged);
 
@@ -138,12 +134,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         _isMetadataResolved = true;
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _resolveLinkMetadata();
-        }
+        if (mounted) _resolveLinkMetadata();
       });
     }
-    if (widget.prefilledName != null && widget.prefilledName!.trim().isNotEmpty) {
+    if (widget.prefilledName != null &&
+        widget.prefilledName!.trim().isNotEmpty) {
       _setNameAndExt(widget.prefilledName!);
       _resolvedFileName = widget.prefilledName!;
       _isMetadataResolved = true;
@@ -161,9 +156,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final url = _urlController.text.trim();
     if (url == _lastCheckedUrl) return;
     _lastCheckedUrl = url;
-
     _ytDebounceTimer?.cancel();
-
     if (url.toLowerCase().startsWith('magnet:')) {
       final parsed = parseMagnetUrl(url);
       final dnName = parsed['name'] ?? 'Torrent Download';
@@ -203,6 +196,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         });
       }
     }
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadDefaultPath() async {
@@ -211,9 +205,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         ? settings.customDownloadPath!
         : await PermissionService().defaultDownloadDirectory();
     if (!mounted) return;
-    if (_pathController.text.isEmpty) {
-      _pathController.text = path;
-    }
+    if (_pathController.text.isEmpty) _pathController.text = path;
   }
 
   @override
@@ -224,6 +216,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _nameController.dispose();
     _extController.dispose();
     _pathController.dispose();
+    _urlFocus.dispose();
+    _scanController.dispose();
     super.dispose();
   }
 
@@ -248,9 +242,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final selectedTotal = _torrentFiles
         .where((f) => f['selected'] == true)
         .fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-    setState(() {
-      _resolvedFileSize = selectedTotal;
-    });
+    setState(() => _resolvedFileSize = selectedTotal);
   }
 
   Future<void> _pickTorrentFile() async {
@@ -269,7 +261,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           if (!mounted) return;
           if (meta != null) {
             setState(() {
-              _resolvedFileName = (meta['name'] as String? ?? '').replaceAll('+', ' ');
+              _resolvedFileName = (meta['name'] as String? ?? '').replaceAll(
+                '+',
+                ' ',
+              );
               _resolvedCategory = categoryFromFileName(_resolvedFileName);
               _torrentFiles = (meta['files'] as List? ?? [])
                   .map(
@@ -298,6 +293,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     }
   }
 
+  // ── LOGIC: resolveLinkMetadata (unchanged) ──────────────────────────────
   Future<void> _resolveLinkMetadata() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
@@ -312,7 +308,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       );
       return;
     }
-
     if (YoutubeService.isPlaylistUrl(url)) {
       final isMixed = YoutubeService.isYoutubeVideoUrl(url);
       if (isMixed && mounted) {
@@ -322,8 +317,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             final isDark = context.read<SettingsProvider>().isDarkMode;
             final isRtl = L10n.isRtl(context);
             return AlertDialog(
-              backgroundColor:
-                  isDark ? AppTheme.surface : AppTheme.lightSurface,
+              backgroundColor: isDark
+                  ? AppTheme.surface
+                  : AppTheme.lightSurface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -387,7 +383,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           }
           return;
         } else if (choice != 'video') {
-          return; // dismissed
+          return;
         }
       } else if (!isMixed && mounted) {
         final result = await YoutubePlaylistSheet.show(context, url);
@@ -407,7 +403,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         return;
       }
     }
-
     if (YoutubeService.isExtractableMediaUrl(url)) {
       if (!mounted) return;
       final stream = await YoutubeQualitySheet.show(context, url);
@@ -420,10 +415,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final audioUrl = stream['audioSrc'] as String?;
         final audioSize = stream['audioSize'] as int?;
         final streamType = stream['type'] as String? ?? 'muxed';
-        final qualityPreset = streamType == 'audio' ? 'audio_only' : stream['quality'] as String?;
+        final qualityPreset = streamType == 'audio'
+            ? 'audio_only'
+            : stream['quality'] as String?;
         final category = streamType == 'audio' ? 'Audio' : 'Video';
         final fileName = '$title.$ext';
-
         final provider = context.read<DownloadProvider>();
         final settings = context.read<SettingsProvider>();
         final savePath = _pathController.text.trim().isNotEmpty
@@ -456,9 +452,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final isDark = context.read<SettingsProvider>().isDarkMode;
         ThemedSnackbar.show(
           context,
-          message: L10n.isRtl(context)
-              ? 'تم بدء التحميل'
-              : 'Download started',
+          message: L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
           color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
           icon: Icons.check_circle_outline,
           isDarkMode: isDark,
@@ -466,9 +460,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         Navigator.pop(context);
         return;
       }
-      // If stream == null (e.g. backend failed because URL is a direct file download), fall through to standard HTTP resolution below
     }
-
     if (!isValidTransmissionUrl(url)) {
       ThemedSnackbar.show(
         context,
@@ -479,17 +471,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       );
       return;
     }
-
     setState(() {
       _isResolvingLink = true;
       _isMetadataResolved = false;
       _resolvedTorrentId = null;
       _torrentFiles = [];
     });
-
     try {
       final settings = context.read<SettingsProvider>();
-
       if (url.toLowerCase().startsWith('magnet:')) {
         final parsed = parseMagnetUrl(url);
         final rawDnName = parsed['name'] ?? 'Torrent Download';
@@ -506,18 +495,20 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           });
         }
       }
-
       String? localFilePath;
       if (url.toLowerCase().startsWith('file://')) {
         try {
           localFilePath = Uri.parse(url).toFilePath();
         } catch (_) {
-          localFilePath = url.replaceFirst(RegExp(r'^file://', caseSensitive: false), '');
+          localFilePath = url.replaceFirst(
+            RegExp(r'^file://', caseSensitive: false),
+            '',
+          );
         }
-      } else if (url.toLowerCase().endsWith('.torrent') || File(url).existsSync()) {
+      } else if (url.toLowerCase().endsWith('.torrent') ||
+          File(url).existsSync()) {
         localFilePath = url;
       }
-
       if (localFilePath != null) {
         final file = File(localFilePath);
         if (await file.exists()) {
@@ -549,7 +540,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           }
         }
       }
-
       final engine = DownloadEngine();
       final nameForReq = _nameController.text.trim().isNotEmpty
           ? '${_nameController.text}.${_extController.text}'
@@ -571,7 +561,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       } finally {
         engine.close();
       }
-
       if (!mounted) return;
       setState(() {
         _resolvedFileName = meta.fileName;
@@ -600,16 +589,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     }
   }
 
+  // ── LOGIC: duplicate handling / submit (unchanged) ──────────────────────
   Future<void> _handleDuplicateOrSubmit() async {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final provider = context.read<DownloadProvider>();
-
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
 
-    // Split URLs for multi-URL support
     final urls = _urlController.text
         .split(RegExp(r'[\r\n]+'))
         .map((l) => l.trim())
@@ -617,7 +605,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         .toList();
 
     if (urls.length > 1) {
-      // Multiple URLs: check session-level duplicates, then add each one
       var addedCount = 0;
       var duplicateCount = 0;
       for (final singleUrl in urls) {
@@ -633,9 +620,15 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           fullName = '$enteredName.$enteredExt';
         }
         final suffix = addedCount + 1;
-        final singleName = fullName.isNotEmpty
-            ? '${safeFileName(fullName)}_$suffix'
-            : fileNameFromUrl(singleUrl);
+        String singleName;
+        if (fullName.isNotEmpty) {
+          final safeName = safeFileName(fullName);
+          final ext = p.extension(safeName);
+          final base = p.basenameWithoutExtension(safeName);
+          singleName = '${base}_$suffix$ext';
+        } else {
+          singleName = fileNameFromUrl(singleUrl);
+        }
         try {
           await provider.addDownload(
             name: singleName,
@@ -647,8 +640,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             scheduledAt: _isScheduled ? _scheduledDateTime : null,
             torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
             downloadPageUrl:
-                widget.downloadPageUrl ??
-                _referrerController.text.trim(),
+                widget.downloadPageUrl ?? _referrerController.text.trim(),
             youtubeQualityPreset: _resolvedYoutubeQualityPreset,
             torrentId: _resolvedTorrentId,
             mergedAudioUrl: _resolvedAudioUrl,
@@ -671,14 +663,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (addedCount > 0) {
         final dupMsg = duplicateCount > 0
             ? (isRtl
-                ? ' ($duplicateCount مكرر تم تخطيه)'
-                : ' ($duplicateCount duplicate${duplicateCount != 1 ? 's' : ''} skipped)')
+                  ? ' ($duplicateCount مكرر تم تخطيه)'
+                  : ' ($duplicateCount duplicate${duplicateCount != 1 ? 's' : ''} skipped)')
             : '';
         ThemedSnackbar.show(
           context,
-          message: (isRtl
-              ? 'تم إضافة $addedCount رابط'
-              : '$addedCount URLs added') + dupMsg,
+          message:
+              (isRtl ? 'تم إضافة $addedCount رابط' : '$addedCount URLs added') +
+              dupMsg,
           color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
           icon: Icons.check_circle_outline,
           isDarkMode: isDark,
@@ -704,7 +696,6 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     if (enteredExt.isNotEmpty && !enteredName.endsWith(enteredExt)) {
       fullEnteredName = '$enteredName.$enteredExt';
     }
-
     final singleUrl = urls.isNotEmpty ? urls.first : '';
     final finalFileName = fullEnteredName.isNotEmpty
         ? safeFileName(fullEnteredName)
@@ -714,11 +705,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     DownloadTask? duplicateTask;
     final trimmedUrl = singleUrl.trim();
     for (final task in provider.tasks) {
-      final isSameUrl = task.url.trim().toLowerCase() == trimmedUrl.toLowerCase();
-      final isSameNameAndSize = finalSize > 0 &&
+      final isSameUrl =
+          task.url.trim().toLowerCase() == trimmedUrl.toLowerCase();
+      final isSameNameAndSize =
+          finalSize > 0 &&
           task.fileName.toLowerCase() == finalFileName.toLowerCase() &&
           task.fileSize == finalSize;
-
       if (isSameUrl || isSameNameAndSize) {
         duplicateTask = task;
         break;
@@ -829,10 +821,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   triggerHaptic(settings);
                   Navigator.pop(context);
                   try {
-                    await provider.startOverTask(
-                      duplicateTask!.id,
-                      singleUrl,
-                    );
+                    await provider.startOverTask(duplicateTask!.id, singleUrl);
                     if (!mounted) return;
                     if (!context.mounted) return;
                     ThemedSnackbar.show(
@@ -979,8 +968,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         scheduledAt: _isScheduled ? _scheduledDateTime : null,
         torrentFiles: _torrentFiles.isNotEmpty ? _torrentFiles : null,
         downloadPageUrl:
-            widget.downloadPageUrl ??
-            _referrerController.text.trim(),
+            widget.downloadPageUrl ?? _referrerController.text.trim(),
         youtubeQualityPreset: _resolvedYoutubeQualityPreset,
         torrentId: _resolvedTorrentId,
         mergedAudioUrl: _resolvedAudioUrl,
@@ -1010,883 +998,1514 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     }
   }
 
+  // ── UI ──────────────────────────────────────────────────────────────────
+  bool get _urlValid {
+    final lines = _urlController.text
+        .split(RegExp(r'[\r\n]+'))
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    return lines.isNotEmpty && lines.every((l) => isValidTransmissionUrl(l));
+  }
+
+  void _stepThread(int delta) {
+    final idx = _threadsList.indexOf(_selectedThreads);
+    final next = (idx + delta).clamp(0, _threadsList.length - 1);
+    setState(() => _selectedThreads = _threadsList[next]);
+    triggerHaptic(context.read<SettingsProvider>());
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-
+    final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final secClr = isDark
         ? AppTheme.textSecondary
         : AppTheme.lightTextSecondary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final orangeClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-    final inputBgColor =
-        (isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9)).withValues(
-          alpha: 0.7,
-        );
-    final inputBorderColor = isDark
-        ? const Color(0x15FFFFFF)
-        : const Color(0x0D000000);
+    final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+    final borderClr = isDark ? AppTheme.border : AppTheme.lightBorder;
+    final panelBg = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
 
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: GlassCard(
-        isDarkMode: isDark,
-        borderRadius: 20,
-        padding: EdgeInsets.zero,
-        child: Stack(
-          children: [
-            AbsorbPointer(
-              absorbing: _isResolvingLink,
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    left: 20.0,
-                    right: 20.0,
-                    top: 20.0,
-                    bottom: 20.0 + MediaQuery.of(context).viewInsets.bottom,
-                  ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Header
-                        Row(
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: blueClr.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: blueClr.withValues(alpha: 0.25),
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.download_rounded,
-                                color: blueClr,
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              L10n.of(context, 'download_file_title'),
-                              style: TextStyle(
-                                color: textClr,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: Icon(Icons.paste, color: secClr, size: 20),
-                              onPressed: _pasteFromClipboard,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                            const SizedBox(width: 16),
-                            IconButton(
-                              icon: Icon(Icons.language, color: secClr, size: 20),
-                              onPressed: () {
-                                final settings = context.read<SettingsProvider>();
-                                final nextLang = settings.languageCode == 'en' ? 'ar' : 'en';
-                                settings.setLanguageCode(nextLang);
-                              },
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Link labels
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  L10n.of(context, 'link_label'),
-                                  style: TextStyle(
-                                    color: secClr,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: borderClr, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: blueClr.withValues(alpha: isDark ? 0.10 : 0.06),
+                blurRadius: 40,
+                spreadRadius: -8,
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              AbsorbPointer(
+                absorbing: _isResolvingLink,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      top: 22,
+                      bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // ── Header ──
+                          Row(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: blueClr.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: blueClr.withValues(alpha: 0.3),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Icon(Icons.copy, color: secClr, size: 14),
-                                const SizedBox(width: 8),
-                                Icon(Icons.share, color: secClr, size: 14),
-                              ],
-                            ),
-                            InkWell(
-                              onTap: _pickTorrentFile,
-                              borderRadius: BorderRadius.circular(6),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                child: Row(
+                                child: Icon(
+                                  Icons.download_rounded,
+                                  color: blueClr,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.folder_open, size: 14, color: blueClr),
-                                    const SizedBox(width: 4),
                                     Text(
-                                      L10n.isRtl(context) ? 'اختر ملف تورنت' : 'Browse .torrent',
+                                      L10n.of(context, 'download_file_title'),
                                       style: TextStyle(
-                                        color: blueClr,
-                                        fontSize: 11,
+                                        color: textClr,
+                                        fontFamily: 'Space Grotesk',
+                                        fontSize: 18.0,
                                         fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      isRtl
+                                          ? 'إشارة تنزيل جديدة'
+                                          : 'NEW TRANSMISSION SIGNAL',
+                                      style: TextStyle(
+                                        color: mutedClr,
+                                        fontSize: 10.0,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.2,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-
-                        // Download link field
-                        Stack(
-                          alignment: Alignment.centerRight,
-                          children: [
-                            _buildTextField(
-                              controller: _urlController,
-                              hint: L10n.of(context, 'add_download_url'),
-                              isDark: isDark,
-                              inputBgColor: inputBgColor,
-                              inputBorderColor: inputBorderColor,
-                              textClr: textClr,
-                              secClr: secClr,
-                              activeBorderColor: blueClr,
-                              maxLines: 3,
-                              minLines: 1,
-                              validator: (val) {
-                                if (val == null || val.trim().isEmpty) {
-                                  return L10n.of(context, 'url_empty_error');
-                                }
-                                // Validate each line separately for multi-URL support
-                                final lines = val.split(RegExp(r'[\r\n]+'))
-                                    .map((l) => l.trim())
-                                    .where((l) => l.isNotEmpty)
-                                    .toList();
-                                if (lines.isEmpty) {
-                                  return L10n.of(context, 'url_empty_error');
-                                }
-                                for (final line in lines) {
-                                  if (!isValidTransmissionUrl(line)) {
-                                    return L10n.of(context, 'url_invalid_error');
-                                  }
-                                }
-                                return null;
-                              },
-                            ),
-                            if (_urlController.text.trim().isNotEmpty)
-                              Positioned(
-                                right: 12.0,
-                                top: 12.0,
-                                child: Icon(
-                                  _urlController.text.trim().split(RegExp(r'[\r\n]+'))
-                                      .where((l) => l.trim().isNotEmpty)
-                                      .every((l) => isValidTransmissionUrl(l.trim()))
-                                      ? Icons.check_circle_rounded
-                                      : Icons.cancel_rounded,
-                                  color: _urlController.text.trim().split(RegExp(r'[\r\n]+'))
-                                      .where((l) => l.trim().isNotEmpty)
-                                      .every((l) => isValidTransmissionUrl(l.trim()))
-                                      ? greenClr
-                                      : redClr,
-                                  size: 18,
-                                ),
+                              _HeaderAction(
+                                icon: Icons.content_paste_rounded,
+                                tooltip: isRtl ? 'لصق' : 'Paste',
+                                color: secClr,
+                                onTap: _pasteFromClipboard,
                               ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // Referrer link field
-                        _buildTextField(
-                          controller: _referrerController,
-                          hint:
-                              'Download/Referrer page link (leave empty if not sure)',
-                          isDark: isDark,
-                          inputBgColor: inputBgColor,
-                          inputBorderColor: inputBorderColor,
-                          textClr: textClr,
-                          secClr: secClr,
-                          activeBorderColor: blueClr,
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // File name & Category labels
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                L10n.of(context, 'file_name_label'),
-                                style: TextStyle(
-                                  color: secClr,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                L10n.of(context, 'category_label'),
-                                style: TextStyle(
-                                  color: secClr,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-
-                        // File name & Category inputs
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildTextField(
-                                      controller: _nameController,
-                                      hint: 'Filename',
-                                      isDark: isDark,
-                                      inputBgColor: inputBgColor,
-                                      inputBorderColor: inputBorderColor,
-                                      textClr: textClr,
-                                      secClr: secClr,
-                                      activeBorderColor: blueClr,
-                                      maxLines: 1,
-                                      validator: (val) {
-                                        if (val == null || val.trim().isEmpty) {
-                                          return L10n.of(context, 'filename_empty_error');
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text('.', style: TextStyle(color: secClr, fontWeight: FontWeight.bold)),
-                                  const SizedBox(width: 6),
-                                  SizedBox(
-                                    width: 60,
-                                    child: _buildTextField(
-                                      controller: _extController,
-                                      hint: 'ext',
-                                      isDark: isDark,
-                                      inputBgColor: inputBgColor,
-                                      inputBorderColor: inputBorderColor,
-                                      textClr: textClr,
-                                      secClr: secClr,
-                                      activeBorderColor: blueClr,
-                                      maxLines: 1,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                decoration: BoxDecoration(
-                                  color: inputBgColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: inputBorderColor),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    dropdownColor: isDark
-                                        ? AppTheme.surface
-                                        : AppTheme.lightSurface,
-                                    value: _selectedCategory,
-                                    isExpanded: true,
-                                    icon: Icon(
-                                      Icons.arrow_drop_down,
-                                      color: secClr,
-                                    ),
-                                    style: TextStyle(
-                                      color: textClr,
-                                      fontSize: 13,
-                                    ),
-                                    items: _categories.map((cat) {
-                                      return DropdownMenuItem<String>(
-                                        value: cat,
-                                        child: Text(
-                                          L10n.translateCategory(context, cat),
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (val) {
-                                      if (val != null) {
-                                        runHaptic(settings);
-                                        setState(() => _selectedCategory = val);
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Save path section
-                        Text(
-                          L10n.of(context, 'save_path_label'),
-                          style: TextStyle(
-                            color: secClr,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildTextField(
-                                controller: _pathController,
-                                hint: 'Save path',
-                                isDark: isDark,
-                                inputBgColor: inputBgColor,
-                                inputBorderColor: inputBorderColor,
-                                textClr: textClr,
-                                secClr: secClr,
-                                validator: (val) {
-                                  if (val == null || val.trim().isEmpty) {
-                                    return 'Save path cannot be empty';
-                                  }
-                                  return null;
+                              const SizedBox(width: 6),
+                              _HeaderAction(
+                                icon: Icons.language_rounded,
+                                tooltip: 'EN/AR',
+                                color: secClr,
+                                onTap: () {
+                                  final nextLang = settings.languageCode == 'en'
+                                      ? 'ar'
+                                      : 'en';
+                                  settings.setLanguageCode(nextLang);
                                 },
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              onPressed: () async {
-                                runHaptic(settings);
-                                final result = await FilePicker.getDirectoryPath();
-                                if (result != null) {
-                                  setState(() {
-                                    _pathController.text = result;
-                                  });
-                                }
-                              },
-                              icon: Icon(Icons.folder_open, color: blueClr),
-                              style: IconButton.styleFrom(
-                                backgroundColor: blueClr.withValues(alpha: 0.1),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                              const SizedBox(width: 6),
+                              _HeaderAction(
+                                icon: Icons.close_rounded,
+                                tooltip: isRtl ? 'إغلاق' : 'Close',
+                                color: secClr,
+                                onTap: () => Navigator.pop(context),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
 
-                        // Download options checkboxes & thread dropdown
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 12,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            _buildCheckbox(
-                              L10n.of(context, 'wifi_only_label'),
-                              _wifiOnly,
-                              (val) => setState(() => _wifiOnly = val ?? false),
-                              blueClr,
-                            ),
-                            _buildCheckbox(
-                              L10n.of(context, 'auto_retry_label'),
-                              _retry,
-                              (val) => setState(() => _retry = val ?? true),
-                              greenClr,
-                            ),
-                            _buildCheckbox(
-                              L10n.of(context, 'use_proxy_label'),
-                              _useProxy,
-                              (val) => setState(() => _useProxy = val ?? false),
-                              orangeClr,
-                            ),
-                            _buildCheckbox(
-                              L10n.isRtl(context) ? 'جدولة' : 'Schedule',
-                              _isScheduled,
-                              (val) => setState(() {
-                                _isScheduled = val ?? false;
-                                if (_isScheduled && _scheduledDateTime == null) {
-                                  _scheduledDateTime = DateTime.now().add(const Duration(hours: 1));
-                                }
-                              }),
-                              isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                            ),
-                            Row(
+                          // ── URL Console (hero) ──
+                          _SectionLabel(
+                            text: L10n.of(context, 'link_label'),
+                            color: mutedClr,
+                            trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  L10n.of(context, 'threads_label'),
-                                  style: TextStyle(
-                                    color: secClr,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  decoration: BoxDecoration(
-                                    color: inputBgColor,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: inputBorderColor),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<int>(
-                                      dropdownColor: isDark
-                                          ? AppTheme.surface
-                                          : AppTheme.lightSurface,
-                                      value: _selectedThreads,
-                                      style: TextStyle(
-                                        color: textClr,
-                                        fontSize: 12,
+                                GestureDetector(
+                                  onTap: _pickTorrentFile,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: violetClr.withValues(alpha: 0.10),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: violetClr.withValues(alpha: 0.3),
                                       ),
-                                      items: _threadsList.map((t) {
-                                        return DropdownMenuItem<int>(
-                                          value: t,
-                                          child: Text('$t'),
-                                        );
-                                      }).toList(),
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          runHaptic(settings);
-                                          setState(() => _selectedThreads = val);
-                                        }
-                                      },
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.folder_open_rounded,
+                                          size: 12,
+                                          color: violetClr,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          isRtl ? 'ملف تورنت' : '.TORRENT',
+                                          style: TextStyle(
+                                            color: violetClr,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Scheduled date/time picker
-                        if (_isScheduled)
-                          GestureDetector(
-                            onTap: () async {
-                              final now = DateTime.now();
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: _scheduledDateTime ?? now.add(const Duration(hours: 1)),
-                                firstDate: now,
-                                lastDate: now.add(const Duration(days: 365)),
-                                builder: (ctx, child) {
-                                  return Theme(
-                                    data: Theme.of(ctx).copyWith(
-                                      colorScheme: ColorScheme.dark(
-                                        primary: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                                      ),
+                          ),
+                          const SizedBox(height: 8),
+                          _CornerFrame(
+                            color: _urlController.text.isEmpty
+                                ? borderClr
+                                : (_urlValid
+                                      ? greenClr
+                                      : (isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed)),
+                            child: AnimatedBuilder(
+                              animation: Listenable.merge([
+                                _urlController,
+                                _urlFocus,
+                              ]),
+                              builder: (_, _) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: panelBg,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: _urlFocus.hasFocus
+                                          ? blueClr.withValues(alpha: 0.5)
+                                          : Colors.transparent,
+                                      width: 1.2,
                                     ),
-                                    child: child!,
-                                  );
-                                },
-                              );
-                              if (date != null && mounted) {
-                                if (!context.mounted) return;
-                                final time = await showTimePicker(
-                                  context: context,
-                                  initialTime: TimeOfDay.fromDateTime(
-                                    _scheduledDateTime ?? now.add(const Duration(hours: 1)),
                                   ),
-                                  builder: (ctx, child) {
-                                    return Theme(
-                                      data: Theme.of(ctx).copyWith(
-                                        colorScheme: ColorScheme.dark(
-                                          primary: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                                  child: Stack(
+                                    children: [
+                                      // scanline sweep while focused
+                                      if (_urlFocus.hasFocus && isDark)
+                                        Positioned.fill(
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            child: AnimatedBuilder(
+                                              animation: _scanController,
+                                              builder: (_, _) => LayoutBuilder(
+                                                builder: (_, c) {
+                                                  final x =
+                                                      (c.maxWidth + 60) *
+                                                          _scanController
+                                                              .value -
+                                                      60;
+                                                  return Stack(
+                                                    children: [
+                                                      Positioned(
+                                                        left: x,
+                                                        top: 0,
+                                                        bottom: 0,
+                                                        child: Container(
+                                                          width: 40,
+                                                          decoration: BoxDecoration(
+                                                            gradient: LinearGradient(
+                                                              colors: [
+                                                                blueClr
+                                                                    .withValues(
+                                                                      alpha: 0,
+                                                                    ),
+                                                                blueClr
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.06,
+                                                                    ),
+                                                                blueClr
+                                                                    .withValues(
+                                                                      alpha: 0,
+                                                                    ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      TextFormField(
+                                        controller: _urlController,
+                                        focusNode: _urlFocus,
+                                        maxLines: 3,
+                                        minLines: 1,
+                                        style: TextStyle(
+                                          color: textClr,
+                                          fontSize: 12,
+                                          fontFamily: 'monospace',
+                                          height: 1.4,
+                                        ),
+                                        validator: (val) {
+                                          if (val == null ||
+                                              val.trim().isEmpty) {
+                                            return L10n.of(
+                                              context,
+                                              'url_empty_error',
+                                            );
+                                          }
+                                          final lines = val
+                                              .split(RegExp(r'[\r\n]+'))
+                                              .map((l) => l.trim())
+                                              .where((l) => l.isNotEmpty)
+                                              .toList();
+                                          if (lines.isEmpty) {
+                                            return L10n.of(
+                                              context,
+                                              'url_empty_error',
+                                            );
+                                          }
+                                          for (final line in lines) {
+                                            if (!isValidTransmissionUrl(line)) {
+                                              return L10n.of(
+                                                context,
+                                                'url_invalid_error',
+                                              );
+                                            }
+                                          }
+                                          return null;
+                                        },
+                                        decoration: InputDecoration(
+                                          hintText:
+                                              'https:// …  |  magnet:?xt= …',
+                                          hintStyle: TextStyle(
+                                            color: mutedClr.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                            fontSize: 12,
+                                            fontFamily: 'monospace',
+                                          ),
+                                          border: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          errorBorder: InputBorder.none,
+                                          focusedErrorBorder: InputBorder.none,
+                                          errorStyle: const TextStyle(
+                                            fontSize: 10,
+                                            height: 0.8,
+                                          ),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 12,
+                                              ),
                                         ),
                                       ),
-                                      child: child!,
-                                    );
-                                  },
+                                    ],
+                                  ),
                                 );
-                                if (time != null && mounted) {
-                                  setState(() {
-                                    _scheduledDateTime = DateTime(
-                                      date.year, date.month, date.day,
-                                      time.hour, time.minute,
-                                    );
-                                  });
-                                }
+                              },
+                            ),
+                          ),
+                          // live validation readout
+                          AnimatedBuilder(
+                            animation: _urlController,
+                            builder: (_, _) {
+                              if (_urlController.text.trim().isEmpty) {
+                                return const SizedBox.shrink();
                               }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: inputBgColor,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.5),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.schedule,
-                                    size: 16,
-                                    color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    _scheduledDateTime != null
-                                        ? '${_scheduledDateTime!.day}/${_scheduledDateTime!.month}/${_scheduledDateTime!.year} ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}'
-                                        : (L10n.isRtl(context) ? 'اختر الوقت' : 'Tap to set date & time'),
-                                    style: TextStyle(
-                                      color: textClr,
-                                      fontSize: 13,
+                              final valid = _urlValid;
+                              final lineCount = _urlController.text
+                                  .split(RegExp(r'[\r\n]+'))
+                                  .where((l) => l.trim().isNotEmpty)
+                                  .length;
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      valid
+                                          ? Icons.check_circle_rounded
+                                          : Icons.cancel_rounded,
+                                      size: 13,
+                                      color: valid
+                                          ? greenClr
+                                          : (isDark
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      valid
+                                          ? (lineCount > 1
+                                                ? (isRtl
+                                                      ? '$lineCount روابط صالحة'
+                                                      : '$lineCount VALID SIGNALS')
+                                                : (isRtl
+                                                      ? 'إشارة صالحة'
+                                                      : 'SIGNAL VALID'))
+                                          : (isRtl
+                                                ? 'إشارة غير صالحة'
+                                                : 'INVALID SIGNAL'),
+                                      style: TextStyle(
+                                        color: valid
+                                            ? greenClr
+                                            : (isDark
+                                                  ? AppTheme.neonRed
+                                                  : AppTheme.lightNeonRed),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 14),
+
+                          // ── Referrer ──
+                          _FieldBox(
+                            panelBg: panelBg,
+                            child: TextFormField(
+                              controller: _referrerController,
+                              style: TextStyle(
+                                color: textClr,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                              ),
+                              decoration: InputDecoration(
+                                hintText: isRtl
+                                    ? 'رابط صفحة التنزيل (اختياري)'
+                                    : 'Download / referrer page link (optional)',
+                                hintStyle: TextStyle(
+                                  color: mutedClr.withValues(alpha: 0.6),
+                                  fontSize: 11,
+                                ),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 11,
+                                ),
                               ),
                             ),
                           ),
-                        // Torrent Files Selection Section
-                        if (_torrentFiles.isNotEmpty) ...[
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: inputBgColor,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          const SizedBox(height: 18),
+
+                          // ── File config row ──
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.folder_zip_outlined,
-                                            size: 16,
-                                            color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Flexible(
-                                            child: Text(
-                                              L10n.isRtl(context)
-                                                  ? 'ملفات التورنت (${_torrentFiles.where((f) => (f['selected'] as bool? ?? true)).length}/${_torrentFiles.length})'
-                                                  : 'Torrent Files (${_torrentFiles.where((f) => (f['selected'] as bool? ?? true)).length}/${_torrentFiles.length})',
+                                    _SectionLabel(
+                                      text: L10n.of(context, 'file_name_label'),
+                                      color: mutedClr,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _FieldBox(
+                                            panelBg: panelBg,
+                                            child: TextFormField(
+                                              controller: _nameController,
                                               style: TextStyle(
                                                 color: textClr,
                                                 fontSize: 12,
-                                                fontWeight: FontWeight.bold,
                                               ),
-                                              overflow: TextOverflow.ellipsis,
+                                              validator: (val) {
+                                                if (val == null ||
+                                                    val.trim().isEmpty) {
+                                                  return L10n.of(
+                                                    context,
+                                                    'filename_empty_error',
+                                                  );
+                                                }
+                                                return null;
+                                              },
+                                              decoration: InputDecoration(
+                                                hintText: 'filename',
+                                                hintStyle: TextStyle(
+                                                  color: mutedClr.withValues(
+                                                    alpha: 0.6,
+                                                  ),
+                                                  fontSize: 11,
+                                                ),
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                errorStyle: const TextStyle(
+                                                  fontSize: 10,
+                                                  height: 0.8,
+                                                ),
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 11,
+                                                    ),
+                                              ),
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    Row(
-                                      children: [
-                                        TextButton(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
                                           ),
-                                          onPressed: () {
-                                            for (final f in _torrentFiles) {
-                                              f['selected'] = true;
-                                            }
-                                            _updateSelectedTorrentSize();
-                                          },
                                           child: Text(
-                                            L10n.isRtl(context) ? 'الكل' : 'Select All',
-                                            style: TextStyle(fontSize: 11, color: blueClr, fontWeight: FontWeight.bold),
+                                            '.',
+                                            style: TextStyle(
+                                              color: secClr,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(width: 4),
-                                        TextButton(
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          ),
-                                          onPressed: () {
-                                            for (final f in _torrentFiles) {
-                                              f['selected'] = false;
-                                            }
-                                            _updateSelectedTorrentSize();
-                                          },
-                                          child: Text(
-                                            L10n.isRtl(context) ? 'إلغاء' : 'Deselect All',
-                                            style: TextStyle(fontSize: 11, color: secClr),
+                                        SizedBox(
+                                          width: 62,
+                                          child: _FieldBox(
+                                            panelBg: panelBg,
+                                            child: TextFormField(
+                                              controller: _extController,
+                                              style: TextStyle(
+                                                color: textClr,
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
+                                              ),
+                                              decoration: InputDecoration(
+                                                hintText: 'ext',
+                                                hintStyle: TextStyle(
+                                                  color: mutedClr.withValues(
+                                                    alpha: 0.6,
+                                                  ),
+                                                  fontSize: 11,
+                                                  fontFamily: 'monospace',
+                                                ),
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 11,
+                                                    ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  constraints: const BoxConstraints(maxHeight: 180),
-                                  decoration: BoxDecoration(
-                                    color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: ListView.separated(
-                                    shrinkWrap: true,
-                                    itemCount: _torrentFiles.length,
-                                    separatorBuilder: (_, _) => Divider(
-                                      color: inputBorderColor.withValues(alpha: 0.3),
-                                      height: 1,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _SectionLabel(
+                                      text: L10n.of(context, 'category_label'),
+                                      color: mutedClr,
                                     ),
-                                    itemBuilder: (ctx, idx) {
-                                      final file = _torrentFiles[idx];
-                                      final isSelected = file['selected'] as bool? ?? true;
-                                      final fileName = (file['name'] as String? ?? '').replaceAll('+', ' ');
-                                      final length = (file['length'] as num?)?.toInt() ?? 0;
-                                      final sizeFormatted = formatBytes(length.toDouble());
-
-                                      return CheckboxListTile(
-                                        dense: true,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                                        activeColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                                        value: isSelected,
-                                        title: Text(
-                                          fileName,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: isSelected ? textClr : secClr,
-                                            fontSize: 12,
-                                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                                            decoration: isSelected ? null : TextDecoration.lineThrough,
+                                    const SizedBox(height: 8),
+                                    _FieldBox(
+                                      panelBg: panelBg,
+                                      child: DropdownButtonHideUnderline(
+                                        child: DropdownButton<String>(
+                                          dropdownColor: isDark
+                                              ? AppTheme.surface
+                                              : AppTheme.lightSurface,
+                                          value: _selectedCategory,
+                                          isExpanded: true,
+                                          icon: Icon(
+                                            Icons.arrow_drop_down,
+                                            color: secClr,
+                                            size: 18,
                                           ),
+                                          style: TextStyle(
+                                            color: textClr,
+                                            fontSize: 12,
+                                          ),
+                                          items: _categories.map((cat) {
+                                            return DropdownMenuItem<String>(
+                                              value: cat,
+                                              child: Text(
+                                                L10n.translateCategory(
+                                                  context,
+                                                  cat,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          }).toList(),
+                                          onChanged: (val) {
+                                            if (val != null) {
+                                              runHaptic(settings);
+                                              setState(
+                                                () => _selectedCategory = val,
+                                              );
+                                            }
+                                          },
                                         ),
-                                        subtitle: Text(
-                                          sizeFormatted,
-                                          style: TextStyle(color: secClr, fontSize: 10),
-                                        ),
-                                        onChanged: (val) {
-                                          file['selected'] = val ?? true;
-                                          _updateSelectedTorrentSize();
-                                        },
-                                      );
-                                    },
-                                  ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 16),
-                        ],
 
-                        // Action Buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: Text(
-                                L10n.of(context, 'cancel_btn'),
-                                style: TextStyle(
-                                  color: secClr,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            if (_isResolvingLink)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 16),
-                                child: SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              )
-                            else
-                              TextButton(
-                                onPressed: _resolveLinkMetadata,
-                                child: Text(
-                                  L10n.of(context, 'connect_btn'),
-                                  style: TextStyle(
-                                    color: blueClr,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
+                          // ── Save path ──
+                          _SectionLabel(
+                            text: L10n.of(context, 'save_path_label'),
+                            color: mutedClr,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _FieldBox(
+                                  panelBg: panelBg,
+                                  child: TextFormField(
+                                    controller: _pathController,
+                                    style: TextStyle(
+                                      color: textClr,
+                                      fontSize: 11,
+                                      fontFamily: 'monospace',
+                                    ),
+                                    validator: (val) {
+                                      if (val == null || val.trim().isEmpty) {
+                                        return 'Save path cannot be empty';
+                                      }
+                                      return null;
+                                    },
+                                    decoration: InputDecoration(
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      errorStyle: const TextStyle(
+                                        fontSize: 10,
+                                        height: 0.8,
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 11,
+                                          ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            NeonGlowButton(
-                              onPressed: () {
-                                if (_formKey.currentState!.validate()) {
-                                  _handleDuplicateOrSubmit();
-                                }
+                              const SizedBox(width: 8),
+                              _SquareButton(
+                                icon: Icons.folder_open_rounded,
+                                color: blueClr,
+                                onTap: () async {
+                                  runHaptic(settings);
+                                  final result =
+                                      await FilePicker.getDirectoryPath();
+                                  if (result != null) {
+                                    setState(
+                                      () => _pathController.text = result,
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+
+                          // ── Threads + toggles ──
+                          Row(
+                            children: [
+                              // Thread stepper
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _SectionLabel(
+                                      text: L10n.of(context, 'threads_label'),
+                                      color: mutedClr,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: panelBg,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: borderClr),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          _StepBtn(
+                                            icon: Icons.remove_rounded,
+                                            onTap: () => _stepThread(-1),
+                                            color: secClr,
+                                          ),
+                                          Expanded(
+                                            child: Center(
+                                              child: Text(
+                                                '$_selectedThreads',
+                                                style: TextStyle(
+                                                  color: blueClr,
+                                                  fontFamily: 'Space Grotesk',
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          _StepBtn(
+                                            icon: Icons.add_rounded,
+                                            onTap: () => _stepThread(1),
+                                            color: secClr,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Quick toggles
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _SectionLabel(
+                                      text: isRtl ? 'خيارات' : 'OPTIONS',
+                                      color: mutedClr,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _ToggleChip(
+                                      icon: Icons.wifi_rounded,
+                                      label: isRtl ? 'واي فاي' : 'WI-FI',
+                                      active: _wifiOnly,
+                                      color: blueClr,
+                                      isDark: isDark,
+                                      onTap: () => setState(
+                                        () => _wifiOnly = !_wifiOnly,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _ToggleChip(
+                                      icon: Icons.refresh_rounded,
+                                      label: isRtl ? 'إعادة' : 'RETRY',
+                                      active: _retry,
+                                      color: greenClr,
+                                      isDark: isDark,
+                                      onTap: () =>
+                                          setState(() => _retry = !_retry),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          // ── Advanced collapse ──
+                          GestureDetector(
+                            onTap: () {
+                              triggerHaptic(settings);
+                              setState(() => _showAdvanced = !_showAdvanced);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: panelBg,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: borderClr),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.tune_rounded,
+                                    size: 15,
+                                    color: secClr,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      isRtl
+                                          ? 'خيارات متقدمة'
+                                          : 'ADVANCED OPTIONS',
+                                      style: TextStyle(
+                                        color: secClr,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  AnimatedRotation(
+                                    turns: _showAdvanced ? 0.5 : 0,
+                                    duration: const Duration(milliseconds: 200),
+                                    child: Icon(
+                                      Icons.keyboard_arrow_up_rounded,
+                                      size: 16,
+                                      color: secClr,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          AnimatedCrossFade(
+                            firstChild: const SizedBox(width: double.infinity),
+                            secondChild: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 10),
+                                _ToggleRow(
+                                  icon: Icons.route_rounded,
+                                  label: L10n.of(context, 'use_proxy_label'),
+                                  value: _useProxy,
+                                  color: amberClr,
+                                  isDark: isDark,
+                                  onChanged: (v) =>
+                                      setState(() => _useProxy = v),
+                                ),
+                                const SizedBox(height: 8),
+                                _ToggleRow(
+                                  icon: Icons.schedule_rounded,
+                                  label: isRtl ? 'جدولة' : 'Schedule',
+                                  value: _isScheduled,
+                                  color: violetClr,
+                                  isDark: isDark,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _isScheduled = v;
+                                      if (_isScheduled &&
+                                          _scheduledDateTime == null) {
+                                        _scheduledDateTime = DateTime.now().add(
+                                          const Duration(hours: 1),
+                                        );
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_isScheduled) ...[
+                                  const SizedBox(height: 8),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      final now = DateTime.now();
+                                      final date = await showDatePicker(
+                                        context: context,
+                                        initialDate:
+                                            _scheduledDateTime ??
+                                            now.add(const Duration(hours: 1)),
+                                        firstDate: now,
+                                        lastDate: now.add(
+                                          const Duration(days: 365),
+                                        ),
+                                      );
+                                      if (date != null && mounted) {
+                                        if (!context.mounted) return;
+                                        final time = await showTimePicker(
+                                          context: context,
+                                          initialTime: TimeOfDay.fromDateTime(
+                                            _scheduledDateTime ??
+                                                now.add(
+                                                  const Duration(hours: 1),
+                                                ),
+                                          ),
+                                        );
+                                        if (time != null && mounted) {
+                                          setState(() {
+                                            _scheduledDateTime = DateTime(
+                                              date.year,
+                                              date.month,
+                                              date.day,
+                                              time.hour,
+                                              time.minute,
+                                            );
+                                          });
+                                        }
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: violetClr.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: violetClr.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.schedule_rounded,
+                                            size: 15,
+                                            color: violetClr,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _scheduledDateTime != null
+                                                  ? '${_scheduledDateTime!.day}/${_scheduledDateTime!.month}/${_scheduledDateTime!.year}  ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}'
+                                                  : (isRtl
+                                                        ? 'اختر الوقت'
+                                                        : 'Tap to set date & time'),
+                                              style: TextStyle(
+                                                color: textClr,
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            crossFadeState: _showAdvanced
+                                ? CrossFadeState.showSecond
+                                : CrossFadeState.showFirst,
+                            duration: const Duration(milliseconds: 220),
+                          ),
+
+                          // ── Torrent files panel ──
+                          if (_torrentFiles.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            _TorrentFilesPanel(
+                              files: _torrentFiles,
+                              isDark: isDark,
+                              panelBg: panelBg,
+                              borderClr: borderClr,
+                              onToggle: (i, v) {
+                                _torrentFiles[i]['selected'] = v;
+                                _updateSelectedTorrentSize();
                               },
-                              text: L10n.of(context, 'add_btn'),
-                              icon: Icons.add_circle_outline,
-                              color: greenClr,
-                              glowColor: greenClr,
-                              isExpanded: false,
-                              isFilled: true,
+                              onSelectAll: (v) {
+                                for (final f in _torrentFiles) {
+                                  f['selected'] = v;
+                                }
+                                _updateSelectedTorrentSize();
+                              },
                             ),
                           ],
-                        ),
-                      ],
+                          const SizedBox(height: 20),
+
+                          // ── Footer ──
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text(
+                                  L10n.of(context, 'cancel_btn'),
+                                  style: TextStyle(
+                                    color: secClr,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (_isResolvingLink)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 15,
+                                        height: 15,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: blueClr,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        isRtl ? 'جارٍ الاتصال…' : 'ACQUIRING…',
+                                        style: TextStyle(
+                                          color: blueClr,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                TextButton(
+                                  onPressed: _resolveLinkMetadata,
+                                  child: Text(
+                                    L10n.of(context, 'connect_btn'),
+                                    style: TextStyle(
+                                      color: blueClr,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(width: 4),
+                              NeonGlowButton(
+                                onPressed: () {
+                                  if (_formKey.currentState!.validate()) {
+                                    _handleDuplicateOrSubmit();
+                                  }
+                                },
+                                text: L10n.of(context, 'add_btn'),
+                                icon: Icons.add_circle_outline,
+                                color: greenClr,
+                                glowColor: greenClr,
+                                isExpanded: false,
+                                isFilled: true,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            if (_isResolvingLink)
-          Positioned.fill(
-            child: Container(
-              color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.3),
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: blueClr,
+              if (_isResolvingLink)
+                Positioned.fill(
+                  child: Container(
+                    color: (isDark ? Colors.black : Colors.white).withValues(
+                      alpha: 0.3,
+                    ),
+                    child: Center(
+                      child: CircularProgressIndicator(color: blueClr),
+                    ),
+                  ),
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Small presentational helpers ──────────────────────────────────────────
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  final Color color;
+  final Widget? trailing;
+  const _SectionLabel({required this.text, required this.color, this.trailing});
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          text,
+          style: TextStyle(
+            color: color,
+            fontSize: 12.0,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+          ),
+        ),
+        ?trailing,
+      ],
+    );
+  }
+}
+
+class _FieldBox extends StatelessWidget {
+  final Widget child;
+  final Color panelBg;
+  const _FieldBox({required this.child, required this.panelBg});
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: panelBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+          width: 0.8,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _CornerFrame extends StatelessWidget {
+  final Widget child;
+  final Color color;
+  const _CornerFrame({required this.child, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    const len = 12.0;
+    Widget bracket(bool top, bool left) => CustomPaint(
+      size: const Size(len, len),
+      painter: _BracketPainter(color: color, top: top, left: left),
+    );
+    return Stack(
+      children: [
+        Padding(padding: const EdgeInsets.all(5), child: child),
+        Positioned(top: 0, left: 0, child: bracket(true, true)),
+        Positioned(top: 0, right: 0, child: bracket(true, false)),
+        Positioned(bottom: 0, left: 0, child: bracket(false, true)),
+        Positioned(bottom: 0, right: 0, child: bracket(false, false)),
+      ],
+    );
+  }
+}
+
+class _BracketPainter extends CustomPainter {
+  final Color color;
+  final bool top;
+  final bool left;
+  _BracketPainter({required this.color, required this.top, required this.left});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final path = Path();
+    if (top && left) {
+      path.moveTo(0, size.height);
+      path.lineTo(0, 0);
+      path.lineTo(size.width, 0);
+    } else if (top && !left) {
+      path.moveTo(0, 0);
+      path.lineTo(size.width, 0);
+      path.lineTo(size.width, size.height);
+    } else if (!top && left) {
+      path.moveTo(0, 0);
+      path.lineTo(0, size.height);
+      path.lineTo(size.width, size.height);
+    } else {
+      path.moveTo(size.width, 0);
+      path.lineTo(size.width, size.height);
+      path.lineTo(0, size.height);
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BracketPainter oldDelegate) {
+    return color != oldDelegate.color ||
+        top != oldDelegate.top ||
+        left != oldDelegate.left;
+  }
+}
+
+class _HeaderAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onTap;
+  const _HeaderAction({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(9),
+          child: Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            child: Icon(icon, size: 17, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SquareButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _SquareButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Icon(icon, size: 18, color: color),
+        ),
+      ),
+    );
+  }
+}
+
+class _StepBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final Color color;
+  const _StepBtn({
+    required this.icon,
+    required this.onTap,
+    required this.color,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 40,
+          alignment: Alignment.center,
+          child: Icon(icon, size: 17, color: color),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToggleChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final Color color;
+  final bool isDark;
+  final VoidCallback onTap;
+  const _ToggleChip({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.color,
+    required this.isDark,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? color.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: active
+                ? color.withValues(alpha: 0.45)
+                : (isDark ? AppTheme.border : AppTheme.lightBorder),
+            width: active ? 1 : 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: active
+                  ? color
+                  : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: active
+                    ? color
+                    : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
               ),
             ),
-          ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hint,
-    required bool isDark,
-    required Color inputBgColor,
-    required Color inputBorderColor,
-    required Color textClr,
-    required Color secClr,
-    Color? activeBorderColor,
-    String? Function(String?)? validator,
-    int? maxLines = 1,
-    int? minLines = 1,
-  }) {
-    final focusColor = activeBorderColor ??
-        (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
-    return Container(
-      decoration: BoxDecoration(
-        color: inputBgColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: inputBorderColor, width: 1.0),
-      ),
-      child: TextFormField(
-        controller: controller,
-        style: TextStyle(color: textClr, fontSize: 13, height: 1.3),
-        maxLines: maxLines,
-        minLines: minLines,
-        validator: validator,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(
-            color: secClr.withValues(alpha: 0.5),
-            fontSize: 12,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: focusColor.withValues(alpha: 0.6),
-              width: 1.2,
-            ),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
-                  .withValues(alpha: 0.6),
-              width: 1.0,
-            ),
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(
-              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-              width: 1.2,
-            ),
-          ),
-          errorStyle: const TextStyle(fontSize: 10, height: 0.8),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 10,
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  Widget _buildCheckbox(
-    String title,
-    bool value,
-    ValueChanged<bool?> onChanged,
-    Color activeColor,
-  ) {
+class _ToggleRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool value;
+  final Color color;
+  final bool isDark;
+  final ValueChanged<bool> onChanged;
+  const _ToggleRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.isDark,
+    required this.onChanged,
+  });
+  @override
+  Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 24,
-          height: 24,
-          child: Checkbox(
-            value: value,
-            activeColor: activeColor,
-            side: BorderSide(
-              color: activeColor.withValues(alpha: 0.5),
-              width: 1.5,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-            ),
-            onChanged: onChanged,
-          ),
+        Icon(
+          icon,
+          size: 15,
+          color: value
+              ? color
+              : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted),
         ),
         const SizedBox(width: 8),
-        Text(
-          title,
-          style: TextStyle(
-            color: activeColor,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+              fontSize: 12,
+            ),
           ),
         ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeThumbColor: color,
+          activeTrackColor: color.withValues(alpha: 0.25),
+        ),
       ],
+    );
+  }
+}
+
+class _TorrentFilesPanel extends StatelessWidget {
+  final List<Map<String, dynamic>> files;
+  final bool isDark;
+  final Color panelBg;
+  final Color borderClr;
+  final void Function(int, bool) onToggle;
+  final void Function(bool) onSelectAll;
+  const _TorrentFilesPanel({
+    required this.files,
+    required this.isDark,
+    required this.panelBg,
+    required this.borderClr,
+    required this.onToggle,
+    required this.onSelectAll,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final selectedCount = files.where((f) => f['selected'] == true).length;
+    return Container(
+      decoration: BoxDecoration(
+        color: panelBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: violet.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
+            child: Row(
+              children: [
+                Icon(Icons.folder_zip_rounded, size: 15, color: violet),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${L10n.isRtl(context) ? "ملفات التورنت" : "TORRENT FILES"} ($selectedCount/${files.length})',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.6,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () => onSelectAll(true),
+                  child: Text(
+                    L10n.isRtl(context) ? 'الكل' : 'ALL',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: violet,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () => onSelectAll(false),
+                  child: Text(
+                    L10n.isRtl(context) ? 'إلغاء' : 'NONE',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark
+                          ? AppTheme.textMuted
+                          : AppTheme.lightTextMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 180),
+            margin: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: (isDark ? Colors.black : Colors.white).withValues(
+                alpha: 0.15,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ListView.separated(
+              physics: const ClampingScrollPhysics(),
+              itemCount: files.length,
+              separatorBuilder: (_, _) =>
+                  Divider(color: borderClr.withValues(alpha: 0.3), height: 1),
+              itemBuilder: (ctx, idx) {
+                final file = files[idx];
+                final isSelected = file['selected'] as bool? ?? true;
+                final fileName = (file['name'] as String? ?? '').replaceAll(
+                  '+',
+                  ' ',
+                );
+                final length = (file['length'] as num?)?.toInt() ?? 0;
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  activeColor: violet,
+                  value: isSelected,
+                  title: Text(
+                    fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isSelected
+                          ? (isDark
+                                ? AppTheme.textPrimary
+                                : AppTheme.lightTextPrimary)
+                          : (isDark
+                                ? AppTheme.textSecondary
+                                : AppTheme.lightTextSecondary),
+                      fontSize: 12,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                      decoration: isSelected
+                          ? null
+                          : TextDecoration.lineThrough,
+                    ),
+                  ),
+                  subtitle: Text(
+                    formatBytes(length.toDouble()),
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textMuted
+                          : AppTheme.lightTextMuted,
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  onChanged: (val) => onToggle(idx, val ?? true),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

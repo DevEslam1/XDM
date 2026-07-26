@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
-class NeonGlowButton extends StatelessWidget {
+class NeonGlowButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final String text;
   final IconData? icon;
@@ -28,104 +28,195 @@ class NeonGlowButton extends StatelessWidget {
   });
 
   @override
+  State<NeonGlowButton> createState() => _NeonGlowButtonState();
+}
+
+class _NeonGlowButtonState extends State<NeonGlowButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmer;
+  bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmer = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _shimmer.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
-    final filledContentColor = isDark ? AppTheme.background : AppTheme.lightBackground;
-    final effectiveGlow = hasGlow || settings.enableGlow;
+    final filledContentColor = isDark
+        ? AppTheme.background
+        : AppTheme.lightBackground;
+    final effectiveGlow = widget.hasGlow || settings.enableGlow;
+    final enabled = widget.onPressed != null && !widget.isLoading;
+    final glow = widget.glowColor ?? widget.color;
 
-    Widget buttonContent = Row(
+    Widget content = Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (isLoading) ...[
+        if (widget.isLoading) ...[
           SizedBox(
             width: 16,
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation<Color>(
-                isFilled ? filledContentColor : color,
+                widget.isFilled ? filledContentColor : widget.color,
               ),
             ),
           ),
           const SizedBox(width: 8),
-        ] else if (icon != null) ...[
-          Icon(icon, size: 18, color: isFilled ? filledContentColor : color),
+        ] else if (widget.icon != null) ...[
+          Icon(
+            widget.icon,
+            size: 18,
+            color: widget.isFilled ? filledContentColor : widget.color,
+          ),
           const SizedBox(width: 8),
         ],
         Text(
-          text,
+          widget.text,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: isFilled ? filledContentColor : color,
+            color: widget.isFilled ? filledContentColor : widget.color,
             fontWeight: FontWeight.w600,
           ),
         ),
       ],
     );
+    if (widget.isExpanded) content = Center(child: content);
 
-    if (isExpanded) {
-      buttonContent = Center(child: buttonContent);
-    }
-
-    final effectiveOnPressed = isLoading ? null : onPressed;
-
-    if (isFilled) {
-      return FilledButton(
-        onPressed: effectiveOnPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: filledContentColor,
-          shape: RoundedRectangleBorder(
+    // Shimmer sweep across filled buttons
+    final label = effectiveGlow && widget.isFilled && enabled
+        ? ClipRRect(
             borderRadius: BorderRadius.circular(12),
-          ),
-          minimumSize: Size(isExpanded ? double.infinity : 0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-        ),
-        child: effectiveGlow
-            ? Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (glowColor ?? color).withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      spreadRadius: -2,
-                    ),
-                  ],
+            child: Stack(
+              children: [
+                content,
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: _shimmer,
+                    builder: (context, _) {
+                      return LayoutBuilder(
+                        builder: (context, c) {
+                          final w = c.maxWidth;
+                          final x = (w + 60) * _shimmer.value - 60;
+                          return Stack(
+                            children: [
+                              Positioned(
+                                left: x,
+                                top: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 44,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.white.withValues(alpha: 0),
+                                        Colors.white.withValues(alpha: 0.16),
+                                        Colors.white.withValues(alpha: 0),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-                child: buttonContent,
-              )
-            : buttonContent,
-      );
-    } else {
-      return OutlinedButton(
-        onPressed: effectiveOnPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: color,
-          side: BorderSide(color: color.withValues(alpha: 0.3), width: 1.0),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          minimumSize: Size(isExpanded ? double.infinity : 0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-        ),
-        child: effectiveGlow
-            ? Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (glowColor ?? color).withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      spreadRadius: -2,
-                    ),
-                  ],
+              ],
+            ),
+          )
+        : content;
+
+    return AnimatedScale(
+      scale: _pressed ? 0.96 : 1.0,
+      duration: AppTheme.motionFast,
+      curve: AppTheme.motionSpring,
+      child: AnimatedOpacity(
+        opacity: enabled ? 1.0 : 0.55,
+        duration: AppTheme.motionBase,
+        child: widget.isFilled
+            ? FilledButton(
+                onPressed: enabled ? () => widget.onPressed!() : null,
+                onHover: (h) => setState(() => _pressed = h),
+                style: FilledButton.styleFrom(
+                  backgroundColor: widget.color,
+                  foregroundColor: filledContentColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  minimumSize: Size(
+                    widget.isExpanded ? double.infinity : 0,
+                    48,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                 ),
-                child: buttonContent,
+                child: effectiveGlow && enabled
+                    ? Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: glow.withValues(alpha: 0.4),
+                              blurRadius: 16,
+                              spreadRadius: -2,
+                            ),
+                          ],
+                        ),
+                        child: label,
+                      )
+                    : label,
               )
-            : buttonContent,
-      );
-    }
+            : OutlinedButton(
+                onPressed: enabled ? () => widget.onPressed!() : null,
+                onHover: (h) => setState(() => _pressed = h),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: widget.color,
+                  side: BorderSide(
+                    color: widget.color.withValues(alpha: 0.3),
+                    width: 1.0,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  minimumSize: Size(
+                    widget.isExpanded ? double.infinity : 0,
+                    48,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                ),
+                child: effectiveGlow && enabled
+                    ? Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: glow.withValues(alpha: 0.4),
+                              blurRadius: 16,
+                              spreadRadius: -2,
+                            ),
+                          ],
+                        ),
+                        child: label,
+                      )
+                    : label,
+              ),
+      ),
+    );
   }
 }

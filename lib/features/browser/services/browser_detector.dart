@@ -127,25 +127,30 @@ class BrowserDetector {
       }
     }
     
-    // Check for download keywords before filtering web extensions,
-    // since many download scripts use .php, .asp, etc.
-    final hasDownloadKeyword = lower.contains('/download') ||
-        lower.contains('download_file') ||
-        lower.contains('attachment') ||
-        lower.contains('?download') ||
-        lower.contains('&download') ||
-        lower.contains('?file=') ||
-        lower.contains('&file=');
-    
-    if (hasDownloadKeyword) {
-      return DetectedMedia(
-        kind: DetectedMediaKind.unknown,
-        url: url,
-        suggestedFileName: _suggestName(url, ''),
-      );
+    final isCleanDownloadRoute = (trimmedPath.endsWith('/download') ||
+            trimmedPath.endsWith('/downloads') ||
+            trimmedPath == '/download' ||
+            trimmedPath == '/downloads') &&
+        uri.query.isEmpty;
+
+    if (!isCleanDownloadRoute) {
+      final hasDownloadKeyword = lower.contains('/download') ||
+          lower.contains('download_file') ||
+          lower.contains('attachment') ||
+          lower.contains('?download') ||
+          lower.contains('&download') ||
+          lower.contains('?file=') ||
+          lower.contains('&file=');
+
+      if (hasDownloadKeyword) {
+        return DetectedMedia(
+          kind: DetectedMediaKind.unknown,
+          url: url,
+          suggestedFileName: _suggestName(url, ''),
+        );
+      }
     }
     
-    // Ignore common web page/resource extensions
     final webExtensions = [
       '.html', '.htm', '.php', '.jsp', '.asp', '.aspx', '.xhtml',
       '.js', '.css'
@@ -160,7 +165,7 @@ class BrowserDetector {
   static bool isAutoDownloadable(String url) {
     final detected = detect(url);
     if (detected == null) return false;
-    if (detected.kind == DetectedMediaKind.image) return false;
+    if (detected.kind == DetectedMediaKind.image || detected.kind == DetectedMediaKind.unknown) return false;
     return true;
   }
 

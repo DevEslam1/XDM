@@ -77,11 +77,15 @@ class DownloadTasks extends Table {
   IntColumn get updatedAt => integer()();
   IntColumn get completedAt => integer().nullable()();
   IntColumn get scheduledAt => integer().nullable()();
-  BoolColumn get supportsResume => boolean().withDefault(const Constant(false))();
+  BoolColumn get supportsResume =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get speedLimitKbps => integer().withDefault(const Constant(0))();
-  BoolColumn get seedingEnabled => boolean().withDefault(const Constant(false))();
-  BoolColumn get seedingLimited => boolean().withDefault(const Constant(false))();
-  IntColumn get seedingLimitKbps => integer().withDefault(const Constant(500))();
+  BoolColumn get seedingEnabled =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get seedingLimited =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get seedingLimitKbps =>
+      integer().withDefault(const Constant(500))();
   TextColumn get torrentFiles => text()
       .map(NullAwareTypeConverter.wrap(const TorrentFilesConverter()))
       .nullable()();
@@ -92,6 +96,8 @@ class DownloadTasks extends Table {
   BoolColumn get pausedByUser => boolean().withDefault(const Constant(false))();
   TextColumn get youtubeQualityPreset => text().nullable()();
   TextColumn get notes => text().nullable()();
+  TextColumn get playlistId => text().nullable()();
+  TextColumn get playlistTitle => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -123,9 +129,12 @@ class BrowserHistory extends Table {
 LazyDatabase _openConnection(String path) {
   return LazyDatabase(() async {
     final file = File(path);
-    return NativeDatabase.createInBackground(file, setup: (database) {
-      database.execute('PRAGMA journal_mode=WAL;');
-    });
+    return NativeDatabase.createInBackground(
+      file,
+      setup: (database) {
+        database.execute('PRAGMA journal_mode=WAL;');
+      },
+    );
   });
 }
 
@@ -135,29 +144,35 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async {
-          await m.createAll();
-          // Create indexes on fresh database
-          await customStatement('CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
-          await customStatement('CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
-          await customStatement('CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
-        },
-        onUpgrade: (m, from, to) async {
-          debugPrint('AppDatabase: Upgrading schema from $from to $to');
-          if (from < 2) {
-            // Migration 1 -> 2: Add notes column
-            await m.addColumn(downloadTasks, downloadTasks.notes);
-          }
-          if (from < 3) {
-            // Migration 2 -> 3: Convert timestamp columns from text to integer
-            // and add indexes.
+    onCreate: (m) async {
+      await m.createAll();
+      // Create indexes on fresh database
+      await customStatement(
+        'CREATE INDEX idx_download_tasks_status ON download_tasks (status)',
+      );
+      await customStatement(
+        'CREATE INDEX idx_download_tasks_category ON download_tasks (category)',
+      );
+      await customStatement(
+        'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
+      );
+    },
+    onUpgrade: (m, from, to) async {
+      debugPrint('AppDatabase: Upgrading schema from $from to $to');
+      if (from < 2) {
+        // Migration 1 -> 2: Add notes column
+        await m.addColumn(downloadTasks, downloadTasks.notes);
+      }
+      if (from < 3) {
+        // Migration 2 -> 3: Convert timestamp columns from text to integer
+        // and add indexes.
 
-            // Step 1: Create a temporary table with the new schema
-            await customStatement('''
+        // Step 1: Create a temporary table with the new schema
+        await customStatement('''
               CREATE TABLE download_tasks_new (
                 id TEXT PRIMARY KEY NOT NULL,
                 file_name TEXT NOT NULL,
@@ -194,9 +209,10 @@ class AppDatabase extends _$AppDatabase {
               )
             ''');
 
-            // Step 2: Copy data with date conversion
-            // ISO8601 string dates are converted to milliseconds since epoch
-            await customStatement('''
+        // Step 2: Copy data with date conversion
+        // ISO8601 string dates are converted to milliseconds since epoch.
+        // We use REPLACE to handle ISO8601 'T' and 'Z' which julianday doesn't parse natively.
+        await customStatement('''
               INSERT INTO download_tasks_new (
                 id, file_name, url, file_size, downloaded_bytes, speed, eta,
                 category, status, save_path, local_file_path, temp_file_path,
@@ -211,10 +227,10 @@ class AppDatabase extends _$AppDatabase {
                 id, file_name, url, file_size, downloaded_bytes, speed, eta,
                 category, status, save_path, local_file_path, temp_file_path,
                 error_message, thread_count, chunks,
-                CAST((julianday(created_at) - 2440587.5) * 86400000 AS INTEGER) as created_at,
-                CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER) as updated_at,
-                CASE WHEN completed_at IS NOT NULL THEN CAST((julianday(completed_at) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as completed_at,
-                CASE WHEN scheduled_at IS NOT NULL THEN CAST((julianday(scheduled_at) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as scheduled_at,
+                CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) as created_at,
+                CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) as updated_at,
+                CASE WHEN completed_at IS NOT NULL THEN CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as completed_at,
+                CASE WHEN scheduled_at IS NOT NULL THEN CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as scheduled_at,
                 supports_resume, speed_limit_kbps, seeding_enabled,
                 seeding_limited, seeding_limit_kbps, torrent_files,
                 download_page_url, merged_audio_url, audio_size, audio_progress,
@@ -222,17 +238,30 @@ class AppDatabase extends _$AppDatabase {
               FROM download_tasks
             ''');
 
-            // Step 3: Drop old table
-            await customStatement('DROP TABLE download_tasks');
+        // Step 3: Drop old table
+        await customStatement('DROP TABLE download_tasks');
 
-            // Step 4: Rename new table
-            await customStatement('ALTER TABLE download_tasks_new RENAME TO download_tasks');
+        // Step 4: Rename new table
+        await customStatement(
+          'ALTER TABLE download_tasks_new RENAME TO download_tasks',
+        );
 
-            // Step 5: Create indexes
-            await customStatement('CREATE INDEX idx_download_tasks_status ON download_tasks (status)');
-            await customStatement('CREATE INDEX idx_download_tasks_category ON download_tasks (category)');
-            await customStatement('CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)');
-          }
-        },
-      );
+        // Step 5: Create indexes
+        await customStatement(
+          'CREATE INDEX idx_download_tasks_status ON download_tasks (status)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_download_tasks_category ON download_tasks (category)',
+        );
+        await customStatement(
+          'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
+        );
+      }
+      if (from < 4) {
+        // Migration 3 -> 4: Add playlistId and playlistTitle columns
+        await m.addColumn(downloadTasks, downloadTasks.playlistId);
+        await m.addColumn(downloadTasks, downloadTasks.playlistTitle);
+      }
+    },
+  );
 }

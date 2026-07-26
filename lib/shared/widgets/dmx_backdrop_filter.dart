@@ -7,7 +7,6 @@ class DmxBackdropFilter extends StatelessWidget {
   final double sigmaX;
   final double sigmaY;
   final Widget child;
-
   const DmxBackdropFilter({
     super.key,
     required this.sigmaX,
@@ -17,7 +16,9 @@ class DmxBackdropFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reduceVisuals = context.select((SettingsProvider s) => s.reduceVisuals);
+    final reduceVisuals = context.select(
+      (SettingsProvider s) => s.reduceVisuals,
+    );
     final classicUi = context.select((SettingsProvider s) => s.classicUi);
     if (reduceVisuals || classicUi) {
       return child;

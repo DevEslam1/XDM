@@ -1,20 +1,19 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'dart:convert';
-import 'dart:async';
 import 'package:share_plus/share_plus.dart';
-
 import '../../../core/app_theme.dart';
+import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
-import '../../../shared/widgets/themed_snackbar.dart';
-import '../../../core/utils/file_utils.dart';
+import '../../../core/services/database_service.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
-import '../../settings/provider/settings_provider.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
-import '../../../core/services/database_service.dart';
+import '../../settings/provider/settings_provider.dart';
 
 class BrowserHistorySheet extends StatefulWidget {
   const BrowserHistorySheet({super.key});
@@ -35,12 +34,18 @@ class BrowserHistorySheet extends StatefulWidget {
   State<BrowserHistorySheet> createState() => _BrowserHistorySheetState();
 }
 
-class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
-  int _selectedTab = 0; // 0: Surfing History, 1: Downloads
+class _BrowserHistorySheetState extends State<BrowserHistorySheet>
+    with TickerProviderStateMixin, HapticHelper {
+  int _selectedTab = 0; // 0: Surfing, 1: Downloads
   List<Map<String, dynamic>> _surfingHistory = [];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   Timer? _debounceTimer;
+  final FocusNode _focusNode = FocusNode();
+  late final AnimationController _tabSlide = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  );
 
   @override
   void initState() {
@@ -50,26 +55,45 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
       if (_debounceTimer?.isActive ?? false) _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 300), () {
         if (mounted) {
-          setState(() {
-            _searchQuery = _searchController.text.toLowerCase().trim();
-          });
+          setState(
+            () => _searchQuery = _searchController.text.toLowerCase().trim(),
+          );
         }
       });
     });
+    _focusNode.addListener(_onFocusChanged);
+  }
+
+  void _onFocusChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _searchController.dispose();
     _debounceTimer?.cancel();
+    _tabSlide.dispose();
     super.dispose();
+  }
+
+  void _switchTab(int index) {
+    if (_selectedTab == index) return;
+    triggerHaptic(context.read<SettingsProvider>());
+    if (index == 1) {
+      _tabSlide.forward();
+    } else {
+      _tabSlide.reverse();
+    }
+    setState(() => _selectedTab = index);
   }
 
   String _formatTimestamp(String? isoString) {
     if (isoString == null || isoString.isEmpty) return '';
     try {
-      final dt = DateTime.parse(isoString);
-      return _formatDateTime(dt);
+      return _formatDateTime(DateTime.parse(isoString));
     } catch (_) {
       return '';
     }
@@ -100,14 +124,15 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
           });
         }
       }
-
       final jsonStr = const JsonEncoder.withIndent('  ').convert(exportData);
-      await SharePlus.instance.share(ShareParams(
-        text: jsonStr,
-        subject: _selectedTab == 0
-            ? 'XDM Surfing History'
-            : 'XDM Download History',
-      ));
+      await SharePlus.instance.share(
+        ShareParams(
+          text: jsonStr,
+          subject: _selectedTab == 0
+              ? 'XDM Surfing History'
+              : 'XDM Download History',
+        ),
+      );
     } catch (e) {
       if (mounted) {
         final isDark = context.read<SettingsProvider>().isDarkMode;
@@ -127,14 +152,10 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
       final db = context.read<DatabaseService>();
       final h = await db.loadBrowserHistory();
       if (!mounted) return;
-      setState(() {
-        _surfingHistory = h;
-      });
+      setState(() => _surfingHistory = h);
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _surfingHistory = [];
-      });
+      setState(() => _surfingHistory = []);
     }
   }
 
@@ -159,8 +180,10 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    
-    // Optimize: rebuild only when task keys or status changes, not on progress ticks
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+
+    // Rebuild only when task identity/status changes, not on progress ticks.
     context.select<DownloadProvider, String>(
       (p) => p.tasks.map((t) => '${t.id}_${t.status.name}').join(','),
     );
@@ -168,7 +191,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
 
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.7,
+      initialChildSize: 0.72,
       maxChildSize: 0.95,
       minChildSize: 0.4,
       builder: (context, controller) {
@@ -197,23 +220,38 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                 top: false,
                 child: Column(
                   children: [
-                    // Header Area
+                    // Grab handle
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(top: 12, bottom: 10),
+                        decoration: BoxDecoration(
+                          color: muted.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    // Header
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
+                      padding: const EdgeInsets.fromLTRB(20, 2, 12, 6),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               color: accent.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(13),
+                              border: Border.all(
+                                color: accent.withValues(alpha: 0.3),
+                              ),
                             ),
                             child: Icon(
                               _selectedTab == 0
-                                  ? Icons.history
-                                  : Icons.download,
+                                  ? Icons.history_rounded
+                                  : Icons.download_rounded,
                               color: accent,
-                              size: 22,
+                              size: 20,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -221,59 +259,60 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                             child: Text(
                               _selectedTab == 0
                                   ? L10n.of(context, 'browser_history_title')
-                                  : L10n.of(context, 'browser_download_history'),
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(
-                                    color: accent,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
-                                  ),
+                                  : L10n.of(
+                                      context,
+                                      'browser_download_history',
+                                    ),
+                              style: TextStyle(
+                                fontFamily: 'Space Grotesk',
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                letterSpacing: 1,
+                                color: textClr,
+                              ),
                             ),
                           ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.ios_share,
-                              color: accent,
-                              size: 20,
-                            ),
+                          _HeaderAction(
+                            icon: Icons.ios_share_rounded,
                             tooltip: L10n.of(context, 'browser_export_json'),
-                            onPressed: _exportHistoryToJson,
+                            isDark: isDark,
+                            onTap: _exportHistoryToJson,
                           ),
                           if (_selectedTab == 0 && _surfingHistory.isNotEmpty)
-                            IconButton(
-                              icon: Icon(
-                                Icons.delete_sweep_outlined,
-                                color: isDark
-                                    ? AppTheme.neonRed
-                                    : AppTheme.lightNeonRed,
-                                size: 22,
+                            _HeaderAction(
+                              icon: Icons.delete_sweep_outlined,
+                              tooltip: L10n.of(
+                                context,
+                                'browser_clear_history_btn',
                               ),
-                              tooltip: L10n.of(context, 'browser_clear_history_btn'),
-                              onPressed: () {
+                              isDark: isDark,
+                              danger: true,
+                              onTap: () {
                                 runHaptic(settings);
                                 _showClearHistoryConfirmation(settings);
                               },
                             ),
-                          TextButton(
-                            onPressed: () {
+                          _HeaderAction(
+                            icon: Icons.close_rounded,
+                            tooltip: L10n.of(context, 'browser_close_btn'),
+                            isDark: isDark,
+                            onTap: () {
                               runHaptic(settings);
                               Navigator.pop(context);
                             },
-                            child: Text(L10n.of(context, 'browser_close_btn')),
                           ),
                         ],
                       ),
                     ),
-
-                    // Custom Tabs Selector
+                    // Sliding tab selector
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 8.0,
+                        horizontal: 16,
+                        vertical: 8,
                       ),
                       child: Container(
-                        height: 40,
-                        padding: const EdgeInsets.all(2),
+                        height: 42,
+                        padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
                           color:
                               (isDark
@@ -288,167 +327,159 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
                             width: 0.8,
                           ),
                         ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final half = constraints.maxWidth / 2;
+                            return Stack(
+                              children: [
+                                AnimatedBuilder(
+                                  animation: _tabSlide,
+                                  builder: (context, child) => Positioned(
+                                    left: _tabSlide.value * half,
+                                    top: 3,
+                                    bottom: 3,
+                                    width: half - 6,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: accent.withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(9),
+                                        border: Border.all(
+                                          color: accent.withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _tabButton(
+                                        0,
+                                        L10n.of(
+                                          context,
+                                          'browser_surfing_history',
+                                        ),
+                                        accent,
+                                        isDark,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: _tabButton(
+                                        1,
+                                        L10n.of(
+                                          context,
+                                          'browser_downloads_tab',
+                                        ),
+                                        accent,
+                                        isDark,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    // Search field
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF0F0F16)
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(21),
+                          border: Border.all(
+                            color: _focusNode.hasFocus
+                                ? accent.withValues(alpha: 0.6)
+                                : (isDark
+                                    ? const Color(0x15FFFFFF)
+                                    : const Color(0x0D000000)),
+                            width: _focusNode.hasFocus ? 1.5 : 1.0,
+                          ),
+                          boxShadow: _focusNode.hasFocus &&
+                                  isDark &&
+                                  settings.enableGlow
+                              ? [
+                                  BoxShadow(
+                                    color: accent.withValues(alpha: 0.25),
+                                    blurRadius: 10,
+                                    spreadRadius: 0.5,
+                                  ),
+                                ]
+                              : null,
+                        ),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            const SizedBox(width: 14),
+                            Icon(
+                              Icons.search_rounded,
+                              size: 18,
+                              color: _focusNode.hasFocus ? accent : muted,
+                            ),
+                            const SizedBox(width: 8),
                             Expanded(
-                              child: _buildTabItem(
-                                0,
-                                L10n.of(context, 'browser_surfing_history'),
-                                accent,
-                                isDark,
+                              child: TextField(
+                                controller: _searchController,
+                                focusNode: _focusNode,
+                                style: TextStyle(
+                                  color: textClr,
+                                  fontSize: 13,
+                                  fontFamily: 'Inter',
+                                ),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: Colors.transparent,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  hintText: L10n.of(
+                                    context,
+                                    'browser_search_history_hint',
+                                  ),
+                                  hintStyle: TextStyle(color: muted, fontSize: 12),
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                ),
                               ),
                             ),
-                            Expanded(
-                              child: _buildTabItem(
-                                1,
-                                L10n.of(context, 'browser_downloads_tab'),
-                                accent,
-                                isDark,
+                            if (_searchController.text.isNotEmpty) ...[
+                              GestureDetector(
+                                onTap: _searchController.clear,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    size: 17,
+                                    color: muted,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ] else
+                              const SizedBox(width: 14),
                           ],
                         ),
                       ),
                     ),
-
-                    // Search Bar
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 4.0,
-                      ),
-                      child: Container(
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color:
-                              (isDark
-                                      ? AppTheme.background
-                                      : AppTheme.lightBackground)
-                                  .withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark
-                                ? AppTheme.glassBorder
-                                : AppTheme.lightGlassBorder,
-                            width: 0.8,
-                          ),
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          style: TextStyle(
-                            color: isDark
-                                ? AppTheme.textPrimary
-                                : AppTheme.lightTextPrimary,
-                            fontSize: 12,
-                          ),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search,
-                              size: 16,
-                              color: isDark
-                                  ? AppTheme.textSecondary
-                                  : AppTheme.lightTextSecondary,
-                            ),
-                            suffixIcon: _searchController.text.isNotEmpty
-                                ? GestureDetector(
-                                    onTap: () {
-                                      _searchController.clear();
-                                    },
-                                    child: Icon(
-                                      Icons.close,
-                                      size: 16,
-                                      color: isDark
-                                          ? AppTheme.textSecondary
-                                          : AppTheme.lightTextSecondary,
-                                    ),
-                                  )
-                                : null,
-                            hintText: L10n.of(context, 'browser_search_history_hint'),
-                            hintStyle: TextStyle(
-                              color: isDark
-                                  ? AppTheme.textMuted
-                                  : AppTheme.lightTextMuted,
-                              fontSize: 12,
-                            ),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            fillColor: Colors.transparent,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Content Area
+                    // Content
                     Expanded(
                       child: _selectedTab == 0
-                          ? (() {
-                              final filteredSurfing = _surfingHistory.where((
-                                item,
-                              ) {
-                                final title = (item['title'] as String? ?? '')
-                                    .toLowerCase();
-                                final url = (item['url'] as String? ?? '')
-                                    .toLowerCase();
-                                return title.contains(_searchQuery) ||
-                                    url.contains(_searchQuery);
-                              }).toList();
-                              return filteredSurfing.isEmpty
-                                  ? _emptySurfingState(context, isDark)
-                                  : ListView.separated(
-                                      controller: controller,
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        4,
-                                        12,
-                                        24,
-                                      ),
-                                      itemCount: filteredSurfing.length,
-                                      separatorBuilder: (context, index) =>
-                                          const SizedBox(height: 6),
-                                      itemBuilder: (context, i) {
-                                        final item = filteredSurfing[i];
-                                        return _surfingTile(
-                                          context,
-                                          item,
-                                          isDark,
-                                          settings,
-                                        );
-                                      },
-                                    );
-                            })()
-                          : (() {
-                              final filteredDownloads = downloadTasks.where((
-                                task,
-                              ) {
-                                final name = task.fileName.toLowerCase();
-                                final url = task.url.toLowerCase();
-                                return name.contains(_searchQuery) ||
-                                    url.contains(_searchQuery);
-                              }).toList();
-                              return filteredDownloads.isEmpty
-                                  ? _emptyDownloadsState(context, isDark)
-                                  : ListView.separated(
-                                      controller: controller,
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        4,
-                                        12,
-                                        24,
-                                      ),
-                                      itemCount: filteredDownloads.length,
-                                      separatorBuilder: (context, index) =>
-                                          const SizedBox(height: 6),
-                                      itemBuilder: (context, i) {
-                                        final task = filteredDownloads[i];
-                                        return _taskTile(context, task, isDark);
-                                      },
-                                    );
-                            })(),
+                          ? _buildSurfingList(controller, isDark, settings)
+                          : _buildDownloadsList(
+                              controller,
+                              isDark,
+                              downloadTasks,
+                            ),
                     ),
                   ],
                 ),
@@ -460,43 +491,23 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     );
   }
 
-  Widget _buildTabItem(int index, String label, Color accent, bool isDark) {
+  Widget _tabButton(int index, String label, Color accent, bool isDark) {
     final isSelected = _selectedTab == index;
     return GestureDetector(
-      onTap: () {
-        runHaptic(context.read<SettingsProvider>());
-        setState(() {
-          _selectedTab = index;
-        });
-      },
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
-                  alpha: 0.8,
-                )
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: isSelected
-              ? Border.all(
-                  color: isDark
-                      ? AppTheme.glassBorder
-                      : AppTheme.lightGlassBorder,
-                  width: 0.8,
-                )
-              : null,
-        ),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _switchTab(index),
+      child: Center(
         child: Text(
           label.toUpperCase(),
           style: TextStyle(
+            fontFamily: 'Space Grotesk',
             color: isSelected
                 ? accent
                 : (isDark
                       ? AppTheme.textSecondary
                       : AppTheme.lightTextSecondary),
             fontSize: 10,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w800,
             letterSpacing: 0.8,
           ),
         ),
@@ -504,194 +515,198 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     );
   }
 
-  Widget _emptySurfingState(BuildContext context, bool isDark) {
-    if (_searchQuery.isNotEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.search_off_rounded,
-                size: 56,
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-              ),
-              const SizedBox(height: 14),
-              Text(
-                '${L10n.of(context, 'browser_no_results_for')} "$_searchQuery"',
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed: () => _searchController.clear(),
-                icon: const Icon(Icons.clear, size: 16),
-                label: Text(L10n.of(context, 'browser_clear_search')),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.history,
-              size: 56,
-              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              L10n.of(context, 'browser_no_history_found'),
-              style: TextStyle(
-                color: isDark
-                    ? AppTheme.textPrimary
-                    : AppTheme.lightTextPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              L10n.of(context, 'browser_no_history_desc'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isDark
-                    ? AppTheme.textSecondary
-                    : AppTheme.lightTextSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
+  Widget _buildSurfingList(
+    ScrollController controller,
+    bool isDark,
+    SettingsProvider settings,
+  ) {
+    final filtered = _surfingHistory.where((item) {
+      final title = (item['title'] as String? ?? '').toLowerCase();
+      final url = (item['url'] as String? ?? '').toLowerCase();
+      return title.contains(_searchQuery) || url.contains(_searchQuery);
+    }).toList();
+
+    if (filtered.isEmpty) return _emptyState(isDark, isSurfing: true);
+
+    return ListView.separated(
+      controller: controller,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
+      itemCount: filtered.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 6),
+      itemBuilder: (context, i) =>
+          _surfingTile(context, filtered[i], isDark, settings, i),
     );
   }
 
-  Widget _emptyDownloadsState(BuildContext context, bool isDark) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
+  Widget _buildDownloadsList(
+    ScrollController controller,
+    bool isDark,
+    List<DownloadTask> downloadTasks,
+  ) {
+    final filtered = downloadTasks.where((task) {
+      final name = task.fileName.toLowerCase();
+      final url = task.url.toLowerCase();
+      return name.contains(_searchQuery) || url.contains(_searchQuery);
+    }).toList();
+
+    if (filtered.isEmpty) return _emptyState(isDark, isSurfing: false);
+
+    return ListView.separated(
+      controller: controller,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 24),
+      itemCount: filtered.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 6),
+      itemBuilder: (context, i) => _taskTile(context, filtered[i], isDark, i),
+    );
+  }
+
+  Widget _emptyState(bool isDark, {required bool isSurfing}) {
+    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
+
+    if (_searchQuery.isNotEmpty) {
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.cloud_off_outlined,
-              size: 56,
-              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-            ),
-            const SizedBox(height: 14),
+            Icon(Icons.search_off_rounded, size: 48, color: muted),
+            const SizedBox(height: 12),
             Text(
-              L10n.of(context, 'browser_no_downloads_yet'),
+              '${L10n.of(context, 'browser_no_results_for')} "$_searchQuery"',
               style: TextStyle(
-                color: isDark
-                    ? AppTheme.textPrimary
-                    : AppTheme.lightTextPrimary,
+                color: textClr,
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 14,
               ),
             ),
-            const SizedBox(height: 6),
-            Text(
-              L10n.of(context, 'browser_no_downloads_desc'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isDark
-                    ? AppTheme.textSecondary
-                    : AppTheme.lightTextSecondary,
-                fontSize: 12,
-              ),
+            const SizedBox(height: 10),
+            TextButton.icon(
+              onPressed: _searchController.clear,
+              icon: const Icon(Icons.clear, size: 15),
+              label: Text(L10n.of(context, 'browser_clear_search')),
             ),
           ],
         ),
+      );
+    }
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: (isDark ? AppTheme.cardBg : AppTheme.lightCardBg)
+                  .withValues(alpha: 0.5),
+              border: Border.all(
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+              ),
+            ),
+            child: Icon(
+              isSurfing ? Icons.history_rounded : Icons.cloud_off_outlined,
+              size: 40,
+              color: muted,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            isSurfing
+                ? L10n.of(context, 'browser_no_history_found')
+                : L10n.of(context, 'browser_no_downloads_yet'),
+            style: TextStyle(
+              color: textClr,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            isSurfing
+                ? L10n.of(context, 'browser_no_history_desc')
+                : L10n.of(context, 'browser_no_downloads_desc'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: secClr, fontSize: 11),
+          ),
+        ],
       ),
     );
   }
 
   Future<void> _showClearHistoryConfirmation(SettingsProvider settings) async {
     final isDark = settings.isDarkMode;
-
-    showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: isDark ? AppTheme.surface : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: BorderSide(
-              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-            ),
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.surface : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(
+            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
           ),
-          title: Text(
-            L10n.of(context, 'browser_clear_history_title'),
-            style: TextStyle(
-              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-              fontWeight: FontWeight.bold,
-            ),
+        ),
+        title: Text(
+          L10n.of(context, 'browser_clear_history_title'),
+          style: TextStyle(
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            fontWeight: FontWeight.bold,
           ),
-          content: Text(
-            L10n.of(context, 'browser_clear_history_content'),
-            style: TextStyle(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
-            ),
+        ),
+        content: Text(
+          L10n.of(context, 'browser_clear_history_content'),
+          style: TextStyle(
+            color: isDark
+                ? AppTheme.textSecondary
+                : AppTheme.lightTextSecondary,
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                runHaptic(settings);
-                Navigator.pop(context, false);
-              },
-              child: Text(
-                L10n.of(context, 'browser_cancel_uppercase'),
-                style: TextStyle(
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              runHaptic(settings);
+              Navigator.pop(context, false);
+            },
+            child: Text(
+              L10n.of(context, 'browser_cancel_uppercase'),
+              style: TextStyle(
+                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
               ),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark
-                    ? AppTheme.neonRed.withValues(alpha: 0.2)
-                    : AppTheme.lightNeonRed.withValues(alpha: 0.1),
-                side: BorderSide(
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isDark
+                  ? AppTheme.neonRed.withValues(alpha: 0.2)
+                  : AppTheme.lightNeonRed.withValues(alpha: 0.1),
+              side: BorderSide(
+                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
               ),
-              onPressed: () {
-                runHaptic(settings);
-                Navigator.pop(context, true);
-              },
-              child: Text(
-                L10n.of(context, 'browser_clear_btn'),
-                style: TextStyle(
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                  fontWeight: FontWeight.bold,
-                ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
-          ],
-        );
-      },
-    ).then((confirmed) {
-      if (confirmed == true) {
-        _clearAllSurfingHistory();
-      }
-    });
+            onPressed: () {
+              runHaptic(settings);
+              Navigator.pop(context, true);
+            },
+            child: Text(
+              L10n.of(context, 'browser_clear_btn'),
+              style: TextStyle(
+                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) _clearAllSurfingHistory();
   }
 
   Widget _surfingTile(
@@ -699,120 +714,109 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     Map<String, dynamic> item,
     bool isDark,
     SettingsProvider settings,
+    int index,
   ) {
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final url = item['url'] as String? ?? '';
     final title = item['title'] as String? ?? url;
     final id = item['id'] as String? ?? '';
-    final visitedAt = item['visitedAt'] as String? ?? '';
-    final timeStr = _formatTimestamp(visitedAt);
+    final timeStr = _formatTimestamp(item['visitedAt'] as String?);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
-          alpha: 0.4,
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 260 + index * 30),
+      curve: Curves.easeOut,
+      builder: (_, t, child) => Opacity(opacity: t, child: child),
+      child: Container(
+        decoration: BoxDecoration(
+          color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
+            alpha: 0.4,
+          ),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+            width: 0.6,
+          ),
         ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-          width: 0.6,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            runHaptic(settings);
-            Navigator.pop(context, url);
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(13),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(13),
+            onTap: () {
+              runHaptic(settings);
+              Navigator.pop(context, url);
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.language_rounded,
+                      color: accent,
+                      size: 16,
+                    ),
                   ),
-                  child: Icon(Icons.language, color: accent, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isDark
-                              ? AppTheme.textPrimary
-                              : AppTheme.lightTextPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        url,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isDark
-                              ? AppTheme.textMuted
-                              : AppTheme.lightTextMuted,
-                          fontSize: 10,
-                        ),
-                      ),
-                      if (timeStr.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          timeStr,
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: isDark
-                                ? AppTheme.textMuted
-                                : AppTheme.lightTextMuted,
-                            fontSize: 9,
+                            color: textClr,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
+                        const SizedBox(height: 2),
+                        Text(
+                          url,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: muted, fontSize: 10),
+                        ),
+                        if (timeStr.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            timeStr,
+                            style: TextStyle(color: muted, fontSize: 9),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.copy,
-                    size: 16,
-                    color: isDark
-                        ? AppTheme.textSecondary
-                        : AppTheme.lightTextSecondary,
+                  _TileAction(
+                    icon: Icons.copy_rounded,
+                    isDark: isDark,
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: url));
+                      runHaptic(settings);
+                    },
                   ),
-                  tooltip: 'Copy URL',
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: url));
-                    runHaptic(settings);
-                  },
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.close,
-                    size: 16,
-                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                  _TileAction(
+                    icon: Icons.close_rounded,
+                    isDark: isDark,
+                    danger: true,
+                    onTap: () {
+                      runHaptic(settings);
+                      if (id.isNotEmpty) _deleteHistoryItem(id);
+                    },
                   ),
-                  tooltip: 'Remove',
-                  onPressed: () {
-                    runHaptic(settings);
-                    if (id.isNotEmpty) {
-                      _deleteHistoryItem(id);
-                    }
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -820,120 +824,129 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
     );
   }
 
-  Widget _taskTile(BuildContext context, DownloadTask t, bool isDark) {
+  Widget _taskTile(
+    BuildContext context,
+    DownloadTask t,
+    bool isDark,
+    int index,
+  ) {
     final color = _statusColor(t.status, isDark);
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final sizeStr = formatBytes(t.fileSize);
     final timeStr = _formatDateTime(t.completedAt ?? t.createdAt);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
-          alpha: 0.4,
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 260 + index * 30),
+      curve: Curves.easeOut,
+      builder: (_, o, child) => Opacity(opacity: o, child: child),
+      child: Container(
+        decoration: BoxDecoration(
+          color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(
+            alpha: 0.4,
+          ),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+            width: 0.6,
+          ),
         ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-          width: 0.6,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: t.url));
-            runHaptic(context.read<SettingsProvider>());
-            final isDark = context.read<SettingsProvider>().isDarkMode;
-            ThemedSnackbar.show(
-              context,
-              message: '${L10n.of(context, 'browser_copied_url_for')} ${t.fileName}',
-              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-              icon: Icons.copy,
-              isDarkMode: isDark,
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(13),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(13),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: t.url));
+              runHaptic(context.read<SettingsProvider>());
+              ThemedSnackbar.show(
+                context,
+                message:
+                    '${L10n.of(context, 'browser_copied_url_for')} ${t.fileName}',
+                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                icon: Icons.copy,
+                isDarkMode: isDark,
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(_statusIcon(t.status), color: color, size: 16),
                   ),
-                  child: Icon(_statusIcon(t.status), color: color, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        t.fileName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isDark
-                              ? AppTheme.textPrimary
-                              : AppTheme.lightTextPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Text(
-                            sizeStr,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t.fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: textClr,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '•  $timeStr',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Text(
+                              sizeStr,
                               style: TextStyle(
-                                color: isDark
-                                    ? AppTheme.textMuted
-                                    : AppTheme.lightTextMuted,
+                                color: color,
                                 fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Space Grotesk',
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _statusLabel(t.status, context),
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.6,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'â€¢  $timeStr',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: muted, fontSize: 10),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: color.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _statusLabel(t.status, context),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                        fontFamily: 'Space Grotesk',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -946,13 +959,13 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
       case DownloadStatus.completed:
         return Icons.check_circle_outline;
       case DownloadStatus.downloading:
-        return Icons.downloading;
+        return Icons.downloading_rounded;
       case DownloadStatus.paused:
         return Icons.pause_circle_outline;
       case DownloadStatus.failed:
         return Icons.error_outline;
       case DownloadStatus.queued:
-        return Icons.schedule;
+        return Icons.schedule_rounded;
     }
   }
 
@@ -984,5 +997,87 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet> {
       case DownloadStatus.queued:
         return L10n.of(context, 'browser_status_queued');
     }
+  }
+}
+
+class _HeaderAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool isDark;
+  final bool danger;
+  final VoidCallback onTap;
+
+  const _HeaderAction({
+    required this.icon,
+    required this.tooltip,
+    required this.isDark,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger
+        ? (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+        : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary);
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(9),
+          child: Container(
+            width: 34,
+            height: 34,
+            margin: const EdgeInsets.only(left: 4),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color:
+                  (danger
+                          ? color
+                          : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg))
+                      .withValues(alpha: danger ? 0.12 : 0.5),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: danger
+                    ? color.withValues(alpha: 0.35)
+                    : (isDark ? AppTheme.border : AppTheme.lightBorder),
+                width: 0.8,
+              ),
+            ),
+            child: Icon(icon, size: 17, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TileAction extends StatelessWidget {
+  final IconData icon;
+  final bool isDark;
+  final bool danger;
+  final VoidCallback onTap;
+
+  const _TileAction({
+    required this.icon,
+    required this.isDark,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger
+        ? (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+        : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary);
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Icon(icon, size: 15, color: color),
+      ),
+    );
   }
 }

@@ -28,4 +28,26 @@ class BrowserTab {
 
   double get progress => progressNotifier.value;
   set progress(double val) => progressNotifier.value = val;
+
+  /// True when the current URL is served over HTTPS.
+  bool get isSecure => url.toLowerCase().startsWith('https://');
+
+  /// Hostname without `www.` for tab-strip labels.
+  String get domain {
+    try {
+      var host = Uri.parse(url).host;
+      if (host.startsWith('www.')) host = host.substring(4);
+      return host;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Short label for the tab strip: prefers the page title, falls back to domain.
+  String get stripLabel {
+    if (isHome) return 'Home';
+    if (title.trim().isNotEmpty && title.trim() != url) return title.trim();
+    final d = domain;
+    return d.isNotEmpty ? d : url;
+  }
 }

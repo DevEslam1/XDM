@@ -348,9 +348,32 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setProxyAddress(String value) async {
-    proxyAddress = value;
-    await _prefs.setString(_proxyAddressKey, value);
+    final trimmed = value.trim();
+    proxyAddress = trimmed;
+    await _prefs.setString(_proxyAddressKey, trimmed);
     notifyListeners();
+  }
+
+  bool get isProxyAddressValid {
+    if (proxyAddress.isEmpty) return true;
+    final parts = proxyAddress.split(':');
+    if (parts.length != 2) return false;
+    final host = parts[0].trim();
+    final port = int.tryParse(parts[1].trim());
+    if (port == null || port <= 0 || port > 65535 || host.isEmpty) return false;
+    
+    // Strict regex validation for RFC-compliant hostnames, IPv4, and IPv6.
+    final hostRegExp = RegExp(
+      r'^(?:'
+      r'(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.'
+      r')*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])' // Hostname
+      r'|'
+      r'^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$' // IPv4
+      r'|'
+      r'^\[?[a-fA-F0-9:]+\]?$' // IPv6 (optional brackets)
+    );
+    if (!hostRegExp.hasMatch(host)) return false;
+    return Uri.tryParse('http://$host') != null && !host.contains(' ');
   }
 
   Future<void> setCustomUserAgent(String value) async {

@@ -607,10 +607,61 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 // ──────────────────────────────────────────────────────────────
 // Floating Particles Background Painter
 // ──────────────────────────────────────────────────────────────
+class _ParticleData {
+  final double baseX;
+  final double baseY;
+  final double speed;
+  final double radius;
+  final double phase;
+  final double baseOpacity;
+
+  const _ParticleData({
+    required this.baseX,
+    required this.baseY,
+    required this.speed,
+    required this.radius,
+    required this.phase,
+    required this.baseOpacity,
+  });
+}
+
+class _LineData {
+  final double x1;
+  final double y1;
+  final double x2;
+  final double y2;
+  const _LineData(this.x1, this.y1, this.x2, this.y2);
+}
+
 class _FloatingParticlesPainter extends CustomPainter {
   final double progress;
   final Color color;
   final bool isDark;
+
+  static final List<_ParticleData> _particles = () {
+    final random = Random(42);
+    return List.generate(18, (_) {
+      return _ParticleData(
+        baseX: random.nextDouble(),
+        baseY: random.nextDouble(),
+        speed: 0.3 + random.nextDouble() * 0.7,
+        radius: 1.0 + random.nextDouble() * 2.5,
+        phase: random.nextDouble() * pi * 2,
+        baseOpacity: 0.1 + random.nextDouble() * 0.25,
+      );
+    });
+  }();
+
+  static final List<_LineData> _lines = () {
+    final random = Random(42);
+    return List.generate(5, (_) {
+      final x1 = random.nextDouble();
+      final y1 = random.nextDouble();
+      final dx = (random.nextDouble() - 0.5) * 0.3;
+      final dy = (random.nextDouble() - 0.5) * 0.3;
+      return _LineData(x1, y1, x1 + dx, y1 + dy);
+    });
+  }();
 
   _FloatingParticlesPainter({
     required this.progress,
@@ -621,15 +672,13 @@ class _FloatingParticlesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (!size.isFinite || size.width <= 0 || size.height <= 0) return;
-    final random = Random(42); // Fixed seed for consistency
-    final particleCount = 18;
 
-    for (int i = 0; i < particleCount; i++) {
-      final baseX = random.nextDouble() * size.width;
-      final baseY = random.nextDouble() * size.height;
-      final speed = 0.3 + random.nextDouble() * 0.7;
-      final radius = 1.0 + random.nextDouble() * 2.5;
-      final phase = random.nextDouble() * pi * 2;
+    for (final p in _particles) {
+      final baseX = p.baseX * size.width;
+      final baseY = p.baseY * size.height;
+      final speed = p.speed;
+      final radius = p.radius;
+      final phase = p.phase;
 
       // Animate position
       final x = baseX + sin(progress * pi * 2 * speed + phase) * 20;
@@ -637,7 +686,7 @@ class _FloatingParticlesPainter extends CustomPainter {
       final adjustedY = y < 0 ? y + size.height : y;
 
       final opacity =
-          (0.1 + random.nextDouble() * 0.25) *
+          p.baseOpacity *
           (isDark ? 1.0 : 0.6) *
           (0.5 + 0.5 * sin(progress * pi * 2 + phase));
 
@@ -653,16 +702,12 @@ class _FloatingParticlesPainter extends CustomPainter {
       ..color = color.withValues(alpha: 0.04)
       ..strokeWidth = 0.5;
 
-    for (int i = 0; i < 5; i++) {
-      final x1 = random.nextDouble() * size.width;
-      final y1 = random.nextDouble() * size.height;
-      final x2 = x1 + (random.nextDouble() - 0.5) * 120;
-      final y2 = y1 + (random.nextDouble() - 0.5) * 120;
-
+    for (int i = 0; i < _lines.length; i++) {
+      final l = _lines[i];
       final animOffset = sin(progress * pi * 2 + i) * 10;
       canvas.drawLine(
-        Offset(x1 + animOffset, y1),
-        Offset(x2 + animOffset, y2),
+        Offset(l.x1 * size.width + animOffset, l.y1 * size.height),
+        Offset(l.x2 * size.width + animOffset, l.y2 * size.height),
         linePaint,
       );
     }

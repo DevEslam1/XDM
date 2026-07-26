@@ -29,6 +29,9 @@ mixin DownloadBackupMixin {
   // ---------------------------------------------------------------------------
   // Encryption helpers
   // ---------------------------------------------------------------------------
+  /// DEPRECATED: This legacy XOR cipher helper is insecure (XDMCRYPT v1 format).
+  /// Kept solely for backwards compatibility to allow legacy imports. New backups
+  /// must be encrypted with encryptBackup (AES-256).
   List<int> _xorCipher(List<int> data, List<int> key) {
     final List<int> result = List<int>.filled(data.length, 0);
     for (int i = 0; i < data.length; i++) {
@@ -83,11 +86,14 @@ mixin DownloadBackupMixin {
       if (!isAuthenticated && bytes.length < magic.length + 16) return null;
       if (!isAuthenticated && !_hasMagic(bytes, magic)) return null;
 
+      if (isAuthenticated) {
+        if (bytes.length < authenticatedMagic.length + 16 + 32) return null;
+      }
+
       final payload = isAuthenticated
           ? bytes.sublist(0, bytes.length - 32)
           : bytes;
       if (isAuthenticated) {
-        if (bytes.length < authenticatedMagic.length + 16 + 32) return null;
         final keyBytes = sha256.convert(utf8.encode(password)).bytes;
         final expectedMac = Hmac(sha256, keyBytes).convert(payload).bytes;
         final actualMac = bytes.sublist(bytes.length - 32);

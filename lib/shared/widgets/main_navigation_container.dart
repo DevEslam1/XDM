@@ -1,22 +1,22 @@
+import 'package:dmx/core/utils/localization.dart';
+import 'package:dmx/features/downloads/provider/download_provider.dart';
+import 'package:dmx/features/settings/provider/settings_provider.dart';
+import 'package:dmx/shared/widgets/dmx_app_icon.dart';
+import 'package:dmx/shared/widgets/dmx_backdrop_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../core/services/clipboard_service.dart';
 import '../../core/services/share_service.dart';
-import '../../core/utils/localization.dart';
-import '../../core/utils/responsive.dart';
 import '../../core/services/share_url_handler.dart';
-import '../../features/browser/screens/browser_screen.dart';
-import '../../features/home/screens/home_screen.dart';
-
-import '../../features/settings/provider/settings_provider.dart';
-import '../../features/settings/screens/settings_screen.dart';
-import '../../features/downloads/provider/download_provider.dart';
 import '../../core/services/single_instance_service.dart';
 import '../../core/services/update_service.dart';
+import '../../core/utils/responsive.dart';
+import '../../features/browser/screens/browser_screen.dart';
+import '../../features/home/screens/home_screen.dart';
+import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/widgets/update_dialogs.dart';
-import 'dmx_backdrop_filter.dart';
 import 'themed_snackbar.dart';
 
 class MainNavigationContainer extends StatefulWidget {
@@ -55,7 +55,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     SingleInstanceService().setListener(
       (url) => _onUrlReceived(url, isShareLaunch: false),
     );
-
     if (widget.initialUrl != null && widget.initialUrl!.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -63,7 +62,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         }
       });
     }
-
     _checkClipboard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAppUpdates();
@@ -81,39 +79,17 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         } else {
           final isDark = settings.isDarkMode;
           final isRtl = L10n.isRtl(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              content: Row(
-                children: [
-                  Icon(
-                    Icons.system_update_rounded,
-                    color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      isRtl
-                          ? 'تحديث جديد متوفر v${update.latestVersion}'
-                          : 'New update available v${update.latestVersion}',
-                      style: TextStyle(
-                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              action: SnackBarAction(
-                label: isRtl ? 'تنزيل' : 'UPDATE',
-                textColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                onPressed: () {
-                  showUpdateInfoDialog(context, update, provider, settings);
-                },
-              ),
-            ),
+          ThemedSnackbar.show(
+            context,
+            message: isRtl
+                ? 'New update available v${update.latestVersion}'
+                : 'New update available v${update.latestVersion}',
+            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            icon: Icons.system_update_rounded,
+            isDarkMode: isDark,
+            actionLabel: isRtl ? 'تنزيل' : 'Update',
+            onAction: () =>
+                showUpdateInfoDialog(context, update, provider, settings),
           );
         }
       }
@@ -132,12 +108,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkClipboard();
-    }
+    if (state == AppLifecycleState.resumed) _checkClipboard();
   }
 
-  void _onUrlReceived(String url, {bool isShareLaunch = false}) async {
+  void _onUrlReceived(String url, {bool isShareLaunch = false}) {
     if (!mounted) return;
     ShareUrlHandler.handle(context, url, isShareLaunch: isShareLaunch);
   }
@@ -146,28 +120,25 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     final now = DateTime.now();
     if (now.difference(_lastClipboardCheckTime).inSeconds < 5) return;
     _lastClipboardCheckTime = now;
-
     final url = await ClipboardService().checkClipboardForUrl();
     if (url != null && mounted && url != _lastClipboardUrl) {
       _lastClipboardUrl = url;
-      _showClipboardBottomSheet(url);
+      _showClipboardSnackbar(url);
     }
   }
 
-  void _showClipboardBottomSheet(String url) {
+  void _showClipboardSnackbar(String url) {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-
-    if (settings.vibration) {
-      HapticFeedback.mediumImpact();
-    }
-
+    if (settings.vibration) HapticFeedback.mediumImpact();
+    final preview = url.length > 40 ? '${url.substring(0, 40)}…' : url;
     ThemedSnackbar.show(
       context,
       message: isRtl
-          ? 'تم اكتشاف رابط في الحافظة: ${url.length > 30 ? "${url.substring(0, 30)}..." : url}'
-          : 'Link detected in clipboard: ${url.length > 30 ? "${url.substring(0, 30)}..." : url}',
+          ? 'تم اكتشاف رابط في الحافظة'
+          : 'Link detected in clipboard',
+      subtitle: preview,
       color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
       icon: Icons.content_paste_go_rounded,
       isDarkMode: isDark,
@@ -185,7 +156,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
     final bodyContent = Directionality(
       textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-      child: FadeIndexedStack(index: currentIndex, children: _screens),
+      child: _FadeIndexedStack(index: currentIndex, children: _screens),
     );
 
     return Scaffold(
@@ -227,6 +198,52 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   }
 }
 
+// Smooth fade when switching tabs
+class _FadeIndexedStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+  const _FadeIndexedStack({required this.index, required this.children});
+  @override
+  State<_FadeIndexedStack> createState() => _FadeIndexedStackState();
+}
+
+class _FadeIndexedStackState extends State<_FadeIndexedStack>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: AppTheme.motionBase,
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(_FadeIndexedStack old) {
+    super.didUpdateWidget(old);
+    if (old.index != widget.index) {
+      _c.reset();
+      _c.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _c,
+      child: IndexedStack(index: widget.index, children: widget.children),
+    );
+  }
+}
+
+
 class _PhoneBottomNavBar extends StatelessWidget {
   final SettingsProvider settings;
   final DownloadProvider downloadProvider;
@@ -248,8 +265,8 @@ class _PhoneBottomNavBar extends StatelessWidget {
       offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
           ? Offset.zero
           : const Offset(0, 1.0),
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
+      duration: AppTheme.motionBase,
+      curve: AppTheme.motionCurve,
       child: ClipRRect(
         borderRadius: settings.classicUi
             ? BorderRadius.zero
@@ -262,7 +279,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
               color: settings.classicUi
                   ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
                   : (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                        .withValues(alpha: 0.65),
+                        .withValues(alpha: 0.7),
               borderRadius: settings.classicUi
                   ? BorderRadius.zero
                   : const BorderRadius.vertical(top: Radius.circular(24)),
@@ -349,8 +366,8 @@ class _TabletFloatingNavBar extends StatelessWidget {
       offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
           ? Offset.zero
           : const Offset(0, 1.8),
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeInOutCubic,
+      duration: AppTheme.motionSlow,
+      curve: AppTheme.motionCurve,
       child: SafeArea(
         top: false,
         child: Container(
@@ -370,7 +387,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
                   )
                 : BoxDecoration(
                     color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                        .withValues(alpha: 0.65),
+                        .withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
                       color: isDark
@@ -491,11 +508,7 @@ class _NavigationRailWidget extends StatelessWidget {
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Icon(
-                  Icons.download_for_offline_rounded,
-                  color: activeColor,
-                  size: 32,
-                ),
+                child: DmxAppIcon(size: 40, showGlow: true),
               ),
               const SizedBox(height: 8),
               _RailItem(
@@ -570,7 +583,6 @@ class _RailItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? selectedIcon : icon;
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: Material(
@@ -578,13 +590,21 @@ class _RailItem extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-          child: Container(
+          child: AnimatedContainer(
+            duration: AppTheme.motionBase,
+            curve: AppTheme.motionCurve,
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
               color: isSelected
                   ? activeColor.withValues(alpha: 0.12)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
+              border: isSelected
+                  ? Border.all(
+                      color: activeColor.withValues(alpha: 0.3),
+                      width: 0.8,
+                    )
+                  : null,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -638,8 +658,12 @@ class _NavItem extends StatelessWidget {
     final inactiveColor = isDark
         ? AppTheme.textSecondary
         : AppTheme.lightTextSecondary;
-    final activeDownloadsCount = index == 0 ? downloadProvider.downloadingTasksCount : 0;
-    final totalSpeed = index == 0 ? downloadProvider.currentDownloadSpeedFormatted : '';
+    final activeDownloadsCount = index == 0
+        ? downloadProvider.downloadingTasksCount
+        : 0;
+    final totalSpeed = index == 0
+        ? downloadProvider.currentDownloadSpeedFormatted
+        : '';
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? activeIcon : icon;
 
@@ -648,9 +672,7 @@ class _NavItem extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            if (settings.vibration) {
-              HapticFeedback.mediumImpact();
-            }
+            if (settings.vibration) HapticFeedback.mediumImpact();
             downloadProvider.setActiveTabIndex(index);
           },
           borderRadius: BorderRadius.circular(16),
@@ -661,8 +683,8 @@ class _NavItem extends StatelessWidget {
                 clipBehavior: Clip.none,
                 children: [
                   AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
+                    duration: AppTheme.motionBase,
+                    curve: AppTheme.motionSpring,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 6,
@@ -672,6 +694,12 @@ class _NavItem extends StatelessWidget {
                           ? activeColor.withValues(alpha: 0.12)
                           : Colors.transparent,
                       borderRadius: BorderRadius.circular(20),
+                      border: isSelected
+                          ? Border.all(
+                              color: activeColor.withValues(alpha: 0.3),
+                              width: 0.8,
+                            )
+                          : null,
                     ),
                     child: Icon(displayIcon, color: color, size: 22),
                   ),
@@ -680,19 +708,30 @@ class _NavItem extends StatelessWidget {
                       top: -4,
                       right: 4,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                          color: isDark
+                              ? AppTheme.neonGreen
+                              : AppTheme.lightNeonGreen,
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: [
                             BoxShadow(
-                              color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen).withValues(alpha: 0.4),
+                              color:
+                                  (isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen)
+                                      .withValues(alpha: 0.4),
                               blurRadius: 4,
                             ),
                           ],
                         ),
                         child: Text(
-                          totalSpeed.isNotEmpty ? totalSpeed : '$activeDownloadsCount',
+                          totalSpeed.isNotEmpty
+                              ? totalSpeed
+                              : '$activeDownloadsCount',
                           style: TextStyle(
                             color: isDark ? Colors.black : Colors.white,
                             fontSize: 9,
@@ -721,57 +760,6 @@ class _NavItem extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class FadeIndexedStack extends StatefulWidget {
-  final int index;
-  final List<Widget> children;
-  final Duration duration;
-
-  const FadeIndexedStack({
-    super.key,
-    required this.index,
-    required this.children,
-    this.duration = const Duration(milliseconds: 220),
-  });
-
-  @override
-  State<FadeIndexedStack> createState() => _FadeIndexedStackState();
-}
-
-class _FadeIndexedStackState extends State<FadeIndexedStack>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: widget.duration);
-    _controller.forward();
-  }
-
-  @override
-  void didUpdateWidget(FadeIndexedStack oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.index != widget.index) {
-      _controller.reset();
-      _controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _controller,
-      child: IndexedStack(index: widget.index, children: widget.children),
     );
   }
 }

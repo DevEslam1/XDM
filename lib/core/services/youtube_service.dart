@@ -8,13 +8,10 @@ import 'xdm_backend_client.dart';
 import 'xdm_backend_exceptions.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
-
 class YoutubeService {
-
   static String? _cookies;
   static String? _oauthToken;
 
-  /// Loads persisted cookies on startup.
   static Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -28,18 +25,15 @@ class YoutubeService {
     }
   }
 
-  /// The OAuth access token if set via [signInWithOAuth], or null.
   static String? get oauthToken => _oauthToken;
   static final _authStateController = StreamController<bool>.broadcast();
 
-  /// Stream that emits `true` when signed in, `false` when signed out.
   static Stream<bool> get onAuthStateChanged => _authStateController.stream;
 
   static void _notifyAuthState() {
     _authStateController.add(isSignedIn);
   }
 
-  /// Signs into YouTube with browser cookies.
   static Future<void> signIn(String cookieString) async {
     _cookies = cookieString;
     _notifyAuthState();
@@ -51,14 +45,12 @@ class YoutubeService {
     }
   }
 
-  /// Signs in using an OAuth access token from Google Sign-In.
   static Future<void> signInWithOAuth(String accessToken) async {
     _oauthToken = accessToken;
     await resetClient();
     _notifyAuthState();
   }
 
-  /// Clears the OAuth token (called on Google sign-out).
   static Future<void> clearOAuth() async {
     _oauthToken = null;
     _notifyAuthState();
@@ -66,7 +58,6 @@ class YoutubeService {
 
   static bool get hasOAuth => _oauthToken != null && _oauthToken!.isNotEmpty;
 
-  /// Signs out from all authentication methods (OAuth + cookies).
   static Future<void> signOut() async {
     _cookies = null;
     _oauthToken = null;
@@ -76,30 +67,26 @@ class YoutubeService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('youtube_cookies_persisted');
     } catch (e) {
-      debugPrint('[YouTubeService] Failed to clear WebView cookies on signout: $e');
+      debugPrint(
+        '[YouTubeService] Failed to clear WebView cookies on signout: $e',
+      );
     }
     _notifyAuthState();
   }
 
-  /// Refreshes the OAuth token.
   static Future<void> refreshOAuthToken(String newToken) async {
     _oauthToken = newToken;
     _notifyAuthState();
   }
 
-  /// Resets client state.
   static Future<void> resetClient() async {
-    _streamsCache.clear();
+    // No local cache to clear anymore, relying on XdmBackendClient cache
   }
 
-
-
-  /// Whether the service currently has authentication cookies or OAuth set.
   static bool get isSignedIn =>
       (_cookies != null && _cookies!.isNotEmpty) ||
       (_oauthToken != null && _oauthToken!.isNotEmpty);
 
-  /// Extracts cookies directly from the native WebView cookie jar.
   static Future<void> fetchCookiesFromWebView() async {
     try {
       final cookieManager = WebviewCookieManager();
@@ -125,8 +112,9 @@ class YoutubeService {
       }
 
       if (allCookies.isNotEmpty) {
-        final cookieStr =
-            allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+        final cookieStr = allCookies.entries
+            .map((e) => '${e.key}=${e.value}')
+            .join('; ');
         await signIn(cookieStr);
       }
     } catch (e) {
@@ -134,7 +122,6 @@ class YoutubeService {
     }
   }
 
-  /// Signs in using cookies from a cookie list, or fetches from browser if null.
   static Future<void> authenticateFromBrowser([List<Cookie>? cookies]) async {
     if (cookies != null && cookies.isNotEmpty) {
       await signInFromCookieManager(cookies);
@@ -143,13 +130,11 @@ class YoutubeService {
     }
   }
 
-  /// Signs in using cookies from a cookie list.
   static Future<void> signInFromCookieManager(List<Cookie> cookies) async {
     final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
     if (cookieStr.isNotEmpty) await signIn(cookieStr);
   }
 
-  /// Returns the current YouTube auth cookie for display/debug, or null.
   static String? get currentCookies => _cookies;
 
   // ───────────────────────── URL Detection ──────────────────────────
@@ -162,24 +147,48 @@ class YoutubeService {
     return extractVideoId(url) != null;
   }
 
-  /// Returns true if [url] is an HTTP(S) URL that does not point to a direct
-  /// static file (by extension). Any such URL will be probed via the backend's
-  /// extract endpoint — if the site is unsupported the caller should fall back
-  /// to a normal direct-download flow.
   static bool isExtractableMediaUrl(String url) {
     if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
     final path = uri.path.toLowerCase();
 
-    // Direct file extensions skip backend probing
     final staticExtensions = [
-      '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm',
-      '.mp3', '.m4a', '.flac', '.wav', '.ogg',
-      '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2',
-      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-      '.apk', '.dmg', '.iso', '.exe', '.msi',
-      '.png', '.jpg', '.jpeg', '.gif', '.webp'
+      '.mp4',
+      '.mkv',
+      '.avi',
+      '.mov',
+      '.wmv',
+      '.flv',
+      '.webm',
+      '.mp3',
+      '.m4a',
+      '.flac',
+      '.wav',
+      '.ogg',
+      '.zip',
+      '.rar',
+      '.7z',
+      '.tar',
+      '.gz',
+      '.bz2',
+      '.pdf',
+      '.doc',
+      '.docx',
+      '.xls',
+      '.xlsx',
+      '.ppt',
+      '.pptx',
+      '.apk',
+      '.dmg',
+      '.iso',
+      '.exe',
+      '.msi',
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.gif',
+      '.webp',
     ];
     for (final ext in staticExtensions) {
       if (path.endsWith(ext)) return false;
@@ -257,23 +266,11 @@ class YoutubeService {
     resetClient();
   }
 
-  static final Map<String, (DateTime, List<Map<String, dynamic>>)> _streamsCache = {};
-  static const _cacheDuration = Duration(minutes: 5);
-
-  /// Formats all available streams for a given URL or Video ID into structured maps.
   static Future<List<Map<String, dynamic>>> getStreams(String url) async {
     final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
-    final targetUrl = videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
-    final cacheKey = videoId ?? url;
-
-    final cached = _streamsCache[cacheKey];
-    if (cached != null) {
-      if (DateTime.now().difference(cached.$1) < _cacheDuration) {
-        return cached.$2;
-      } else {
-        _streamsCache.remove(cacheKey);
-      }
-    }
+    final targetUrl = videoId != null
+        ? 'https://www.youtube.com/watch?v=$videoId'
+        : url;
 
     final settings = SettingsProvider.instance;
     if (!settings.useRemoteBackend) {
@@ -287,7 +284,8 @@ class YoutubeService {
       );
 
       final title = (backendRes['title'] as String?) ?? 'Untitled';
-      final rawStreams = (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
+      final rawStreams =
+          (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
 
       if (rawStreams != null && rawStreams.isNotEmpty) {
         final results = <Map<String, dynamic>>[];
@@ -295,7 +293,6 @@ class YoutubeService {
         for (final s in rawStreams) {
           final map = Map<String, dynamic>.from(s as Map);
 
-          // Handle new POST /extract format output
           if (map.containsKey('direct_url')) {
             final rawType = map['type'] as String? ?? '';
             final ext = map['ext'] as String? ?? 'mp4';
@@ -321,7 +318,9 @@ class YoutubeService {
                   ? 'Audio Only ${ext.toUpperCase()}'
                   : '$quality ${ext.toUpperCase()}',
               'src': directUrl,
-              'audioSrc': map.containsKey('audioSrc') ? map['audioSrc']?.toString() : null,
+              'audioSrc': map.containsKey('audioSrc')
+                  ? map['audioSrc']?.toString()
+                  : null,
               'videoSize': map['videoSize'] as int? ?? 0,
               'audioSize': map['audioSize'] as int? ?? 0,
               'size': filesize,
@@ -329,7 +328,6 @@ class YoutubeService {
               'title': title,
             });
           } else {
-            // Handle original GET /api/streams format output
             if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
               map['audioSrc'] = map['audioSrc'].toString();
             } else {
@@ -341,26 +339,18 @@ class YoutubeService {
         }
 
         if (kDebugMode) {
-          final combinedCount = results.where((s) => s['type'] == 'combined').length;
+          final combinedCount = results
+              .where((s) => s['type'] == 'combined')
+              .length;
           final muxedCount = results.where((s) => s['type'] == 'muxed').length;
           final audioCount = results.where((s) => s['type'] == 'audio').length;
-          final videoOnlyCount = results.where((s) => s['type'] == 'video_only').length;
+          final videoOnlyCount = results
+              .where((s) => s['type'] == 'video_only')
+              .length;
           debugPrint(
             '[YoutubeService] Parsed ${results.length} streams (combined: $combinedCount, muxed: $muxedCount, audio: $audioCount, video_only: $videoOnlyCount)',
           );
         }
-
-        // Evict expired entries first to prevent memory leak
-        final now = DateTime.now();
-        _streamsCache.removeWhere((key, val) => now.difference(val.$1) >= _cacheDuration);
-        // If still too large, remove the oldest entry
-        if (_streamsCache.length >= 50) {
-          final oldestKey = _streamsCache.entries
-              .reduce((a, b) => a.value.$1.isBefore(b.value.$1) ? a : b)
-              .key;
-          _streamsCache.remove(oldestKey);
-        }
-        _streamsCache[cacheKey] = (now, results);
         return results;
       }
     } on BackendException catch (e) {
@@ -372,41 +362,32 @@ class YoutubeService {
     throw Exception('No available streams found for this video.');
   }
 
-
-
-
-  /// Generic extraction for any URL (any yt-dlp-supported site).
-  /// Unlike [getStreams], does NOT extract a YouTube video ID — sends the raw
-  /// URL to the backend. Only attaches YouTube OAuth/cookie headers when the
-  /// URL is actually on a YouTube host. Returns null if the backend reports
-  /// the site as unsupported ([BackendBadRequestException] /
-  /// [BackendNotFoundException]).
-  static Future<List<Map<String, dynamic>>?> getStreamsForAnyUrl(String url) async {
+  static Future<List<Map<String, dynamic>>?> getStreamsForAnyUrl(
+    String url,
+  ) async {
     final uri = Uri.tryParse(url);
     final host = uri?.host.toLowerCase() ?? '';
     final isYouTubeHost =
         host.contains('youtube.com') || host.contains('youtu.be');
 
     final videoId = extractVideoId(url);
-    final cacheKey = videoId ?? url;
-    final cached = _streamsCache[cacheKey];
-    if (cached != null) {
-      if (DateTime.now().difference(cached.$1) < _cacheDuration) {
-        return cached.$2;
-      } else {
-        _streamsCache.remove(cacheKey);
-      }
-    }
+    // Use video ID URL if it's a YouTube video to leverage backend caching better
+    final targetUrl = videoId != null
+        ? 'https://www.youtube.com/watch?v=$videoId'
+        : url;
 
     try {
       final settings = SettingsProvider.instance;
       final backendRes = await XdmBackendClient().getStreams(
-        url,
-        cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend ? currentCookies : null,
+        targetUrl,
+        cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend
+            ? currentCookies
+            : null,
       );
 
       final title = (backendRes['title'] as String?) ?? 'Untitled';
-      final rawStreams = (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
+      final rawStreams =
+          (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
 
       if (rawStreams != null && rawStreams.isNotEmpty) {
         final results = <Map<String, dynamic>>[];
@@ -439,7 +420,9 @@ class YoutubeService {
                   ? 'Audio Only ${ext.toUpperCase()}'
                   : '$quality ${ext.toUpperCase()}',
               'src': directUrl,
-              'audioSrc': map.containsKey('audioSrc') ? map['audioSrc']?.toString() : null,
+              'audioSrc': map.containsKey('audioSrc')
+                  ? map['audioSrc']?.toString()
+                  : null,
               'videoSize': map['videoSize'] as int? ?? 0,
               'audioSize': map['audioSize'] as int? ?? 0,
               'size': filesize,
@@ -455,21 +438,9 @@ class YoutubeService {
             results.add(map);
           }
         }
-
-        // Cache results
-        final now = DateTime.now();
-        _streamsCache.removeWhere((key, val) => now.difference(val.$1) >= _cacheDuration);
-        if (_streamsCache.length >= 50) {
-          final oldestKey = _streamsCache.entries
-              .reduce((a, b) => a.value.$1.isBefore(b.value.$1) ? a : b)
-              .key;
-          _streamsCache.remove(oldestKey);
-        }
-        _streamsCache[cacheKey] = (now, results);
         return results;
       }
     } on BackendBadRequestException {
-      // Site unsupported by backend — fall back to direct download
       return null;
     } on BackendNotFoundException {
       return null;
@@ -482,7 +453,6 @@ class YoutubeService {
     return null;
   }
 
-  /// Selects a stream map for a specific video ID and quality preset/resolution.
   static Future<Map<String, dynamic>?> getStreamForVideo(
     String videoId, [
     String? qualityPreset,
@@ -494,49 +464,85 @@ class YoutubeService {
       final preset = (qualityPreset ?? 'best_combined').toLowerCase().trim();
 
       if (preset == 'audio_only') {
-        final audioStreams = streams.where((s) => s['type'] == 'audio').toList();
+        final audioStreams = streams
+            .where((s) => s['type'] == 'audio')
+            .toList();
         if (audioStreams.isNotEmpty) return audioStreams.first;
         return streams.first;
       }
 
       if (preset == 'best_muxed') {
-        final muxedStreams = streams.where((s) => s['type'] == 'muxed').toList();
+        final muxedStreams = streams
+            .where((s) => s['type'] == 'muxed')
+            .toList();
         if (muxedStreams.isNotEmpty) return muxedStreams.first;
-        final combinedStreams = streams.where((s) => s['type'] == 'combined').toList();
+        final combinedStreams = streams
+            .where((s) => s['type'] == 'combined')
+            .toList();
         if (combinedStreams.isNotEmpty) return combinedStreams.first;
         return streams.first;
       }
 
       if (preset == 'best_combined' || preset == 'best') {
-        final combinedStreams = streams.where((s) => s['type'] == 'combined').toList();
+        final combinedStreams = streams
+            .where((s) => s['type'] == 'combined')
+            .toList();
         if (combinedStreams.isNotEmpty) return combinedStreams.first;
-        final muxedStreams = streams.where((s) => s['type'] == 'muxed').toList();
+        final muxedStreams = streams
+            .where((s) => s['type'] == 'muxed')
+            .toList();
         if (muxedStreams.isNotEmpty) return muxedStreams.first;
         return streams.first;
       }
 
-      // Exact quality matching (e.g. 2160p, 1440p, 1080p, 720p, 480p, 360p, 240p, 144p)
       final reqHeight = parseQualityHeight(preset);
       if (reqHeight > 0) {
-        final combinedStreams = streams.where((s) => s['type'] == 'combined').toList();
-        final exactCombined = combinedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight);
+        final combinedStreams = streams
+            .where((s) => s['type'] == 'combined')
+            .toList();
+        final exactCombined = combinedStreams.where(
+          (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
+        );
         if (exactCombined.isNotEmpty) return exactCombined.first;
 
-        final muxedStreams = streams.where((s) => s['type'] == 'muxed').toList();
-        final exactMuxed = muxedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight);
+        final muxedStreams = streams
+            .where((s) => s['type'] == 'muxed')
+            .toList();
+        final exactMuxed = muxedStreams.where(
+          (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
+        );
         if (exactMuxed.isNotEmpty) return exactMuxed.first;
 
-        // Nearest lower quality match among combined (sorted descending by height)
-        final lowerCombined = combinedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList()
-          ..sort((a, b) => parseQualityHeight(b['quality'] as String? ?? '').compareTo(parseQualityHeight(a['quality'] as String? ?? '')));
+        final lowerCombined =
+            combinedStreams
+                .where(
+                  (s) =>
+                      parseQualityHeight(s['quality'] as String? ?? '') <=
+                      reqHeight,
+                )
+                .toList()
+              ..sort(
+                (a, b) => parseQualityHeight(
+                  b['quality'] as String? ?? '',
+                ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
+              );
         if (lowerCombined.isNotEmpty) return lowerCombined.first;
 
-        // Nearest lower quality match among muxed (sorted descending by height)
-        final lowerMuxed = muxedStreams.where((s) => parseQualityHeight(s['quality'] as String? ?? '') <= reqHeight).toList()
-          ..sort((a, b) => parseQualityHeight(b['quality'] as String? ?? '').compareTo(parseQualityHeight(a['quality'] as String? ?? '')));
+        final lowerMuxed =
+            muxedStreams
+                .where(
+                  (s) =>
+                      parseQualityHeight(s['quality'] as String? ?? '') <=
+                      reqHeight,
+                )
+                .toList()
+              ..sort(
+                (a, b) => parseQualityHeight(
+                  b['quality'] as String? ?? '',
+                ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
+              );
         if (lowerMuxed.isNotEmpty) return lowerMuxed.first;
 
-        // If no lower quality exists, fallback to lowest available above requested
         if (combinedStreams.isNotEmpty) return combinedStreams.last;
         if (muxedStreams.isNotEmpty) return muxedStreams.last;
       }
@@ -548,11 +554,9 @@ class YoutubeService {
     }
   }
 
-  /// Fetches playlist info and video list for `YoutubePlaylistSheet`.
-  /// When [pageToken] is provided, only fetches the next page of videos.
   static Future<Map<String, dynamic>?> getPlaylistDetails(
     String url, {
-    int? pageToken,
+    dynamic pageToken,
     int pageSize = 50,
   }) async {
     final playlistId = extractPlaylistId(url);
@@ -565,6 +569,8 @@ class YoutubeService {
       final backendRes = await XdmBackendClient().getPlaylist(
         url,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
+        pageToken: pageToken,
+        pageSize: pageSize,
       );
 
       final info = backendRes['info'] as Map<String, dynamic>?;
@@ -573,10 +579,7 @@ class YoutubeService {
         final videoList = rawVideos
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList();
-        return {
-          'info': info,
-          'videos': videoList,
-        };
+        return {'info': info, 'videos': videoList};
       }
     } on BackendRateLimitException catch (e) {
       throw Exception(e.toUserMessage());
@@ -587,14 +590,15 @@ class YoutubeService {
     } on BackendUnauthorizedException catch (e) {
       throw Exception(e.toUserMessage());
     } catch (e) {
-      debugPrint('[YoutubeService] Backend error during getPlaylistDetails ($e).');
+      debugPrint(
+        '[YoutubeService] Backend error during getPlaylistDetails ($e).',
+      );
       throw Exception(_parseErrorMessage(e));
     }
 
     return null;
   }
 
-  /// Searches YouTube videos via the backend.
   static Future<List<Map<String, dynamic>>> search(String query) async {
     try {
       final results = await XdmBackendClient().search(query);
@@ -607,16 +611,14 @@ class YoutubeService {
     }
   }
 
-  /// Fetches summary info for a playlist URL.
   static Future<Map<String, dynamic>?> getPlaylistInfo(String url) async {
     final details = await getPlaylistDetails(url);
     return details?['info'] as Map<String, dynamic>?;
   }
 
-  /// Fetches video items for a playlist ID.
   static Future<List<Map<String, dynamic>>?> getPlaylistVideos(
     String playlistId, {
-    int? pageToken,
+    dynamic pageToken,
     int pageSize = 50,
   }) async {
     final details = await getPlaylistDetails(
@@ -624,10 +626,11 @@ class YoutubeService {
       pageToken: pageToken,
       pageSize: pageSize,
     );
-    return (details?['videos'] as List?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    return (details?['videos'] as List?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
   }
 
-  /// Refreshes expired stream URLs for a given YouTube download page URL.
   static Future<Map<String, dynamic>?> refreshStreamUrl(
     String downloadPageUrl,
     String oldStreamUrl,
@@ -638,20 +641,26 @@ class YoutubeService {
     try {
       final streams = await getStreams(downloadPageUrl);
       if (streams.isNotEmpty) {
-        // Try to match by itag parameter in old stream url vs new streams
         Uri? oldUri;
         try {
           oldUri = Uri.parse(oldStreamUrl);
         } catch (e) {
-          debugPrint('[YouTubeService] Failed to parse oldStreamUrl in refreshStreamUrl: $e');
+          debugPrint(
+            '[YouTubeService] Failed to parse oldStreamUrl in refreshStreamUrl: $e',
+          );
         }
 
         final oldItag = oldUri?.queryParameters['itag'];
-        
+
         if (oldItag != null) {
           final matched = streams.firstWhere(
-            (s) => s['itag']?.toString() == oldItag || 
-                   (s['src'] != null && Uri.tryParse(s['src'].toString())?.queryParameters['itag'] == oldItag),
+            (s) =>
+                s['itag']?.toString() == oldItag ||
+                (s['src'] != null &&
+                    Uri.tryParse(
+                          s['src'].toString(),
+                        )?.queryParameters['itag'] ==
+                        oldItag),
             orElse: () => <String, dynamic>{},
           );
           if (matched.isNotEmpty) {
@@ -662,22 +671,25 @@ class YoutubeService {
           }
         }
 
-        // If itag match failed, match by quality/type/ext/height
-        final oldQuality = oldUri?.queryParameters['quality'] ?? oldUri?.queryParameters['height'];
-        
-        // Find best fallback match
+        final oldQuality =
+            oldUri?.queryParameters['quality'] ??
+            oldUri?.queryParameters['height'];
+
         Map<String, dynamic>? bestMatch;
         for (final s in streams) {
           final sUrl = s['src']?.toString() ?? '';
           final sUri = Uri.tryParse(sUrl);
-          final sQuality = s['quality']?.toString() ?? sUri?.queryParameters['quality'] ?? sUri?.queryParameters['height'];
-          
+          final sQuality =
+              s['quality']?.toString() ??
+              sUri?.queryParameters['quality'] ??
+              sUri?.queryParameters['height'];
+
           if (oldQuality != null && sQuality == oldQuality) {
             bestMatch = s;
             break;
           }
         }
-        
+
         if (bestMatch != null) {
           return {
             'url': bestMatch['src'] as String?,
@@ -685,7 +697,6 @@ class YoutubeService {
           };
         }
 
-        // Default fallback to first stream
         final first = streams.first;
         return {
           'url': first['src'] as String?,
@@ -698,7 +709,6 @@ class YoutubeService {
     return null;
   }
 
-  /// Fetches fresh stream URLs (video and optional audio) for a YouTube page URL.
   static Future<Map<String, String?>?> getFreshStreams(
     String downloadPageUrl,
   ) async {
@@ -719,10 +729,7 @@ class YoutubeService {
         final muxed = streams.where((s) => s['type'] == 'muxed').toList();
         if (muxed.isNotEmpty) {
           final best = muxed.first;
-          return {
-            'url': best['src'] as String?,
-            'audioUrl': null,
-          };
+          return {'url': best['src'] as String?, 'audioUrl': null};
         }
         final first = streams.first;
         return {
@@ -736,8 +743,6 @@ class YoutubeService {
 
     return null;
   }
-
-
 
   static String _parseErrorMessage(Object error) {
     final msg = error.toString();
@@ -774,4 +779,3 @@ class YoutubeService {
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
-

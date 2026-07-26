@@ -274,14 +274,11 @@ mixin DownloadFilterMixin {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+  static const List<String> _categories = [
+    'Video', 'Audio', 'Document', 'Archive', 'APK', 'Other'
+  ];
+
   Map<String, T> _emptyCategoryCounts<T>(T value) {
-    return {
-      'Video': value,
-      'Audio': value,
-      'Document': value,
-      'Archive': value,
-      'APK': value,
-      'Other': value,
-    };
+    return {for (final cat in _categories) cat: value};
   }
 }
