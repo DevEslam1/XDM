@@ -22,7 +22,7 @@ class FilterChipsBar extends StatelessWidget {
 
         final filters = isHistory
             ? ['All', 'Completed', 'Failed']
-            : ['All', 'Downloading', 'Paused'];
+            : ['All', 'Downloading', 'Paused', 'Torrents'];
 
         return Selector<DownloadProvider, _FilterState>(
           selector: (_, p) {
@@ -97,6 +97,7 @@ class FilterChipsBar extends StatelessWidget {
                           'Downloading' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                           'Completed' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                           'Failed' => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          'Torrents' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                           _ => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                         };
 

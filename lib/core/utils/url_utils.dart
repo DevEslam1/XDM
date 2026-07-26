@@ -107,9 +107,9 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
   final dnMatch = RegExp(r'dn=([^&]+)', caseSensitive: false).firstMatch(trimmed);
   if (dnMatch != null) {
     try {
-      result['name'] = Uri.decodeComponent(dnMatch.group(1)!);
+      result['name'] = Uri.decodeComponent(dnMatch.group(1)!.replaceAll('+', ' '));
     } catch (_) {
-      result['name'] = dnMatch.group(1)!;
+      result['name'] = dnMatch.group(1)!.replaceAll('+', ' ');
     }
   }
 
@@ -132,9 +132,9 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
       final dnList = queryParams['dn'] ?? [];
       if (dnList.isNotEmpty) {
         try {
-          result['name'] = Uri.decodeComponent(dnList.first);
+          result['name'] = Uri.decodeComponent(dnList.first.replaceAll('+', ' '));
         } catch (_) {
-          result['name'] = dnList.first;
+          result['name'] = dnList.first.replaceAll('+', ' ');
         }
       }
     }

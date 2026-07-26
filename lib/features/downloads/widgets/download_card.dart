@@ -34,613 +34,675 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       builder: (context, snapshot, child) {
         final task = snapshot.task;
 
-    // Determine status colors
-    Color statusColor;
-    switch (task.status) {
-      case DownloadStatus.queued:
-        statusColor = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-        break;
-      case DownloadStatus.downloading:
-        statusColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-        break;
-      case DownloadStatus.paused:
-        statusColor = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-        break;
-      case DownloadStatus.completed:
-        statusColor = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-        break;
-      case DownloadStatus.failed:
-        statusColor = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-        break;
-    }
+        // Determine status colors
+        Color statusColor;
+        switch (task.status) {
+          case DownloadStatus.queued:
+            statusColor = isDark
+                ? AppTheme.neonViolet
+                : AppTheme.lightNeonViolet;
+            break;
+          case DownloadStatus.downloading:
+            statusColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+            break;
+          case DownloadStatus.paused:
+            statusColor = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+            break;
+          case DownloadStatus.completed:
+            statusColor = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+            break;
+          case DownloadStatus.failed:
+            statusColor = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+            break;
+        }
 
-    // Determine category icon
-    IconData categoryIcon;
-    switch (task.category) {
-      case 'Video':
-        categoryIcon = Icons.movie_outlined;
-        break;
-      case 'Audio':
-        categoryIcon = Icons.audiotrack_outlined;
-        break;
-      case 'Document':
-        categoryIcon = Icons.description_outlined;
-        break;
-      case 'Archive':
-        categoryIcon = Icons.folder_zip_outlined;
-        break;
-      case 'APK':
-        categoryIcon = Icons.android_outlined;
-        break;
-      default:
-        categoryIcon = Icons.insert_drive_file_outlined;
-    }
+        // Determine category icon
+        IconData categoryIcon;
+        switch (task.category) {
+          case 'Video':
+            categoryIcon = Icons.movie_outlined;
+            break;
+          case 'Audio':
+            categoryIcon = Icons.audiotrack_outlined;
+            break;
+          case 'Document':
+            categoryIcon = Icons.description_outlined;
+            break;
+          case 'Archive':
+            categoryIcon = Icons.folder_zip_outlined;
+            break;
+          case 'APK':
+            categoryIcon = Icons.android_outlined;
+            break;
+          default:
+            categoryIcon = Icons.insert_drive_file_outlined;
+        }
 
-    final cardBg = settings.classicUi
-        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-        : (task.status == DownloadStatus.downloading
-              ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                    .withValues(alpha: 0.06)
-              : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg));
-    final cardBorder = settings.classicUi
-        ? Border.all(
-            color: isDark ? AppTheme.border : AppTheme.lightBorder,
-            width: 1.0,
-          )
-        : Border.all(
-            color: task.status == DownloadStatus.downloading
-                ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                      .withValues(alpha: 0.2)
-                : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
-            width: 0.8,
-          );
-    final cardShadow =
-        (settings.classicUi ||
-            task.status != DownloadStatus.downloading ||
-            !isDark)
-        ? null
-        : [
-            BoxShadow(
-              color: AppTheme.neonBlue.withValues(alpha: 0.06),
-              blurRadius: 16.0,
-              spreadRadius: 0,
+        final cardBg = settings.classicUi
+            ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+            : (task.status == DownloadStatus.downloading
+                  ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                        .withValues(alpha: 0.06)
+                  : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg));
+        final cardBorder = settings.classicUi
+            ? Border.all(
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                width: 1.0,
+              )
+            : Border.all(
+                color: task.status == DownloadStatus.downloading
+                    ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                          .withValues(alpha: 0.2)
+                    : (isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder),
+                width: 0.8,
+              );
+        final cardShadow =
+            (settings.classicUi ||
+                task.status != DownloadStatus.downloading ||
+                !isDark)
+            ? null
+            : [
+                BoxShadow(
+                  color: AppTheme.neonBlue.withValues(alpha: 0.06),
+                  blurRadius: 16.0,
+                  spreadRadius: 0,
+                ),
+              ];
+
+        final cardBody = RepaintBoundary(
+          child: Container(
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(compact ? 16 : 20),
+              border: cardBorder,
+              boxShadow: cardShadow,
             ),
-          ];
-
-    final cardBody = RepaintBoundary(
-      child: Container(
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(compact ? 16 : 20),
-        border: cardBorder,
-        boxShadow: cardShadow,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(compact ? 16 : 20),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(compact ? 16 : 20),
-          onTap: () {
-            triggerHaptic(settings);
-            Navigator.push(
-              context,
-              PremiumPageRoute(
-                type: PageTransitionType.slideRight,
-                child: DetailsScreen(taskId: task.id),
-              ),
-            );
-          },
-          onLongPress: () {
-            triggerHaptic(settings);
-            _showAdvancedOptionsSheet(context, task, provider, settings);
-          },
-          child: Padding(
-            padding: EdgeInsets.all(compact ? 12.0 : 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top row: File info + Control buttons
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // File category icon
-                    Container(
-                      width: compact ? 36 : 46,
-                      height: compact ? 36 : 46,
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(compact ? 10 : 14),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.15),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Icon(
-                        categoryIcon,
-                        color: statusColor.withValues(alpha: 0.85),
-                        size: compact ? 18 : 22,
-                      ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(compact ? 16 : 20),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(compact ? 16 : 20),
+                onTap: () {
+                  triggerHaptic(settings);
+                  Navigator.push(
+                    context,
+                    PremiumPageRoute(
+                      type: PageTransitionType.slideRight,
+                      child: DetailsScreen(taskId: task.id),
                     ),
-                    SizedBox(width: compact ? 10 : 12),
-                    // File name and status chip
-                    Expanded(
-                      child: Column(
+                  );
+                },
+                onLongPress: () {
+                  triggerHaptic(settings);
+                  _showAdvancedOptionsSheet(context, task, provider, settings);
+                },
+                child: Padding(
+                  padding: EdgeInsets.all(compact ? 12.0 : 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top row: File info + Control buttons
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            task.fileName,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(
-                                  fontSize: compact ? 13 : 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark
-                                      ? AppTheme.textPrimary
-                                      : AppTheme.lightTextPrimary,
-                                ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: compact ? 4 : 6),
-                          Wrap(
-                            spacing: compact ? 6 : 8,
-                            runSpacing: compact ? 2 : 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              StatusChip(task: task),
-                              Text(
-                                L10n.translateCategory(
-                                  context,
-                                  task.category,
-                                ).toUpperCase(),
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      fontSize: compact ? 8.5 : 9,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.8,
-                                      color: isDark
-                                          ? AppTheme.textSecondary
-                                          : AppTheme.lightTextSecondary,
-                                    ),
+                          // File category icon
+                          Container(
+                            width: compact ? 36 : 46,
+                            height: compact ? 36 : 46,
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(
+                                compact ? 10 : 14,
                               ),
-                              if (task.isTorrent &&
-                                  (task.status == DownloadStatus.downloading ||
-                                      (task.status ==
-                                              DownloadStatus.completed &&
-                                          task.seedingEnabled))) ...[
+                              border: Border.all(
+                                color: statusColor.withValues(alpha: 0.15),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Icon(
+                              categoryIcon,
+                              color: statusColor.withValues(alpha: 0.85),
+                              size: compact ? 18 : 22,
+                            ),
+                          ),
+                          SizedBox(width: compact ? 10 : 12),
+                          // File name and status chip
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  '|',
-                                  style: TextStyle(
-                                    fontSize: compact ? 8.5 : 9,
-                                    color: isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted,
-                                  ),
-                                ),
-                                Text(
-                                  '${L10n.of(context, 'seeds')}: ${provider.getTorrentSeeds(task.id)}',
-                                  style: Theme.of(context).textTheme.bodySmall
+                                  task.fileName,
+                                  style: Theme.of(context).textTheme.titleMedium
                                       ?.copyWith(
-                                        fontSize: compact ? 8.5 : 9,
+                                        fontSize: compact ? 13 : 14,
                                         fontWeight: FontWeight.bold,
                                         color: isDark
-                                            ? AppTheme.neonGreen
-                                            : AppTheme.lightNeonGreen,
+                                            ? AppTheme.textPrimary
+                                            : AppTheme.lightTextPrimary,
                                       ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                Text(
-                                  '${L10n.of(context, 'peers')}: ${provider.getTorrentPeers(task.id)}',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        fontSize: compact ? 8.5 : 9,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark
-                                            ? AppTheme.neonBlue
-                                            : AppTheme.lightNeonBlue,
+                                SizedBox(height: compact ? 4 : 6),
+                                Wrap(
+                                  spacing: compact ? 6 : 8,
+                                  runSpacing: compact ? 2 : 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    StatusChip(task: task),
+                                    Text(
+                                      L10n.translateCategory(
+                                        context,
+                                        task.category,
+                                      ).toUpperCase(),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            fontSize: compact ? 8.5 : 9,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.8,
+                                            color: isDark
+                                                ? AppTheme.textSecondary
+                                                : AppTheme.lightTextSecondary,
+                                          ),
+                                    ),
+                                    if (task.isTorrent &&
+                                        (task.status ==
+                                                DownloadStatus.downloading ||
+                                            (task.status ==
+                                                    DownloadStatus.completed &&
+                                                task.seedingEnabled))) ...[
+                                      Text(
+                                        '|',
+                                        style: TextStyle(
+                                          fontSize: compact ? 8.5 : 9,
+                                          color: isDark
+                                              ? AppTheme.textMuted
+                                              : AppTheme.lightTextMuted,
+                                        ),
                                       ),
+                                      Text(
+                                        '${L10n.of(context, 'seeds')}: ${provider.getTorrentSeeds(task.id)}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              fontSize: compact ? 8.5 : 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? AppTheme.neonGreen
+                                                  : AppTheme.lightNeonGreen,
+                                            ),
+                                      ),
+                                      Text(
+                                        '${L10n.of(context, 'peers')}: ${provider.getTorrentPeers(task.id)}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              fontSize: compact ? 8.5 : 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? AppTheme.neonBlue
+                                                  : AppTheme.lightNeonBlue,
+                                            ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
+                            ),
+                          ),
+                          // Action controls
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (task.status == DownloadStatus.downloading)
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.pause,
+                                    color: isDark
+                                        ? AppTheme.textSecondary
+                                        : AppTheme.lightTextSecondary,
+                                    size: compact ? 18 : 20,
+                                  ),
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    provider.pauseTask(task.id);
+                                  },
+                                  tooltip: 'Pause Download',
+                                  constraints: compact
+                                      ? const BoxConstraints()
+                                      : null,
+                                  padding: compact
+                                      ? const EdgeInsets.all(4)
+                                      : const EdgeInsets.all(8),
+                                )
+                              else if (task.status == DownloadStatus.paused ||
+                                  task.status == DownloadStatus.queued)
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.play_arrow,
+                                    color: isDark
+                                        ? AppTheme.neonBlue
+                                        : AppTheme.lightNeonBlue,
+                                    size: compact ? 18 : 20,
+                                  ),
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    provider.resumeTask(task.id);
+                                  },
+                                  tooltip: 'Resume Download',
+                                  constraints: compact
+                                      ? const BoxConstraints()
+                                      : null,
+                                  padding: compact
+                                      ? const EdgeInsets.all(4)
+                                      : const EdgeInsets.all(8),
+                                )
+                              else if (task.status == DownloadStatus.failed)
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.refresh,
+                                    color: isDark
+                                        ? AppTheme.neonViolet
+                                        : AppTheme.lightNeonViolet,
+                                    size: compact ? 18 : 20,
+                                  ),
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    provider.retryTask(task.id);
+                                  },
+                                  tooltip: 'Retry Download',
+                                  constraints: compact
+                                      ? const BoxConstraints()
+                                      : null,
+                                  padding: compact
+                                      ? const EdgeInsets.all(4)
+                                      : const EdgeInsets.all(8),
+                                )
+                              else if (task.status ==
+                                  DownloadStatus.completed) ...[
+                                if (task.isTorrent)
+                                  IconButton(
+                                    icon: Icon(
+                                      task.seedingEnabled
+                                          ? Icons.pause
+                                          : Icons.play_arrow,
+                                      color: task.seedingEnabled
+                                          ? (isDark
+                                                ? AppTheme.textSecondary
+                                                : AppTheme.lightTextSecondary)
+                                          : (isDark
+                                                ? AppTheme.neonBlue
+                                                : AppTheme.lightNeonBlue),
+                                      size: compact ? 18 : 20,
+                                    ),
+                                    onPressed: () {
+                                      triggerHaptic(settings);
+                                      provider.updateTaskSeeding(
+                                        task.id,
+                                        enabled: !task.seedingEnabled,
+                                      );
+                                    },
+                                    tooltip: task.seedingEnabled
+                                        ? 'Pause Seeding'
+                                        : 'Start Seeding',
+                                    constraints: compact
+                                        ? const BoxConstraints()
+                                        : null,
+                                    padding: compact
+                                        ? const EdgeInsets.all(4)
+                                        : const EdgeInsets.all(8),
+                                  ),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.folder_open_outlined,
+                                    color: isDark
+                                        ? AppTheme.neonGreen
+                                        : AppTheme.lightNeonGreen,
+                                    size: compact ? 18 : 20,
+                                  ),
+                                  onPressed: () {
+                                    triggerHaptic(settings);
+                                    openFile(
+                                      context,
+                                      task.localFilePath,
+                                      settings,
+                                    );
+                                  },
+                                  tooltip: 'Open File',
+                                  constraints: compact
+                                      ? const BoxConstraints()
+                                      : null,
+                                  padding: compact
+                                      ? const EdgeInsets.all(4)
+                                      : const EdgeInsets.all(8),
+                                ),
+                              ],
+                              IconButton(
+                                icon: Icon(
+                                  Icons.close,
+                                  color: isDark
+                                      ? AppTheme.neonRed
+                                      : AppTheme.lightNeonRed,
+                                  size: compact ? 16 : 18,
+                                ),
+                                onPressed: () async {
+                                  triggerHaptic(settings);
+                                  final deleteFiles =
+                                      await _showDeleteConfirmationDialog(
+                                        context,
+                                        task,
+                                        settings,
+                                      );
+                                  if (deleteFiles != null) {
+                                    provider.deleteTask(
+                                      task.id,
+                                      deleteFiles: deleteFiles,
+                                    );
+                                    if (context.mounted) {
+                                      ThemedSnackbar.show(
+                                        context,
+                                        message: L10n.isRtl(context)
+                                            ? 'تم حذف التنزيل بنجاح'
+                                            : 'Download deleted successfully',
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
+                                        icon: Icons.delete,
+                                        isDarkMode: isDark,
+                                      );
+                                    }
+                                  }
+                                },
+                                tooltip: 'Delete Task',
+                                constraints: compact
+                                    ? const BoxConstraints()
+                                    : null,
+                                padding: compact
+                                    ? const EdgeInsets.all(4)
+                                    : const EdgeInsets.all(8),
+                              ),
                             ],
                           ),
                         ],
                       ),
-                    ),
-                    // Action controls
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (task.status == DownloadStatus.downloading)
-                          IconButton(
-                            icon: Icon(
-                              Icons.pause,
-                              color: isDark
-                                  ? AppTheme.textSecondary
-                                  : AppTheme.lightTextSecondary,
-                              size: compact ? 18 : 20,
-                            ),
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              provider.pauseTask(task.id);
-                            },
-                            tooltip: 'Pause Download',
-                            constraints: compact ? const BoxConstraints() : null,
-                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
-                          )
-                        else if (task.status == DownloadStatus.paused ||
-                            task.status == DownloadStatus.queued)
-                          IconButton(
-                            icon: Icon(
-                              Icons.play_arrow,
-                              color: isDark
-                                  ? AppTheme.neonBlue
-                                  : AppTheme.lightNeonBlue,
-                              size: compact ? 18 : 20,
-                            ),
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              provider.resumeTask(task.id);
-                            },
-                            tooltip: 'Resume Download',
-                            constraints: compact ? const BoxConstraints() : null,
-                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
-                          )
-                        else if (task.status == DownloadStatus.failed)
-                          IconButton(
-                            icon: Icon(
-                              Icons.refresh,
-                              color: isDark
-                                  ? AppTheme.neonViolet
-                                  : AppTheme.lightNeonViolet,
-                              size: compact ? 18 : 20,
-                            ),
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              provider.retryTask(task.id);
-                            },
-                            tooltip: 'Retry Download',
-                            constraints: compact ? const BoxConstraints() : null,
-                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
-                          )
-                        else if (task.status == DownloadStatus.completed) ...[
-                          if (task.isTorrent)
-                            IconButton(
-                              icon: Icon(
-                                task.seedingEnabled
-                                    ? Icons.pause
-                                    : Icons.play_arrow,
-                                color: task.seedingEnabled
-                                    ? (isDark
-                                          ? AppTheme.textSecondary
-                                          : AppTheme.lightTextSecondary)
-                                    : (isDark
-                                          ? AppTheme.neonBlue
-                                          : AppTheme.lightNeonBlue),
-                                size: compact ? 18 : 20,
-                              ),
-                              onPressed: () {
-                                triggerHaptic(settings);
-                                provider.updateTaskSeeding(
-                                  task.id,
-                                  enabled: !task.seedingEnabled,
-                                );
-                              },
-                              tooltip: task.seedingEnabled
-                                  ? 'Pause Seeding'
-                                  : 'Start Seeding',
-                              constraints: compact ? const BoxConstraints() : null,
-                              padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
-                            ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.folder_open_outlined,
-                              color: isDark
-                                  ? AppTheme.neonGreen
-                                  : AppTheme.lightNeonGreen,
-                              size: compact ? 18 : 20,
-                            ),
-                            onPressed: () {
-                              triggerHaptic(settings);
-                              openFile(context, task.localFilePath, settings);
-                            },
-                            tooltip: 'Open File',
-                            constraints: compact ? const BoxConstraints() : null,
-                            padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
-                          ),
-                        ],
-                        IconButton(
-                          icon: Icon(
-                            Icons.close,
-                            color: isDark
-                                ? AppTheme.neonRed
-                                : AppTheme.lightNeonRed,
-                            size: compact ? 16 : 18,
-                          ),
-                          onPressed: () async {
-                            triggerHaptic(settings);
-                            final deleteFiles =
-                                await _showDeleteConfirmationDialog(
-                                  context,
-                                  task,
-                                  settings,
-                                );
-                            if (deleteFiles != null) {
-                              provider.deleteTask(
-                                task.id,
-                                deleteFiles: deleteFiles,
-                              );
-                              if (context.mounted) {
-                                ThemedSnackbar.show(
-                                  context,
-                                  message: L10n.isRtl(context)
-                                      ? 'تم حذف التنزيل بنجاح'
-                                      : 'Download deleted successfully',
-                                  color: isDark
-                                      ? AppTheme.neonRed
-                                      : AppTheme.lightNeonRed,
-                                  icon: Icons.delete,
-                                  isDarkMode: isDark,
-                                );
-                              }
-                            }
-                          },
-                          tooltip: 'Delete Task',
-                          constraints: compact ? const BoxConstraints() : null,
-                          padding: compact ? const EdgeInsets.all(4) : const EdgeInsets.all(8),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                SizedBox(height: compact ? 10 : 14),
-                _ProgressBar(
-                  task: task,
-                  compact: compact,
-                  isDark: isDark,
-                  statusColor: statusColor,
-                ),
-                SizedBox(height: compact ? 8 : 10),
-                // Footer metadata
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Size progress
-                    Flexible(
-                      child: Text(
-                        '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: isDark
-                              ? AppTheme.textSecondary
-                              : AppTheme.lightTextSecondary,
-                          fontSize: compact ? 10 : 11,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                      SizedBox(height: compact ? 10 : 14),
+                      _ProgressBar(
+                        task: task,
+                        compact: compact,
+                        isDark: isDark,
+                        statusColor: statusColor,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Progress percent
-                    Text(
-                      task.progressPercentString,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: isDark
-                            ? AppTheme.textPrimary
-                            : AppTheme.lightTextPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: compact ? 10 : 11,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // ETA or status message
-                    Flexible(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      SizedBox(height: compact ? 8 : 10),
+                      // Footer metadata
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                        if (task.status == DownloadStatus.downloading) ...[
-                          Icon(
-                            Icons.download,
-                            size: compact ? 11 : 12,
-                            color: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            task.speedFormatted,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: isDark
-                                      ? AppTheme.neonBlue
-                                      : AppTheme.lightNeonBlue,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: compact ? 10 : 11,
-                                ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (task.isTorrent) ...[
-                            Icon(
-                              Icons.upload,
-                              size: compact ? 11 : 12,
-                              color: isDark
-                                  ? AppTheme.neonViolet
-                                  : AppTheme.lightNeonViolet,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${formatBytes(provider.getTorrentUploadSpeed(task.id))}/s',
+                          // Size progress
+                          Flexible(
+                            child: Text(
+                              '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     color: isDark
-                                        ? AppTheme.neonViolet
-                                        : AppTheme.lightNeonViolet,
-                                    fontWeight: FontWeight.w600,
+                                        ? AppTheme.textSecondary
+                                        : AppTheme.lightTextSecondary,
                                     fontSize: compact ? 10 : 11,
                                   ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(width: 8),
-                          ],
-                        ] else if (task.status == DownloadStatus.completed &&
-                            task.isTorrent &&
-                            task.seedingEnabled) ...[
-                          Icon(
-                            Icons.upload,
-                            size: compact ? 11 : 12,
-                            color: isDark
-                                ? AppTheme.neonViolet
-                                : AppTheme.lightNeonViolet,
                           ),
                           const SizedBox(width: 4),
+                          // Progress percent
                           Text(
-                            task.speedFormatted,
-                            style: Theme.of(context).textTheme.bodySmall
+                            task.progressPercentString,
+                            style: Theme.of(context).textTheme.labelMedium
                                 ?.copyWith(
                                   color: isDark
-                                      ? AppTheme.neonViolet
-                                      : AppTheme.lightNeonViolet,
-                                  fontWeight: FontWeight.w600,
+                                      ? AppTheme.textPrimary
+                                      : AppTheme.lightTextPrimary,
+                                  fontWeight: FontWeight.bold,
                                   fontSize: compact ? 10 : 11,
                                 ),
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        Icon(
-                          (task.status == DownloadStatus.completed &&
-                                  task.isTorrent &&
-                                  task.seedingEnabled)
-                              ? Icons.cloud_upload_outlined
-                              : (task.status == DownloadStatus.completed
-                                    ? Icons.check_circle_outline
-                                    : Icons.schedule),
-                          size: compact ? 11 : 12,
-                          color:
-                              (task.status == DownloadStatus.completed &&
-                                  task.isTorrent &&
-                                  task.seedingEnabled)
-                              ? (isDark
-                                    ? AppTheme.neonViolet
-                                    : AppTheme.lightNeonViolet)
-                              : (task.status == DownloadStatus.completed
-                                    ? (isDark
-                                          ? AppTheme.neonGreen
-                                          : AppTheme.lightNeonGreen)
-                                    : (isDark
-                                          ? AppTheme.textMuted
-                                          : AppTheme.lightTextMuted)),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          L10n.translateStatus(
-                            context,
-                            task.status,
-                            task.etaFormatted,
-                          ),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color:
-                                    (task.status == DownloadStatus.completed &&
-                                        task.isTorrent &&
-                                        task.seedingEnabled)
-                                    ? (isDark
+                          const SizedBox(width: 4),
+                          // ETA or status message
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerRight,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (task.status ==
+                                      DownloadStatus.downloading) ...[
+                                    Icon(
+                                      Icons.download,
+                                      size: compact ? 11 : 12,
+                                      color: isDark
+                                          ? AppTheme.neonBlue
+                                          : AppTheme.lightNeonBlue,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      task.speedFormatted,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: isDark
+                                                ? AppTheme.neonBlue
+                                                : AppTheme.lightNeonBlue,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: compact ? 10 : 11,
+                                          ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (task.isTorrent) ...[
+                                      Icon(
+                                        Icons.upload,
+                                        size: compact ? 11 : 12,
+                                        color: isDark
+                                            ? AppTheme.neonViolet
+                                            : AppTheme.lightNeonViolet,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${formatBytes(provider.getTorrentUploadSpeed(task.id))}/s',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: isDark
+                                                  ? AppTheme.neonViolet
+                                                  : AppTheme.lightNeonViolet,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: compact ? 10 : 11,
+                                            ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                  ] else if (task.status ==
+                                          DownloadStatus.completed &&
+                                      task.isTorrent &&
+                                      task.seedingEnabled) ...[
+                                    Icon(
+                                      Icons.upload,
+                                      size: compact ? 11 : 12,
+                                      color: isDark
                                           ? AppTheme.neonViolet
-                                          : AppTheme.lightNeonViolet)
-                                    : (task.status == DownloadStatus.completed
-                                          ? (isDark
-                                                ? AppTheme.neonGreen
-                                                : AppTheme.lightNeonGreen)
-                                          : (isDark
-                                                ? AppTheme.textSecondary
-                                                : AppTheme.lightTextSecondary)),
-                                fontSize: compact ? 10 : 11,
+                                          : AppTheme.lightNeonViolet,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      task.speedFormatted,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: isDark
+                                                ? AppTheme.neonViolet
+                                                : AppTheme.lightNeonViolet,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: compact ? 10 : 11,
+                                          ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Icon(
+                                    (task.status == DownloadStatus.completed &&
+                                            task.isTorrent &&
+                                            task.seedingEnabled)
+                                        ? Icons.cloud_upload_outlined
+                                        : (task.status ==
+                                                  DownloadStatus.completed
+                                              ? Icons.check_circle_outline
+                                              : Icons.schedule),
+                                    size: compact ? 11 : 12,
+                                    color:
+                                        (task.status ==
+                                                DownloadStatus.completed &&
+                                            task.isTorrent &&
+                                            task.seedingEnabled)
+                                        ? (isDark
+                                              ? AppTheme.neonViolet
+                                              : AppTheme.lightNeonViolet)
+                                        : (task.status ==
+                                                  DownloadStatus.completed
+                                              ? (isDark
+                                                    ? AppTheme.neonGreen
+                                                    : AppTheme.lightNeonGreen)
+                                              : (isDark
+                                                    ? AppTheme.textMuted
+                                                    : AppTheme.lightTextMuted)),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    L10n.translateStatus(
+                                      context,
+                                      task.status,
+                                      task.etaFormatted,
+                                    ),
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color:
+                                              (task.status ==
+                                                      DownloadStatus
+                                                          .completed &&
+                                                  task.isTorrent &&
+                                                  task.seedingEnabled)
+                                              ? (isDark
+                                                    ? AppTheme.neonViolet
+                                                    : AppTheme.lightNeonViolet)
+                                              : (task.status ==
+                                                        DownloadStatus.completed
+                                                    ? (isDark
+                                                          ? AppTheme.neonGreen
+                                                          : AppTheme
+                                                                .lightNeonGreen)
+                                                    : (isDark
+                                                          ? AppTheme
+                                                                .textSecondary
+                                                          : AppTheme
+                                                                .lightTextSecondary)),
+                                          fontSize: compact ? 10 : 11,
+                                        ),
+                                  ),
+                                ],
                               ),
-                        ),
-                      ],
-                        ),
-                        ),
-                      ],
-                    ),
-                  ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+            ),
           ),
-        ),
-      ),
-      ),
-    );
+        );
 
-    return Dismissible(
-      key: Key(task.id),
-      direction: DismissDirection.horizontal,
-      background: Container(
-        margin: EdgeInsets.only(bottom: compact ? 8 : 12),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 24.0),
-        decoration: BoxDecoration(
-          color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-              .withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(compact ? 16 : 20),
-        ),
-        child: Icon(
-          task.status == DownloadStatus.downloading
-              ? Icons.pause
-              : Icons.play_arrow,
-          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-        ),
-      ),
-      secondaryBackground: Container(
-        margin: EdgeInsets.only(bottom: compact ? 8 : 12),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24.0),
-        decoration: BoxDecoration(
-          color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(
-            alpha: 0.12,
+        return Dismissible(
+          key: Key(task.id),
+          direction: DismissDirection.horizontal,
+          background: Container(
+            margin: EdgeInsets.only(bottom: compact ? 8 : 12),
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 24.0),
+            decoration: BoxDecoration(
+              color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(compact ? 16 : 20),
+            ),
+            child: Icon(
+              task.status == DownloadStatus.downloading
+                  ? Icons.pause
+                  : Icons.play_arrow,
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            ),
           ),
-          borderRadius: BorderRadius.circular(compact ? 16 : 20),
-        ),
-        child: Icon(
-          Icons.delete_outline,
-          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-        ),
-      ),
-      confirmDismiss: (direction) async {
-        triggerHaptic(settings);
-        if (direction == DismissDirection.endToStart) {
-          final deleteFiles = await _showDeleteConfirmationDialog(
-            context,
-            task,
-            settings,
-          );
-          if (deleteFiles != null) {
-            provider.deleteTask(task.id, deleteFiles: deleteFiles);
-            if (context.mounted) {
-              ThemedSnackbar.show(
+          secondaryBackground: Container(
+            margin: EdgeInsets.only(bottom: compact ? 8 : 12),
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 24.0),
+            decoration: BoxDecoration(
+              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(compact ? 16 : 20),
+            ),
+            child: Icon(
+              Icons.delete_outline,
+              color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            ),
+          ),
+          confirmDismiss: (direction) async {
+            triggerHaptic(settings);
+            if (direction == DismissDirection.endToStart) {
+              final deleteFiles = await _showDeleteConfirmationDialog(
                 context,
-                message: L10n.isRtl(context)
-                    ? 'تم حذف التنزيل بنجاح'
-                    : 'Download deleted successfully',
-                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                icon: Icons.delete,
-                isDarkMode: isDark,
+                task,
+                settings,
               );
+              if (deleteFiles != null) {
+                provider.deleteTask(task.id, deleteFiles: deleteFiles);
+                if (context.mounted) {
+                  ThemedSnackbar.show(
+                    context,
+                    message: L10n.isRtl(context)
+                        ? 'تم حذف التنزيل بنجاح'
+                        : 'Download deleted successfully',
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    icon: Icons.delete,
+                    isDarkMode: isDark,
+                  );
+                }
+                return true;
+              }
+              return false;
+            } else {
+              if (task.status == DownloadStatus.downloading) {
+                provider.pauseTask(task.id);
+              } else if (task.status == DownloadStatus.paused ||
+                  task.status == DownloadStatus.queued) {
+                provider.resumeTask(task.id);
+              } else if (task.status == DownloadStatus.failed) {
+                provider.retryTask(task.id);
+              }
+              return false;
             }
-            return true;
-          }
-          return false;
-        } else {
-          if (task.status == DownloadStatus.downloading) {
-            provider.pauseTask(task.id);
-          } else if (task.status == DownloadStatus.paused ||
-              task.status == DownloadStatus.queued) {
-            provider.resumeTask(task.id);
-          } else if (task.status == DownloadStatus.failed) {
-            provider.retryTask(task.id);
-          }
-          return false;
-        }
-      },
-      child: Padding(
-        padding: EdgeInsets.only(bottom: compact ? 8.0 : 12.0),
-        child: RepaintBoundary(
-          child: cardBody,
-        ),
-      ),
-    );
+          },
+          child: Padding(
+            padding: EdgeInsets.only(bottom: compact ? 8.0 : 12.0),
+            child: RepaintBoundary(child: cardBody),
+          ),
+        );
       },
     );
   }
@@ -665,7 +727,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             border: Border(
               top: BorderSide(
-                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
                 width: 0.8,
               ),
             ),
@@ -681,8 +745,11 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
-                          .withValues(alpha: 0.4),
+                      color:
+                          (isDark
+                                  ? AppTheme.textMuted
+                                  : AppTheme.lightTextMuted)
+                              .withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -694,16 +761,21 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     children: [
                       Icon(
                         Icons.tune_rounded,
-                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        color: isDark
+                            ? AppTheme.neonBlue
+                            : AppTheme.lightNeonBlue,
                         size: 20,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           task.fileName,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                color: isDark
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.lightTextPrimary,
                               ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -720,9 +792,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     Icons.info_outline,
                     color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                   ),
-                  title: Text(isRtl ? 'عرض التفاصيل المتقدمة' : 'View Full Details'),
+                  title: Text(
+                    isRtl ? 'عرض التفاصيل المتقدمة' : 'View Full Details',
+                  ),
                   subtitle: Text(
-                    isRtl ? 'معلومات الملف والسرعة والأجزاء' : 'File stats, threads & headers',
+                    isRtl
+                        ? 'معلومات الملف والسرعة والأجزاء'
+                        : 'File stats, threads & headers',
                     style: const TextStyle(fontSize: 11),
                   ),
                   onTap: () {
@@ -741,9 +817,15 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     Icons.language_rounded,
                     color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                   ),
-                  title: Text(isRtl ? 'فتح في تبويب المتصفح' : 'Open Source in Browser Tab'),
+                  title: Text(
+                    isRtl
+                        ? 'فتح في تبويب المتصفح'
+                        : 'Open Source in Browser Tab',
+                  ),
                   subtitle: Text(
-                    isRtl ? 'فتح صفحة التنزيل بالمتصفح' : 'Loads target site in built-in browser',
+                    isRtl
+                        ? 'فتح صفحة التنزيل بالمتصفح'
+                        : 'Loads target site in built-in browser',
                     style: const TextStyle(fontSize: 11),
                   ),
                   onTap: () {
@@ -756,11 +838,17 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                 ListTile(
                   leading: Icon(
                     Icons.link,
-                    color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                    color: isDark
+                        ? AppTheme.neonViolet
+                        : AppTheme.lightNeonViolet,
                   ),
-                  title: Text(isRtl ? 'تحديث رابط التنزيل' : 'Update Download Link'),
+                  title: Text(
+                    isRtl ? 'تحديث رابط التنزيل' : 'Update Download Link',
+                  ),
                   subtitle: Text(
-                    isRtl ? 'استبدال الرابط المنتهي برابط جديد' : 'Replace expired link to resume download',
+                    isRtl
+                        ? 'استبدال الرابط المنتهي برابط جديد'
+                        : 'Replace expired link to resume download',
                     style: const TextStyle(fontSize: 11),
                   ),
                   onTap: () {
@@ -771,16 +859,24 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                 ListTile(
                   leading: Icon(
                     Icons.copy_rounded,
-                    color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                    color: isDark
+                        ? AppTheme.neonGreen
+                        : AppTheme.lightNeonGreen,
                   ),
-                  title: Text(isRtl ? 'نسخ رابط التحميل' : 'Copy Download Link'),
+                  title: Text(
+                    isRtl ? 'نسخ رابط التحميل' : 'Copy Download Link',
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     Clipboard.setData(ClipboardData(text: task.url));
                     ThemedSnackbar.show(
                       context,
-                      message: isRtl ? 'تم نسخ الرابط' : 'URL copied to clipboard',
-                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      message: isRtl
+                          ? 'تم نسخ الرابط'
+                          : 'URL copied to clipboard',
+                      color: isDark
+                          ? AppTheme.neonGreen
+                          : AppTheme.lightNeonGreen,
                       icon: Icons.check,
                       isDarkMode: isDark,
                     );
@@ -790,9 +886,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                   ListTile(
                     leading: Icon(
                       Icons.folder_open_rounded,
-                      color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                      color: isDark
+                          ? AppTheme.neonAmber
+                          : AppTheme.lightNeonAmber,
                     ),
-                    title: Text(isRtl ? 'فتح الملف أو المجلد' : 'Open File or Folder'),
+                    title: Text(
+                      isRtl ? 'فتح الملف أو المجلد' : 'Open File or Folder',
+                    ),
                     onTap: () {
                       Navigator.pop(ctx);
                       openFile(context, task.localFilePath, settings);
@@ -805,7 +905,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                       task.status == DownloadStatus.downloading
                           ? Icons.pause_circle_outline
                           : Icons.play_circle_outline,
-                      color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                      color: isDark
+                          ? AppTheme.neonViolet
+                          : AppTheme.lightNeonViolet,
                     ),
                     title: Text(
                       task.status == DownloadStatus.downloading
@@ -825,7 +927,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                   ListTile(
                     leading: Icon(
                       Icons.refresh_rounded,
-                      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                      color: isDark
+                          ? AppTheme.neonBlue
+                          : AppTheme.lightNeonBlue,
                     ),
                     title: Text(isRtl ? 'إعادة المحاولة' : 'Retry Download'),
                     onTap: () {
@@ -840,7 +944,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                   ),
                   title: Text(
                     isRtl ? 'حذف التنزيل' : 'Delete Task',
-                    style: TextStyle(color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+                    style: TextStyle(
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    ),
                   ),
                   onTap: () async {
                     Navigator.pop(ctx);
@@ -857,7 +963,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                           message: isRtl
                               ? 'تم حذف التنزيل بنجاح'
                               : 'Download deleted successfully',
-                          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          color: isDark
+                              ? AppTheme.neonRed
+                              : AppTheme.lightNeonRed,
                           icon: Icons.delete,
                           isDarkMode: isDark,
                         );
@@ -888,7 +996,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       builder: (dialogCtx) {
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Row(
             children: [
               Icon(
@@ -899,7 +1009,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
               Expanded(
                 child: Text(
                   isRtl ? 'تحديث رابط التنزيل' : 'Update Download Link',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -914,26 +1027,33 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                     : 'Enter the new direct stream / download link to resume:',
                 style: TextStyle(
                   fontSize: 12,
-                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                  color: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: textController,
                 style: TextStyle(
-                  color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  color: isDark
+                      ? AppTheme.textPrimary
+                      : AppTheme.lightTextPrimary,
                   fontSize: 13,
                 ),
                 maxLines: 3,
                 decoration: InputDecoration(
                   hintText: 'https://...',
                   filled: true,
-                  fillColor: (isDark ? AppTheme.background : AppTheme.lightBackground)
-                      .withValues(alpha: 0.6),
+                  fillColor:
+                      (isDark ? AppTheme.background : AppTheme.lightBackground)
+                          .withValues(alpha: 0.6),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide(
-                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                      color: isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder,
                     ),
                   ),
                 ),
@@ -947,9 +1067,13 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                backgroundColor: isDark
+                    ? AppTheme.neonBlue
+                    : AppTheme.lightNeonBlue,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               onPressed: () async {
                 final newUrl = textController.text.trim();
@@ -962,7 +1086,9 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                       message: isRtl
                           ? 'تم تحديث رابط التنزيل بنجاح'
                           : 'Download URL updated successfully',
-                      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      color: isDark
+                          ? AppTheme.neonGreen
+                          : AppTheme.lightNeonGreen,
                       icon: Icons.check_circle_outline,
                       isDarkMode: isDark,
                     );
@@ -1146,7 +1272,8 @@ class _ProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isMergedDownload = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
+    final isMergedDownload =
+        task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
     final showSplitBar =
         !isMergedDownload &&
         (task.status == DownloadStatus.downloading ||
@@ -1202,9 +1329,7 @@ class _ProgressBar extends StatelessWidget {
           height: compact ? 4 : 6,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: isDark
-                ? AppTheme.glassBorder
-                : AppTheme.lightGlassBorder,
+            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
             borderRadius: BorderRadius.circular(8),
           ),
         ),
@@ -1247,7 +1372,8 @@ class _CardSnapshot {
 
   @override
   bool operator ==(Object other) =>
-      other is _CardSnapshot && other.task.id == task.id &&
+      other is _CardSnapshot &&
+      other.task.id == task.id &&
       other.status == status &&
       other.category == category &&
       other.errorMessage == errorMessage &&
@@ -1273,7 +1399,17 @@ class _CardSnapshot {
 
   @override
   int get hashCode => Object.hash(
-        task.id, status, category, errorMessage, progress, audioProgress,
-        speed, eta, downloadedBytes, fileSize, isTorrent, seedingEnabled,
-      );
+    task.id,
+    status,
+    category,
+    errorMessage,
+    progress,
+    audioProgress,
+    speed,
+    eta,
+    downloadedBytes,
+    fileSize,
+    isTorrent,
+    seedingEnabled,
+  );
 }

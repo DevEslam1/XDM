@@ -243,6 +243,61 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     }
   }
 
+  void _updateSelectedTorrentSize() {
+    if (_torrentFiles.isEmpty) return;
+    final selectedTotal = _torrentFiles
+        .where((f) => f['selected'] == true)
+        .fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
+    setState(() {
+      _resolvedFileSize = selectedTotal;
+    });
+  }
+
+  Future<void> _pickTorrentFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['torrent'],
+      );
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        _urlController.text = filePath;
+        final file = File(filePath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final meta = await compute(BencodeDecoder.parseTorrentBytes, bytes);
+          if (!mounted) return;
+          if (meta != null) {
+            setState(() {
+              _resolvedFileName = (meta['name'] as String? ?? '').replaceAll('+', ' ');
+              _resolvedCategory = categoryFromFileName(_resolvedFileName);
+              _torrentFiles = (meta['files'] as List? ?? [])
+                  .map(
+                    (f) => ({
+                      'name': (f['name'] as String? ?? '').replaceAll('+', ' '),
+                      'length': f['length'] as int? ?? 0,
+                      'selected': true,
+                      'priority': 4,
+                      'downloadedBytes': 0,
+                      'speed': 0.0,
+                    }),
+                  )
+                  .toList();
+              _updateSelectedTorrentSize();
+              _isMetadataResolved = true;
+              _setNameAndExt(_resolvedFileName);
+              if (_categories.contains(_resolvedCategory)) {
+                _selectedCategory = _resolvedCategory;
+              }
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error picking torrent file: $e');
+    }
+  }
+
   Future<void> _resolveLinkMetadata() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
@@ -437,17 +492,19 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
       if (url.toLowerCase().startsWith('magnet:')) {
         final parsed = parseMagnetUrl(url);
-        final dnName = parsed['name'] ?? 'Torrent Download';
+        final rawDnName = parsed['name'] ?? 'Torrent Download';
+        final dnName = safeFileName(rawDnName.replaceAll('+', ' '));
         if (mounted) {
           setState(() {
             _setNameAndExt(dnName);
             _resolvedFileName = dnName;
-            _resolvedCategory = 'Archive';
-            _selectedCategory = 'Archive';
-            _isMetadataResolved = true;
+            final cat = categoryFromFileName(dnName);
+            _resolvedCategory = cat != 'Other' ? cat : 'Video';
+            if (_categories.contains(_resolvedCategory)) {
+              _selectedCategory = _resolvedCategory;
+            }
           });
         }
-        return;
       }
 
       String? localFilePath;
@@ -1055,19 +1112,45 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
                         // Link labels
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              L10n.of(context, 'link_label'),
-                              style: TextStyle(
-                                color: secClr,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
+                            Row(
+                              children: [
+                                Text(
+                                  L10n.of(context, 'link_label'),
+                                  style: TextStyle(
+                                    color: secClr,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Icon(Icons.copy, color: secClr, size: 14),
+                                const SizedBox(width: 8),
+                                Icon(Icons.share, color: secClr, size: 14),
+                              ],
+                            ),
+                            InkWell(
+                              onTap: _pickTorrentFile,
+                              borderRadius: BorderRadius.circular(6),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.folder_open, size: 14, color: blueClr),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      L10n.isRtl(context) ? 'اختر ملف تورنت' : 'Browse .torrent',
+                                      style: TextStyle(
+                                        color: blueClr,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Icon(Icons.copy, color: secClr, size: 14),
-                            const SizedBox(width: 8),
-                            Icon(Icons.share, color: secClr, size: 14),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -1483,7 +1566,143 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ),
                             ),
                           ),
-                        const SizedBox(height: 16),
+                        // Torrent Files Selection Section
+                        if (_torrentFiles.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: inputBgColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet).withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.folder_zip_outlined,
+                                            size: 16,
+                                            color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              L10n.isRtl(context)
+                                                  ? 'ملفات التورنت (${_torrentFiles.where((f) => (f['selected'] as bool? ?? true)).length}/${_torrentFiles.length})'
+                                                  : 'Torrent Files (${_torrentFiles.where((f) => (f['selected'] as bool? ?? true)).length}/${_torrentFiles.length})',
+                                              style: TextStyle(
+                                                color: textClr,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        TextButton(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          onPressed: () {
+                                            for (final f in _torrentFiles) {
+                                              f['selected'] = true;
+                                            }
+                                            _updateSelectedTorrentSize();
+                                          },
+                                          child: Text(
+                                            L10n.isRtl(context) ? 'الكل' : 'Select All',
+                                            style: TextStyle(fontSize: 11, color: blueClr, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        TextButton(
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          onPressed: () {
+                                            for (final f in _torrentFiles) {
+                                              f['selected'] = false;
+                                            }
+                                            _updateSelectedTorrentSize();
+                                          },
+                                          child: Text(
+                                            L10n.isRtl(context) ? 'إلغاء' : 'Deselect All',
+                                            style: TextStyle(fontSize: 11, color: secClr),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  constraints: const BoxConstraints(maxHeight: 180),
+                                  decoration: BoxDecoration(
+                                    color: (isDark ? Colors.black : Colors.white).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: ListView.separated(
+                                    shrinkWrap: true,
+                                    itemCount: _torrentFiles.length,
+                                    separatorBuilder: (_, _) => Divider(
+                                      color: inputBorderColor.withValues(alpha: 0.3),
+                                      height: 1,
+                                    ),
+                                    itemBuilder: (ctx, idx) {
+                                      final file = _torrentFiles[idx];
+                                      final isSelected = file['selected'] as bool? ?? true;
+                                      final fileName = (file['name'] as String? ?? '').replaceAll('+', ' ');
+                                      final length = (file['length'] as num?)?.toInt() ?? 0;
+                                      final sizeFormatted = formatBytes(length.toDouble());
+
+                                      return CheckboxListTile(
+                                        dense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                                        activeColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                                        value: isSelected,
+                                        title: Text(
+                                          fileName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: isSelected ? textClr : secClr,
+                                            fontSize: 12,
+                                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                            decoration: isSelected ? null : TextDecoration.lineThrough,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          sizeFormatted,
+                                          style: TextStyle(color: secClr, fontSize: 10),
+                                        ),
+                                        onChanged: (val) {
+                                          file['selected'] = val ?? true;
+                                          _updateSelectedTorrentSize();
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
 
                         // Action Buttons
                         Row(

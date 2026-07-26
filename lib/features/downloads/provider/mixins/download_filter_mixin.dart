@@ -153,6 +153,7 @@ mixin DownloadFilterMixin {
         'Completed' => task.status == DownloadStatus.completed,
         'Failed' => task.status == DownloadStatus.failed,
         'Paused' => task.status == DownloadStatus.paused,
+        'Torrents' => task.isTorrent,
         _ => true,
       };
     }).toList();

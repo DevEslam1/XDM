@@ -1,9 +1,10 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/torrent_service.dart';
 import '../../../../core/services/database_service.dart';
+import '../../../../core/utils/file_utils.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
 
@@ -306,34 +307,94 @@ mixin DownloadTorrentMixin {
     }).toList();
   }
 
-  /// Reads each torrent file's actual byte count from disk.
+  /// Checks disk storage for existing torrent files and updates per-file downloadedBytes
+  /// and total downloadedBytes to reflect real disk progress before continuing/resuming.
+  /// NOTE: Uses file.lengthSync() which on Windows returns the logical (sparse) size,
+  /// not actual bytes written. Therefore we only trust diskLen when it's *less* than
+  /// the full length (clearly partial). When diskLen >= length we preserve the stored
+  /// estimate rather than assuming 100%, because libtorrent sparse files report full
+  /// logical size even when only partially written.
+  List<Map<String, dynamic>> checkRealTorrentDiskProgress(DownloadTask task) {
+    if (task.torrentFiles == null || task.torrentFiles!.isEmpty) {
+      return task.torrentFiles ?? [];
+    }
+
+    final updatedFiles = <Map<String, dynamic>>[];
+    for (final f in task.torrentFiles!) {
+      final copy = Map<String, dynamic>.from(f);
+      final relPath = copy['name'] as String? ?? '';
+      final length = (copy['length'] as int?) ?? 0;
+      final storedDownloaded = (copy['downloadedBytes'] as int?) ?? 0;
+
+      int realBytes = storedDownloaded;
+      if (relPath.isNotEmpty && length > 0 && task.status != DownloadStatus.completed) {
+        try {
+          final fullPath = p.normalize(p.join(task.savePath, relPath));
+          final file = File(fullPath);
+          if (file.existsSync()) {
+            final diskLen = file.lengthSync();
+            // Only trust diskLen when file is clearly smaller than full size
+            // (indicates partial download). Do NOT assume full size == complete
+            // because sparse files report full logical size.
+            if (diskLen > storedDownloaded && diskLen < length) {
+              realBytes = diskLen;
+            }
+          } else {
+            realBytes = 0;
+          }
+        } catch (e) {
+          debugPrint('Error checking disk progress for $relPath: $e');
+        }
+      }
+
+      copy['downloadedBytes'] = realBytes;
+      copy['speed'] = 0.0;
+      updatedFiles.add(copy);
+    }
+    return updatedFiles;
+  }
+
+  /// Returns each torrent file's confirmed downloaded byte count on disk.
   Future<List<int>> getTorrentFileActualBytes(String taskId) async {
     final task = findTaskById(taskId);
     if (task == null || task.torrentFiles == null) return [];
 
-    if (task.status == DownloadStatus.completed) {
-      return task.torrentFiles!
-          .map((f) => (f['length'] as int?) ?? 0)
-          .toList();
-    }
-
     final result = <int>[];
+    final selectedFiles = task.torrentFiles!.where((f) => (f['selected'] as bool? ?? true)).toList();
+    final totalSelectedSize = selectedFiles.fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
+    final taskDownloaded = task.downloadedBytes;
+
     for (final f in task.torrentFiles!) {
       final relPath = f['name'] as String? ?? '';
-      if (relPath.isEmpty) {
-        result.add((f['downloadedBytes'] as int?) ?? 0);
-        continue;
+      final length = (f['length'] as int?) ?? 0;
+      final downloaded = (f['downloadedBytes'] as int?) ?? 0;
+
+      int diskBytes = downloaded;
+      if (relPath.isNotEmpty && length > 0) {
+        try {
+          final fullPath = p.normalize(p.join(task.savePath, relPath));
+          final file = File(fullPath);
+          if (file.existsSync()) {
+            final diskLen = file.lengthSync();
+            // Only trust diskLen when file is clearly smaller than full size
+            // (partial download). Sparse files report full logical size even
+            // when only partially written, so we preserve stored estimate.
+            if (diskLen > diskBytes && diskLen < length) {
+              diskBytes = diskLen;
+            }
+          } else {
+            diskBytes = 0;
+          }
+        } catch (_) {}
       }
-      try {
-        final fullPath = p.normalize(p.join(task.savePath, relPath));
-        if (!fullPath.startsWith(task.savePath)) {
-          result.add((f['downloadedBytes'] as int?) ?? 0);
-          continue;
-        }
-        final file = File(fullPath);
-        result.add(await file.exists() ? await file.length() : 0);
-      } catch (_) {
-        result.add((f['downloadedBytes'] as int?) ?? 0);
+
+      if (diskBytes > 0) {
+        result.add(diskBytes.clamp(0, length > 0 ? length : diskBytes));
+      } else if (taskDownloaded > 0 && totalSelectedSize > 0 && (f['selected'] as bool? ?? true) && length > 0) {
+        final estimated = ((taskDownloaded * (length / totalSelectedSize))).round().clamp(0, length);
+        result.add(estimated);
+      } else {
+        result.add(0);
       }
     }
     return result;
@@ -505,9 +566,23 @@ mixin DownloadTorrentMixin {
         .where((f) => f['selected'] == true)
         .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
 
+    String updatedCategory = task.category;
+    if (task.category == 'Other' || task.category.isEmpty) {
+      final selectedFiles = files.where((f) => f['selected'] == true).toList();
+      final sample = selectedFiles.isNotEmpty ? selectedFiles.first : (files.isNotEmpty ? files.first : null);
+      if (sample != null) {
+        final fileName = (sample['name'] as String? ?? '').replaceAll('+', ' ');
+        final cat = categoryFromFileName(fileName);
+        if (cat != 'Other') {
+          updatedCategory = cat;
+        }
+      }
+    }
+
     final updated = task.copyWith(
       torrentFiles: files,
       fileSize: selectedSize > 0 ? selectedSize : task.fileSize,
+      category: updatedCategory,
     );
 
     providerTasks[index] = updated;

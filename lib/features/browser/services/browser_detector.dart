@@ -115,16 +115,8 @@ class BrowserDetector {
     final trimmedPath = cleanPath.endsWith('/')
         ? cleanPath.substring(0, cleanPath.length - 1)
         : cleanPath;
-
-    // Ignore common web page/resource extensions
-    final webExtensions = [
-      '.html', '.htm', '.php', '.jsp', '.asp', '.aspx', '.xhtml', 
-      '.js', '.css'
-    ];
-    if (webExtensions.any((ext) => trimmedPath.endsWith(ext))) {
-      return null;
-    }
-
+    
+    // Check by file extension first
     for (final entry in _extensionMap.entries) {
       if (trimmedPath.endsWith(entry.key)) {
         return DetectedMedia(
@@ -135,26 +127,33 @@ class BrowserDetector {
       }
     }
     
+    // Check for download keywords before filtering web extensions,
+    // since many download scripts use .php, .asp, etc.
     final hasDownloadKeyword = lower.contains('/download') ||
         lower.contains('download_file') ||
-        lower.contains('attachment');
-
+        lower.contains('attachment') ||
+        lower.contains('?download') ||
+        lower.contains('&download') ||
+        lower.contains('?file=') ||
+        lower.contains('&file=');
+    
     if (hasDownloadKeyword) {
-      final uri = Uri.tryParse(url);
-      if (uri != null) {
-        final path = uri.path.toLowerCase();
-        if ((path.endsWith('/download') || path.endsWith('/download/') || 
-             path.endsWith('/downloads') || path.endsWith('/downloads/')) && 
-            uri.query.isEmpty) {
-          return null;
-        }
-      }
       return DetectedMedia(
         kind: DetectedMediaKind.unknown,
         url: url,
         suggestedFileName: _suggestName(url, ''),
       );
     }
+    
+    // Ignore common web page/resource extensions
+    final webExtensions = [
+      '.html', '.htm', '.php', '.jsp', '.asp', '.aspx', '.xhtml',
+      '.js', '.css'
+    ];
+    if (webExtensions.any((ext) => trimmedPath.endsWith(ext))) {
+      return null;
+    }
+    
     return null;
   }
 
@@ -162,7 +161,6 @@ class BrowserDetector {
     final detected = detect(url);
     if (detected == null) return false;
     if (detected.kind == DetectedMediaKind.image) return false;
-    if (detected.kind == DetectedMediaKind.unknown) return false;
     return true;
   }
 

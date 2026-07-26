@@ -580,21 +580,44 @@ class DownloadProvider extends ChangeNotifier
 
     // For all downloads (magnet, torrent, HTTP), bypass synchronous metadata resolve
     // to keep UI thread fully responsive. Metadata resolves in the background inside DownloadEngine.
+    // Calculate size from torrentFiles if available
+    final int torrentFilesTotalSize = (torrentFiles != null && torrentFiles.isNotEmpty)
+        ? torrentFiles.where((f) => f['selected'] == true).fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
+        : 0;
+
     if (isMagnet) {
       final parsed = parseMagnetUrl(url.trim());
-      final magnetName = parsed['name'] ?? 'Torrent Download';
+      final rawMagnetName = parsed['name'] ?? 'Torrent Download';
+      final magnetName = safeFileName(rawMagnetName.replaceAll('+', ' '));
       fileName = name.trim().isNotEmpty
-          ? safeFileName(name.trim())
+          ? safeFileName(name.trim().replaceAll('+', ' '))
           : magnetName;
-      fileSize = size > 0 ? size : 0;
-      resolvedCategory = category.trim().isNotEmpty ? category : 'Archive';
+      fileSize = size > 0 ? size : (torrentFilesTotalSize > 0 ? torrentFilesTotalSize : 0);
+
+      // Determine category from primary torrent file if present, else from fileName
+      String catCandidate = categoryFromFileName(fileName);
+      if ((catCandidate == 'Other' || catCandidate.isEmpty) &&
+          torrentFiles != null &&
+          torrentFiles.isNotEmpty) {
+        final firstFile = torrentFiles.firstWhere(
+          (f) => f['selected'] == true,
+          orElse: () => torrentFiles.first,
+        );
+        final firstFileName = (firstFile['name'] as String? ?? '').replaceAll('+', ' ');
+        if (firstFileName.isNotEmpty) {
+          catCandidate = categoryFromFileName(firstFileName);
+        }
+      }
+      resolvedCategory = (category.trim().isNotEmpty && category != 'Auto')
+          ? category
+          : (catCandidate != 'Other' ? catCandidate : 'Video');
       supportsResume = true;
     } else {
       fileName = name.trim().isNotEmpty
-          ? safeFileName(name.trim())
+          ? safeFileName(name.trim().replaceAll('+', ' '))
           : fileNameFromUrl(url.trim());
-      fileSize = size > 0 ? size : 0;
-      resolvedCategory = category.trim().isNotEmpty
+      fileSize = size > 0 ? size : (torrentFilesTotalSize > 0 ? torrentFilesTotalSize : 0);
+      resolvedCategory = (category.trim().isNotEmpty && category != 'Auto')
           ? category
           : categoryFromFileName(fileName);
       supportsResume = true; // Assume resume support initially
@@ -1281,24 +1304,29 @@ class DownloadProvider extends ChangeNotifier
 
     // Fire-and-await so the queued→downloading transition is committed
     // before the first progress callback fires.
-    // For torrents: also reset per-file downloaded bytes so the file list
-    // starts from 0% (not carrying over stale 100% from a previous completion).
-    final resetTorrentFiles = task.isTorrent && task.torrentFiles != null
-        ? task.torrentFiles!.map((f) {
-            final copy = Map<String, dynamic>.from(f);
-            copy['downloadedBytes'] = 0;
-            copy['speed'] = 0.0;
-            return copy;
-          }).toList()
-        : null;
+    // For torrents: check real downloaded percentage on disk before starting/resuming
+    final verifiedTorrentFiles = task.isTorrent && task.torrentFiles != null
+        ? checkRealTorrentDiskProgress(task)
+        : task.torrentFiles;
+
+    int realTotalDownloaded = task.downloadedBytes;
+    if (task.isTorrent && verifiedTorrentFiles != null && verifiedTorrentFiles.isNotEmpty) {
+      final totalDiskDownloaded = verifiedTorrentFiles
+          .where((f) => (f['selected'] as bool? ?? true))
+          .fold<int>(0, (sum, f) => sum + ((f['downloadedBytes'] as int?) ?? 0));
+      if (totalDiskDownloaded > realTotalDownloaded) {
+        realTotalDownloaded = totalDiskDownloaded;
+      }
+    }
 
     await _setTask(
       task.copyWith(
         status: DownloadStatus.downloading,
+        downloadedBytes: realTotalDownloaded,
         clearError: true,
         clearStatusMessage: true,
         clearCompletedAt: true,
-        torrentFiles: resetTorrentFiles ?? task.torrentFiles,
+        torrentFiles: verifiedTorrentFiles,
         audioProgress: 0.0,
       ),
     );
@@ -1403,8 +1431,11 @@ class DownloadProvider extends ChangeNotifier
 
       // Shared byte/speed trackers — read and written by both the audio and
       // video progress callbacks, combined by pushCombinedProgress().
-      int audioBytesSoFar = 0;
-      int videoBytesSoFar = 0;
+      int audioBytesSoFar = hasAudio && task.audioSize > 0
+          ? (task.audioProgress * task.audioSize).round()
+          : 0;
+      int videoBytesSoFar = (task.downloadedBytes - audioBytesSoFar)
+          .clamp(0, task.fileSize > 0 ? task.fileSize : task.downloadedBytes);
       double audioSpeedNow = 0.0;
       double videoSpeedNow = 0.0;
 
@@ -1427,6 +1458,20 @@ class DownloadProvider extends ChangeNotifier
         final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
         final combinedSpeed = audioSpeedNow + videoSpeedNow;
 
+        int? calculatedEta;
+        if (combinedSpeed > 0 && totalSize > totalDownloaded) {
+          final remainingBytes = totalSize - totalDownloaded;
+          final rawEta = (remainingBytes / combinedSpeed).round();
+          if (rawEta > 0) {
+            final prevEta = base.eta;
+            if (prevEta != null && prevEta > 0) {
+              calculatedEta = ((0.3 * rawEta) + (0.7 * prevEta)).round();
+            } else {
+              calculatedEta = rawEta;
+            }
+          }
+        }
+
         final updated = base.copyWith(
           fileName: fileNameOverride ?? base.fileName,
           localFilePath: localFilePathOverride ?? base.localFilePath,
@@ -1435,6 +1480,8 @@ class DownloadProvider extends ChangeNotifier
           fileSize: totalSize,
           downloadedBytes: totalDownloaded,
           speed: combinedSpeed,
+          eta: calculatedEta,
+          clearEta: calculatedEta == null,
           chunks: chunksOverride ?? base.chunks,
           supportsResume: supportsResumeOverride ?? base.supportsResume,
           torrentFiles: torrentFilesOverride ?? base.torrentFiles,
@@ -1563,6 +1610,7 @@ class DownloadProvider extends ChangeNotifier
               isNameAutoGenerated: isAutoName,
               referer: isYoutube ? task.downloadPageUrl : null,
               getTorrentFiles: () => _findTask(task.id)?.torrentFiles ?? task.torrentFiles,
+              torrentId: torrentId,
               cookies: cookieString,
               oauthToken: YoutubeService.oauthToken,
               onProgress: (progress) {
@@ -1848,14 +1896,18 @@ class DownloadProvider extends ChangeNotifier
             }
           }
 
+          final finalFileSize = current.fileSize > 0
+              ? current.fileSize
+              : (current.downloadedBytes > 0 ? current.downloadedBytes : 0);
           await _setTask(
             current.copyWith(
               clearError: true,
               clearStatusMessage: true,
               status: DownloadStatus.completed,
+              fileSize: finalFileSize,
               downloadedBytes:
-                  (current.isTorrent || hasAudio) && current.fileSize > 0
-                  ? current.fileSize
+                  (current.isTorrent || hasAudio) && finalFileSize > 0
+                  ? finalFileSize
                   : current.downloadedBytes,
               speed: 0,
               eta: 0,

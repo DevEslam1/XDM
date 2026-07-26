@@ -433,7 +433,7 @@ class DownloadEngine {
               completer.complete(
                 DownloadMetadata(
                   fileName: torrent.name,
-                  category: 'Archive',
+                  category: categoryFromFileName(torrent.name),
                   fileSize: totalSize,
                   supportsResume: true,
                   torrentFiles: resolvedFiles,
@@ -1063,10 +1063,10 @@ class DownloadEngine {
         lastTorrentReportTime = nowMs;
 
         final speed = torrent.downloadRate.toDouble();
-        final remaining = totalSize - downloadedBytes;
+        final remaining = totalSize > downloadedBytes ? totalSize - downloadedBytes : 0;
         final eta = speed > 0 && remaining > 0
             ? (remaining / speed).round()
-            : 0;
+            : null;
 
         List<Map<String, dynamic>>? resolvedFiles;
         String? resolvedName;
@@ -1074,18 +1074,23 @@ class DownloadEngine {
           resolvedName = torrent.name;
           try {
             final files = TorrentService.getFiles(id);
-            resolvedFiles = files
-                .map(
-                  (f) => {
-                    'name': f.name,
-                    'length': f.size,
-                    'selected': true,
-                    'priority': 4,
-                    'downloadedBytes': 0,
-                    'speed': 0.0,
-                  },
-                )
-                .toList();
+            // Preserve existing per-file data (selection, progress, priority)
+            // so the engine's progress callbacks don't overwrite user choices.
+            final existingFiles = getTorrentFiles?.call() ?? [];
+            resolvedFiles = files.map((f) {
+              final existing = existingFiles.cast<Map<String, dynamic>?>().firstWhere(
+                (e) => (e?['name'] as String?) == f.name,
+                orElse: () => null,
+              );
+              return <String, dynamic>{
+                'name': f.name,
+                'length': f.size,
+                'selected': existing?['selected'] as bool? ?? true,
+                'priority': existing?['priority'] as int? ?? 4,
+                'downloadedBytes': existing?['downloadedBytes'] as int? ?? 0,
+                'speed': existing?['speed'] as double? ?? 0.0,
+              };
+            }).toList();
           } catch (e) {
             debugPrint('[DownloadEngine] TorrentService.getFiles failed: $e');
           }

@@ -66,6 +66,7 @@ const _windowsReserved = {
 
 String safeFileName(String value) {
   var sanitized = value
+      .replaceAll('+', ' ')
       .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
       .replaceAll(RegExp(r'\s+'), ' ')
       .replaceAll(RegExp(r'^\.+|\.+$'), '')

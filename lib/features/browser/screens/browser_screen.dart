@@ -558,8 +558,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               setState(() {
                 _detectedDownloadUrls[tab.id] = request.url;
               });
-            }
-            if (_isSnifferEnabled && _isDownloadable(request.url)) {
               _showInterceptionSheet(context, request.url);
               return NavigationDecision.prevent;
             }
@@ -794,10 +792,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     } catch (e) {
       debugPrint('[DMX Browser] Failed to load custom JS/CSS: $e');
     }
-  }
-
-  bool _isDownloadable(String url) {
-    return BrowserDetector.isAutoDownloadable(url);
   }
 
   Future<void> _updateNavState() async {

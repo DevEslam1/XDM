@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/utils/file_opener.dart';
@@ -81,19 +83,27 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             }
 
             final task = provider.tasks[taskIndex];
-            final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
-            final isDownloadingTorrent = task.status == DownloadStatus.downloading && task.isTorrent;
+            final isSeeding =
+                task.status == DownloadStatus.completed &&
+                task.isTorrent &&
+                task.seedingEnabled;
+            final isDownloadingTorrent =
+                task.status == DownloadStatus.downloading && task.isTorrent;
 
             String speedTextInsideCircle;
             if (isDownloadingTorrent) {
               final ulSpeed = provider.getTorrentUploadSpeed(task.id);
-              speedTextInsideCircle = 'DL: ${task.speedFormatted} | UL: ${formatBytes(ulSpeed)}/s';
+              speedTextInsideCircle =
+                  'DL: ${task.speedFormatted} | UL: ${formatBytes(ulSpeed)}/s';
             } else if (isSeeding) {
               speedTextInsideCircle = 'UL: ${task.speedFormatted}';
             } else {
               speedTextInsideCircle = task.status == DownloadStatus.downloading
                   ? task.speedFormatted
-                  : L10n.translateStatusName(context, task.status).toUpperCase();
+                  : L10n.translateStatusName(
+                      context,
+                      task.status,
+                    ).toUpperCase();
             }
 
             // Status colors
@@ -142,7 +152,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                         child: CircularProgressWidget(
                           progress: task.progress,
                           speedText: speedTextInsideCircle,
-                          etaText: (task.status == DownloadStatus.downloading || isSeeding)
+                          etaText:
+                              (task.status == DownloadStatus.downloading ||
+                                  isSeeding)
                               ? L10n.translateStatus(
                                   context,
                                   task.status,
@@ -378,9 +390,15 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                   gridData: const FlGridData(show: false),
                   titlesData: FlTitlesData(
                     show: true,
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    bottomTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -389,7 +407,11 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                           if (value == meta.max && meta.max > 0) {
                             return Text(
                               '${formatBytes(meta.max.round())}/s',
-                              style: TextStyle(color: secClr, fontSize: 8, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: secClr,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
                             );
                           }
                           return const SizedBox.shrink();
@@ -848,6 +870,70 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             value: task.downloadedSizeFormatted,
             settings: settings,
           ),
+          if (!task.isTorrent) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        L10n.isRtl(context)
+                            ? 'نسبة التحميل'
+                            : 'DOWNLOAD PROGRESS',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 9,
+                          color: isDark
+                              ? AppTheme.textMuted
+                              : AppTheme.lightTextMuted,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        task.progressPercentString,
+                        style: TextStyle(
+                          color: task.status == DownloadStatus.completed
+                              ? (isDark
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.lightNeonGreen)
+                              : (isDark
+                                    ? AppTheme.neonBlue
+                                    : AppTheme.lightNeonBlue),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: task.progress,
+                      minHeight: 6,
+                      backgroundColor:
+                          (isDark
+                                  ? AppTheme.glassBorder
+                                  : AppTheme.lightGlassBorder)
+                              .withValues(alpha: 0.3),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        task.status == DownloadStatus.completed
+                            ? (isDark
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.lightNeonGreen)
+                            : (isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           _buildMetaRow(
             context,
             label: L10n.of(context, 'details_category'),
@@ -868,7 +954,8 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
               value: _translateErrorMessage(context, task.errorMessage!),
               settings: settings,
             ),
-          if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) ...[
+          if (task.mergedAudioUrl != null &&
+              task.mergedAudioUrl!.isNotEmpty) ...[
             _buildMetaRow(
               context,
               label: L10n.isRtl(context) ? 'رابط الصوت' : 'AUDIO URL',
@@ -907,21 +994,27 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          L10n.isRtl(context) ? 'تنزيل الصوت' : 'AUDIO DOWNLOAD',
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: secClr,
-                            fontSize: 10,
-                            letterSpacing: 1.0,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          L10n.isRtl(context)
+                              ? 'تنزيل الصوت'
+                              : 'AUDIO DOWNLOAD',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: secClr,
+                                fontSize: 10,
+                                letterSpacing: 1.0,
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                         Text(
                           task.audioProgressPercentString,
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: isDark
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.lightNeonGreen,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                         ),
                       ],
                     ),
@@ -1364,7 +1457,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
               side: BorderSide(
-                color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
               ),
             ),
             title: Text(
@@ -1431,7 +1526,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                       borderRadius: BorderRadius.circular(20),
                       borderSide: BorderSide(
                         color:
-                            (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                            (isDark
+                                    ? AppTheme.neonBlue
+                                    : AppTheme.lightNeonBlue)
                                 .withValues(alpha: 0.5),
                         width: 1.2,
                       ),
@@ -1449,7 +1546,9 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                 child: Text(
                   L10n.of(context, 'cancel_btn'),
                   style: TextStyle(
-                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    color: isDark
+                        ? AppTheme.textMuted
+                        : AppTheme.lightTextMuted,
                   ),
                 ),
               ),
@@ -1486,30 +1585,32 @@ class DetailsScreen extends StatelessWidget with HapticHelper {
                         isDarkMode: isDark,
                       );
                     }
-                } catch (e) {
-                  if (context.mounted) {
-                    ThemedSnackbar.show(
-                      context,
-                      message: e.toString(),
-                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                      icon: Icons.error_outline,
-                      isDarkMode: isDark,
-                    );
+                  } catch (e) {
+                    if (context.mounted) {
+                      ThemedSnackbar.show(
+                        context,
+                        message: e.toString(),
+                        color: isDark
+                            ? AppTheme.neonRed
+                            : AppTheme.lightNeonRed,
+                        icon: Icons.error_outline,
+                        isDarkMode: isDark,
+                      );
+                    }
                   }
-                }
-              },
-              child: Text(
-                isRtl ? 'تحديث' : 'UPDATE',
-                style: TextStyle(
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  fontWeight: FontWeight.bold,
+                },
+                child: Text(
+                  isRtl ? 'تحديث' : 'UPDATE',
+                  style: TextStyle(
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
-    );
+            ],
+          );
+        },
+      );
     } finally {
       textController.dispose();
     }
@@ -1907,7 +2008,8 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       _refreshTimer?.cancel();
       _refreshTimer = null;
     } else if (state == AppLifecycleState.resumed) {
@@ -1960,6 +2062,86 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
     WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _deleteSingleTorrentFile(
+    BuildContext context,
+    DownloadTask task,
+    DownloadProvider provider,
+    int fileIndex,
+    String fileName,
+  ) async {
+    final isDark = widget.settings.isDarkMode;
+    final isRtl = L10n.isRtl(context);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        title: Text(
+          isRtl ? 'حذف الملف؟' : 'Delete File?',
+          style: TextStyle(
+            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+          ),
+        ),
+        content: Text(
+          isRtl
+              ? 'هل تريد حذف "$fileName" من وحدة التخزين وإلغاء تحميلة؟'
+              : 'Are you sure you want to delete "$fileName" from storage and stop downloading it?',
+          style: TextStyle(
+            color: isDark
+                ? AppTheme.textSecondary
+                : AppTheme.lightTextSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.neonRed),
+            child: Text(isRtl ? 'حذف' : 'Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final relPath = task.torrentFiles![fileIndex]['name'] as String? ?? '';
+      if (relPath.isNotEmpty) {
+        final fullPath = p.normalize(p.join(task.savePath, relPath));
+        final file = File(fullPath);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      }
+
+      final updatedFiles = List<Map<String, dynamic>>.from(task.torrentFiles!);
+      updatedFiles[fileIndex] = {
+        ...updatedFiles[fileIndex],
+        'selected': false,
+        'priority': 0,
+        'downloadedBytes': 0,
+      };
+      await provider.updateTorrentTaskFiles(task.id, updatedFiles);
+
+      if (context.mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: isRtl ? 'تم حذف الملف' : 'File deleted from disk',
+          color: AppTheme.neonRed,
+          icon: Icons.delete_forever_outlined,
+          isDarkMode: isDark,
+        );
+      }
+      _refresh();
+    } catch (e) {
+      debugPrint('Failed to delete single torrent file: $e');
+    }
   }
 
   /// Returns the best-available downloaded byte count for file [index].
@@ -2091,25 +2273,22 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                             value: selected,
                             activeColor: blueClr,
                             side: BorderSide(color: glassBorder, width: 1.0),
-                            onChanged: isCompleted
-                                ? null
-                                : (val) {
-                                    if (val != null) {
-                                      triggerHaptic(settings);
-                                      final updatedFiles =
-                                          List<Map<String, dynamic>>.from(
-                                            files,
-                                          );
-                                      updatedFiles[index] = {
-                                        ...f,
-                                        'selected': val,
-                                      };
-                                      provider.updateTorrentTaskFiles(
-                                        task.id,
-                                        updatedFiles,
-                                      );
-                                    }
-                                  },
+                            onChanged: (val) {
+                              if (val != null) {
+                                triggerHaptic(settings);
+                                final updatedFiles =
+                                    List<Map<String, dynamic>>.from(files);
+                                updatedFiles[index] = {
+                                  ...f,
+                                  'selected': val,
+                                  'priority': val ? 4 : 0,
+                                };
+                                provider.updateTorrentTaskFiles(
+                                  task.id,
+                                  updatedFiles,
+                                );
+                              }
+                            },
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -2148,7 +2327,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                                     ),
                                   ),
                                   if (selected) ...[
-                                    const SizedBox(width: 8),
+                                    const SizedBox(width: 6),
                                     _buildPrioritySelector(
                                       context: context,
                                       priority: f['priority'] as int? ?? 4,
@@ -2172,6 +2351,30 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                                       },
                                     ),
                                   ],
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    onTap: () {
+                                      triggerHaptic(settings);
+                                      _deleteSingleTorrentFile(
+                                        context,
+                                        task,
+                                        provider,
+                                        index,
+                                        name,
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(2.0),
+                                      child: Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 16,
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -2334,11 +2537,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
           ),
           if (!isCompleted) ...[
             const SizedBox(width: 2),
-            Icon(
-              Icons.arrow_drop_down,
-              size: 12,
-              color: priorityColor,
-            ),
+            Icon(Icons.arrow_drop_down, size: 12, color: priorityColor),
           ],
         ],
       ),
@@ -2410,7 +2609,9 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  color: isDark
+                      ? AppTheme.neonViolet
+                      : AppTheme.lightNeonViolet,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -2418,7 +2619,9 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
               Text(
                 isRtl ? 'منخفضة' : 'Low',
                 style: TextStyle(
-                  color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                  color: isDark
+                      ? AppTheme.neonViolet
+                      : AppTheme.lightNeonViolet,
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                 ),

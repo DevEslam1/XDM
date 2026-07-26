@@ -97,11 +97,16 @@ class DownloadTask {
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
 
   double get progress {
+    if (status == DownloadStatus.completed) return 1.0;
     if (fileSize <= 0) return 0.0;
     return (downloadedBytes / fileSize).clamp(0.0, 1.0);
   }
 
-  String get progressPercentString => '${(progress * 100).toStringAsFixed(1)}%';
+  String get progressPercentString {
+    if (status == DownloadStatus.completed) return '100.0%';
+    if (fileSize <= 0) return '0.0%';
+    return '${(progress * 100).toStringAsFixed(1)}%';
+  }
 
   String get speedFormatted {
     if (status != DownloadStatus.downloading && status != DownloadStatus.completed) return '0.0 KB/s';
@@ -141,7 +146,13 @@ class DownloadTask {
     return '${eta}s left';
   }
 
-  String get sizeFormatted => fileSize > 0 ? formatBytes(fileSize) : 'Unknown';
+  String get sizeFormatted {
+    if (fileSize > 0) return formatBytes(fileSize);
+    if (status == DownloadStatus.completed && downloadedBytes > 0) {
+      return formatBytes(downloadedBytes);
+    }
+    return 'Unknown';
+  }
 
   String get downloadedSizeFormatted => formatBytes(downloadedBytes);
 
