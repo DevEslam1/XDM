@@ -23,6 +23,7 @@ import '../../browser/services/ad_blocker.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/services/update_service.dart';
+import '../../../core/services/permission_service.dart';
 import '../widgets/update_dialogs.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -2478,6 +2479,53 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                       : 'Limits threads to 2, downloads to 1, and forces Classic UI to save battery',
                   style: TextStyle(color: subClr, fontSize: 12),
                 ),
+              ),
+              const SizedBox(height: 12),
+              // Ignore Battery Optimization System Action
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  isRtl
+                      ? 'إلغاء تحسين البطارية (استمرار الخلفية)'
+                      : 'Ignore Battery Optimization',
+                  style: TextStyle(
+                    color: textClr,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  isRtl
+                      ? 'السماح للتطبيق بالعمل واستكمال التحميلات في الخلفية دون إيقافه بواسطة النظام'
+                      : 'Allow app to continue background downloads without OS termination',
+                  style: TextStyle(color: subClr, fontSize: 12),
+                ),
+                trailing: Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: subClr,
+                ),
+                onTap: () async {
+                  triggerHaptic(settings);
+                  final granted =
+                      await PermissionService().requestBatteryOptimizationExemption();
+                  if (context.mounted) {
+                    ThemedSnackbar.show(
+                      context,
+                      message: granted
+                          ? (isRtl
+                              ? 'تم استثناء التطبيق من تحسين البطارية'
+                              : 'Battery optimization ignored successfully')
+                          : (isRtl
+                              ? 'يرجى للسماح للتطبيق بالعمل في الخلفية من إعدادات النظام'
+                              : 'Battery optimization exemption not granted'),
+                      color: granted
+                          ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                          : (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber),
+                      icon: granted ? Icons.check_circle_rounded : Icons.info_rounded,
+                    );
+                  }
+                },
               ),
               const SizedBox(height: 12),
               // Reduce Visuals Toggle

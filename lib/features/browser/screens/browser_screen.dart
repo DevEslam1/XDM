@@ -87,6 +87,24 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   String? _homeReturnUrl;
 
   static const String _longPressChannel = 'XDM_LongPress';
+  /// Overrides setTimeout/setInterval to cap delays at 250ms, making
+  /// countdown timers on download sites finish almost instantly.
+  static const String _kTimerSpeedScript = '''
+(function() {
+  if (window.__xdmTimerSpeed) return;
+  window.__xdmTimerSpeed = true;
+  const cap = 250;
+  const origSetTimeout = window.setTimeout;
+  const origSetInterval = window.setInterval;
+  window.setTimeout = function(fn, delay) {
+    return origSetTimeout.call(window, fn, (typeof delay === 'number' && delay > cap) ? cap : delay);
+  };
+  window.setInterval = function(fn, delay) {
+    return origSetInterval.call(window, fn, (typeof delay === 'number' && delay > cap) ? cap : delay);
+  };
+})();
+''';
+
   static const String _kLongPressScript = '''
 (function() {
   if (window.__xdmLongPressBound) return;
@@ -295,6 +313,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
       AdBlocker.initialize();
+      // ignore: unawaited_futures
+      AdBlocker.autoUpdateHosts();
     }
   }
 
@@ -398,6 +418,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               });
               downloadProvider.setNavbarVisible(true);
             }
+            _injectTimerSpeedScript(tab);
             _injectLongPressScriptToTab(tab);
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
@@ -635,6 +656,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           });
     } catch (e) {
       debugPrint('[DMX Browser] Failed to add browser history: $e');
+    }
+  }
+
+  Future<void> _injectTimerSpeedScript(BrowserTab tab) async {
+    if (!mounted) return;
+    try {
+      await tab.controller.runJavaScript(_kTimerSpeedScript);
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to inject timer speed script: $e');
     }
   }
 
@@ -2665,6 +2695,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        // Only handle back when the browser tab is actually active.
+        if (downloadProvider.activeTabIndex != 1) return;
         if (_tabs.isEmpty || _currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
         if (Navigator.canPop(context)) {
           Navigator.pop(context);

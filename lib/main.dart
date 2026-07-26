@@ -44,10 +44,6 @@ Future<void> main(List<String> args) async {
           exit(0);
         }
 
-        // AdBlocker is only needed in the browser — defer after first frame.
-        // ignore: unawaited_futures
-        Future.microtask(() => AdBlocker.initialize());
-
         await XdmBackendClient.loadApiKey();
 
         // Torrent engine is only needed for torrent downloads — lazy-init on
@@ -65,12 +61,17 @@ Future<void> main(List<String> args) async {
         final settingsProvider = SettingsProvider.instance;
         await settingsProvider.load();
 
+        // AdBlocker is only needed in the browser — defer but start after
+        // settings are loaded so we can detect first-launch state.
+        // ignore: unawaited_futures
+        AdBlocker.initialize(forceUpdate: settingsProvider.showOnboarding);
+
         XdmBackendClient().refreshConfig();
 
         await YoutubeService.init();
 
         final notificationService = NotificationService();
-        await notificationService.init();
+        await notificationService.init(requestPermission: false);
 
         await BackgroundService.initialize();
 

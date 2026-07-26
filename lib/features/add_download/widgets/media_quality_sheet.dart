@@ -737,6 +737,17 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         ? AppTheme.textSecondary
         : AppTheme.lightTextSecondary;
 
+    String sizeLabel;
+    if (size > 0) {
+      if (type == 'combined' && (stream['videoSize'] as int? ?? 0) > 0 && (stream['audioSize'] as int? ?? 0) > 0) {
+        sizeLabel = 'Video: ${formatBytes(stream['videoSize'] as int)} + Audio: ${formatBytes(stream['audioSize'] as int)} = ${formatBytes(size)} • .$ext';
+      } else {
+        sizeLabel = '${formatBytes(size)} • .$ext';
+      }
+    } else {
+      sizeLabel = '• .$ext';
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: GlassCard(
@@ -771,9 +782,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
               ),
             ),
             subtitle: Text(
-              type == 'combined' && (stream['videoSize'] as int? ?? 0) > 0 && (stream['audioSize'] as int? ?? 0) > 0
-                  ? 'Video: ${formatBytes(stream['videoSize'] as int)} + Audio: ${formatBytes(stream['audioSize'] as int)} = ${formatBytes(size)} • .$ext'
-                  : '${formatBytes(size)} • .$ext',
+              sizeLabel,
               style: TextStyle(color: secClr, fontSize: 10),
             ),
             trailing: Icon(Icons.download_rounded, color: color, size: 20),

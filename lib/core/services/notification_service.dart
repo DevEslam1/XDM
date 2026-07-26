@@ -48,11 +48,27 @@ class NotificationService {
 
   Stream<Map<String, String>> get onActionTapped => _actionStreamController.stream;
 
+  /// Request notification runtime permission (Android 13+).
+  /// Safe to call multiple times; returns `true` if granted.
+  Future<bool> requestNotificationPermission() async {
+    if (!isSupported) return true;
+    try {
+      final androidPlugin = _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        final granted = await androidPlugin.requestNotificationsPermission();
+        return granted ?? false;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   ReceivePort? _receivePort;
   StreamSubscription<dynamic>? _receivePortSub;
   Future<void>? _initFuture;
 
-  Future<void> init() async {
+  Future<void> init({bool requestPermission = true}) async {
     if (!isSupported) return;
 
     // If init is already in progress or completed successfully, reuse it
@@ -133,7 +149,9 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
-      await androidPlugin.requestNotificationsPermission();
+      if (requestPermission) {
+        await androidPlugin.requestNotificationsPermission();
+      }
       await androidPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
           _downloadChannelId,

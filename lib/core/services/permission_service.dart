@@ -276,6 +276,16 @@ class PermissionService {
     return (await Permission.storage.status).isPermanentlyDenied;
   }
 
+  /// Checks if battery optimization is currently ignored/exempted.
+  Future<bool> isBatteryOptimizationExempt() async {
+    if (kIsWeb || !Platform.isAndroid) return true;
+    try {
+      return await Permission.ignoreBatteryOptimizations.status.isGranted;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /// Requests a one-time battery optimization exemption (ignore battery
   /// optimizations). Returns `true` if already exempt or the user granted
   /// the exemption. Returns `false` if the user denied it or the platform
@@ -286,7 +296,14 @@ class PermissionService {
       final status = await Permission.ignoreBatteryOptimizations.status;
       if (status.isGranted) return true;
       final result = await Permission.ignoreBatteryOptimizations.request();
-      return result.isGranted;
+      if (result.isGranted) return true;
+
+      // Fallback: If direct system prompt failed or was denied/restricted by vendor ROM,
+      // open App Settings so user can manually allow background battery usage.
+      if (result.isPermanentlyDenied || result.isDenied) {
+        await openAppSettings();
+      }
+      return (await Permission.ignoreBatteryOptimizations.status).isGranted;
     } catch (e) {
       debugPrint('[PermissionService] Battery optimization exemption request failed: $e');
       return false;

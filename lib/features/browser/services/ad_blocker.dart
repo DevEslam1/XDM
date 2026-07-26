@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:dio/dio.dart';
@@ -134,14 +135,23 @@ class AdBlocker {
 
   static Future<void>? _initFuture;
   static bool _isUpdating = false;
+  static Timer? _periodicTimer;
 
-  /// Asynchronously loads local hosts from cache file or triggers background download
-  static Future<void> initialize() {
-    _initFuture ??= _initializeInternal();
+  /// Asynchronously loads local hosts from cache file or triggers background download.
+  /// Pass [forceUpdate] = true on the very first app launch to always download
+  /// fresh filters even if a cache file exists from a previous install.
+  static Future<void> initialize({bool forceUpdate = false}) {
+    _initFuture ??= _initializeInternal(forceUpdate: forceUpdate);
     return _initFuture!;
   }
 
-  static Future<void> _initializeInternal() async {
+  /// Allows the app to cancel the periodic timer on shutdown.
+  static void dispose() {
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
+
+  static Future<void> _initializeInternal({bool forceUpdate = false}) async {
     if (_initialized) return;
     _invalidateCache();
 
@@ -150,22 +160,35 @@ class AdBlocker {
 
     try {
       final file = await _getHostsFile();
-      if (await file.exists()) {
-      final filePath = file.path;
-      final result = await compute(_loadAndParseHostsFile, filePath);
-      final domains = result['domains'] as Set<String>;
-      final patterns = (result['patterns'] as List).cast<String>();
-      _blockedDomains.addAll(domains);
-      _blockedPatterns.addAll(patterns.map((p) => RegExp(p)));
-      debugPrint('AdBlocker loaded ${domains.length} custom domains and ${patterns.length} regex patterns from local cache.');
-      } else {
-        // First install — download filters immediately (awaited so they're
-        // ready before the user opens a page).
-        await updateHosts();
+
+      // On first-ever app launch (forceUpdate) OR when no cached file exists,
+      // download fresh filters immediately. updateHosts() populates both the
+      // in-memory sets and the cache file, so we skip the redundant cache load.
+      if (forceUpdate || !await file.exists()) {
+        debugPrint('AdBlocker: ${forceUpdate ? "First-launch — forcing" : "No cache found — starting"} filter download...');
+        try {
+          await updateHosts();
+        } catch (e) {
+          debugPrint('AdBlocker initial download failed (will retry via autoUpdateHosts): $e');
+        }
       }
-      _initialized = true;
+
+      // If the download above succeeded, _blockedDomains already has fresh data
+      // and loading from cache would be redundant. Only load from cache when
+      // we still only have fallback domains.
+      if (_blockedDomains.length <= _fallbackDomains.length && await file.exists()) {
+        final filePath = file.path;
+        final result = await compute(_loadAndParseHostsFile, filePath);
+        final domains = result['domains'] as Set<String>;
+        final patterns = (result['patterns'] as List).cast<String>();
+        _blockedDomains.addAll(domains);
+        _blockedPatterns.addAll(patterns.map((p) => RegExp(p)));
+        debugPrint('AdBlocker loaded ${domains.length} custom domains and ${patterns.length} regex patterns from local cache.');
+      }
     } catch (e) {
       debugPrint('AdBlocker initialization error: $e');
+    } finally {
+      _initialized = true;
     }
 
     // Automatically check for stale cache (>24h) and update in background.
@@ -173,6 +196,13 @@ class AdBlocker {
     // waiting for the user to open the browser tab.
     // ignore: unawaited_futures
     autoUpdateHosts();
+
+    // Periodic check every hour so filters stay fresh even in long sessions.
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer.periodic(const Duration(hours: 1), (_) {
+      // ignore: unawaited_futures
+      autoUpdateHosts();
+    });
   }
 
   static Map<String, dynamic> _loadAndParseHostsFile(String filePath) {
