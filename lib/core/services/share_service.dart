@@ -62,6 +62,7 @@ class ShareService {
     _intentSub?.cancel();
     _intentSub = null;
     _initialized = false;
+    _initialMediaConsumed = false;
     _lastReceivedUrl = null;
   }
 

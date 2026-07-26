@@ -5,6 +5,18 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/services/xdm_backend_client.dart';
 
 class SettingsProvider extends ChangeNotifier {
+  /// The global singleton instance, set once during app startup.
+  /// Used by services like [YoutubeService] that need access to settings
+  /// without receiving the instance via dependency injection.
+  static SettingsProvider? _instance;
+  static SettingsProvider get instance {
+    if (_instance == null) {
+      _instance = SettingsProvider();
+      _instance!.load();
+    }
+    return _instance!;
+  }
+
   static const _autoStartKey = 'autoStart';
   static const _maxDownloadsKey = 'maxDownloads';
   static const _speedLimitKey = 'speedLimitMb';
@@ -244,6 +256,8 @@ class SettingsProvider extends ChangeNotifier {
     batteryOptimizationPrompted = _prefs.getBool(_batteryOptimizationPromptedKey) ?? false;
     _maxTotalConnections = _prefs.getInt(_maxTotalConnectionsKey) ?? 32;
     if (![8, 16, 24, 32, 48, 64].contains(_maxTotalConnections)) _maxTotalConnections = 32;
+
+    _instance = this;
   }
 
 

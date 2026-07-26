@@ -12,6 +12,7 @@ class SingleInstanceService {
 
   static const int _port = 37128;
   HttpServer? _server;
+  StreamSubscription<HttpRequest>? _serverSubscription;
   void Function(String url)? _onUrlListener;
   String? _initialUrl;
   String? _securityToken;
@@ -47,7 +48,7 @@ class SingleInstanceService {
       // Write token to file so secondary instances can read it
       await _tokenFile.writeAsString(_securityToken!);
 
-      _server?.listen((HttpRequest request) async {
+      _serverSubscription = _server?.listen((HttpRequest request) async {
         try {
           final tokenParam = request.uri.queryParameters['token'];
           if (tokenParam == null || tokenParam != _securityToken) {
@@ -59,9 +60,7 @@ class SingleInstanceService {
           final urlParam = request.uri.queryParameters['url'];
           if (urlParam != null && urlParam.trim().isNotEmpty) {
             final decoded = Uri.decodeComponent(urlParam.trim());
-            if (_onUrlListener != null) {
-              _onUrlListener!(decoded);
-            }
+            _onUrlListener?.call(decoded);
           }
         } catch (e) {
           debugPrint('SingleInstanceServer request error: $e');
@@ -75,13 +74,13 @@ class SingleInstanceService {
     } on SocketException {
       // Server already running in primary instance! Forward candidateUrl if present.
       if (candidateUrl != null && candidateUrl.isNotEmpty) {
+        final client = HttpClient();
         try {
           String? remoteToken;
           if (await _tokenFile.exists()) {
             remoteToken = (await _tokenFile.readAsString()).trim();
           }
 
-          final client = HttpClient();
           final queryParams = <String, String>{'url': candidateUrl};
           if (remoteToken != null && remoteToken.isNotEmpty) {
             queryParams['token'] = remoteToken;
@@ -89,9 +88,10 @@ class SingleInstanceService {
           final uri = Uri.http('127.0.0.1:$_port', '/', queryParams);
           final req = await client.getUrl(uri);
           await req.close();
-          client.close();
         } catch (e) {
           debugPrint('Failed to forward url to primary instance: $e');
+        } finally {
+          client.close();
         }
       }
       return false; // Exit secondary instance
@@ -111,6 +111,8 @@ class SingleInstanceService {
   }
 
   void dispose() {
+    _serverSubscription?.cancel();
+    _serverSubscription = null;
     _server?.close(force: true);
     _server = null;
     _onUrlListener = null;
@@ -131,8 +133,7 @@ class SingleInstanceService {
       if (isMagnetUrl(clean) ||
           isTorrentFileUrl(clean) ||
           isHttpUrl(clean) ||
-          clean.toLowerCase().endsWith('.torrent') ||
-          File(clean).existsSync()) {
+          clean.toLowerCase().endsWith('.torrent')) {
         return clean;
       }
     }

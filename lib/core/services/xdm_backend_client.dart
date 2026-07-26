@@ -21,7 +21,6 @@ class XdmBackendClient {
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
 
-  static final _settings = SettingsProvider();
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
@@ -60,9 +59,10 @@ class XdmBackendClient {
   /// Updates the backend configuration from SettingsProvider
   void _updateDioFromSettings() {
     final key = _apiKey ?? _apiKeyFallback;
+    final settings = SettingsProvider.instance;
     _dio = Dio(
       BaseOptions(
-        baseUrl: _settings.backendUrl.isNotEmpty ? _settings.backendUrl : kDefaultBackendBaseUrl,
+        baseUrl: settings.backendUrl.isNotEmpty ? settings.backendUrl : kDefaultBackendBaseUrl,
         connectTimeout: const Duration(seconds: 15),
         // Backend extraction can take up to 45 s; give a comfortable margin.
         receiveTimeout: const Duration(seconds: 60),
@@ -74,24 +74,24 @@ class XdmBackendClient {
     );
 
     if (kDebugMode) {
-      debugPrint('[XdmBackendClient] Configured with backend URL: ${_settings.backendUrl.isNotEmpty ? _settings.backendUrl : kDefaultBackendBaseUrl}');
+      debugPrint('[XdmBackendClient] Configured with backend URL: ${settings.backendUrl.isNotEmpty ? settings.backendUrl : kDefaultBackendBaseUrl}');
     }
   }
 
   /// Manually updates the backend configuration and refreshes the Dio client
   Future<void> updateBackendConfig(String backendUrl) async {
-    await _settings.setBackendUrl(backendUrl);
+    await SettingsProvider.instance.setBackendUrl(backendUrl);
     _updateDioFromSettings();
   }
 
   /// Refreshes the backend configuration from SettingsProvider
   Future<void> refreshConfig() async {
-    await _settings.load();
+    await SettingsProvider.instance.load();
     _updateDioFromSettings();
   }
 
   /// Get the current backend URL for UI display
-  static String get currentBackendUrl => _settings.backendUrl;
+  static String get currentBackendUrl => SettingsProvider.instance.backendUrl;
 
   Future<Map<String, dynamic>> health() async {
     try {

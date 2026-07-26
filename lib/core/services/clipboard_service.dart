@@ -18,7 +18,10 @@ class ClipboardService {
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
-      if (text != null && isHttpUrl(text)) {
+      if (text != null &&
+          (isHttpUrl(text) ||
+              isMagnetUrl(text) ||
+              isTorrentFileUrl(text))) {
         // Basic safety: reject URLs with suspicious patterns
         final lower = text.toLowerCase();
         if (lower.contains('javascript:') ||

@@ -213,6 +213,7 @@ class DownloadEngine {
   final List<Isolate> _activeIsolates = [];
   final Dio _sharedDio;
   final Set<Dio> _activeDioClients = {};
+  final Set<Dio> _reservedDioClients = {};
   final Map<Dio, DateTime> _dioClientCreationTimes = {};
   Timer? _cleanupTimer;
 
@@ -222,10 +223,11 @@ class DownloadEngine {
       _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
         final now = DateTime.now();
         _activeDioClients.removeWhere((client) {
+          // Skip clients currently reserved by an active download
+          if (_reservedDioClients.contains(client)) return false;
           final createdAt = _dioClientCreationTimes[client];
           final age = createdAt != null ? now.difference(createdAt) : Duration.zero;
-          // Only clean up clients older than 5 minutes with no active isolates
-          if (_activeIsolates.isEmpty && age > const Duration(minutes: 5)) {
+          if (age > const Duration(minutes: 5)) {
             debugPrint('[DMX] Cleanup timer: closing orphaned Dio client (${age.inSeconds}s old)');
             try {
               client.close(force: true);
@@ -343,6 +345,7 @@ class DownloadEngine {
       };
     }
     _activeDioClients.add(client);
+    _reservedDioClients.add(client);
     _dioClientCreationTimes[client] = DateTime.now();
     return client;
   }
@@ -585,6 +588,7 @@ class DownloadEngine {
     } catch (e) {
       debugPrint('HEAD request failed for $punyUrl: $e');
     } finally {
+      _reservedDioClients.remove(isolatedDio);
       _activeDioClients.remove(isolatedDio);
       _dioClientCreationTimes.remove(isolatedDio);
       isolatedDio.close(force: true);
@@ -903,8 +907,20 @@ class DownloadEngine {
             filePath = Uri.parse(url).toFilePath();
           } else if (url.startsWith('http://') || url.startsWith('https://')) {
             final tempTorrentPath = p.join(Directory.systemTemp.path, 'temp_${DateTime.now().millisecondsSinceEpoch}.torrent');
-            await Dio().download(url, tempTorrentPath);
-            filePath = tempTorrentPath;
+            final tempTorrentFile = File(tempTorrentPath);
+            try {
+              await Dio().download(url, tempTorrentPath);
+              filePath = tempTorrentPath;
+              id = TorrentService.addTorrentFile(filePath, saveDir);
+              return;
+            } finally {
+              // Clean up temp torrent file after loading
+              try {
+                if (await tempTorrentFile.exists()) {
+                  await tempTorrentFile.delete();
+                }
+              } catch (_) {}
+            }
           }
           id = TorrentService.addTorrentFile(filePath, saveDir);
         }
@@ -1221,13 +1237,14 @@ class DownloadEngine {
             chunkProgress[i] = 0;
           }
         }
-        // Open file: only truncate when pre-allocating; otherwise open read-write without truncation
+        // Open file: only truncate when pre-allocating; otherwise open in readWrite
+        // mode so existing partial data is preserved for resume.
         late RandomAccessFile sharedRaf;
         if (needPreallocate) {
           sharedRaf = await targetFile.open(mode: FileMode.write);
           await sharedRaf.truncate(totalSize);
         } else {
-          sharedRaf = await targetFile.open(mode: FileMode.writeOnly);
+          sharedRaf = await targetFile.open(mode: FileMode.append);
         }
         bool isRafClosed = false;
 
@@ -1599,7 +1616,7 @@ class DownloadEngine {
           }
           if (contiguousBytes > 0 && supportsResume) {
             if (await targetFile.exists()) {
-              final raf = await targetFile.open(mode: FileMode.writeOnly);
+              final raf = await targetFile.open(mode: FileMode.append);
               await raf.truncate(contiguousBytes);
               await raf.close();
             }
@@ -1631,6 +1648,7 @@ class DownloadEngine {
         }
       }
     } finally {
+      _reservedDioClients.remove(isolatedDio);
       _activeDioClients.remove(isolatedDio);
       _dioClientCreationTimes.remove(isolatedDio);
       isolatedDio.close(force: true);
@@ -1997,6 +2015,7 @@ class DownloadEngine {
       }
     }
     _activeDioClients.clear();
+    _reservedDioClients.clear();
     _dioClientCreationTimes.clear();
     for (final isolate in _activeIsolates) {
       try {

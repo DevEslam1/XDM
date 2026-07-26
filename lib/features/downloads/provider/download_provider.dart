@@ -286,6 +286,9 @@ class DownloadProvider extends ChangeNotifier
   /// in-flight downloads (from a previous run) cannot be resumed safely.
   /// On user-triggered reload, we must preserve currently active downloads.
   Future<void> load({bool pauseOrphanDownloads = true}) async {
+    // Cancel stale notifications from previous sessions
+    await _notificationService.cancelAll();
+
     final cleanupDays = _settingsProvider.cleanupDays;
     final now = DateTime.now();
     final toDelete = <DownloadTask>[];
@@ -682,6 +685,7 @@ class DownloadProvider extends ChangeNotifier
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
+    _lastDbSaveBytes.remove(id);
     _pendingProgressUpdates.remove(id);
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
@@ -788,6 +792,7 @@ class DownloadProvider extends ChangeNotifier
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
+    _lastDbSaveBytes.remove(id);
     _pendingProgressUpdates.remove(id);
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
@@ -936,6 +941,7 @@ class DownloadProvider extends ChangeNotifier
       _speedHistories.remove(id);
       _lastProgressUpdateTimes.remove(id);
       _lastDbSaveTimes.remove(id);
+      _lastDbSaveBytes.remove(id);
       _pendingProgressUpdates.remove(id);
       _retryCounts.remove(id);
       _retryTimers[id]?.cancel();
@@ -2533,6 +2539,7 @@ class DownloadProvider extends ChangeNotifier
         downloadedBytes: 0,
         chunks: List<double>.filled(threadCount, 0.0),
         status: DownloadStatus.paused,
+        clearError: true,
       );
     } else {
       task = task.copyWith(
@@ -2732,9 +2739,13 @@ class DownloadProvider extends ChangeNotifier
     if (itagChanged) {
       await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
     } else {
-      await updateTaskUrl(id, newUrl, newAudioUrl: newAudioUrl);
+      // updateTaskUrl already handles resume internally for downloading tasks
+      await updateTaskUrl(id, newUrl, newAudioUrl: newAudioUrl, isRefresh: true);
       final updated = _findTask(id);
-      if (updated != null && updated.status != DownloadStatus.downloading) {
+      // Only resume if the task was NOT already downloading
+      if (updated != null &&
+          updated.status != DownloadStatus.downloading &&
+          updated.status != DownloadStatus.queued) {
         await resumeTask(id);
       }
     }

@@ -235,6 +235,7 @@ mixin DownloadFilterMixin {
 
   void clearCategoryFilters() {
     _categoryFilters.clear();
+    _filteredTasksDirty = true;
     notifyListeners();
   }
 

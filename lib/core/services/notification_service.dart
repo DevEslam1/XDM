@@ -301,6 +301,12 @@ class NotificationService {
     await _plugin.cancel(id: notificationId);
   }
 
+  /// Cancels all stale notifications from previous sessions
+  Future<void> cancelAll() async {
+    if (!_initialized) return;
+    await _plugin.cancelAll();
+  }
+
   Future<void> dispose() async {
     await _receivePortSub?.cancel();
     _receivePortSub = null;

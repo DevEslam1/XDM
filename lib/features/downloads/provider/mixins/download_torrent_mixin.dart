@@ -50,6 +50,7 @@ mixin DownloadTorrentMixin {
         }
         torrentId = TorrentService.addTorrentFile(filePath, saveDir);
       }
+      if (torrentId < 0) return;
       providerTorrentIds[task.id] = torrentId;
       TorrentService.resumeTorrent(torrentId);
 

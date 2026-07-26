@@ -16,6 +16,10 @@ class TorrentService {
 
   static Future<void> init() async {
     _disposed = false;
+    _updatesSub?.cancel();
+    _updatesSub = null;
+    _updateController = null;
+    _isStartingTracking = false;
     await LibtorrentFlutter.init();
     _startTrackingUpdates();
   }
@@ -29,28 +33,41 @@ class TorrentService {
     try {
       final controller =
           StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
-      final sub = LibtorrentFlutter.instance.torrentUpdates.listen((torrents) {
-        _activeTorrentIds = Set<int>.from(torrents.keys);
-        final mapped = torrents.map((key, value) => MapEntry(key, TorrentUpdateInfo(
-          id: value.id,
-          name: value.name,
-          progress: value.progress,
-          downloadRate: value.downloadRate,
-          uploadRate: value.uploadRate,
-          totalDone: value.totalDone,
-          totalWanted: value.totalWanted,
-          hasMetadata: value.hasMetadata,
-          stateLabel: value.state.label,
-          numSeeds: value.numSeeds,
-          numPeers: value.numPeers,
-        )));
-        controller.add(mapped);
-      });
+      final sub = LibtorrentFlutter.instance.torrentUpdates.listen(
+        (torrents) {
+          try {
+            _activeTorrentIds = Set<int>.from(torrents.keys);
+            final mapped = torrents.map((key, value) => MapEntry(key, TorrentUpdateInfo(
+              id: value.id,
+              name: value.name,
+              progress: value.progress,
+              downloadRate: value.downloadRate,
+              uploadRate: value.uploadRate,
+              totalDone: value.totalDone,
+              totalWanted: value.totalWanted,
+              hasMetadata: value.hasMetadata,
+              stateLabel: value.state.label,
+              numSeeds: value.numSeeds,
+              numPeers: value.numPeers,
+            )));
+            controller.add(mapped);
+          } catch (e) {
+            _log.warning('Error processing torrent update: $e');
+          }
+        },
+        cancelOnError: false,
+        onError: (e) {
+          _log.warning('Torrent updates stream error: $e');
+        },
+        onDone: () {
+          _updatesSub = null;
+        },
+      );
       _updateController = controller;
       _updatesSub = sub;
     } catch (e) {
       _log.warning('Failed to start torrent tracking: $e');
-      rethrow;
+      _updatesSub = null;
     } finally {
       _isStartingTracking = false;
     }
@@ -84,21 +101,31 @@ class TorrentService {
   static int addMagnet(String magnetUri, String savePath) {
     if (_disposed || !isInitialized) return -1;
     _startTrackingUpdates();
-    final id = LibtorrentFlutter.instance.addMagnet(magnetUri, savePath);
-    if (id >= 0) {
-      _activeTorrentIds.add(id);
+    try {
+      final id = LibtorrentFlutter.instance.addMagnet(magnetUri, savePath);
+      if (id >= 0) {
+        _activeTorrentIds.add(id);
+      }
+      return id;
+    } catch (e) {
+      _log.warning('addMagnet failed: $e');
+      return -1;
     }
-    return id;
   }
 
   static int addTorrentFile(String filePath, String savePath) {
     if (_disposed || !isInitialized) return -1;
     _startTrackingUpdates();
-    final id = LibtorrentFlutter.instance.addTorrentFile(filePath, savePath);
-    if (id >= 0) {
-      _activeTorrentIds.add(id);
+    try {
+      final id = LibtorrentFlutter.instance.addTorrentFile(filePath, savePath);
+      if (id >= 0) {
+        _activeTorrentIds.add(id);
+      }
+      return id;
+    } catch (e) {
+      _log.warning('addTorrentFile failed: $e');
+      return -1;
     }
-    return id;
   }
 
   static void removeTorrent(int id, {bool deleteFiles = false}) {

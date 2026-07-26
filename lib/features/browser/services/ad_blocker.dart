@@ -253,13 +253,13 @@ class AdBlocker {
       final difference = DateTime.now().difference(lastModified);
       if (difference.inHours >= 24) {
         debugPrint('AdBlocker: Cached hosts list is older than 24 hours ($difference). Auto-updating...');
-        updateHosts();
+        await updateHosts();
       } else {
         debugPrint('AdBlocker: Cached hosts list is fresh ($difference old). Skipping auto-update.');
       }
     } catch (e) {
       debugPrint('AdBlocker: Error in auto-updating hosts: $e');
-      updateHosts();
+      await updateHosts();
     }
   }
 

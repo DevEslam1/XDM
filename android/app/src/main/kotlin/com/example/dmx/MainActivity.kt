@@ -23,9 +23,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val action = intent?.action
-        if (Intent.ACTION_SEND == action || Intent.ACTION_SEND_MULTIPLE == action) {
-            setTheme(R.style.TranslucentShareTheme)
+        if (Intent.ACTION_SEND != action && Intent.ACTION_SEND_MULTIPLE != action) {
+            // Normal launch — show splash/launch theme
+            setTheme(R.style.LaunchTheme)
         }
+        // For share intents, the manifest already sets TranslucentShareTheme
+        // so no splash/white flash is shown.
         super.onCreate(savedInstanceState)
         // Request maximum refresh rate on supported devices (Android 11+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

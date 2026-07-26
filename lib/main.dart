@@ -45,6 +45,7 @@ Future<void> main(List<String> args) async {
         }
 
         await AdBlocker.initialize();
+        await XdmBackendClient.loadApiKey();
         if (TorrentService.isSupported) {
           await TorrentService.init();
         }

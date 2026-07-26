@@ -217,7 +217,9 @@ class DownloadTask {
       seedingEnabled: seedingEnabled ?? this.seedingEnabled,
       seedingLimited: seedingLimited ?? this.seedingLimited,
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
-      torrentFiles: torrentFiles ?? this.torrentFiles,
+      torrentFiles: torrentFiles != null
+          ? [for (final m in torrentFiles) Map<String, dynamic>.from(m)]
+          : this.torrentFiles?.map((m) => Map<String, dynamic>.from(m)).toList(),
       downloadPageUrl: clearDownloadPageUrl ? null : downloadPageUrl ?? this.downloadPageUrl,
       mergedAudioUrl: clearMergedAudioUrl ? null : mergedAudioUrl ?? this.mergedAudioUrl,
       audioSize: audioSize ?? this.audioSize,
@@ -316,9 +318,9 @@ class DownloadTask {
     }
 
     return DownloadTask(
-      id: map['id'] as String,
-      fileName: map['fileName'] as String,
-      url: map['url'] as String,
+      id: map['id'] as String? ?? '',
+      fileName: map['fileName'] as String? ?? '',
+      url: map['url'] as String? ?? '',
       fileSize: (map['fileSize'] as num?)?.toInt() ?? 0,
       downloadedBytes: (map['downloadedBytes'] as num?)?.toInt() ?? 0,
       speed: (map['speed'] as num?)?.toDouble() ?? 0.0,

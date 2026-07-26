@@ -13,9 +13,12 @@ class _ShareLaunchScreenState extends State<ShareLaunchScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ShareUrlHandler.handle(context, widget.url, isShareLaunch: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      try {
+        await ShareUrlHandler.handle(context, widget.url, isShareLaunch: true);
+      } catch (e) {
+        debugPrint('[ShareLaunchScreen] Error handling share URL: $e');
       }
     });
   }
@@ -23,7 +26,7 @@ class _ShareLaunchScreenState extends State<ShareLaunchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black54,
+      backgroundColor: Colors.transparent,
       body: Container(
         color: Colors.transparent,
         width: double.infinity,

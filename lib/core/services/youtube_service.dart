@@ -275,7 +275,7 @@ class YoutubeService {
       }
     }
 
-    final settings = SettingsProvider();
+    final settings = SettingsProvider.instance;
     if (!settings.useRemoteBackend) {
       throw Exception('Remote backend is disabled in settings.');
     }
@@ -321,7 +321,9 @@ class YoutubeService {
                   ? 'Audio Only ${ext.toUpperCase()}'
                   : '$quality ${ext.toUpperCase()}',
               'src': directUrl,
-              'audioSrc': null,
+              'audioSrc': map.containsKey('audioSrc') ? map['audioSrc']?.toString() : null,
+              'videoSize': map['videoSize'] as int? ?? 0,
+              'audioSize': map['audioSize'] as int? ?? 0,
               'size': filesize,
               'ext': ext,
               'title': title,
@@ -397,7 +399,7 @@ class YoutubeService {
     }
 
     try {
-      final settings = SettingsProvider();
+      final settings = SettingsProvider.instance;
       final backendRes = await XdmBackendClient().getStreams(
         url,
         cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend ? currentCookies : null,
@@ -437,7 +439,9 @@ class YoutubeService {
                   ? 'Audio Only ${ext.toUpperCase()}'
                   : '$quality ${ext.toUpperCase()}',
               'src': directUrl,
-              'audioSrc': null,
+              'audioSrc': map.containsKey('audioSrc') ? map['audioSrc']?.toString() : null,
+              'videoSize': map['videoSize'] as int? ?? 0,
+              'audioSize': map['audioSize'] as int? ?? 0,
               'size': filesize,
               'ext': ext,
               'title': title,
@@ -557,7 +561,7 @@ class YoutubeService {
     }
 
     try {
-      final settings = SettingsProvider();
+      final settings = SettingsProvider.instance;
       final backendRes = await XdmBackendClient().getPlaylist(
         url,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,

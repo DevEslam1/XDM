@@ -10,7 +10,6 @@ import '../../features/browser/models/bookmark.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import '../../features/settings/provider/settings_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,8 +27,6 @@ class DatabaseService {
       _db = AppDatabase.forTesting(NativeDatabase.memory());
     } else {
       await Hive.initFlutter();
-      final settings = SettingsProvider();
-      await settings.load();
       bool isPortable = false;
       if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
         final exePath = Platform.resolvedExecutable;
@@ -200,8 +197,8 @@ class DatabaseService {
         }
       }
       return !hasFailures; // Only return true if all boxes migrated with zero failures
-    } catch (e) {
-      debugPrint('Hive to Drift migration error: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Hive to Drift migration error: $e\n$stackTrace');
       return false;
     }
   }
@@ -440,5 +437,9 @@ class DatabaseService {
 
   Future<void> clearBrowserHistory() {
     return _db.delete(_db.browserHistory).go();
+  }
+
+  Future<void> dispose() async {
+    await _db.close();
   }
 }

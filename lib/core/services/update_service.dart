@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -47,23 +48,38 @@ class UpdateService {
   static const String kDefaultUpdateManifestUrl =
       'https://raw.githubusercontent.com/DevEslam1/XDM/main/version_manifest.json';
 
-  final Dio _dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-    ),
-  );
+  Dio? _dio;
+
+  Dio _getDio() {
+    _dio ??= Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 15),
+      ),
+    );
+    return _dio!;
+  }
+
+  void dispose() {
+    _dio?.close(force: true);
+    _dio = null;
+  }
 
   /// Checks for an app update by downloading the update manifest JSON.
   /// Returns [UpdateInfo] if a newer version or mandatory update is available, null otherwise.
   Future<UpdateInfo?> checkForUpdate({String? manifestUrl}) async {
     try {
       final url = manifestUrl ?? kDefaultUpdateManifestUrl;
-      final response = await _dio.get<dynamic>(url);
+      final response = await _getDio().get<dynamic>(url);
       if (response.statusCode == 200 && response.data != null) {
-        final Map<String, dynamic> json = response.data is String
-            ? jsonDecode(response.data as String) as Map<String, dynamic>
-            : Map<String, dynamic>.from(response.data as Map);
+        final Map<String, dynamic> json;
+        if (response.data is String) {
+          json = Map<String, dynamic>.from(jsonDecode(response.data as String));
+        } else if (response.data is Map) {
+          json = Map<String, dynamic>.from(response.data as Map);
+        } else {
+          return null;
+        }
 
         final update = UpdateInfo.fromJson(json);
         final packageInfo = await PackageInfo.fromPlatform();
@@ -78,6 +94,21 @@ class UpdateService {
       debugPrint('[UpdateService] Failed to check for update: $e');
     }
     return null;
+  }
+
+  /// Computes SHA-256 hash of a file using streaming to avoid loading entire file into memory.
+  Future<String> _computeSha256Streaming(File file) async {
+    Digest? digest;
+    final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
+      digest = results.single;
+    });
+    final sink = sha256.startChunkedConversion(innerSink);
+    final stream = file.openRead();
+    await for (final chunk in stream) {
+      sink.add(chunk);
+    }
+    sink.close();
+    return digest.toString();
   }
 
   /// Dedicated local folder for storing downloaded app update APKs.
@@ -103,9 +134,8 @@ class UpdateService {
       }
 
       if (expectedSha256 != null && expectedSha256.trim().isNotEmpty) {
-        final bytes = await apkFile.readAsBytes();
-        final digest = sha256.convert(bytes);
-        if (digest.toString().toLowerCase() != expectedSha256.trim().toLowerCase()) {
+        final digest = await _computeSha256Streaming(apkFile);
+        if (digest.toLowerCase() != expectedSha256.trim().toLowerCase()) {
           debugPrint('[UpdateService] SHA256 mismatch');
           return false;
         }
