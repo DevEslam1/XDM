@@ -9,13 +9,8 @@ class SettingsProvider extends ChangeNotifier {
   /// Used by services like [YoutubeService] that need access to settings
   /// without receiving the instance via dependency injection.
   static SettingsProvider? _instance;
-  static bool _instanceLoaded = false;
   static SettingsProvider get instance {
     _instance ??= SettingsProvider();
-    if (!_instanceLoaded) {
-      _instanceLoaded = true;
-      _instance!.load();
-    }
     return _instance!;
   }
 
