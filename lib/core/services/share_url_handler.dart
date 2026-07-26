@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../app_theme.dart';
 import 'youtube_service.dart';
@@ -132,9 +131,5 @@ class ShareUrlHandler {
       );
     }
 
-    if (isShareLaunch && context.mounted) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      SystemNavigator.pop();
-    }
   }
 }

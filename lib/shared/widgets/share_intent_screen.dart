@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/services/share_url_handler.dart';
 
 class ShareLaunchScreen extends StatefulWidget {
@@ -19,19 +20,20 @@ class _ShareLaunchScreenState extends State<ShareLaunchScreen> {
         await ShareUrlHandler.handle(context, widget.url, isShareLaunch: true);
       } catch (e) {
         debugPrint('[ShareLaunchScreen] Error handling share URL: $e');
+      } finally {
+        if (mounted) {
+          await Future.delayed(const Duration(milliseconds: 300));
+          SystemNavigator.pop();
+        }
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: Colors.transparent,
-      body: Container(
-        color: Colors.transparent,
-        width: double.infinity,
-        height: double.infinity,
-      ),
+      body: SizedBox.shrink(),
     );
   }
 }
