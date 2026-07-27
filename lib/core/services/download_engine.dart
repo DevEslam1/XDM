@@ -363,7 +363,7 @@ class DownloadEngine {
 
     if (client.httpClientAdapter is IOHttpClientAdapter) {
       final adapter = client.httpClientAdapter as IOHttpClientAdapter;
-      final String host =
+      final String proxyHostResolved =
           (enableProxy && proxyHost != null && proxyHost.trim().isNotEmpty)
           ? proxyHost.trim()
           : (enableProxy && proxyAddress != null && proxyAddress.contains(':')
@@ -380,9 +380,9 @@ class DownloadEngine {
 
       adapter.createHttpClient = () {
         final httpClient = HttpClient();
-        if (enableProxy && host.isNotEmpty) {
+        if (enableProxy && proxyHostResolved.isNotEmpty) {
           httpClient.findProxy = (uri) {
-            return 'PROXY $host:$port';
+            return 'PROXY $proxyHostResolved:$port';
           };
           if (proxyUsername != null && proxyUsername.isNotEmpty) {
             httpClient.authenticateProxy = (h, p, scheme, realm) async {
@@ -405,18 +405,9 @@ class DownloadEngine {
           debugPrint(
             '[DMX AUDIT] SSL bypass active for URL: $url',
           );
-          httpClient.badCertificateCallback = (cert, h, p) {
-            final isTargetHost =
-                downloadHost != null &&
-                downloadHost.isNotEmpty &&
-                h == downloadHost;
-            final isProxyHost =
-                enableProxy &&
-                proxyHost != null &&
-                proxyHost.isNotEmpty &&
-                h == proxyHost;
-            return isTargetHost || isProxyHost;
-          };
+          // Accept all certs when bypass is on — a targeted check on downloadHost
+          // alone breaks redirects (HTTP→HTTPS CDN hops present a different host).
+          httpClient.badCertificateCallback = (cert, h, p) => true;
         }
         return httpClient;
       };

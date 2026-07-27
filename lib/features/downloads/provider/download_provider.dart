@@ -788,13 +788,20 @@ class DownloadProvider extends ChangeNotifier
       if (torrentId != null) {
         TorrentService.pauseTorrent(torrentId);
       }
-      _pendingCancellations.add(id);
+      // Cancel the token only — do NOT add to _pendingCancellations here.
+      // _pendingCancellations is checked in _startTaskBody to gate new starts;
+      // leaving a stale entry would permanently block resume for this ID.
       try {
         _cancelTokens[id]?.cancel('paused');
       } catch (e) {
         // Ignore
       }
       _cancelTokens.remove(id);
+    }
+    // Cancel any lingering progress notification (M2).
+    final pauseNotifId = _notificationIds[id];
+    if (pauseNotifId != null) {
+      _notificationService.cancelNotification(pauseNotifId);
     }
     await _setTask(
       task.copyWith(
@@ -891,9 +898,15 @@ class DownloadProvider extends ChangeNotifier
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
 
-    _pendingCancellations.add(id);
+    // Cancel the token — do NOT add to _pendingCancellations (would block future resume).
     _cancelTokens[id]?.cancel('cancelled');
     _cancelTokens.remove(id);
+
+    // Cancel any lingering progress notification (M2).
+    final cancelNotifId = _notificationIds[id];
+    if (cancelNotifId != null) {
+      _notificationService.cancelNotification(cancelNotifId);
+    }
 
     final torrentId = _torrentIds[id];
     if (torrentId != null) {
@@ -1343,9 +1356,12 @@ class DownloadProvider extends ChangeNotifier
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
     // Guard: if a concurrent cancel/pause fired during the async gap above,
-    // cancel the fresh token so the download never starts.
-    if (_pendingCancellations.remove(task.id) || !_cancelTokens.containsKey(task.id)) {
-      cancelToken.cancel();
+    // the task status will no longer be 'queued'. Re-check the live status
+    // instead of using _pendingCancellations (which is never pruned on pause
+    // paths and causes every subsequent resume to abort silently).
+    final latestBeforeStart = _findTask(task.id);
+    if (latestBeforeStart == null ||
+        latestBeforeStart.status != DownloadStatus.queued) {
       _cancelTokens.remove(task.id);
       return;
     }
@@ -1605,6 +1621,7 @@ class DownloadProvider extends ChangeNotifier
               eta: updated.etaFormatted,
               languageCode: _settingsProvider.languageCode,
               payload: task.id,
+              hasMultipleActive: downloadingTasksCount > 1,
             );
           }
           BackgroundService.sendHeartbeat();
@@ -2412,7 +2429,7 @@ class DownloadProvider extends ChangeNotifier
         if (torrentId != null) {
           TorrentService.pauseTorrent(torrentId);
         }
-        _pendingCancellations.add(task.id);
+        // No _pendingCancellations.add — would permanently block resume.
         _cancelTokens[task.id]?.cancel('network_disconnect_pause');
         _cancelTokens.remove(task.id);
       }
@@ -2461,7 +2478,7 @@ class DownloadProvider extends ChangeNotifier
         if (torrentId != null) {
           TorrentService.pauseTorrent(torrentId);
         }
-        _pendingCancellations.add(task.id);
+        // No _pendingCancellations.add — would permanently block resume.
         _cancelTokens[task.id]?.cancel('wifi_only_pause');
         _cancelTokens.remove(task.id);
       }

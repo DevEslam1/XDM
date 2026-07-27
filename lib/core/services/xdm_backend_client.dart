@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show max;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -343,7 +344,7 @@ class _ApiRateLimiter {
     _endpoints[key]!.removeWhere((t) => now.difference(t).inSeconds >= 60);
 
     if (_endpoints[key]!.length >= limit) {
-      final retryAfter = 60 - now.difference(_endpoints[key]!.first).inSeconds;
+      final retryAfter = max(1, 60 - now.difference(_endpoints[key]!.first).inSeconds);
       throw BackendRateLimitException(
         retryAfterSeconds: retryAfter,
         message: 'Rate limit exceeded for endpoint: $endpoint',

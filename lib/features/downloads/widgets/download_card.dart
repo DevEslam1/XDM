@@ -1510,7 +1510,6 @@ void _showAdvancedControls(
   SettingsProvider settings,
 ) {
   final isDark = settings.isDarkMode;
-  final isRtl = L10n.isRtl(context);
   final provider = context.read<DownloadProvider>();
   final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
   final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;

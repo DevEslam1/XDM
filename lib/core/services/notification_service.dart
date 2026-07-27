@@ -231,12 +231,12 @@ class NotificationService {
       actions.addAll([
         AndroidNotificationAction(
           'pause_all',
-          languageCode == 'ar' ? 'إيقاف الكل' : 'Pause All',
+          L10n.translate(languageCode, 'pause_all_btn'),
           showsUserInterface: false,
         ),
         AndroidNotificationAction(
           'resume_all',
-          languageCode == 'ar' ? 'استئناف الكل' : 'Resume All',
+          L10n.translate(languageCode, 'resume_all_btn'),
           showsUserInterface: false,
         ),
       ]);

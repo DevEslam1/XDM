@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
@@ -41,6 +42,19 @@ class FFmpegMuxService {
           }
         }
       }
+    }
+
+    /// Cancels all active FFmpeg sessions (best-effort) and re-throws [error].
+    Future<Never> cancelAndRethrow(Object error, StackTrace stack) async {
+      try {
+        final sessions = await FFmpegKit.listSessions();
+        for (final s in sessions) {
+          await FFmpegKit.cancel(s.getSessionId());
+        }
+      } catch (cancelErr) {
+        _log.warning('FFmpeg cancel on timeout failed: $cancelErr');
+      }
+      Error.throwWithStackTrace(error, stack);
     }
 
     try {
@@ -99,10 +113,17 @@ class FFmpegMuxService {
       _log.info(
         'FFmpeg arguments: $arguments (Timeout: ${timeoutDuration.inMinutes} mins)',
       );
-      final session = await FFmpegKit.executeWithArguments(
-        arguments,
-      ).timeout(timeoutDuration);
-      final returnCode = await session.getReturnCode();
+
+      // Primary attempt -------------------------------------------------------
+      final session = await FFmpegKit.executeWithArguments(arguments)
+          .timeout(timeoutDuration, onTimeout: () {
+        throw TimeoutException(
+          'FFmpeg primary merge timed out after ${timeoutDuration.inMinutes} min',
+        );
+      });
+      final returnCode = await session
+          .getReturnCode()
+          .timeout(const Duration(seconds: 30));
 
       if (ReturnCode.isSuccess(returnCode)) {
         final outputFile = File(outputPath);
@@ -121,6 +142,7 @@ class FFmpegMuxService {
         final logs = await session.getLogsAsString();
         _log.severe('Merge failed with return code $returnCode.\nLogs:\n$logs');
 
+        // Fallback attempt: re-encode audio to AAC --------------------------
         _log.info('Retrying merge with AAC audio encoding...');
         final fallbackArguments = [
           '-i',
@@ -142,10 +164,16 @@ class FFmpegMuxService {
           outputPath,
         ];
 
-        final fallbackSession = await FFmpegKit.executeWithArguments(
-          fallbackArguments,
-        ).timeout(timeoutDuration);
-        final fallbackReturnCode = await fallbackSession.getReturnCode();
+        final fallbackSession =
+            await FFmpegKit.executeWithArguments(fallbackArguments)
+                .timeout(timeoutDuration, onTimeout: () {
+          throw TimeoutException(
+            'FFmpeg fallback merge timed out after ${timeoutDuration.inMinutes} min',
+          );
+        });
+        final fallbackReturnCode = await fallbackSession
+            .getReturnCode()
+            .timeout(const Duration(seconds: 30));
 
         if (ReturnCode.isSuccess(fallbackReturnCode)) {
           final outputFile = File(outputPath);
@@ -172,6 +200,11 @@ class FFmpegMuxService {
         }
         return false;
       }
+    } on TimeoutException catch (e, stack) {
+      // Cancel any lingering native sessions then propagate.
+      _log.severe('FFmpeg timed out: $e — cancelling native sessions');
+      await cleanUpInputs();
+      await cancelAndRethrow(e, stack);
     } catch (e, stackTrace) {
       _log.severe('Exception during FFmpeg merge: $e\n$stackTrace');
       // Clean up temp inputs even if an exception (like timeout) occurs

@@ -659,7 +659,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
           ),
         ),
         content: Text(
-          L10n.of(context, 'browser_clear_history_content'),
+          L10n.of(context, 'browser_clear_history_desc'),
           style: TextStyle(
             color: isDark
                 ? AppTheme.textSecondary

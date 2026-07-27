@@ -71,7 +71,7 @@ class DownloadTasks extends Table {
   TextColumn get errorMessage => text().nullable()();
   IntColumn get threadCount => integer()();
   TextColumn get chunks => text()
-      .map(NullAwareTypeConverter.wrap(const DoubleListConverter()))
+      .map(const NullAwareTypeConverter.wrap(DoubleListConverter()))
       .nullable()();
   IntColumn get createdAt => integer()();
   IntColumn get updatedAt => integer()();
@@ -87,7 +87,7 @@ class DownloadTasks extends Table {
   IntColumn get seedingLimitKbps =>
       integer().withDefault(const Constant(500))();
   TextColumn get torrentFiles => text()
-      .map(NullAwareTypeConverter.wrap(const TorrentFilesConverter()))
+      .map(const NullAwareTypeConverter.wrap(TorrentFilesConverter()))
       .nullable()();
   TextColumn get downloadPageUrl => text().nullable()();
   TextColumn get mergedAudioUrl => text().nullable()();

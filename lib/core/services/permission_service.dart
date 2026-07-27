@@ -196,27 +196,17 @@ class PermissionService {
 
     final sdk = await _androidSdkLevel();
     if (sdk >= 33) {
-      bool photosGranted = await Permission.photos.isGranted;
-      bool videosGranted = await Permission.videos.isGranted;
-      bool audioGranted = await Permission.audio.isGranted;
-
-      final permissions = [
-        if (!photosGranted) Permission.photos,
-        if (!videosGranted) Permission.videos,
-        if (!audioGranted) Permission.audio,
+      // Request opportunistically — helps UX when saving to shared media
+      // collections (Gallery, Music). The app's default path
+      // (getExternalStorageDirectories → Downloads) is app-specific and
+      // requires no media permission on SDK 30+, so we never block here.
+      final permissions = <Permission>[
+        if (!await Permission.photos.isGranted) Permission.photos,
+        if (!await Permission.videos.isGranted) Permission.videos,
+        if (!await Permission.audio.isGranted) Permission.audio,
       ];
-
-      if (permissions.isNotEmpty) {
-        await permissions.request();
-        photosGranted = await Permission.photos.isGranted;
-        videosGranted = await Permission.videos.isGranted;
-        audioGranted = await Permission.audio.isGranted;
-      }
-
-      // If none of the media permissions are granted, we cannot reliably save files.
-      if (!photosGranted && !videosGranted && !audioGranted) {
-        return false;
-      }
+      if (permissions.isNotEmpty) await permissions.request();
+      // Do NOT gate on grant result — fall through to directory creation.
     } else if (sdk >= 29) {
       final status = await Permission.storage.status;
       if (!status.isGranted) {

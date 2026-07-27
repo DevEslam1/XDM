@@ -30,7 +30,6 @@ mixin DownloadFilterMixin {
   String? _browserUrlToLoad;
 
   List<DownloadTask>? _cachedFilteredTasks;
-  List<DownloadTask>? _cachedResolvedTasks;
   bool _filteredTasksDirty = true;
 
   // ---------------------------------------------------------------------------
@@ -53,7 +52,6 @@ mixin DownloadFilterMixin {
   bool get filteredTasksDirty => _filteredTasksDirty;
   set filteredTasksDirty(bool value) {
     _filteredTasksDirty = value;
-    if (value) _cachedResolvedTasks = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -130,13 +128,14 @@ mixin DownloadFilterMixin {
   // ---------------------------------------------------------------------------
   List<DownloadTask> get filteredTasks {
     if (!_filteredTasksDirty && _cachedFilteredTasks != null) {
-      // Return cached resolved list if available
-      if (_cachedResolvedTasks != null) return _cachedResolvedTasks!;
-      _cachedResolvedTasks = _cachedFilteredTasks!
+      // Re-resolve live task objects from the cached filter/sort result.
+      // _cachedFilteredTasks holds the stable (sorted/filtered) ID order;
+      // findTaskById always returns the latest in-memory instance so progress
+      // ticks are reflected without invalidating the expensive filter cache.
+      return _cachedFilteredTasks!
           .map((t) => findTaskById(t.id))
           .whereType<DownloadTask>()
           .toList();
-      return _cachedResolvedTasks!;
     }
     final list = providerTasks.where((task) {
       final queryLower = _searchQuery.toLowerCase();
@@ -188,7 +187,6 @@ mixin DownloadFilterMixin {
     });
 
     _cachedFilteredTasks = list;
-    _cachedResolvedTasks = null; // Invalidate resolved cache
     _filteredTasksDirty = false;
     return list;
   }
