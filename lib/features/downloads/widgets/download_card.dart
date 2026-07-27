@@ -14,16 +14,17 @@ import '../../details/screens/details_screen.dart';
 
 /// Adaptive download card. Detects the download kind and renders a
 /// purpose-built variant:
-///   • Torrent / magnet  -> _TorrentCard   (seeds/peers, upload, files, seeding)
-///   • Media / playlist  -> _MediaCard     (quality badge, audio track, merge)
-///   • Single file       -> _FileCard      (chunked multi-thread progress)
+///   • Torrent / magnet  -> _TorrentCard  (seeds/peers, per-file %, seeding)
+///   • Media / playlist  -> _MediaCard    (quality badge, audio track, merge)
+///   • Single file       -> _FileCard     (chunked multi-thread progress)
 ///
-/// Playlist videos (task.playlistId set) are grouped by the home screen into
-/// a [PlaylistGroupCard]; individual items still render as _MediaCard when
-/// expanded.
+/// Every variant exposes the same telemetry strip:
+///   DOWNLOADED / TOTAL SIZE / ELAPSED / TIME REMAINING / SPEED
+/// plus a chunked progress bar and the total percentage readout.
 class DownloadCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+
   const DownloadCard({super.key, required this.task, this.compact = false});
 
   @override
@@ -38,9 +39,10 @@ class DownloadCard extends StatelessWidget with HapticHelper {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
 // Shared helpers
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+
 Color _statusColor(DownloadStatus status, bool isDark) {
   return switch (status) {
     DownloadStatus.queued =>
@@ -66,21 +68,22 @@ IconData _categoryIcon(String category) {
   };
 }
 
-String _statusLabel(BuildContext context, DownloadStatus status) {
-  return L10n.translateStatusName(context, status);
-}
+bool _isSeeding(DownloadTask task) =>
+    task.status == DownloadStatus.completed &&
+    task.isTorrent &&
+    task.seedingEnabled;
 
-// ═══════════════════════════════════════════════════════════════
-// Shared sub-widgets
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+// Card shell — status accent rail + tinted panel
+// ────────────────────────────────────────────────────────────────────────────
 
-/// Card shell with a signature cockpit notch + status accent rail.
 class _CardShell extends StatelessWidget {
   final Widget child;
   final Color accent;
   final bool isDark;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+
   const _CardShell({
     required this.child,
     required this.accent,
@@ -102,7 +105,7 @@ class _CardShell extends StatelessWidget {
             isDark: isDark,
             radius: 18,
             accentColor: accent,
-            accentAlpha: 0.18,
+            accentAlpha: 0.22,
           ),
           child: IntrinsicHeight(
             child: Row(
@@ -117,6 +120,9 @@ class _CardShell extends StatelessWidget {
                       topLeft: Radius.circular(18),
                       bottomLeft: Radius.circular(18),
                     ),
+                    boxShadow: [
+                      AppTheme.glow(accent, alpha: 0.30, blur: 6, spread: 0),
+                    ],
                   ),
                 ),
                 Expanded(child: child),
@@ -129,11 +135,15 @@ class _CardShell extends StatelessWidget {
   }
 }
 
-/// Status chip that pulses while downloading/seeding.
+// ────────────────────────────────────────────────────────────────────────────
+// Status chip — pulses while downloading / seeding
+// ────────────────────────────────────────────────────────────────────────────
+
 class _StatusChip extends StatefulWidget {
   final DownloadTask task;
   final bool isDark;
   final String? overrideLabel;
+
   const _StatusChip({
     required this.task,
     required this.isDark,
@@ -153,9 +163,7 @@ class _StatusChipState extends State<_StatusChip>
 
   bool get _isActive =>
       widget.task.status == DownloadStatus.downloading ||
-      (widget.task.status == DownloadStatus.completed &&
-          widget.task.isTorrent &&
-          widget.task.seedingEnabled);
+      _isSeeding(widget.task);
 
   @override
   void initState() {
@@ -210,11 +218,188 @@ class _StatusChipState extends State<_StatusChip>
   }
 }
 
-/// Multi-thread chunked progress bar — one segment per thread.
+String _statusLabel(BuildContext context, DownloadStatus status) {
+  return L10n.translateStatusName(context, status);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Telemetry strip — DOWNLOADED / TOTAL / ELAPSED / REMAIN / SPEED
+// ────────────────────────────────────────────────────────────────────────────
+
+class _StatCell extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool isDark;
+  final Color? valueColor;
+  final IconData? icon;
+
+  const _StatCell({
+    required this.label,
+    required this.value,
+    required this.isDark,
+    this.valueColor,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 9, color: muted),
+              const SizedBox(width: 3),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                style: AppTheme.microLabel(isDark: isDark, size: 7.5),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: AppTheme.dataStyle(
+            isDark: isDark,
+            size: 10.5,
+            weight: FontWeight.w700,
+            color: valueColor,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+class _TelemetryStrip extends StatelessWidget {
+  final DownloadTask task;
+  final bool isDark;
+  final Color accent;
+  final double seedingUploadSpeed;
+
+  const _TelemetryStrip({
+    required this.task,
+    required this.isDark,
+    required this.accent,
+    this.seedingUploadSpeed = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final seeding = _isSeeding(task);
+
+    final String remain;
+    if (task.status == DownloadStatus.downloading) {
+      remain = task.etaFormatted;
+    } else if (task.status == DownloadStatus.completed) {
+      remain = 'DONE';
+    } else {
+      remain = '--';
+    }
+
+    final String speed;
+    if (task.status == DownloadStatus.downloading) {
+      speed = task.speedFormatted;
+    } else if (seeding) {
+      speed = '${formatBytes(seedingUploadSpeed)}/s';
+    } else {
+      speed = '--';
+    }
+
+    Widget divider() => Container(
+      width: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: AppTheme.well(isDark: isDark, radius: 12),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: _StatCell(
+                label: 'DOWNLOADED',
+                value: task.downloadedSizeFormatted,
+                isDark: isDark,
+                icon: Icons.arrow_downward_rounded,
+              ),
+            ),
+            divider(),
+            Expanded(
+              child: _StatCell(
+                label: 'TOTAL SIZE',
+                value: task.sizeFormatted,
+                isDark: isDark,
+                icon: Icons.storage_outlined,
+              ),
+            ),
+            divider(),
+            Expanded(
+              child: _StatCell(
+                label: 'ELAPSED',
+                value: task.elapsedFormatted,
+                isDark: isDark,
+                icon: Icons.timer_outlined,
+              ),
+            ),
+            divider(),
+            Expanded(
+              child: _StatCell(
+                label: 'REMAIN',
+                value: remain,
+                isDark: isDark,
+                valueColor: task.status == DownloadStatus.downloading
+                    ? accent
+                    : muted,
+                icon: Icons.hourglass_bottom_rounded,
+              ),
+            ),
+            divider(),
+            Expanded(
+              child: _StatCell(
+                label: seeding ? 'UPLOAD' : 'SPEED',
+                value: speed,
+                isDark: isDark,
+                valueColor:
+                    (task.status == DownloadStatus.downloading || seeding)
+                    ? accent
+                    : muted,
+                icon: seeding
+                    ? Icons.arrow_upward_rounded
+                    : Icons.speed_rounded,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Progress — chunked bar + total percentage readout
+// ────────────────────────────────────────────────────────────────────────────
+
 class _ChunkedProgressBar extends StatelessWidget {
   final DownloadTask task;
   final bool isDark;
   final Color color;
+
   const _ChunkedProgressBar({
     required this.task,
     required this.isDark,
@@ -278,13 +463,53 @@ class _ChunkedProgressBar extends StatelessWidget {
   }
 }
 
-/// Icon control button with press-scale micro-interaction.
+class _ProgressRow extends StatelessWidget {
+  final DownloadTask task;
+  final bool isDark;
+  final Color color;
+
+  const _ProgressRow({
+    required this.task,
+    required this.isDark,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _ChunkedProgressBar(task: task, isDark: isDark, color: color),
+        ),
+        const SizedBox(width: 12),
+        // Total percentage readout
+        Text(
+          task.progressPercentString,
+          style: AppTheme.dataStyle(
+            isDark: isDark,
+            size: 15,
+            weight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Control cluster — pause / resume / retry / open / delete
+// (torrent pause & resume go through the same provider calls; the provider
+//  now validates the native torrent handle so resume actually re-attaches)
+// ────────────────────────────────────────────────────────────────────────────
+
 class _ControlButton extends StatefulWidget {
   final IconData icon;
   final Color color;
   final VoidCallback? onPressed;
   final String tooltip;
   final bool filled;
+
   const _ControlButton({
     required this.icon,
     required this.color,
@@ -339,9 +564,9 @@ class _ControlButtonState extends State<_ControlButton> {
   }
 }
 
-/// Standard control cluster shared by all variants.
 class _ControlCluster extends StatelessWidget with HapticHelper {
   final DownloadTask task;
+
   const _ControlCluster({required this.task});
 
   @override
@@ -350,7 +575,6 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -417,7 +641,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
               if (context.mounted) {
                 ThemedSnackbar.show(
                   context,
-                  message: isRtl ? 'تم حذف التنزيل بنجاح' : 'Download deleted',
+                  message: isRtl ? 'تم حذف التحميل بنجاح' : 'Download deleted',
                   color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                   icon: Icons.delete_outline,
                   isDarkMode: isDark,
@@ -431,34 +655,64 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
   }
 }
 
-/// Data readout (speed / size / eta) in the display face.
-class _DataReadout extends StatelessWidget {
-  final String value;
+// ────────────────────────────────────────────────────────────────────────────
+// Status message / error rows
+// ────────────────────────────────────────────────────────────────────────────
+
+class _NoticeRow extends StatelessWidget {
+  final String text;
   final Color color;
+  final IconData icon;
   final bool isDark;
-  final double size;
-  const _DataReadout({
-    required this.value,
+
+  const _NoticeRow({
+    required this.text,
     required this.color,
+    required this.icon,
     required this.isDark,
-    this.size = 12,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      value,
-      style: AppTheme.dataStyle(isDark: isDark, color: color, size: size),
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 10,
+                weight: FontWeight.w600,
+                color: color,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
 // Variant 1 — Single file
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+
 class _FileCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+
   const _FileCard({required this.task, required this.compact});
 
   @override
@@ -466,7 +720,6 @@ class _FileCard extends StatelessWidget with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final statusColor = _statusColor(task.status, isDark);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return _CardShell(
@@ -481,7 +734,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
       },
       onLongPress: () => _showAdvancedControls(context, task, settings),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(compact ? 12 : 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -520,19 +773,23 @@ class _FileCard extends StatelessWidget with HapticHelper {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Row(
                         children: [
                           _StatusChip(task: task, isDark: isDark),
                           const SizedBox(width: 8),
-                          Text(
-                            L10n.translateCategory(
-                              context,
-                              task.category,
-                            ).toUpperCase(),
-                            style: AppTheme.microLabel(
-                              isDark: isDark,
-                              size: 8.5,
+                          Flexible(
+                            child: Text(
+                              L10n.translateCategory(
+                                context,
+                                task.category,
+                              ).toUpperCase(),
+                              style: AppTheme.microLabel(
+                                isDark: isDark,
+                                size: 8.5,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
@@ -543,67 +800,40 @@ class _FileCard extends StatelessWidget with HapticHelper {
                 _ControlCluster(task: task),
               ],
             ),
-            const SizedBox(height: 14),
-            _ChunkedProgressBar(task: task, isDark: isDark, color: statusColor),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _DataReadout(
-                  value:
-                      '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
-                  color: mutedClr,
-                  isDark: isDark,
-                  size: 11,
-                ),
-                const Spacer(),
-                if (task.status == DownloadStatus.downloading) ...[
-                  Icon(
-                    Icons.arrow_downward_rounded,
-                    size: 12,
-                    color: statusColor,
-                  ),
-                  const SizedBox(width: 3),
-                  _DataReadout(
-                    value: task.speedFormatted,
-                    color: statusColor,
-                    isDark: isDark,
-                    size: 11,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                _DataReadout(
-                  value: task.progressPercentString,
-                  color: textClr,
-                  isDark: isDark,
-                  size: 12,
-                ),
-              ],
-            ),
-            if (task.status == DownloadStatus.downloading &&
-                task.etaFormatted.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  L10n.translateStatus(context, task.status, task.etaFormatted),
-                  style: AppTheme.microLabel(isDark: isDark, size: 9),
-                ),
+            const SizedBox(height: 12),
+            _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
+            const SizedBox(height: 12),
+            _ProgressRow(task: task, isDark: isDark, color: statusColor),
+            if (task.statusMessage != null && task.statusMessage!.isNotEmpty)
+              _NoticeRow(
+                text: task.statusMessage!,
+                color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                icon: Icons.merge_type_rounded,
+                isDark: isDark,
               ),
-            ],
             if (task.status == DownloadStatus.failed &&
-                task.errorMessage != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                task.errorMessage!,
-                style: AppTheme.microLabel(
-                  isDark: isDark,
-                  color: statusColor,
-                  size: 9,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                task.errorMessage != null)
+              _NoticeRow(
+                text: task.errorMessage!,
+                color: statusColor,
+                icon: Icons.error_outline,
+                isDark: isDark,
               ),
-            ],
+            if (task.status == DownloadStatus.downloading)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Text(
+                    '${task.threadCount} CH • ${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                    style: AppTheme.microLabel(
+                      isDark: isDark,
+                      color: mutedClr,
+                      size: 8.5,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -611,12 +841,14 @@ class _FileCard extends StatelessWidget with HapticHelper {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
 // Variant 2 — Media (single video / audio / playlist item)
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+
 class _MediaCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+
   const _MediaCard({required this.task, required this.compact});
 
   String get _qualityLabel {
@@ -629,6 +861,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
 
   bool get _hasAudioTrack =>
       task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty;
+
   bool get _isAudioOnly => task.youtubeQualityPreset == 'audio_only';
 
   @override
@@ -636,7 +869,6 @@ class _MediaCard extends StatelessWidget with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final statusColor = _statusColor(task.status, isDark);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final qualityColor = _isAudioOnly
         ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
@@ -654,14 +886,13 @@ class _MediaCard extends StatelessWidget with HapticHelper {
       },
       onLongPress: () => _showAdvancedControls(context, task, settings),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(compact ? 12 : 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // media thumbnail placeholder
                 Container(
                   width: compact ? 46 : 56,
                   height: compact ? 34 : 40,
@@ -701,7 +932,6 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                         children: [
                           _StatusChip(task: task, isDark: isDark),
                           const SizedBox(width: 6),
-                          // quality badge
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 7,
@@ -748,9 +978,11 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                 _ControlCluster(task: task),
               ],
             ),
-            const SizedBox(height: 14),
-            _ChunkedProgressBar(task: task, isDark: isDark, color: statusColor),
-            // separate audio-track progress when merging
+            const SizedBox(height: 12),
+            _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
+            const SizedBox(height: 12),
+            _ProgressRow(task: task, isDark: isDark, color: statusColor),
+            // Separate audio-track progress while merging download runs
             if (_hasAudioTrack &&
                 !_isAudioOnly &&
                 task.status == DownloadStatus.downloading &&
@@ -796,40 +1028,21 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                 ],
               ),
             ],
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _DataReadout(
-                  value:
-                      '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
-                  color: mutedClr,
-                  isDark: isDark,
-                  size: 11,
-                ),
-                const Spacer(),
-                if (task.status == DownloadStatus.downloading) ...[
-                  Icon(
-                    Icons.arrow_downward_rounded,
-                    size: 12,
-                    color: statusColor,
-                  ),
-                  const SizedBox(width: 3),
-                  _DataReadout(
-                    value: task.speedFormatted,
-                    color: statusColor,
-                    isDark: isDark,
-                    size: 11,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                _DataReadout(
-                  value: task.progressPercentString,
-                  color: textClr,
-                  isDark: isDark,
-                  size: 12,
-                ),
-              ],
-            ),
+            if (task.statusMessage != null && task.statusMessage!.isNotEmpty)
+              _NoticeRow(
+                text: task.statusMessage!,
+                color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                icon: Icons.merge_type_rounded,
+                isDark: isDark,
+              ),
+            if (task.status == DownloadStatus.failed &&
+                task.errorMessage != null)
+              _NoticeRow(
+                text: task.errorMessage!,
+                color: statusColor,
+                icon: Icons.error_outline,
+                isDark: isDark,
+              ),
           ],
         ),
       ),
@@ -837,12 +1050,14 @@ class _MediaCard extends StatelessWidget with HapticHelper {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
 // Variant 3 — Torrent / magnet
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+
 class _TorrentCard extends StatefulWidget {
   final DownloadTask task;
   final bool compact;
+
   const _TorrentCard({required this.task, required this.compact});
 
   @override
@@ -850,7 +1065,8 @@ class _TorrentCard extends StatefulWidget {
 }
 
 class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
-  bool _expanded = false;
+  bool _showAllFiles = false;
+  static const int _collapsedFileCount = 4;
 
   @override
   Widget build(BuildContext context) {
@@ -858,25 +1074,22 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final statusColor = _statusColor(widget.task.status, isDark);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final isMagnet = widget.task.url.startsWith('magnet:');
-    final isSeeding =
-        widget.task.status == DownloadStatus.completed &&
-        widget.task.seedingEnabled;
+    final seeding = _isSeeding(widget.task);
 
-    return Selector<DownloadProvider, ({int seeds, int peers, double uploadSpeed})>(
+    return Selector<
+      DownloadProvider,
+      ({int seeds, int peers, double uploadSpeed})
+    >(
       selector: (context, provider) => (
         seeds: provider.getTorrentSeeds(widget.task.id),
         peers: provider.getTorrentPeers(widget.task.id),
         uploadSpeed: provider.getTorrentUploadSpeed(widget.task.id),
       ),
       builder: (context, stats, _) {
-        final seeds = stats.seeds;
-        final peers = stats.peers;
-        final uploadSpeed = stats.uploadSpeed;
         final fileCount = widget.task.torrentFiles?.length ?? 0;
         final selectedCount =
             widget.task.torrentFiles
@@ -899,10 +1112,11 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
           onLongPress: () =>
               _showAdvancedControls(context, widget.task, settings),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: EdgeInsets.all(widget.compact ? 12 : 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -948,19 +1162,19 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                               _StatusChip(
                                 task: widget.task,
                                 isDark: isDark,
-                                overrideLabel: isSeeding
+                                overrideLabel: seeding
                                     ? (isRtl ? 'مشاركة' : 'SEEDING')
                                     : null,
                               ),
                               _PeerChip(
                                 icon: Icons.arrow_upward_rounded,
-                                label: '$seeds',
+                                label: '${stats.seeds}',
                                 color: greenClr,
                                 isDark: isDark,
                               ),
                               _PeerChip(
                                 icon: Icons.arrow_downward_rounded,
-                                label: '$peers',
+                                label: '${stats.peers}',
                                 color: violetClr,
                                 isDark: isDark,
                               ),
@@ -976,87 +1190,30 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         ],
                       ),
                     ),
-                    Column(
-                      children: [
-                        _ControlCluster(task: widget.task),
-                        if (fileCount > 0) ...[
-                          const SizedBox(height: 6),
-                          GestureDetector(
-                            onTap: () {
-                              triggerHaptic(settings);
-                              setState(() => _expanded = !_expanded);
-                            },
-                            child: AnimatedRotation(
-                              turns: _expanded ? 0.5 : 0,
-                              duration: AppTheme.motionBase,
-                              child: Icon(
-                                Icons.keyboard_arrow_up_rounded,
-                                size: 18,
-                                color: mutedClr,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                    Column(children: [_ControlCluster(task: widget.task)]),
                   ],
                 ),
-                const SizedBox(height: 14),
-                _ChunkedProgressBar(
+                const SizedBox(height: 12),
+                // Telemetry: downloaded / total / elapsed / remain / speed
+                _TelemetryStrip(
+                  task: widget.task,
+                  isDark: isDark,
+                  accent: statusColor,
+                  seedingUploadSpeed: stats.uploadSpeed,
+                ),
+                const SizedBox(height: 12),
+                // Total progress + total percentage
+                _ProgressRow(
                   task: widget.task,
                   isDark: isDark,
                   color: statusColor,
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _DataReadout(
-                      value:
-                          '${widget.task.downloadedSizeFormatted} / ${widget.task.sizeFormatted}',
-                      color: mutedClr,
-                      isDark: isDark,
-                      size: 11,
-                    ),
-                    const Spacer(),
-                    if (widget.task.status == DownloadStatus.downloading) ...[
-                      Icon(
-                        Icons.arrow_downward_rounded,
-                        size: 12,
-                        color: statusColor,
-                      ),
-                      const SizedBox(width: 3),
-                      _DataReadout(
-                        value: widget.task.speedFormatted,
-                        color: statusColor,
-                        isDark: isDark,
-                        size: 11,
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    if (isSeeding || uploadSpeed > 0) ...[
-                      Icon(
-                        Icons.arrow_upward_rounded,
-                        size: 12,
-                        color: violetClr,
-                      ),
-                      const SizedBox(width: 3),
-                      _DataReadout(
-                        value: '${formatBytes(uploadSpeed)}/s',
-                        color: violetClr,
-                        isDark: isDark,
-                        size: 11,
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    _DataReadout(
-                      value: widget.task.progressPercentString,
-                      color: textClr,
-                      isDark: isDark,
-                      size: 12,
-                    ),
-                  ],
-                ),
-                // seeding toggle when completed
+                // Per-file percentages
+                if (fileCount > 0) ...[
+                  const SizedBox(height: 12),
+                  _buildFilesSection(isDark, statusColor),
+                ],
+                // Seeding toggle once completed
                 if (widget.task.status == DownloadStatus.completed) ...[
                   const SizedBox(height: 10),
                   Divider(
@@ -1065,7 +1222,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         : AppTheme.lightBorderSubtle,
                     height: 1,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(
@@ -1097,26 +1254,98 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                     ],
                   ),
                 ],
-                // expandable file list
-                AnimatedCrossFade(
-                  firstChild: const SizedBox(width: double.infinity),
-                  secondChild: _TorrentFileList(
-                    task: widget.task,
+                if (widget.task.status == DownloadStatus.failed &&
+                    widget.task.errorMessage != null)
+                  _NoticeRow(
+                    text: widget.task.errorMessage!,
+                    color: statusColor,
+                    icon: Icons.error_outline,
                     isDark: isDark,
                   ),
-                  crossFadeState: _expanded
-                      ? CrossFadeState.showSecond
-                      : CrossFadeState.showFirst,
-                  duration: AppTheme.motionBase,
-                  firstCurve: AppTheme.motionCurve,
-                  secondCurve: AppTheme.motionCurve,
-                  sizeCurve: AppTheme.motionCurve,
-                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildFilesSection(bool isDark, Color accent) {
+    final files = widget.task.torrentFiles ?? [];
+    final totalSelectedSize = files
+        .where((f) => f['selected'] == true)
+        .fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
+    final totalDownloaded = widget.task.downloadedBytes;
+    final displayFiles = files.map((f) {
+      final selected = f['selected'] == true;
+      final length = (f['length'] as num?)?.toInt() ?? 0;
+      final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      final estimatedDownloaded = selected && totalSelectedSize > 0
+          ? ((totalDownloaded * length) / totalSelectedSize).round().clamp(
+              0,
+              length,
+            )
+          : 0;
+      final effectiveDownloaded =
+          widget.task.status == DownloadStatus.completed && selected
+          ? length
+          : (downloaded > 0 ? downloaded : estimatedDownloaded);
+      return {...f, 'downloadedBytes': effectiveDownloaded};
+    }).toList();
+
+    final visible = _showAllFiles
+        ? displayFiles
+        : displayFiles.take(_collapsedFileCount).toList();
+    final hiddenCount = displayFiles.length - visible.length;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'FILES • ${files.where((f) => f['selected'] == true).length}/${files.length}',
+            style: AppTheme.microLabel(isDark: isDark, size: 8),
+          ),
+        ),
+        ...visible.map(
+          (f) => _TorrentFileRow(file: f, isDark: isDark, accent: accent),
+        ),
+        if (hiddenCount > 0 || _showAllFiles)
+          GestureDetector(
+            onTap: () {
+              triggerHaptic(context.read<SettingsProvider>());
+              setState(() => _showAllFiles = !_showAllFiles);
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _showAllFiles
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 14,
+                    color: mutedClr,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _showAllFiles
+                        ? 'SHOW LESS'
+                        : '+$hiddenCount MORE FILE${hiddenCount == 1 ? '' : 'S'}',
+                    style: AppTheme.microLabel(
+                      isDark: isDark,
+                      color: mutedClr,
+                      size: 8.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -1126,6 +1355,7 @@ class _PeerChip extends StatelessWidget {
   final String label;
   final Color color;
   final bool isDark;
+
   const _PeerChip({
     required this.icon,
     required this.label,
@@ -1157,124 +1387,131 @@ class _PeerChip extends StatelessWidget {
   }
 }
 
-class _TorrentFileList extends StatelessWidget {
-  final DownloadTask task;
+/// One torrent file row: name, individual progress bar, per-file percentage,
+/// and file size. Bytes come from the provider's disk-verified per-file
+/// tracking (`downloadedBytes` inside `task.torrentFiles`).
+class _TorrentFileRow extends StatelessWidget {
+  final Map<String, dynamic> file;
   final bool isDark;
-  const _TorrentFileList({required this.task, required this.isDark});
+  final Color accent;
+
+  const _TorrentFileRow({
+    required this.file,
+    required this.isDark,
+    required this.accent,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final files = task.torrentFiles ?? [];
+    final selected = file['selected'] == true;
+    final length = (file['length'] as num?)?.toInt() ?? 0;
+    final downloaded = (file['downloadedBytes'] as num?)?.toInt() ?? 0;
+    final p = length > 0 ? (downloaded / length).clamp(0.0, 1.0) : 0.0;
+    final done = selected && p >= 1.0;
+    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final name = (file['name'] as String? ?? '').replaceAll('+', ' ');
+
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Column(
-        children: files.map((f) {
-          final selected = f['selected'] == true;
-          final length = (f['length'] as num?)?.toInt() ?? 0;
-          final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-          final p = length > 0 ? (downloaded / length).clamp(0.0, 1.0) : 0.0;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(
+            done
+                ? Icons.check_circle_rounded
+                : selected
+                ? Icons.insert_drive_file_rounded
+                : Icons.block_rounded,
+            size: 13,
+            color: done ? greenClr : (selected ? accent : mutedClr),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  selected
-                      ? Icons.insert_drive_file_rounded
-                      : Icons.block_rounded,
-                  size: 13,
-                  color: selected
-                      ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                      : mutedClr,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    (f['name'] as String? ?? '').replaceAll('+', ' '),
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 10.5,
-                      weight: selected ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Text(
+                  name,
+                  style: AppTheme.dataStyle(
+                    isDark: isDark,
+                    size: 10.5,
+                    weight: selected ? FontWeight.w600 : FontWeight.w400,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 60,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: Stack(
-                      children: [
-                        Container(
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: Stack(
+                    children: [
+                      Container(
+                        height: 3,
+                        decoration: AppTheme.progressTrack(
+                          isDark: isDark,
+                          radius: 2,
+                        ),
+                      ),
+                      FractionallySizedBox(
+                        widthFactor: p,
+                        child: Container(
                           height: 3,
-                          decoration: AppTheme.progressTrack(
-                            isDark: isDark,
-                            radius: 2,
+                          decoration: BoxDecoration(
+                            color: done ? greenClr : accent,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        FractionallySizedBox(
-                          widthFactor: p,
-                          child: Container(
-                            height: 3,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppTheme.neonBlue
-                                  : AppTheme.lightNeonBlue,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 32,
-                  child: Text(
-                    '${(p * 100).toStringAsFixed(0)}%',
-                    textAlign: TextAlign.end,
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 9.5,
-                      weight: FontWeight.w600,
-                      color: selected
-                          ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                          : mutedClr,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 52,
-                  child: Text(
-                    formatBytes(length.toDouble()),
-                    textAlign: TextAlign.end,
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 9,
-                      color: mutedClr,
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          );
-        }).toList(),
+          ),
+          const SizedBox(width: 10),
+          // Per-file percentage
+          SizedBox(
+            width: 36,
+            child: Text(
+              '${(p * 100).toStringAsFixed(0)}%',
+              textAlign: TextAlign.end,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 10,
+                weight: FontWeight.w800,
+                color: done ? greenClr : accent,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 52,
+            child: Text(
+              formatBytes(length.toDouble()),
+              textAlign: TextAlign.end,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 9,
+                weight: FontWeight.w500,
+                color: mutedClr,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
 // Playlist group card — groups playlist videos into one card
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+
 class PlaylistGroupCard extends StatefulWidget {
   final String playlistId;
   final String title;
   final List<DownloadTask> items;
+
   const PlaylistGroupCard({
     super.key,
     required this.playlistId,
@@ -1294,7 +1531,7 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
       widget.items.where((t) => t.status == DownloadStatus.completed).length;
 
   double get _overallProgress {
-    final total = widget.items.fold<int>(0, (s, t) => s + t.fileSize);
+    final total = widget.items.fold<int>(0, (s, t) => s + t.resolvedFileSize);
     if (total <= 0) return 0.0;
     final done = widget.items.fold<int>(0, (s, t) => s + t.downloadedBytes);
     return (done / total).clamp(0.0, 1.0);
@@ -1314,7 +1551,6 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
     final accent = _allDone
         ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
         : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed);
-    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return _CardShell(
@@ -1404,7 +1640,6 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
                     ],
                   ),
                 ),
-                // bulk controls
                 if (_anyDownloading)
                   _ControlButton(
                     icon: Icons.pause_rounded,
@@ -1450,44 +1685,43 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
               ],
             ),
             const SizedBox(height: 14),
-            // aggregate progress
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 6,
-                    decoration: AppTheme.progressTrack(isDark: isDark),
-                  ),
-                  AnimatedFractionallySizedBox(
-                    widthFactor: _overallProgress,
-                    duration: const Duration(milliseconds: 400),
-                    curve: AppTheme.motionCurve,
-                    child: Container(
-                      height: 6,
-                      decoration: AppTheme.progressFill(accent),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
+            // Aggregate progress + total percentage
             Row(
               children: [
-                Text(
-                  '${(_overallProgress * 100).toStringAsFixed(0)}%',
-                  style: AppTheme.dataStyle(
-                    isDark: isDark,
-                    size: 12,
-                    color: textClr,
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 6,
+                          decoration: AppTheme.progressTrack(isDark: isDark),
+                        ),
+                        AnimatedFractionallySizedBox(
+                          widthFactor: _overallProgress,
+                          duration: const Duration(milliseconds: 400),
+                          curve: AppTheme.motionCurve,
+                          child: Container(
+                            height: 6,
+                            decoration: AppTheme.progressFill(accent),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const Spacer(),
-                if (_anyDownloading)
-                  Icon(Icons.downloading_rounded, size: 13, color: accent),
+                const SizedBox(width: 12),
+                Text(
+                  '${(_overallProgress * 100).toStringAsFixed(1)}%',
+                  style: AppTheme.dataStyle(
+                    isDark: isDark,
+                    size: 15,
+                    weight: FontWeight.w800,
+                    color: accent,
+                  ),
+                ),
               ],
             ),
-            // expanded item list
             AnimatedCrossFade(
               firstChild: const SizedBox(width: double.infinity),
               secondChild: Padding(
@@ -1502,7 +1736,10 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
                     ),
                     const SizedBox(height: 10),
                     ...widget.items.map(
-                      (t) => _MediaCard(task: t, compact: true),
+                      (t) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _MediaCard(task: t, compact: true),
+                      ),
                     ),
                   ],
                 ),
@@ -1522,9 +1759,10 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
 // Advanced Controls (Long Press)
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+
 void _showAdvancedControls(
   BuildContext context,
   DownloadTask task,
@@ -1534,7 +1772,6 @@ void _showAdvancedControls(
   final provider = context.read<DownloadProvider>();
   final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
   final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
@@ -1712,9 +1949,10 @@ void _confirmDelete(
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
 // Delete confirmation (shared)
-// ═══════════════════════════════════════════════════════════════
+// ────────────────────────────────────────────────────────────────────────────
+
 Future<bool?> showDeleteConfirmationDialog(
   BuildContext context,
   DownloadTask task,

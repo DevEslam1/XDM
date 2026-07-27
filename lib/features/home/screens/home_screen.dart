@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -1183,12 +1184,16 @@ class _DownloadTaskList extends StatelessWidget {
       shouldRebuild: (prev, next) {
         if (prev.length != next.length) return true;
         for (var i = 0; i < prev.length; i++) {
-          if (prev[i].id != next[i].id ||
-              prev[i].status != next[i].status ||
-              prev[i].downloadedBytes != next[i].downloadedBytes ||
-              (prev[i].speed ~/ 1024) != (next[i].speed ~/ 1024) ||
-              prev[i].eta != next[i].eta ||
-              prev[i].chunks.length != next[i].chunks.length) {
+          final oldTask = prev[i];
+          final newTask = next[i];
+          if (oldTask.id != newTask.id ||
+              oldTask.status != newTask.status ||
+              oldTask.downloadedBytes != newTask.downloadedBytes ||
+              oldTask.fileSize != newTask.fileSize ||
+              oldTask.threadCount != newTask.threadCount ||
+              !listEquals(oldTask.chunks, newTask.chunks) ||
+              (oldTask.speed ~/ 1024) != (newTask.speed ~/ 1024) ||
+              oldTask.eta != newTask.eta) {
             return true;
           }
         }
@@ -1229,11 +1234,13 @@ class _DownloadTaskList extends StatelessWidget {
           if (t.isPlaylistItem) {
             if (seenPlaylists.contains(t.playlistId!)) continue;
             seenPlaylists.add(t.playlistId!);
-            renderItems.add(PlaylistGroupCard(
-              playlistId: t.playlistId!,
-              title: t.playlistTitle ?? 'Playlist',
-              items: groups[t.playlistId!]!,
-            ));
+            renderItems.add(
+              PlaylistGroupCard(
+                playlistId: t.playlistId!,
+                title: t.playlistTitle ?? 'Playlist',
+                items: groups[t.playlistId!]!,
+              ),
+            );
           } else {
             renderItems.add(DownloadCard(task: t, compact: true));
           }
@@ -1269,11 +1276,16 @@ class _DownloadTaskList extends StatelessWidget {
             }
           },
           child: ListView.separated(
-            padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            padding: EdgeInsets.symmetric(
+              horizontal: screenPadding(context).left,
+            ),
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
             itemCount: renderItems.length,
             separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, index) => RepaintBoundary(child: renderItems[index]),
+            itemBuilder: (context, index) =>
+                RepaintBoundary(child: renderItems[index]),
           ),
         );
       },

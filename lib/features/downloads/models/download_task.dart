@@ -41,7 +41,6 @@ class DownloadTask {
   final DateTime? completedAt;
   final DateTime? scheduledAt;
   final bool supportsResume;
-  
   // Speed Limit and Torrent Seeding Fields
   final int speedLimitKbps; // 0 = unlimited
   final bool seedingEnabled;
@@ -56,7 +55,7 @@ class DownloadTask {
   final String? youtubeQualityPreset;
   final String? notes;
   final bool isAppUpdate;
-  final String? playlistId;      // groups playlist videos into one card
+  final String? playlistId; // groups playlist videos into one card
   final String? playlistTitle;
 
   DownloadTask({
@@ -99,23 +98,43 @@ class DownloadTask {
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
+
   bool get isPlaylistItem => playlistId != null && playlistId!.isNotEmpty;
+
+  /// Total size with fallbacks: stored [fileSize] first, then the sum of the
+  /// selected torrent files (magnets only learn their size after metadata),
+  /// then 0. Every size/percentage readout must go through this getter so
+  /// torrents with a late-resolved size still render correct numbers.
+  int get resolvedFileSize {
+    if (fileSize > 0) return fileSize;
+    if (torrentFiles != null && torrentFiles!.isNotEmpty) {
+      final sum = torrentFiles!
+          .where((f) => f['selected'] != false)
+          .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
+      if (sum > 0) return sum;
+    }
+    return 0;
+  }
 
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
-    if (fileSize <= 0) return 0.0;
-    return (downloadedBytes / fileSize).clamp(0.0, 1.0);
+    final total = resolvedFileSize;
+    if (total <= 0) return 0.0;
+    return (downloadedBytes / total).clamp(0.0, 1.0);
   }
 
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
-    if (fileSize <= 0) return '0.0%';
+    if (resolvedFileSize <= 0) return '0.0%';
     return '${(progress * 100).toStringAsFixed(1)}%';
   }
 
   String get speedFormatted {
-    if (status != DownloadStatus.downloading && status != DownloadStatus.completed) return '0.0 KB/s';
-    // If it's completed and is torrent seeding:
+    if (status != DownloadStatus.downloading &&
+        status != DownloadStatus.completed) {
+      return '0.0 KB/s';
+    }
+    // Completed + torrent + seeding: speed carries the upload rate.
     if (status == DownloadStatus.completed && isTorrent && seedingEnabled) {
       return '${formatBytes(speed)}/s';
     }
@@ -137,7 +156,6 @@ class DownloadTask {
     }
     if (status == DownloadStatus.failed) return 'Failed';
     if (eta == null || eta! <= 0) return '--';
-
     if (eta! >= 3600) {
       final hours = eta! ~/ 3600;
       final minutes = (eta! % 3600) ~/ 60;
@@ -151,19 +169,59 @@ class DownloadTask {
     return '${eta}s';
   }
 
+  /// Wall-clock time the download has been alive.
+  ///  - downloading / queued → up to now (ticks live while the card rebuilds)
+  ///  - paused / failed      → up to the last state change
+  ///  - completed            → total transfer time
+  String get elapsedFormatted {
+    final DateTime end;
+    switch (status) {
+      case DownloadStatus.completed:
+        end = completedAt ?? updatedAt;
+        break;
+      case DownloadStatus.downloading:
+      case DownloadStatus.queued:
+        end = DateTime.now();
+        break;
+      case DownloadStatus.paused:
+      case DownloadStatus.failed:
+        end = updatedAt;
+        break;
+    }
+    var seconds = end.difference(createdAt).inSeconds;
+    if (seconds < 0) seconds = 0;
+    if (seconds < 60) return '${seconds}s';
+    if (seconds < 3600) {
+      return '${seconds ~/ 60}m ${seconds % 60}s';
+    }
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    if (h >= 100) return '${h ~/ 24}d ${h % 24}h';
+    return '${h}h ${m}m';
+  }
+
   String get sizeFormatted {
-    if (fileSize > 0) return formatBytes(fileSize);
+    final total = resolvedFileSize;
+    if (total > 0) return formatBytes(total);
     if (status == DownloadStatus.completed && downloadedBytes > 0) {
       return formatBytes(downloadedBytes);
     }
     return 'Unknown';
   }
 
-  String get downloadedSizeFormatted => formatBytes(downloadedBytes);
+  /// Downloaded bytes, clamped so a late-resolved total can never render
+  /// "1.4 GB / 800 MB" style rows.
+  String get downloadedSizeFormatted {
+    final total = resolvedFileSize;
+    if (total > 0 && downloadedBytes > total) return formatBytes(total);
+    return formatBytes(downloadedBytes);
+  }
 
-  String get audioSizeFormatted => audioSize > 0 ? formatBytes(audioSize) : 'Unknown';
+  String get audioSizeFormatted =>
+      audioSize > 0 ? formatBytes(audioSize) : 'Unknown';
 
-  String get audioProgressPercentString => '${(audioProgress * 100).toStringAsFixed(1)}%';
+  String get audioProgressPercentString =>
+      '${(audioProgress * 100).toStringAsFixed(1)}%';
 
   DownloadTask copyWith({
     String? fileName,
@@ -224,7 +282,9 @@ class DownloadTask {
       localFilePath: localFilePath ?? this.localFilePath,
       tempFilePath: tempFilePath ?? this.tempFilePath,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      statusMessage: clearStatusMessage ? null : statusMessage ?? this.statusMessage,
+      statusMessage: clearStatusMessage
+          ? null
+          : statusMessage ?? this.statusMessage,
       threadCount: threadCount ?? this.threadCount,
       chunks: chunks != null ? List.of(chunks) : List.of(this.chunks),
       createdAt: createdAt,
@@ -238,13 +298,21 @@ class DownloadTask {
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
       torrentFiles: torrentFiles != null
           ? [for (final m in torrentFiles) Map<String, dynamic>.from(m)]
-          : this.torrentFiles?.map((m) => Map<String, dynamic>.from(m)).toList(),
-      downloadPageUrl: clearDownloadPageUrl ? null : downloadPageUrl ?? this.downloadPageUrl,
-      mergedAudioUrl: clearMergedAudioUrl ? null : mergedAudioUrl ?? this.mergedAudioUrl,
+          : this.torrentFiles
+                ?.map((m) => Map<String, dynamic>.from(m))
+                .toList(),
+      downloadPageUrl: clearDownloadPageUrl
+          ? null
+          : downloadPageUrl ?? this.downloadPageUrl,
+      mergedAudioUrl: clearMergedAudioUrl
+          ? null
+          : mergedAudioUrl ?? this.mergedAudioUrl,
       audioSize: audioSize ?? this.audioSize,
       audioProgress: audioProgress ?? this.audioProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
-      youtubeQualityPreset: clearYoutubeQualityPreset ? null : youtubeQualityPreset ?? this.youtubeQualityPreset,
+      youtubeQualityPreset: clearYoutubeQualityPreset
+          ? null
+          : youtubeQualityPreset ?? this.youtubeQualityPreset,
       notes: notes ?? this.notes,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       playlistId: clearPlaylist ? null : playlistId ?? this.playlistId,
@@ -308,18 +376,19 @@ class DownloadTask {
             }
             return DownloadStatus.paused;
           })();
-    final rawChunks = (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
-        .map((value) => (value as num?)?.toDouble().clamp(0.0, 1.0) ?? 0.0)
-        .toList();
-    final threadCount = (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
-
+    final rawChunks =
+        (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
+            .map((value) => (value as num?)?.toDouble().clamp(0.0, 1.0) ?? 0.0)
+            .toList();
+    final threadCount =
+        (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
     // Validate chunks length matches threadCount — resize if mismatched.
-    // When truncating, preserve overall progress by redistributing across new count.
+    // When truncating, preserve overall progress by redistributing across
+    // the new count.
     List<double> chunks;
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
     } else if (rawChunks.length > threadCount) {
-      // Preserve total progress across fewer chunks
       final totalProgress = rawChunks.fold<double>(0.0, (s, c) => s + c);
       final redistributed = totalProgress / threadCount;
       chunks = List<double>.filled(threadCount, redistributed);
@@ -331,13 +400,9 @@ class DownloadTask {
         );
       }
     } else {
-      // Preserve existing progress and pad new chunks at 0
       final existingSum = rawChunks.fold<double>(0.0, (s, c) => s + c);
       final remaining = threadCount - rawChunks.length;
-      chunks = [
-        ...rawChunks,
-        ...List.filled(remaining, 0.0),
-      ];
+      chunks = [...rawChunks, ...List.filled(remaining, 0.0)];
       if (kDebugMode) {
         debugPrint(
           'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
@@ -346,7 +411,6 @@ class DownloadTask {
         );
       }
     }
-
     return DownloadTask(
       id: map['id'] as String? ?? '',
       fileName: map['fileName'] as String? ?? '',
@@ -379,11 +443,16 @@ class DownloadTask {
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
       torrentFiles: map['torrentFiles'] is List
           ? (map['torrentFiles'] as List)
-              .map((f) => f is Map ? Map<String, dynamic>.from(f) : <String, dynamic>{})
-              .toList()
+                .map(
+                  (f) => f is Map
+                      ? Map<String, dynamic>.from(f)
+                      : <String, dynamic>{},
+                )
+                .toList()
           : null,
       downloadPageUrl: map['downloadPageUrl'] as String?,
-      mergedAudioUrl: map['mergedAudioUrl'] as String? ?? map['audioUrl'] as String?,
+      mergedAudioUrl:
+          map['mergedAudioUrl'] as String? ?? map['audioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       pausedByUser: map['pausedByUser'] as bool? ?? false,
@@ -395,10 +464,8 @@ class DownloadTask {
     );
   }
 
-  // Identity equality based on [id]. This is intentionally limited to ID comparison
-  // to ensure proper identification in lists, sets, and animation transitions.
-  // Note that tasks with the same ID but different states (e.g. progress, status)
-  // will be considered equal under this operator.
+  // Identity equality based on [id] (plus playlist grouping keys) so cards
+  // animate correctly in lists.
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -410,11 +477,3 @@ class DownloadTask {
   @override
   int get hashCode => Object.hash(id, playlistId, playlistTitle);
 }
-
-// TODO: Add unit tests for DownloadTask
-//   - copyWith: each field, clearXxx flags, null preservation
-//   - toMap / fromMap: round-trip fidelity, corrupt/missing keys
-//   - Chunk resizing: too many, too few, exact match
-//   - Unknown status fallback to paused
-//   - Equality: same id equals, different id not equals
-//   - Getters: isTorrent, progress, speedFormatted, etaFormatted

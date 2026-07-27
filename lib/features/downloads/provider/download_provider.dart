@@ -1376,11 +1376,19 @@ class DownloadProvider extends ChangeNotifier
       try {
         final existingTorrentId = _torrentIds[task.id];
         if (existingTorrentId != null) {
-          // Validate torrent still exists; if the engine removed it, re-add
-          try {
-            TorrentService.getFiles(existingTorrentId);
+          // Only reuse the handle if the native session still owns the
+          // torrent. A magnet paused before metadata was fetched is REMOVED
+          // from the session by the cancel handler, and `getFiles()` never
+          // throws for a dead handle — it returns [] — so the old code
+          // silently reused a dead id and resume hung until the 45s
+          // metadata timeout, then failed.
+          if (_isTorrentAlive(existingTorrentId)) {
             torrentId = existingTorrentId;
-          } catch (_) {
+            // Wake the session early so torrentUpdates starts emitting while
+            // the engine waits for metadata; a paused torrent can otherwise
+            // stay silent and stall the metadata wait.
+            TorrentService.resumeTorrent(existingTorrentId);
+          } else {
             _torrentIds.remove(task.id);
           }
         }
@@ -1550,6 +1558,12 @@ class DownloadProvider extends ChangeNotifier
           .clamp(0, task.fileSize > 0 ? task.fileSize : task.downloadedBytes);
       double audioSpeedNow = 0.0;
       double videoSpeedNow = 0.0;
+      // Live total reported by the engine. Starts from the pre-resolved size
+      // and is overwritten as soon as the engine reports the real one —
+      // magnets/torrents only learn their true size after metadata arrives.
+      // Without this, fileSize stays 0 forever and total %, ETA and the
+      // "downloaded / total" readout never work for torrents.
+      int videoSizeSoFar = videoTransferSize;
 
       void pushCombinedProgress({
         List<double>? chunksOverride,
@@ -1566,7 +1580,9 @@ class DownloadProvider extends ChangeNotifier
         if (base.status != DownloadStatus.downloading) return;
 
         final audioContribution = hasAudio ? (base.audioSize > 0 ? base.audioSize : 0) : 0;
-        final totalSize = videoTransferSize + audioContribution;
+        final effectiveVideoSize =
+            videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
+        final totalSize = effectiveVideoSize + audioContribution;
         final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
         final instantSpeed = audioSpeedNow + videoSpeedNow;
         final speedQueue = _speedHistories[task.id];
@@ -1742,6 +1758,7 @@ class DownloadProvider extends ChangeNotifier
 
                 videoBytesSoFar = progress.downloadedBytes;
                 videoSpeedNow = progress.speed;
+                if (progress.fileSize > 0) videoSizeSoFar = progress.fileSize;
 
                 // --- Throttling detection: unchanged from the original logic ---
                 if (isYoutube &&
@@ -1806,7 +1823,11 @@ class DownloadProvider extends ChangeNotifier
 
                 pushCombinedProgress(
                   chunksOverride: progress.chunks ??
-                      _buildChunks(streamThreadCount, videoTransferSize, progress.downloadedBytes),
+                      _buildChunks(
+                        streamThreadCount,
+                        videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize,
+                        progress.downloadedBytes,
+                      ),
                   supportsResumeOverride: progress.supportsResume,
                   torrentFilesOverride: progress.torrentFiles,
                   fileNameOverride: newFileName,
@@ -2263,6 +2284,17 @@ class DownloadProvider extends ChangeNotifier
     final index = _tasks.indexWhere((task) => task.id == id);
     if (index == -1) return null;
     return _tasks[index];
+  }
+
+  /// A torrent handle is reusable only while the native session still owns
+  /// it. Stats map first (cheap), then a live file query as fallback.
+  bool _isTorrentAlive(int id) {
+    if (_latestTorrentStats.containsKey(id)) return true;
+    try {
+      return TorrentService.getFiles(id).isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Build per-thread chunk progress fallback returning unified overall progress.
