@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import '../utils/url_utils.dart';
 
@@ -41,7 +42,9 @@ class ShareService {
       for (final file in value) {
         handleUrl(file.path, isInitial: false);
       }
-    }, onError: (err) {});
+    }, onError: (err) {
+      debugPrint('[ShareService] getMediaStream error: $err');
+    });
 
     if (!_initialMediaConsumed) {
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {

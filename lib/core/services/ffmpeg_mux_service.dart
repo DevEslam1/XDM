@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:logging/logging.dart';
 
@@ -115,12 +116,22 @@ class FFmpegMuxService {
       );
 
       // Primary attempt -------------------------------------------------------
-      final session = await FFmpegKit.executeWithArguments(arguments)
-          .timeout(timeoutDuration, onTimeout: () {
-        throw TimeoutException(
-          'FFmpeg primary merge timed out after ${timeoutDuration.inMinutes} min',
-        );
-      });
+      FFmpegSession? session;
+      try {
+        session = await FFmpegKit.executeWithArguments(arguments)
+            .timeout(timeoutDuration, onTimeout: () {
+          throw TimeoutException(
+            'FFmpeg primary merge timed out after ${timeoutDuration.inMinutes} min',
+          );
+        });
+      } on TimeoutException {
+        // Cancel the native FFmpeg session to prevent an orphan process.
+        if (session != null) {
+          await FFmpegKit.cancel(session.getSessionId());
+        }
+        await cleanUpInputs();
+        rethrow;
+      }
       final returnCode = await session
           .getReturnCode()
           .timeout(const Duration(seconds: 30));
@@ -164,13 +175,22 @@ class FFmpegMuxService {
           outputPath,
         ];
 
-        final fallbackSession =
-            await FFmpegKit.executeWithArguments(fallbackArguments)
-                .timeout(timeoutDuration, onTimeout: () {
-          throw TimeoutException(
-            'FFmpeg fallback merge timed out after ${timeoutDuration.inMinutes} min',
-          );
-        });
+        FFmpegSession? fallbackSession;
+        try {
+          fallbackSession =
+              await FFmpegKit.executeWithArguments(fallbackArguments)
+                  .timeout(timeoutDuration, onTimeout: () {
+            throw TimeoutException(
+              'FFmpeg fallback merge timed out after ${timeoutDuration.inMinutes} min',
+            );
+          });
+        } on TimeoutException {
+          if (fallbackSession != null) {
+            await FFmpegKit.cancel(fallbackSession.getSessionId());
+          }
+          await cleanUpInputs();
+          rethrow;
+        }
         final fallbackReturnCode = await fallbackSession
             .getReturnCode()
             .timeout(const Duration(seconds: 30));
@@ -203,6 +223,16 @@ class FFmpegMuxService {
     } on TimeoutException catch (e, stack) {
       // Cancel any lingering native sessions then propagate.
       _log.severe('FFmpeg timed out: $e — cancelling native sessions');
+      // Delete the partial output file to avoid leaving corrupted data.
+      try {
+        final outFile = File(outputPath);
+        if (await outFile.exists()) {
+          await outFile.delete();
+          _log.info('Deleted partial output file after timeout: $outputPath');
+        }
+      } catch (deleteErr) {
+        _log.warning('Failed to delete partial output file: $deleteErr');
+      }
       await cleanUpInputs();
       await cancelAndRethrow(e, stack);
     } catch (e, stackTrace) {

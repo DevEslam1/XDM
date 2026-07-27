@@ -255,7 +255,9 @@ class _RetryOnConnectionErrorInterceptor extends Interceptor {
           final response = await _dio!.fetch(err.requestOptions);
           handler.resolve(response);
         } catch (retryError) {
-          handler.next(err);
+          // Propagate the retry error if it carries more-recent network info,
+          // otherwise fall back to the original error.
+          handler.next(retryError is DioException ? retryError : err);
         }
       });
     } else {
@@ -666,6 +668,8 @@ class DownloadEngine {
                 isYoutube ||
                 getResponse.statusCode == 206 ||
                 getResponse.headers.value('accept-ranges') == 'bytes';
+            // Cancel the stream immediately — we only needed the headers.
+            await getResponse.data?.stream.listen((_) {}).cancel();
           }
         } catch (e) {
           debugPrint(
@@ -793,6 +797,13 @@ class DownloadEngine {
         onProgress: onProgress,
         getTorrentFiles: getTorrentFiles,
         torrentId: torrentId,
+        enableProxy: enableProxy,
+        proxyAddress: proxyAddress,
+        proxyHost: proxyHost,
+        proxyPort: proxyPort,
+        proxyUsername: proxyUsername,
+        proxyPassword: proxyPassword,
+        bypassSSL: bypassSSL,
       );
       _activeCancelTokens.remove(cancelToken);
       return;
@@ -1015,6 +1026,13 @@ class DownloadEngine {
     required ValueChangedProgress onProgress,
     List<Map<String, dynamic>>? Function()? getTorrentFiles,
     int? torrentId,
+    bool enableProxy = false,
+    String? proxyAddress,
+    String? proxyHost,
+    int? proxyPort,
+    String? proxyUsername,
+    String? proxyPassword,
+    bool bypassSSL = false,
   }) async {
     int id = torrentId ?? -1;
     if (id == -1) {
@@ -1031,11 +1049,22 @@ class DownloadEngine {
             'temp_${DateTime.now().millisecondsSinceEpoch}.torrent',
           );
           final tempTorrentFile = File(tempTorrentPath);
+          final torrentDio = _buildIsolatedClient(
+            url: url,
+            enableProxy: enableProxy,
+            proxyAddress: proxyAddress,
+            proxyHost: proxyHost,
+            proxyPort: proxyPort,
+            proxyUsername: proxyUsername,
+            proxyPassword: proxyPassword,
+            bypassSSL: bypassSSL,
+          );
           try {
-            await Dio().download(url, tempTorrentPath);
+            await torrentDio.download(url, tempTorrentPath);
             filePath = tempTorrentPath;
             id = TorrentService.addTorrentFile(filePath, saveDir);
           } finally {
+            torrentDio.close(force: true);
             try {
               if (await tempTorrentFile.exists()) {
                 await tempTorrentFile.delete();
@@ -1391,14 +1420,27 @@ class DownloadEngine {
             chunkProgress[i] = 0;
           }
         }
-        late RandomAccessFile sharedRaf;
+        // Per-chunk part files — avoids the O_APPEND write-position bug where
+        // setPosition() is silently ignored, corrupting resumed downloads.
+        final partFiles = List.generate(
+          threadCount,
+          (i) => File('$currentTempFilePath.part$i'),
+        );
+
+        // Pre-allocate part files on a fresh start.
         if (needPreallocate) {
-          sharedRaf = await targetFile.open(mode: FileMode.write);
-          await sharedRaf.truncate(totalSize);
-        } else {
-          sharedRaf = await targetFile.open(mode: FileMode.append);
+          for (int i = 0; i < threadCount; i++) {
+            final start = i * partSize;
+            final end = (i == threadCount - 1)
+                ? (totalSize - 1)
+                : (start + partSize - 1);
+            final chunkLen = end - start + 1;
+            final pf = partFiles[i];
+            final raf = await pf.open(mode: FileMode.write);
+            await raf.truncate(chunkLen);
+            await raf.close();
+          }
         }
-        bool isRafClosed = false;
 
         final lock = Lock();
 
@@ -1577,7 +1619,6 @@ class DownloadEngine {
                       );
                     }
                     final buffer = BytesBuilder(copy: false);
-                    int bufferStartOffset = start + chunkProgress[idx];
                     var chunkDownloadedThisSession = 0;
                     var localWrittenBytes = 0;
 
@@ -1597,14 +1638,14 @@ class DownloadEngine {
 
                         if (buffer.length >= _flushBufferSize) {
                           final bytesToWrite = buffer.takeBytes();
-                          await lock.synchronized(() async {
-                            await sharedRaf.setPosition(bufferStartOffset);
-                            await sharedRaf.writeFrom(bytesToWrite);
+                          final partRaf = await partFiles[idx].open(mode: FileMode.append);
+                          await partRaf.writeFrom(bytesToWrite);
+                          await partRaf.close();
+                          await lock.synchronized(() {
+                            localWrittenBytes += bytesToWrite.length;
+                            chunkProgress[idx] = resumeFrom + localWrittenBytes;
                           });
-                          bufferStartOffset += bytesToWrite.length;
-                          localWrittenBytes += bytesToWrite.length;
-                          // Only update progress AFTER successful write:
-                          chunkProgress[idx] = resumeFrom + localWrittenBytes;
+                          // chunkProgress[idx] updated inside lock above
                         }
 
                         await reportProgress();
@@ -1646,23 +1687,25 @@ class DownloadEngine {
 
                       if (buffer.length > 0) {
                         final bytesToWrite = buffer.takeBytes();
-                        await lock.synchronized(() async {
-                          await sharedRaf.setPosition(bufferStartOffset);
-                          await sharedRaf.writeFrom(bytesToWrite);
+                        final partRaf = await partFiles[idx].open(mode: FileMode.append);
+                        await partRaf.writeFrom(bytesToWrite);
+                        await partRaf.close();
+                        await lock.synchronized(() {
+                          localWrittenBytes += bytesToWrite.length;
+                          chunkProgress[idx] = resumeFrom + localWrittenBytes;
                         });
-                        localWrittenBytes += bytesToWrite.length;
-                        chunkProgress[idx] = resumeFrom + localWrittenBytes;
                       }
                     } catch (e) {
                       if (buffer.length > 0) {
                         try {
                           final bytesToWrite = buffer.takeBytes();
-                          await lock.synchronized(() async {
-                            await sharedRaf.setPosition(bufferStartOffset);
-                            await sharedRaf.writeFrom(bytesToWrite);
+                          final partRaf = await partFiles[idx].open(mode: FileMode.append);
+                          await partRaf.writeFrom(bytesToWrite);
+                          await partRaf.close();
+                          await lock.synchronized(() {
+                            localWrittenBytes += bytesToWrite.length;
+                            chunkProgress[idx] = resumeFrom + localWrittenBytes;
                           });
-                          localWrittenBytes += bytesToWrite.length;
-                          chunkProgress[idx] = resumeFrom + localWrittenBytes;
                         } catch (writeError) {
                           debugPrint(
                             'Failed to flush buffer on error: $writeError',
@@ -1673,7 +1716,7 @@ class DownloadEngine {
                     }
                     break;
                   } finally {
-                    // sharedRaf closed later
+                    // part files closed per-write; nothing to close here
                   }
                 } catch (e) {
                   if (cancelToken.isCancelled ||
@@ -1700,14 +1743,19 @@ class DownloadEngine {
           await Future.wait(futures);
           await saveState();
 
-          try {
-            if (!isRafClosed) {
-              await sharedRaf.flush();
-              await sharedRaf.close();
-              isRafClosed = true;
-            }
-          } catch (e) {
-            debugPrint('Failed to close shared RAF: $e');
+          // Concatenate part files into the final temp file.
+          final outRaf = await targetFile.open(mode: FileMode.write);
+          for (int i = 0; i < threadCount; i++) {
+            final partBytes = await partFiles[i].readAsBytes();
+            await outRaf.writeFrom(partBytes);
+          }
+          await outRaf.flush();
+          await outRaf.close();
+          // Delete part files.
+          for (final pf in partFiles) {
+            try {
+              if (await pf.exists()) await pf.delete();
+            } catch (_) {}
           }
 
           if (totalSize > 0) {
@@ -1741,18 +1789,8 @@ class DownloadEngine {
             await stateFile.delete();
           }
         } catch (e) {
-          try {
-            if (!isRafClosed) {
-              await sharedRaf.close();
-              isRafClosed = true;
-            }
-          } catch (err) {
-            debugPrint(
-              '[DMX] Error closing shared RandomAccessFile on exception: $err',
-            );
-          }
-
           if (cancelToken.isCancelled) {
+            // Keep part files and state for resume
             await saveState();
             rethrow;
           }
@@ -1766,13 +1804,13 @@ class DownloadEngine {
             if (status == 200 || status == 416) {
               isRangeRejection = true;
             }
-            if (errorToCheck.message?.startsWith('Invalid Content-Range') ==
-                true) {
+            if (errorToCheck.message?.startsWith('Invalid Content-Range') == true) {
               isRangeRejection = true;
             }
           }
 
           if (!isRangeRejection) {
+            // Keep part files and state for resume on retry
             await saveState();
             rethrow;
           }
@@ -1780,6 +1818,28 @@ class DownloadEngine {
           debugPrint(
             'Multi-threaded range request failed (Range Rejection): $e. Checking aggregated progress.',
           );
+
+          // Aggregate part files into targetFile for single-threaded fallback
+          try {
+            final outRaf = await targetFile.open(mode: FileMode.write);
+            for (int i = 0; i < threadCount; i++) {
+              if (await partFiles[i].exists()) {
+                final partBytes = await partFiles[i].readAsBytes();
+                await outRaf.writeFrom(partBytes);
+              }
+            }
+            await outRaf.flush();
+            await outRaf.close();
+          } catch (aggErr) {
+            debugPrint('Failed to aggregate part files for fallback: $aggErr');
+          }
+
+          // Clean up part files after successful aggregation
+          for (final pf in partFiles) {
+            try {
+              if (await pf.exists()) await pf.delete();
+            } catch (_) {}
+          }
 
           int contiguousBytes = 0;
           for (int ci = 0; ci < chunkProgress.length; ci++) {

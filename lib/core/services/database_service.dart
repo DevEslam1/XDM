@@ -239,6 +239,7 @@ class DatabaseService {
       notes: drift.Value(task.notes),
       playlistId: drift.Value(task.playlistId),
       playlistTitle: drift.Value(task.playlistTitle),
+      isAppUpdate: drift.Value(task.isAppUpdate),
     );
   }
 
@@ -265,7 +266,13 @@ class DatabaseService {
     final statusName = row.status;
     final status = DownloadStatus.values.firstWhere(
       (value) => value.name == statusName,
-      orElse: () => DownloadStatus.paused,
+      orElse: () {
+        debugPrint(
+          '[DMX] _rowToTask: unrecognised status "$statusName" for task '
+          '${row.id} — defaulting to paused.',
+        );
+        return DownloadStatus.paused;
+      },
     );
 
     return DownloadTask(
@@ -303,6 +310,7 @@ class DatabaseService {
       notes: row.notes,
       playlistId: row.playlistId?.isNotEmpty == true ? row.playlistId : null,
       playlistTitle: row.playlistTitle?.isNotEmpty == true ? row.playlistTitle : null,
+      isAppUpdate: row.isAppUpdate,
     );
   }
 
@@ -425,21 +433,16 @@ class DatabaseService {
         ),
         mode: drift.InsertMode.insertOrReplace);
 
-    // Prune old entries to keep the table bounded
-    final countResult = await (_db.selectOnly(_db.browserHistory)
-          ..addColumns([_db.browserHistory.id.count()]))
-        .getSingle();
-    final count = countResult.read(_db.browserHistory.id.count()) ?? 0;
-    if (count > 500) {
-      final toDelete = await (_db.select(_db.browserHistory)
-            ..orderBy([(t) => drift.OrderingTerm.asc(t.visitedAt)])
-            ..limit(count - 500))
-          .get();
-      if (toDelete.isNotEmpty) {
-        final ids = toDelete.map((r) => r.id).toList();
-        await (_db.delete(_db.browserHistory)..where((t) => t.id.isIn(ids))).go();
-      }
-    }
+    // Prune old entries atomically — a single DELETE with a subquery avoids
+    // the count-then-delete race condition.
+    await _db.customStatement(
+      'DELETE FROM browser_history '
+      'WHERE id NOT IN ('
+      '  SELECT id FROM browser_history '
+      '  ORDER BY visited_at DESC '
+      '  LIMIT 500'
+      ')',
+    );
 
     return id;
   }

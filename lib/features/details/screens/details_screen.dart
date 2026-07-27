@@ -1631,8 +1631,9 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
   @override
   void didUpdateWidget(_TorrentFilesPanel old) {
     super.didUpdateWidget(old);
-    if (old.task.downloadedBytes != widget.task.downloadedBytes ||
-        old.task.status != widget.task.status) {
+    // Only refresh immediately on a status transition; the periodic timer
+    // handles progress-tick updates to avoid blocking the UI thread.
+    if (old.task.status != widget.task.status) {
       _refresh();
     }
     if (widget.task.status == DownloadStatus.downloading &&

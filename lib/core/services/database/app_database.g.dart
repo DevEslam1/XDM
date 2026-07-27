@@ -396,6 +396,21 @@ class $DownloadTasksTable extends DownloadTasks
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _isAppUpdateMeta = const VerificationMeta(
+    'isAppUpdate',
+  );
+  @override
+  late final GeneratedColumn<bool> isAppUpdate = GeneratedColumn<bool>(
+    'is_app_update',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_app_update" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -432,6 +447,7 @@ class $DownloadTasksTable extends DownloadTasks
     notes,
     playlistId,
     playlistTitle,
+    isAppUpdate,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -710,6 +726,15 @@ class $DownloadTasksTable extends DownloadTasks
         ),
       );
     }
+    if (data.containsKey('is_app_update')) {
+      context.handle(
+        _isAppUpdateMeta,
+        isAppUpdate.isAcceptableOrUnknown(
+          data['is_app_update']!,
+          _isAppUpdateMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -859,6 +884,10 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.string,
         data['${effectivePrefix}playlist_title'],
       ),
+      isAppUpdate: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_app_update'],
+      )!,
     );
   }
 
@@ -868,10 +897,10 @@ class $DownloadTasksTable extends DownloadTasks
   }
 
   static TypeConverter<List<double>?, String?> $converterchunks =
-      NullAwareTypeConverter.wrap(const DoubleListConverter());
+      const NullAwareTypeConverter.wrap(DoubleListConverter());
   static TypeConverter<List<Map<String, dynamic>>?, String?>
-  $convertertorrentFiles = NullAwareTypeConverter.wrap(
-    const TorrentFilesConverter(),
+  $convertertorrentFiles = const NullAwareTypeConverter.wrap(
+    TorrentFilesConverter(),
   );
 }
 
@@ -910,6 +939,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? notes;
   final String? playlistId;
   final String? playlistTitle;
+  final bool isAppUpdate;
   const DbDownloadTask({
     required this.id,
     required this.fileName,
@@ -945,6 +975,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     this.notes,
     this.playlistId,
     this.playlistTitle,
+    required this.isAppUpdate,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1011,6 +1042,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || playlistTitle != null) {
       map['playlist_title'] = Variable<String>(playlistTitle);
     }
+    map['is_app_update'] = Variable<bool>(isAppUpdate);
     return map;
   }
 
@@ -1072,6 +1104,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       playlistTitle: playlistTitle == null && nullToAbsent
           ? const Value.absent()
           : Value(playlistTitle),
+      isAppUpdate: Value(isAppUpdate),
     );
   }
 
@@ -1119,6 +1152,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       notes: serializer.fromJson<String?>(json['notes']),
       playlistId: serializer.fromJson<String?>(json['playlistId']),
       playlistTitle: serializer.fromJson<String?>(json['playlistTitle']),
+      isAppUpdate: serializer.fromJson<bool>(json['isAppUpdate']),
     );
   }
   @override
@@ -1161,6 +1195,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'notes': serializer.toJson<String?>(notes),
       'playlistId': serializer.toJson<String?>(playlistId),
       'playlistTitle': serializer.toJson<String?>(playlistTitle),
+      'isAppUpdate': serializer.toJson<bool>(isAppUpdate),
     };
   }
 
@@ -1199,6 +1234,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     Value<String?> notes = const Value.absent(),
     Value<String?> playlistId = const Value.absent(),
     Value<String?> playlistTitle = const Value.absent(),
+    bool? isAppUpdate,
   }) => DbDownloadTask(
     id: id ?? this.id,
     fileName: fileName ?? this.fileName,
@@ -1242,6 +1278,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     playlistTitle: playlistTitle.present
         ? playlistTitle.value
         : this.playlistTitle,
+    isAppUpdate: isAppUpdate ?? this.isAppUpdate,
   );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1319,6 +1356,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       playlistTitle: data.playlistTitle.present
           ? data.playlistTitle.value
           : this.playlistTitle,
+      isAppUpdate: data.isAppUpdate.present
+          ? data.isAppUpdate.value
+          : this.isAppUpdate,
     );
   }
 
@@ -1358,7 +1398,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('youtubeQualityPreset: $youtubeQualityPreset, ')
           ..write('notes: $notes, ')
           ..write('playlistId: $playlistId, ')
-          ..write('playlistTitle: $playlistTitle')
+          ..write('playlistTitle: $playlistTitle, ')
+          ..write('isAppUpdate: $isAppUpdate')
           ..write(')'))
         .toString();
   }
@@ -1399,6 +1440,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     notes,
     playlistId,
     playlistTitle,
+    isAppUpdate,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1437,7 +1479,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.youtubeQualityPreset == this.youtubeQualityPreset &&
           other.notes == this.notes &&
           other.playlistId == this.playlistId &&
-          other.playlistTitle == this.playlistTitle);
+          other.playlistTitle == this.playlistTitle &&
+          other.isAppUpdate == this.isAppUpdate);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1475,6 +1518,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> notes;
   final Value<String?> playlistId;
   final Value<String?> playlistTitle;
+  final Value<bool> isAppUpdate;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1511,6 +1555,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.notes = const Value.absent(),
     this.playlistId = const Value.absent(),
     this.playlistTitle = const Value.absent(),
+    this.isAppUpdate = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -1548,6 +1593,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.notes = const Value.absent(),
     this.playlistId = const Value.absent(),
     this.playlistTitle = const Value.absent(),
+    this.isAppUpdate = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        fileName = Value(fileName),
@@ -1595,6 +1641,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? notes,
     Expression<String>? playlistId,
     Expression<String>? playlistTitle,
+    Expression<bool>? isAppUpdate,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1633,6 +1680,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (notes != null) 'notes': notes,
       if (playlistId != null) 'playlist_id': playlistId,
       if (playlistTitle != null) 'playlist_title': playlistTitle,
+      if (isAppUpdate != null) 'is_app_update': isAppUpdate,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1672,6 +1720,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Value<String?>? notes,
     Value<String?>? playlistId,
     Value<String?>? playlistTitle,
+    Value<bool>? isAppUpdate,
     Value<int>? rowid,
   }) {
     return DownloadTasksCompanion(
@@ -1709,6 +1758,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       notes: notes ?? this.notes,
       playlistId: playlistId ?? this.playlistId,
       playlistTitle: playlistTitle ?? this.playlistTitle,
+      isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1824,6 +1874,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (playlistTitle.present) {
       map['playlist_title'] = Variable<String>(playlistTitle.value);
     }
+    if (isAppUpdate.present) {
+      map['is_app_update'] = Variable<bool>(isAppUpdate.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1867,6 +1920,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('notes: $notes, ')
           ..write('playlistId: $playlistId, ')
           ..write('playlistTitle: $playlistTitle, ')
+          ..write('isAppUpdate: $isAppUpdate, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2584,6 +2638,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<String?> notes,
       Value<String?> playlistId,
       Value<String?> playlistTitle,
+      Value<bool> isAppUpdate,
       Value<int> rowid,
     });
 typedef $$DownloadTasksTableUpdateCompanionBuilder =
@@ -2622,6 +2677,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<String?> notes,
       Value<String?> playlistId,
       Value<String?> playlistTitle,
+      Value<bool> isAppUpdate,
       Value<int> rowid,
     });
 
@@ -2809,6 +2865,11 @@ class $$DownloadTasksTableFilterComposer
     column: $table.playlistTitle,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<bool> get isAppUpdate => $composableBuilder(
+    column: $table.isAppUpdate,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -2989,6 +3050,11 @@ class $$DownloadTasksTableOrderingComposer
     column: $table.playlistTitle,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get isAppUpdate => $composableBuilder(
+    column: $table.isAppUpdate,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3142,6 +3208,11 @@ class $$DownloadTasksTableAnnotationComposer
     column: $table.playlistTitle,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isAppUpdate => $composableBuilder(
+    column: $table.isAppUpdate,
+    builder: (column) => column,
+  );
 }
 
 class $$DownloadTasksTableTableManager
@@ -3210,6 +3281,7 @@ class $$DownloadTasksTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String?> playlistId = const Value.absent(),
                 Value<String?> playlistTitle = const Value.absent(),
+                Value<bool> isAppUpdate = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion(
                 id: id,
@@ -3246,6 +3318,7 @@ class $$DownloadTasksTableTableManager
                 notes: notes,
                 playlistId: playlistId,
                 playlistTitle: playlistTitle,
+                isAppUpdate: isAppUpdate,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3285,6 +3358,7 @@ class $$DownloadTasksTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String?> playlistId = const Value.absent(),
                 Value<String?> playlistTitle = const Value.absent(),
+                Value<bool> isAppUpdate = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion.insert(
                 id: id,
@@ -3321,6 +3395,7 @@ class $$DownloadTasksTableTableManager
                 notes: notes,
                 playlistId: playlistId,
                 playlistTitle: playlistTitle,
+                isAppUpdate: isAppUpdate,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

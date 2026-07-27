@@ -24,9 +24,9 @@ class ClipboardService {
               isTorrentFileUrl(text))) {
         // Basic safety: reject URLs with suspicious patterns
         final lower = text.toLowerCase();
-        if (lower.contains('javascript:') ||
-            lower.contains('data:') ||
-            lower.contains('vbscript:')) {
+        if (lower.startsWith('javascript:') ||
+            lower.startsWith('data:') ||
+            lower.startsWith('vbscript:')) {
           return null;
         }
         if (text != _lastCheckedUrl) {

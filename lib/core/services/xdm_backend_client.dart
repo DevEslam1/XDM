@@ -90,11 +90,9 @@ class XdmBackendClient {
   /// Updates the backend configuration from SettingsProvider
   void _updateDioFromSettings() {
     final settings = SettingsProvider.instance;
-    try {
-      _dio.close(force: true);
-    } catch (_) {
-      // First initialization, nothing to close
-    }
+    // Do NOT force-close the old _dio instance — that would cancel any
+    // in-flight API requests. Simply replace the reference and let the old
+    // instance be garbage-collected after its current requests finish.
 
     // Build headers without the key; the key is injected per-request via
     // [_buildHeaders] so that a [BackendUnauthorizedException] is thrown at

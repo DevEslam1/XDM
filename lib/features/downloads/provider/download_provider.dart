@@ -102,13 +102,21 @@ class DownloadProvider extends ChangeNotifier
     _actionSubscription = _notificationService.onActionTapped.listen(
       _handleNotificationAction,
     );
-    if (TorrentService.isInitialized) {
-      _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen((
-        torrents,
-      ) {
-        _latestTorrentStats = torrents;
-      });
+    // Subscribe lazily — torrent engine may not be initialized yet.
+    _initTorrentSubscription();
+  }
+
+  void _initTorrentSubscription() {
+    if (_torrentUpdatesSubscription != null) return;
+    if (!TorrentService.isInitialized) {
+      // Retry after a short delay; torrent init is async.
+      Future.delayed(const Duration(seconds: 2), _initTorrentSubscription);
+      return;
     }
+    _torrentUpdatesSubscription =
+        TorrentService.torrentUpdates.listen((torrents) {
+      _latestTorrentStats = torrents;
+    });
   }
 
   StreamSubscription<Map<String, String>>? _actionSubscription;
@@ -960,7 +968,6 @@ class DownloadProvider extends ChangeNotifier
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
     final activeFuture = _activeFutures[id];
-    _pendingCancellations.add(id);
     try {
       _cancelTokens[id]?.cancel('deleted');
     } catch (e) {
@@ -977,7 +984,6 @@ class DownloadProvider extends ChangeNotifier
     }
 
     _cancelTokens.remove(id);
-    _pendingCancellations.remove(id);
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
@@ -1136,7 +1142,6 @@ class DownloadProvider extends ChangeNotifier
   // ---------------------------------------------------------------------------
 
   final Set<String> _startingTaskIds = {};
-  final Set<String> _pendingCancellations = {};
 
   @override
   int get pendingStartCount => _startingTaskIds.length;

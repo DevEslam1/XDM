@@ -297,7 +297,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                 ),
                 child: Text(
-                  L10n.of(context, 'clipboard_ignore'),
+                  L10n.of(context, 'onboarding_skip'),
                   style: TextStyle(
                     color: secClr,
                     fontWeight: FontWeight.w600,

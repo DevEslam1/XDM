@@ -91,6 +91,7 @@ class L10n {
           'Auto-categorization, scheduling, Wi-Fi guard, and dark/light themes.',
       'onboarding_start': 'Get started',
       'onboarding_next': 'Next',
+      'onboarding_skip': 'Skip',
       'permission_title': 'App Permissions',
       'permission_subtitle': 'Allow the following permissions for the best experience',
       'permission_storage_title': 'Storage',
@@ -373,6 +374,8 @@ class L10n {
       'browser_no_downloads_desc': 'Files you download from the browser will appear here.',
       'browser_clear_history_title': 'CLEAR HISTORY?',
       'browser_clear_history_desc': 'Are you sure you want to clear all history?',
+      'browser_clear_history_content':
+          'Are you sure you want to clear all browsing history?',
       'browser_export_failed': 'Export failed',
       'browser_copied_url_for': 'Copied URL for:',
       'browser_status_done': 'DONE',
@@ -475,6 +478,7 @@ class L10n {
           'تصنيف تلقائي، جدولة، حماية الواي فاي، وثيمات مظلمة/فاتحة.',
       'onboarding_start': 'بدء الاستخدام',
       'onboarding_next': 'التالي',
+      'onboarding_skip': 'تخطي',
       'permission_title': 'أذونات التطبيق',
       'permission_subtitle': 'اسمح بالأذونات التالية للحصول على أفضل تجربة',
       'permission_storage_title': 'التخزين',
@@ -757,6 +761,8 @@ class L10n {
       'browser_no_downloads_desc': 'ستظهر الملفات التي تنزلها من المتصفح هنا.',
       'browser_clear_history_title': 'مسح السجل؟',
       'browser_clear_history_desc': 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟',
+      'browser_clear_history_content':
+          'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
       'browser_export_failed': 'فشل التصدير',
       'browser_copied_url_for': 'تم نسخ الرابط لـ:',
       'browser_status_done': 'مكتمل',

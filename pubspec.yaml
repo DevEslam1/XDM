@@ -73,6 +73,7 @@ dev_dependencies:
   drift_dev: ^2.34.4
   build_runner: ^2.15.1
 
+
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true

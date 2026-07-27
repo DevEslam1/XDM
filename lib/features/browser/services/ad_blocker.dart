@@ -18,7 +18,6 @@ class AdBlocker {
     'www.gstatic.com',
     'googleapis.com',
     'googleusercontent.com',
-    'google-analytics.com',
     'drive.google.com',
     'docs.google.com',
     'play.google.com',

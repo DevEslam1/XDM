@@ -142,6 +142,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
       icon: Icons.content_paste_go_rounded,
       isDarkMode: isDark,
+      actionLabel: isRtl ? 'تحميل' : 'Download',
+      onAction: () {
+        final provider = context.read<DownloadProvider>();
+        provider.openUrlInBrowser(url);
+      },
     );
   }
 

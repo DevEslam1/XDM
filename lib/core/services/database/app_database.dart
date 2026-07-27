@@ -98,6 +98,8 @@ class DownloadTasks extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get playlistId => text().nullable()();
   TextColumn get playlistTitle => text().nullable()();
+  BoolColumn get isAppUpdate =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -144,7 +146,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -227,10 +229,10 @@ class AppDatabase extends _$AppDatabase {
                 id, file_name, url, file_size, downloaded_bytes, speed, eta,
                 category, status, save_path, local_file_path, temp_file_path,
                 error_message, thread_count, chunks,
-                CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) as created_at,
-                CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) as updated_at,
-                CASE WHEN completed_at IS NOT NULL THEN CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as completed_at,
-                CASE WHEN scheduled_at IS NOT NULL THEN CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER) ELSE NULL END as scheduled_at,
+                COALESCE(CAST((julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) as created_at,
+                COALESCE(CAST((julianday(REPLACE(REPLACE(updated_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) as updated_at,
+                CASE WHEN completed_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(completed_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END as completed_at,
+                CASE WHEN scheduled_at IS NOT NULL THEN COALESCE(CAST((julianday(REPLACE(REPLACE(scheduled_at, 'T', ' '), 'Z', '')) - 2440587.5) * 86400000 AS INTEGER), 0) ELSE NULL END as scheduled_at,
                 supports_resume, speed_limit_kbps, seeding_enabled,
                 seeding_limited, seeding_limit_kbps, torrent_files,
                 download_page_url, merged_audio_url, audio_size, audio_progress,
@@ -261,6 +263,10 @@ class AppDatabase extends _$AppDatabase {
         // Migration 3 -> 4: Add playlistId and playlistTitle columns
         await m.addColumn(downloadTasks, downloadTasks.playlistId);
         await m.addColumn(downloadTasks, downloadTasks.playlistTitle);
+      }
+      if (from < 5) {
+        // Migration 4 -> 5: Add isAppUpdate column
+        await m.addColumn(downloadTasks, downloadTasks.isAppUpdate);
       }
     },
   );

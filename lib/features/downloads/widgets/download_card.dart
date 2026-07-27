@@ -867,11 +867,16 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
         widget.task.status == DownloadStatus.completed &&
         widget.task.seedingEnabled;
 
-    return Consumer<DownloadProvider>(
-      builder: (context, provider, _) {
-        final seeds = provider.getTorrentSeeds(widget.task.id);
-        final peers = provider.getTorrentPeers(widget.task.id);
-        final uploadSpeed = provider.getTorrentUploadSpeed(widget.task.id);
+    return Selector<DownloadProvider, ({int seeds, int peers, double uploadSpeed})>(
+      selector: (context, provider) => (
+        seeds: provider.getTorrentSeeds(widget.task.id),
+        peers: provider.getTorrentPeers(widget.task.id),
+        uploadSpeed: provider.getTorrentUploadSpeed(widget.task.id),
+      ),
+      builder: (context, stats, _) {
+        final seeds = stats.seeds;
+        final peers = stats.peers;
+        final uploadSpeed = stats.uploadSpeed;
         final fileCount = widget.task.torrentFiles?.length ?? 0;
         final selectedCount =
             widget.task.torrentFiles
@@ -1082,7 +1087,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         value: widget.task.seedingEnabled,
                         onChanged: (val) {
                           triggerHaptic(settings);
-                          provider.updateTaskSeeding(
+                          context.read<DownloadProvider>().updateTaskSeeding(
                             widget.task.id,
                             enabled: val,
                           );

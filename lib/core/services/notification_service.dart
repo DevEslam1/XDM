@@ -43,10 +43,42 @@ class NotificationService {
   static const String _downloadChannelDesc =
       'Real-time download transfer progress';
 
+  // Buffered event queue: events emitted before the UI subscribes are held
+  // here and replayed on first listen, so pause/resume/cancel actions are
+  // never silently lost during app startup.
+  final List<Map<String, String>> _pendingActions = [];
+  StreamController<Map<String, String>>? _actionListenerController;
   StreamController<Map<String, String>> _actionStreamController =
       StreamController<Map<String, String>>.broadcast();
 
-  Stream<Map<String, String>> get onActionTapped => _actionStreamController.stream;
+  Stream<Map<String, String>> get onActionTapped {
+    // Return a stream that replays any queued events to the first subscriber.
+    final controller = StreamController<Map<String, String>>();
+    _actionListenerController = controller;
+    // Replay buffered events
+    for (final event in _pendingActions) {
+      controller.add(event);
+    }
+    _pendingActions.clear();
+    // Forward future events
+    final sub = _actionStreamController.stream.listen(
+      controller.add,
+      onError: controller.addError,
+      onDone: controller.close,
+    );
+    controller.onCancel = sub.cancel;
+    return controller.stream;
+  }
+
+  void _addAction(Map<String, String> event) {
+    if (_actionListenerController != null &&
+        !(_actionListenerController!.isClosed)) {
+      _actionStreamController.add(event);
+    } else {
+      // Buffer until a listener subscribes
+      _pendingActions.add(event);
+    }
+  }
 
   /// Validates that a task ID has a plausible UUID format.
   /// Provides basic injection protection for notification payloads.
@@ -108,6 +140,8 @@ class NotificationService {
     if (_actionStreamController.isClosed) {
       _actionStreamController = StreamController<Map<String, String>>.broadcast();
     }
+    _actionListenerController = null;
+    _pendingActions.clear();
 
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
@@ -131,7 +165,7 @@ class NotificationService {
         final action = message['action'] as String?;
         final taskId = message['taskId'] as String?;
         if (action != null && taskId != null && _isValidTaskId(taskId)) {
-          _actionStreamController.add({
+          _addAction({
             'action': action,
             'taskId': taskId,
           });
@@ -145,7 +179,7 @@ class NotificationService {
         final actionId = response.actionId ?? 'tap';
         final payload = response.payload;
         if (payload != null && _isValidTaskId(payload)) {
-          _actionStreamController.add({
+          _addAction({
             'action': actionId,
             'taskId': payload,
           });

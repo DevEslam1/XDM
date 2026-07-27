@@ -1003,7 +1003,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? 'عنوان الخادم الخلفي لـ yt-dlp (http/https)'
                               : 'Backend URL for yt-dlp (http:// or https://)',
                           controller: _backendUrlController,
-                          onChanged: (val) =>
+                          onSubmitted: (val) =>
                               settings.setBackendUrl(val.trim()),
                         ),
                         _Divider(isDark: isDark),
@@ -1150,7 +1150,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           title: L10n.of(context, 'settings_ua'),
                           subtitle: L10n.of(context, 'settings_ua_sub'),
                           controller: _uaController,
-                          onChanged: (val) => settings.setCustomUserAgent(val),
+                          onSubmitted: (val) => settings.setCustomUserAgent(val),
                         ),
                         _Divider(isDark: isDark),
                         _SwitchTile(
@@ -1178,7 +1178,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 ? 'اسم المضيف أو عنوان IP'
                                 : 'Host name or IP address',
                             controller: _proxyHostController,
-                            onChanged: (val) {
+                            onSubmitted: (val) {
                               settings.setProxyHost(val.trim());
                               settings.setProxyAddress(
                                 '${val.trim()}:${settings.proxyPort}',
@@ -1197,7 +1197,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 ? 'منفذ الاتصال بالوكيل'
                                 : 'Port number for connection',
                             controller: _proxyPortController,
-                            onChanged: (val) {
+                            onSubmitted: (val) {
                               final port = int.tryParse(val.trim()) ?? 8080;
                               settings.setProxyPort(port);
                               settings.setProxyAddress(
@@ -2170,14 +2170,14 @@ class _TextFieldTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final Color accentColor; // NEW
+  final ValueChanged<String>? onSubmitted;
+  final Color accentColor;
 
   const _TextFieldTile({
     required this.title,
     required this.subtitle,
     required this.controller,
-    required this.onChanged,
+    this.onSubmitted,
     required this.accentColor,
   });
 
@@ -2244,7 +2244,7 @@ class _TextFieldTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 child: TextField(
                   controller: controller,
-                  onChanged: onChanged,
+                  onSubmitted: onSubmitted,
                   style: TextStyle(
                     color: isDark
                         ? AppTheme.textPrimary
@@ -2895,14 +2895,14 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                 child: Column(
                   children: [
                     _DiagBar(
-                      label: isRtl ? 'حمل المعالج (CPU)' : 'CPU Threading Load',
+                      label: isRtl ? 'حمل المعالج (تقديري)' : 'CPU Load (est.)',
                       value: cpuLoadValue,
                       accentColor: accentColor,
                       isDark: isDark,
                     ),
                     const SizedBox(height: 12),
                     _DiagBar(
-                      label: isRtl ? 'استهلاك الذاكرة (RAM)' : 'RAM Cache Load',
+                      label: isRtl ? 'استهلاك الذاكرة (تقديري)' : 'RAM Load (est.)',
                       value: ramLoadValue,
                       accentColor: accentColor,
                       isDark: isDark,
