@@ -113,8 +113,9 @@ class DownloadProvider extends ChangeNotifier
       Future.delayed(const Duration(seconds: 2), _initTorrentSubscription);
       return;
     }
-    _torrentUpdatesSubscription =
-        TorrentService.torrentUpdates.listen((torrents) {
+    _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen((
+      torrents,
+    ) {
       _latestTorrentStats = torrents;
     });
   }
@@ -138,6 +139,7 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, int> _lastProgressUpdateTimes = {};
   final Map<String, int> _lastDbSaveTimes = {};
   final Map<String, int> _lastDbSaveBytes = {};
+  final Map<String, int> _lastTorrentFileDiskSync = {};
   final Set<String> _pendingProgressUpdates = {};
   final Set<String> _tasksPausedDueToNetwork = {};
   final Map<String, int> _torrentIds = {};
@@ -153,7 +155,8 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, int> _retryCounts = {};
   Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
 
-  List<double> getSpeedHistory(String id) => _speedHistories[id]?.toList() ?? const [];
+  List<double> getSpeedHistory(String id) =>
+      _speedHistories[id]?.toList() ?? const [];
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   List<ConnectivityResult> _currentConnectivity = [];
@@ -303,7 +306,9 @@ class DownloadProvider extends ChangeNotifier
       // Multi-threaded: .dmxpart file is pre-allocated to full size via truncate.
       // Without .dmxstate, the file size is meaningless as progress.
       // Fall back to DB value or 0.
-      return task.downloadedBytes > 0 ? task.downloadedBytes.clamp(0, targetSize) : 0;
+      return task.downloadedBytes > 0
+          ? task.downloadedBytes.clamp(0, targetSize)
+          : 0;
     }
 
     if (task.downloadedBytes > 0 && task.downloadedBytes <= targetSize) {
@@ -314,10 +319,12 @@ class DownloadProvider extends ChangeNotifier
 
   Future<DownloadTask> _reconcilePartialProgress(DownloadTask task) async {
     if (task.status == DownloadStatus.completed) return task;
-    
+
     // Do not reconcile progress for active downloads (their memory state is accurate)
-    if (_cancelTokens.containsKey(task.id) || task.status == DownloadStatus.downloading) return task;
-    
+    if (_cancelTokens.containsKey(task.id) ||
+        task.status == DownloadStatus.downloading)
+      return task;
+
     // Torrents manage their own fastresume data and piece maps.
     // Reading .part files will break torrent progress.
     if (task.isTorrent) return task;
@@ -499,7 +506,7 @@ class DownloadProvider extends ChangeNotifier
   // ---------------------------------------------------------------------------
   // Download task lifecycle
   // ---------------------------------------------------------------------------
-  
+
   Future<void> addDownload({
     required String name,
     required String url,
@@ -537,8 +544,8 @@ class DownloadProvider extends ChangeNotifier
       throw Exception('Storage permission was denied.');
     }
 
-
-    final resolvedThreadCount = (threadCount ?? _settingsProvider.defaultThreadCount).clamp(1, 32);
+    final resolvedThreadCount =
+        (threadCount ?? _settingsProvider.defaultThreadCount).clamp(1, 32);
 
     try {
       if (urls.length > 1) {
@@ -638,6 +645,7 @@ class DownloadProvider extends ChangeNotifier
       }
       return t.url == url;
     });
+
     if (exists && !isAppUpdate) {
       throw Exception('This download is already active in the queue.');
     }
@@ -648,17 +656,18 @@ class DownloadProvider extends ChangeNotifier
         : await _permissionService.defaultDownloadDirectory();
 
     final bool isMagnet = url.trim().toLowerCase().startsWith('magnet:');
+    final bool isTorrent = isTorrentUrl(url, fileName: name);
 
     String resolvedCategory;
     String fileName;
     int fileSize;
     bool supportsResume;
 
-    // For all downloads (magnet, torrent, HTTP), bypass synchronous metadata resolve
-    // to keep UI thread fully responsive. Metadata resolves in the background inside DownloadEngine.
-    // Calculate size from torrentFiles if available
-    final int torrentFilesTotalSize = (torrentFiles != null && torrentFiles.isNotEmpty)
-        ? torrentFiles.where((f) => f['selected'] == true).fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
+    final int torrentFilesTotalSize =
+        (torrentFiles != null && torrentFiles.isNotEmpty)
+        ? torrentFiles
+              .where((f) => f['selected'] == true)
+              .fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
         : 0;
 
     if (isMagnet) {
@@ -668,9 +677,9 @@ class DownloadProvider extends ChangeNotifier
       fileName = name.trim().isNotEmpty
           ? safeFileName(name.trim().replaceAll('+', ' '))
           : magnetName;
-      fileSize = size > 0 ? size : (torrentFilesTotalSize > 0 ? torrentFilesTotalSize : 0);
-
-      // Determine category from primary torrent file if present, else from fileName
+      fileSize = size > 0
+          ? size
+          : (torrentFilesTotalSize > 0 ? torrentFilesTotalSize : 0);
       String catCandidate = categoryFromFileName(fileName);
       if ((catCandidate == 'Other' || catCandidate.isEmpty) &&
           torrentFiles != null &&
@@ -679,7 +688,10 @@ class DownloadProvider extends ChangeNotifier
           (f) => f['selected'] == true,
           orElse: () => torrentFiles.first,
         );
-        final firstFileName = (firstFile['name'] as String? ?? '').replaceAll('+', ' ');
+        final firstFileName = (firstFile['name'] as String? ?? '').replaceAll(
+          '+',
+          ' ',
+        );
         if (firstFileName.isNotEmpty) {
           catCandidate = categoryFromFileName(firstFileName);
         }
@@ -692,41 +704,64 @@ class DownloadProvider extends ChangeNotifier
       fileName = name.trim().isNotEmpty
           ? safeFileName(name.trim().replaceAll('+', ' '))
           : fileNameFromUrl(url.trim());
-      fileSize = size > 0 ? size : (torrentFilesTotalSize > 0 ? torrentFilesTotalSize : 0);
+      fileSize = size > 0
+          ? size
+          : (torrentFilesTotalSize > 0 ? torrentFilesTotalSize : 0);
       resolvedCategory = (category.trim().isNotEmpty && category != 'Auto')
           ? category
           : categoryFromFileName(fileName);
-      supportsResume = true; // Assume resume support initially
+      supportsResume = true;
     }
 
     var directory = savePath.trim().isNotEmpty
         ? savePath.trim()
         : defaultDirectory;
+
     if (_settingsProvider.categoryFolders) {
       String subFolder = resolvedCategory;
       if (_settingsProvider.languageCode == 'ar') {
         subFolder = switch (resolvedCategory) {
-          'Video' => 'الفيديو',
-          'Audio' => 'الصوت',
-          'Document' => 'المستندات',
-          'Archive' => 'الأرشيف',
-          'APK' => 'التطبيقات',
+          'Video' => 'فيديوهات',
+          'Audio' => 'صوتيات',
+          'Document' => 'مستندات',
+          'Archive' => 'أرشيف',
+          'APK' => 'تطبيقات',
           'Other' || 'General' => 'أخرى',
           _ => resolvedCategory,
         };
       }
       directory = p.join(directory, subFolder);
     }
-    final localFilePath = await getUniqueFilePath(
-      directory,
-      fileName,
-    );
-    final uniqueName = p.basename(localFilePath);
-    final tempFilePath = _downloadEngine.buildTempFilePath(directory, uniqueName);
+
+    // Torrents/magnets must target their ORIGINAL folder (never renamed) so an
+    // existing folder with partial data is found and the download resumes.
+    // Everything else keeps the unique-name behaviour to avoid overwrites.
+    String localFilePath;
+    int existingBytes = 0;
+    List<Map<String, dynamic>>? finalTorrentFiles = torrentFiles;
+    if (isTorrent) {
+      localFilePath = torrentSavePath(directory, fileName);
+      final scan = _scanExistingTorrentData(localFilePath, torrentFiles);
+      existingBytes = scan.total;
+      if (scan.files != null) {
+        finalTorrentFiles = scan.files;
+      }
+      if (existingBytes > 0) {
+        debugPrint(
+          '[DMX] Found existing torrent data on disk: '
+          '${formatBytes(existingBytes)} in $localFilePath — will resume.',
+        );
+      }
+    } else {
+      localFilePath = await getUniqueFilePath(directory, fileName);
+    }
+
+    // In-place download for HTTP: target the final path directly so the file
+    // is visible immediately and resumes from bytes already on disk.
+    final tempFilePath = localFilePath;
+
     final now = DateTime.now();
-
     final isScheduled = scheduledAt != null && scheduledAt.isAfter(now);
-
     final effectiveThreadCount = threadCount;
 
     final task = DownloadTask(
@@ -734,7 +769,7 @@ class DownloadProvider extends ChangeNotifier
       fileName: fileName,
       url: url.trim(),
       fileSize: fileSize,
-      downloadedBytes: 0,
+      downloadedBytes: existingBytes,
       category: resolvedCategory,
       status: isScheduled ? DownloadStatus.paused : DownloadStatus.queued,
       savePath: directory,
@@ -744,14 +779,12 @@ class DownloadProvider extends ChangeNotifier
       chunks: List<double>.filled(effectiveThreadCount, 0.0),
       createdAt: now,
       updatedAt: now,
-
       scheduledAt: scheduledAt,
       supportsResume: supportsResume,
-      // Apply the user's global torrent seeding preference.
       seedingEnabled: _settingsProvider.globalTorrentSeeding,
       seedingLimited: _settingsProvider.globalTorrentSeedingLimited,
       seedingLimitKbps: _settingsProvider.globalTorrentSeedingLimitKbps,
-      torrentFiles: torrentFiles,
+      torrentFiles: finalTorrentFiles,
       downloadPageUrl: downloadPageUrl,
       mergedAudioUrl: mergedAudioUrl,
       audioSize: audioSize,
@@ -762,15 +795,58 @@ class DownloadProvider extends ChangeNotifier
     );
 
     _tasks.insert(0, task);
+
     if (torrentId != null) {
       _torrentIds[task.id] = torrentId;
     }
+
     filteredTasksDirty = true;
     await _databaseService.saveTask(task);
     notifyListeners();
     _updateTelemetryWidget();
+
     if (!isScheduled) {
       pumpQueue();
+    }
+  }
+
+  /// Scans the torrent's target folder for data that's already on disk so a
+  /// torrent can resume from it instead of starting over.
+  ///
+  /// Handles both layouts libtorrent produces:
+  ///  - single-file torrent → the target path IS the file.
+  ///  - multi-file torrent  → the target path is a folder; each file in
+  ///    [fileList] is checked at its relative path inside it.
+  /// When no file list is available yet (magnets before metadata) the whole
+  /// folder is counted recursively as a best-effort estimate.
+  ({int total, List<Map<String, dynamic>>? files}) _scanExistingTorrentData(
+    String rootPath,
+    List<Map<String, dynamic>>? fileList,
+  ) {
+    try {
+      final type = FileSystemEntity.typeSync(rootPath);
+      if (type == FileSystemEntityType.file) {
+        final len = File(rootPath).lengthSync();
+        List<Map<String, dynamic>>? files = fileList;
+        if (fileList != null && fileList.length == 1) {
+          files = [
+            Map<String, dynamic>.from(fileList.first)
+              ..['downloadedBytes'] = len,
+          ];
+        }
+        return (total: len, files: files);
+      }
+      if (type == FileSystemEntityType.directory) {
+        if (fileList != null && fileList.isNotEmpty) {
+          final scan = scanTorrentFilesOnDisk(rootPath, fileList);
+          return (total: scan.total, files: scan.files);
+        }
+        return (total: scanFolderBytesSync(rootPath), files: null);
+      }
+      return (total: 0, files: fileList);
+    } catch (e) {
+      debugPrint('[DMX] Torrent pre-scan failed for $rootPath: $e');
+      return (total: 0, files: fileList);
     }
   }
 
@@ -854,7 +930,9 @@ class DownloadProvider extends ChangeNotifier
       case 'tap':
         if (taskId != null) {
           final task = _findTask(taskId);
-          if (task != null && task.isAppUpdate && task.status == DownloadStatus.completed) {
+          if (task != null &&
+              task.isAppUpdate &&
+              task.status == DownloadStatus.completed) {
             open_filex.OpenFilex.open(task.localFilePath);
           }
         }
@@ -977,7 +1055,7 @@ class DownloadProvider extends ChangeNotifier
     if (activeFuture != null) {
       try {
         await activeFuture;
-      // ignore: avoid_catches_without_on_clauses
+        // ignore: avoid_catches_without_on_clauses
       } catch (e) {
         debugPrint('[DMX] activeFuture error in save: $e');
       }
@@ -1131,8 +1209,6 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
   }
 
-
-
   DownloadTask? taskById(String id) {
     return _findTask(id);
   }
@@ -1203,7 +1279,8 @@ class DownloadProvider extends ChangeNotifier
         final origin = '${uri.scheme}://${uri.host}';
         final now = DateTime.now();
         final cached = _cookieCache[origin];
-        if (cached != null && now.difference(cached.timestamp) < const Duration(minutes: 5)) {
+        if (cached != null &&
+            now.difference(cached.timestamp) < const Duration(minutes: 5)) {
           cookieString = cached.cookie;
         } else {
           final cookies = await WebviewCookieManager().getCookies(origin);
@@ -1211,13 +1288,16 @@ class DownloadProvider extends ChangeNotifier
           _cookieCache[origin] = (cookie: cookieString, timestamp: now);
           if (_cookieCache.length >= _cookieCacheMaxSize) {
             final oldest = _cookieCache.entries
-                .reduce((a, b) => a.value.timestamp.isBefore(b.value.timestamp) ? a : b)
+                .reduce(
+                  (a, b) =>
+                      a.value.timestamp.isBefore(b.value.timestamp) ? a : b,
+                )
                 .key;
             _cookieCache.remove(oldest);
           }
         }
       }
-    // ignore: avoid_catches_without_on_clauses
+      // ignore: avoid_catches_without_on_clauses
     } catch (e) {
       debugPrint('[DMX] Cookie resolution error: $e');
     }
@@ -1266,10 +1346,9 @@ class DownloadProvider extends ChangeNotifier
               task.savePath,
               resolvedFileName,
             );
-            final resolvedTempPath = _downloadEngine.buildTempFilePath(
-              task.savePath,
-              resolvedFileName,
-            );
+            // For HTTP downloads use the final path as the temp path so the
+            // file appears in-place and resumes correctly.
+            final resolvedTempPath = resolvedLocalPath;
 
             if (type == 'combined') {
               final videoSize = streamInfo['videoSize'] as int? ?? 0;
@@ -1298,15 +1377,20 @@ class DownloadProvider extends ChangeNotifier
               );
             }
             await _setTask(task);
-          } else if (task.url.isNotEmpty && !task.url.contains('youtube.com/')) {
-            debugPrint('[DMX] YoutubeService.getStreamForVideo returned null; proceeding with pre-resolved stream URL.');
+          } else if (task.url.isNotEmpty &&
+              !task.url.contains('youtube.com/')) {
+            debugPrint(
+              '[DMX] YoutubeService.getStreamForVideo returned null; proceeding with pre-resolved stream URL.',
+            );
           } else {
             throw Exception('Stream not available');
           }
         }
       } catch (e) {
         if (task.url.isNotEmpty && !task.url.contains('youtube.com/')) {
-          debugPrint('[DMX] YoutubeService stream resolution error ($e); proceeding with pre-resolved stream URL.');
+          debugPrint(
+            '[DMX] YoutubeService stream resolution error ($e); proceeding with pre-resolved stream URL.',
+          );
         } else {
           final isRetryable = _isRetryableError(e);
           final maxRetries = _settingsProvider.autoRetryEnabled && isRetryable
@@ -1347,7 +1431,8 @@ class DownloadProvider extends ChangeNotifier
           await _setTask(
             task.copyWith(
               status: DownloadStatus.failed,
-              errorMessage: 'Failed to resolve YouTube stream: ${_errorMessage(e)}',
+              errorMessage:
+                  'Failed to resolve YouTube stream: ${_errorMessage(e)}',
             ),
           );
           pumpQueue();
@@ -1355,7 +1440,6 @@ class DownloadProvider extends ChangeNotifier
           return;
         }
       }
-
     }
 
     final cancelToken = CancelToken();
@@ -1424,18 +1508,23 @@ class DownloadProvider extends ChangeNotifier
 
     // Fire-and-await so the queued→downloading transition is committed
     // before the first progress callback fires.
-    // For torrents: check real downloaded percentage on disk before starting/resuming
-    final verifiedTorrentFiles = task.isTorrent && task.torrentFiles != null
+    // For torrents: re-scan the target folder so we resume from whatever is
+    // already on disk (handles data added while the task was paused/queued).
+    List<Map<String, dynamic>>? verifiedTorrentFiles =
+        task.isTorrent && task.torrentFiles != null
         ? checkRealTorrentDiskProgress(task)
         : task.torrentFiles;
-
     int realTotalDownloaded = task.downloadedBytes;
-    if (task.isTorrent && verifiedTorrentFiles != null && verifiedTorrentFiles.isNotEmpty) {
-      final totalDiskDownloaded = verifiedTorrentFiles
-          .where((f) => (f['selected'] as bool? ?? true))
-          .fold<int>(0, (sum, f) => sum + ((f['downloadedBytes'] as int?) ?? 0));
-      if (totalDiskDownloaded > realTotalDownloaded) {
-        realTotalDownloaded = totalDiskDownloaded;
+    if (task.isTorrent) {
+      final scan = _scanExistingTorrentData(
+        task.localFilePath,
+        task.torrentFiles,
+      );
+      if (scan.total > realTotalDownloaded) {
+        realTotalDownloaded = scan.total;
+      }
+      if (scan.files != null) {
+        verifiedTorrentFiles = scan.files;
       }
     }
 
@@ -1451,26 +1540,35 @@ class DownloadProvider extends ChangeNotifier
       ),
     );
     final notificationId = _getNotificationId(task.id);
+    // Torrents always reconcile: the guessed name (magnet `dn`) may differ from
+    // the real torrent name reported after metadata, and the task's paths must
+    // point at the folder libtorrent actually uses so resume stays consistent.
     final isAutoName =
+        task.isTorrent ||
         task.fileName == 'torrent_download.zip' ||
         task.fileName.isEmpty ||
         task.fileName == fileNameFromUrl(task.url) ||
         task.fileName.startsWith('download_');
 
-    final hasAudio = !task.isTorrent &&
+    final hasAudio =
+        !task.isTorrent &&
         task.mergedAudioUrl != null &&
         task.mergedAudioUrl!.isNotEmpty;
     final audioTempPath = hasAudio ? '${task.tempFilePath}.audio' : null;
 
     // Detect YouTube early so we can skip CDN HEAD probes that trigger 429s.
-    final isYoutube = task.downloadPageUrl != null &&
+    final isYoutube =
+        task.downloadPageUrl != null &&
         (task.downloadPageUrl!.contains('youtube.com/') ||
             task.downloadPageUrl!.contains('youtu.be/'));
 
     // Ensure audioSize is properly set for combined downloads.
     // Skip for YouTube — googlevideo.com CDN URLs 429 on extra HEAD requests
     // and the audio size is already provided by the stream resolution step.
-    if (hasAudio && task.audioSize <= 0 && task.mergedAudioUrl != null && !isYoutube) {
+    if (hasAudio &&
+        task.audioSize <= 0 &&
+        task.mergedAudioUrl != null &&
+        !isYoutube) {
       try {
         final meta = await _downloadEngine.resolveMetadata(
           url: task.mergedAudioUrl!,
@@ -1505,7 +1603,10 @@ class DownloadProvider extends ChangeNotifier
     } else if (hasAudio && task.audioSize > 0 && task.fileSize > 0) {
       // fileSize may only represent the video portion (backend returned total=videoSize)
       // or total is equal to audioSize — treat fileSize as total and subtract audio.
-      videoTransferSize = (task.fileSize - task.audioSize).clamp(0, task.fileSize);
+      videoTransferSize = (task.fileSize - task.audioSize).clamp(
+        0,
+        task.fileSize,
+      );
     } else {
       videoTransferSize = task.fileSize;
     }
@@ -1530,7 +1631,9 @@ class DownloadProvider extends ChangeNotifier
         );
         if (videoMeta.fileSize > 0) {
           videoTransferSize = videoMeta.fileSize;
-          debugPrint('[DMX] Resolved video transfer size via HEAD probe: $videoTransferSize bytes');
+          debugPrint(
+            '[DMX] Resolved video transfer size via HEAD probe: $videoTransferSize bytes',
+          );
         }
       } catch (e) {
         debugPrint('[DMX] Failed to resolve video transfer size: $e');
@@ -1542,687 +1645,818 @@ class DownloadProvider extends ChangeNotifier
 
     // Run video and audio in PARALLEL — each gets the full configured
     // thread count (streamThreadCount), not split between them.
-    final downloadFuture = () async {
-      final currentTask = _findTask(task.id);
-      if (currentTask == null) return;
-      task = currentTask;
-      final maxRetries = _settingsProvider.autoRetryEnabled ? _settingsProvider.maxRetries : 0;
-      int attempt = 0;
+    final downloadFuture =
+        () async {
+              final currentTask = _findTask(task.id);
+              if (currentTask == null) return;
+              task = currentTask;
+              final maxRetries = _settingsProvider.autoRetryEnabled
+                  ? _settingsProvider.maxRetries
+                  : 0;
+              int attempt = 0;
 
-      // Shared byte/speed trackers — read and written by both the audio and
-      // video progress callbacks, combined by pushCombinedProgress().
-      int audioBytesSoFar = hasAudio && task.audioSize > 0
-          ? (task.audioProgress * task.audioSize).round()
-          : 0;
-      int videoBytesSoFar = (task.downloadedBytes - audioBytesSoFar)
-          .clamp(0, task.fileSize > 0 ? task.fileSize : task.downloadedBytes);
-      double audioSpeedNow = 0.0;
-      double videoSpeedNow = 0.0;
-      // Live total reported by the engine. Starts from the pre-resolved size
-      // and is overwritten as soon as the engine reports the real one —
-      // magnets/torrents only learn their true size after metadata arrives.
-      // Without this, fileSize stays 0 forever and total %, ETA and the
-      // "downloaded / total" readout never work for torrents.
-      int videoSizeSoFar = videoTransferSize;
-
-      void pushCombinedProgress({
-        List<double>? chunksOverride,
-        bool? supportsResumeOverride,
-        List<Map<String, dynamic>>? torrentFilesOverride,
-        String? fileNameOverride,
-        String? localFilePathOverride,
-        String? tempFilePathOverride,
-        String? categoryOverride,
-      }) {
-        final index = _tasks.indexWhere((t) => t.id == task.id);
-        if (index == -1) return;
-        final base = _tasks[index];
-        if (base.status != DownloadStatus.downloading) return;
-
-        final audioContribution = hasAudio ? (base.audioSize > 0 ? base.audioSize : 0) : 0;
-        final effectiveVideoSize =
-            videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
-        final totalSize = effectiveVideoSize + audioContribution;
-        final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
-        final instantSpeed = audioSpeedNow + videoSpeedNow;
-        final speedQueue = _speedHistories[task.id];
-        if (speedQueue != null) {
-          speedQueue.add(instantSpeed);
-          if (speedQueue.length > 20) speedQueue.removeFirst();
-        }
-        final combinedSpeed = speedQueue != null && speedQueue.isNotEmpty
-            ? speedQueue.reduce((a, b) => a + b) / speedQueue.length
-            : instantSpeed;
-
-        int? calculatedEta;
-        if (combinedSpeed.isFinite && combinedSpeed > 0 && totalSize > totalDownloaded) {
-          final remainingBytes = max(0, totalSize - totalDownloaded);
-          final rawEta = (remainingBytes / combinedSpeed).round();
-          if (rawEta > 0 && rawEta.isFinite) {
-            final prevEta = base.eta;
-            if (prevEta != null && prevEta > 0) {
-              calculatedEta = ((0.3 * rawEta) + (0.7 * prevEta)).round();
-            } else {
-              calculatedEta = rawEta;
-            }
-          }
-        }
-
-        final updated = base.copyWith(
-          fileName: fileNameOverride ?? base.fileName,
-          localFilePath: localFilePathOverride ?? base.localFilePath,
-          tempFilePath: tempFilePathOverride ?? base.tempFilePath,
-          category: categoryOverride ?? base.category,
-          fileSize: totalSize,
-          downloadedBytes: totalDownloaded,
-          speed: combinedSpeed,
-          eta: calculatedEta,
-          clearEta: calculatedEta == null,
-          chunks: chunksOverride ?? base.chunks,
-          supportsResume: supportsResumeOverride ?? base.supportsResume,
-          torrentFiles: torrentFilesOverride ?? base.torrentFiles,
-        );
-
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
-        if (now - lastUpdate >= 250) {
-          _lastProgressUpdateTimes[task.id] = now;
-          _tasks[index] = updated;
-          notifyListeners();
-
-          if (_settingsProvider.notificationsEnabled) {
-            final progressPercent = totalSize > 0
-                ? ((totalDownloaded / totalSize) * 100).round().clamp(0, 100)
-                : 0;
-            _notificationService.showDownloadProgress(
-              notificationId: notificationId,
-              title: task.fileName,
-              progressPercent: progressPercent,
-              speed: updated.speedFormatted,
-              eta: updated.etaFormatted,
-              languageCode: _settingsProvider.languageCode,
-              payload: task.id,
-              hasMultipleActive: downloadingTasksCount > 1,
-            );
-          }
-          BackgroundService.sendHeartbeat();
-        } else {
-          _tasks[index] = updated;
-          _pendingProgressUpdates.add(task.id);
-        }
-      }
-
-      while (true) {
-        attempt++;
-
-        // Fresh cancel tokens every attempt — see note #3 above. Mirror the
-        // top-level cancelToken into both, same as before.
-        final videoCancelToken = CancelToken();
-        final audioCancelToken = CancelToken();
-        cancelToken.whenCancel.then((_) {
-          if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
-          if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
-        });
-
-        try {
-          Future<void> runAudio() async {
-            if (!hasAudio) return;
-            debugPrint('[DMX] Parallel download: starting audio stream.');
-            await _downloadEngine.download(
-              url: task.mergedAudioUrl!,
-              tempFilePath: audioTempPath!,
-              localFilePath: audioTempPath,
-              knownFileSize: task.audioSize,
-              supportsResume: true,
-              cancelToken: audioCancelToken,
-              cookies: cookieString,
-              oauthToken: YoutubeService.oauthToken,
-              onProgress: (progress) {
-                final t = _findTask(task.id);
-                if (t == null || t.status != DownloadStatus.downloading) return;
-
-                audioBytesSoFar = progress.downloadedBytes;
-                audioSpeedNow = progress.speed;
-
-                final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
-                final fraction =
-                    size > 0 ? (progress.downloadedBytes / size).clamp(0.0, 1.0) : 0.0;
-                final index = _tasks.indexWhere((x) => x.id == task.id);
-                if (index != -1) {
-                  _tasks[index] =
-                      _tasks[index].copyWith(audioProgress: fraction, audioSize: size);
-                }
-                pushCombinedProgress();
-              },
-              speedLimitBytesPerSecond: () {
-                final current = _findTask(task.id);
-                if (current != null && current.speedLimitKbps > 0) {
-                  return (current.speedLimitKbps * 1000) ~/ 8;
-                }
-                return _settingsProvider.speedLimitBytesPerSecond;
-              },
-              activeDownloadCount: () => downloadingTasksCount,
-              threadCount: streamThreadCount,
-              customUserAgent: _settingsProvider.customUserAgent,
-              referer: isYoutube
-                  ? (task.downloadPageUrl ?? 'https://www.youtube.com/')
-                  : null,
-              enableProxy: _settingsProvider.enableProxy,
-              proxyAddress: _settingsProvider.proxyAddress,
-              proxyHost: _settingsProvider.proxyHost,
-              proxyPort: _settingsProvider.proxyPort,
-              proxyUsername: _settingsProvider.proxyUsername,
-              proxyPassword: _settingsProvider.proxyPassword,
-              bypassSSL: _settingsProvider.bypassSSL,
-              isNameAutoGenerated: false,
-            );
-
-            final audioFile = File(audioTempPath);
-            if (!await audioFile.exists()) {
-              throw Exception('Audio file not found after download: $audioTempPath');
-            }
-            final audioLen = await audioFile.length();
-            debugPrint('[DMX] Audio download complete: $audioTempPath ($audioLen bytes)');
-            if (audioLen == 0) {
-              throw Exception('Audio file is empty: $audioTempPath');
-            }
-            audioBytesSoFar = task.audioSize > 0 ? task.audioSize : audioLen;
-            audioSpeedNow = 0.0;
-            final idx = _tasks.indexWhere((x) => x.id == task.id);
-            if (idx != -1) {
-              _tasks[idx] = _tasks[idx].copyWith(audioProgress: 1.0);
-            }
-            pushCombinedProgress();
-          }
-
-          Future<void> runVideo() async {
-            debugPrint('[DMX] Parallel download: starting video stream.');
-            await _downloadEngine.download(
-              url: task.url,
-              tempFilePath: task.tempFilePath,
-              localFilePath: task.localFilePath,
-              knownFileSize: videoTransferSize,
-              supportsResume: task.supportsResume,
-              cancelToken: videoCancelToken,
-              isNameAutoGenerated: isAutoName,
-              referer: isYoutube ? task.downloadPageUrl : null,
-              getTorrentFiles: () => _findTask(task.id)?.torrentFiles ?? task.torrentFiles,
-              torrentId: torrentId,
-              cookies: cookieString,
-              oauthToken: YoutubeService.oauthToken,
-              onProgress: (progress) {
-                final current = _findTask(task.id);
-                if (current == null || current.status != DownloadStatus.downloading) {
-                  return;
-                }
-
-                videoBytesSoFar = progress.downloadedBytes;
-                videoSpeedNow = progress.speed;
-                if (progress.fileSize > 0) videoSizeSoFar = progress.fileSize;
-
-                // --- Throttling detection: unchanged from the original logic ---
-                if (isYoutube &&
-                    progress.downloadedBytes > 1024 * 1024 &&
-                    progress.speed > 0 &&
-                    progress.speed < 120 * 1024) {
-                  final lowSpeedCount = (_ytLowSpeedCounts[task.id] ?? 0) + 1;
-                  _ytLowSpeedCounts[task.id] = lowSpeedCount;
-
-                  Logger.root.warning(
-                    'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id} (sample $lowSpeedCount). '
-                    'The stream URL may be throttled due to n-parameter descrambling.',
+              // Shared byte/speed trackers — read and written by both the audio and
+              // video progress callbacks, combined by pushCombinedProgress().
+              int audioBytesSoFar = hasAudio && task.audioSize > 0
+                  ? (task.audioProgress * task.audioSize).round()
+                  : 0;
+              int videoBytesSoFar = (task.downloadedBytes - audioBytesSoFar)
+                  .clamp(
+                    0,
+                    task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
                   );
+              double audioSpeedNow = 0.0;
+              double videoSpeedNow = 0.0;
+              // Live total reported by the engine. Starts from the pre-resolved size
+              // and is overwritten as soon as the engine reports the real one —
+              // magnets/torrents only learn their true size after metadata arrives.
+              // Without this, fileSize stays 0 forever and total %, ETA and the
+              // "downloaded / total" readout never work for torrents.
+              int videoSizeSoFar = videoTransferSize;
 
-                  if (lowSpeedCount >= 10 && !(_ytThrottlingRefreshing[task.id] ?? false)) {
-                    _ytThrottlingRefreshing[task.id] = true;
-                    _ytLowSpeedCounts[task.id] = 0;
-                    Logger.root.info(
-                      'Persistent YouTube throttling detected for ${task.id}. Attempting automatic stream refresh...',
-                    );
-                    Future.microtask(() async {
-                      try {
-                        final pageUrl = task.downloadPageUrl ?? task.url;
-                        final fresh = await YoutubeService.getFreshStreams(pageUrl);
-                        if (fresh != null && fresh['url'] != null) {
-                          await updateTaskUrlAndResume(task.id, fresh['url']!,
-                              newAudioUrl: fresh['audioUrl']);
-                        }
-                      } catch (err) {
-                        debugPrint('Auto YouTube stream refresh failed: $err');
-                      } finally {
-                        _ytThrottlingRefreshing[task.id] = false;
-                      }
-                    });
-                  }
-                } else if (isYoutube && progress.speed >= 120 * 1024) {
-                  _ytLowSpeedCounts[task.id] = 0;
-                }
-                // --- end throttling detection ---
-
-                final speedQueue = _speedHistories[task.id] ??= Queue<double>();
-                speedQueue.add(progress.speed);
-                if (speedQueue.length > 20) speedQueue.removeFirst();
-
+              void pushCombinedProgress({
+                List<double>? chunksOverride,
+                bool? supportsResumeOverride,
+                List<Map<String, dynamic>>? torrentFilesOverride,
+                String? fileNameOverride,
+                String? localFilePathOverride,
+                String? tempFilePathOverride,
+                String? categoryOverride,
+              }) {
                 final index = _tasks.indexWhere((t) => t.id == task.id);
                 if (index == -1) return;
                 final base = _tasks[index];
+                if (base.status != DownloadStatus.downloading) return;
 
-                final newFileName = isAutoName && progress.fileName != null
-                    ? progress.fileName!
-                    : base.fileName;
-                final newLocalPath = newFileName != base.fileName
-                    ? p.join(p.dirname(base.localFilePath), safeFileName(newFileName))
-                    : base.localFilePath;
-                final newTempPath = newFileName != base.fileName
-                    ? p.join(p.dirname(base.tempFilePath), '${safeFileName(newFileName)}.dmxpart')
-                    : base.tempFilePath;
-                final newCategory =
-                    newFileName != base.fileName && base.category == 'Other'
-                        ? categoryFromFileName(newFileName)
-                        : base.category;
+                final audioContribution = hasAudio
+                    ? (base.audioSize > 0 ? base.audioSize : 0)
+                    : 0;
+                final effectiveVideoSize = videoSizeSoFar > 0
+                    ? videoSizeSoFar
+                    : videoTransferSize;
+                final totalSize = effectiveVideoSize + audioContribution;
+                final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
+                final instantSpeed = audioSpeedNow + videoSpeedNow;
+                final speedQueue = _speedHistories[task.id];
+                if (speedQueue != null) {
+                  speedQueue.add(instantSpeed);
+                  if (speedQueue.length > 20) speedQueue.removeFirst();
+                }
+                final combinedSpeed =
+                    speedQueue != null && speedQueue.isNotEmpty
+                    ? speedQueue.reduce((a, b) => a + b) / speedQueue.length
+                    : instantSpeed;
 
-                pushCombinedProgress(
-                  chunksOverride: progress.chunks ??
-                      _buildChunks(
-                        streamThreadCount,
-                        videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize,
-                        progress.downloadedBytes,
-                      ),
-                  supportsResumeOverride: progress.supportsResume,
-                  torrentFilesOverride: progress.torrentFiles,
-                  fileNameOverride: newFileName,
-                  localFilePathOverride: newLocalPath,
-                  tempFilePathOverride: newTempPath,
-                  categoryOverride: newCategory,
+                int? calculatedEta;
+                if (combinedSpeed.isFinite &&
+                    combinedSpeed > 0 &&
+                    totalSize > totalDownloaded) {
+                  final remainingBytes = max(0, totalSize - totalDownloaded);
+                  final rawEta = (remainingBytes / combinedSpeed).round();
+                  if (rawEta > 0 && rawEta.isFinite) {
+                    final prevEta = base.eta;
+                    if (prevEta != null && prevEta > 0) {
+                      calculatedEta = ((0.3 * rawEta) + (0.7 * prevEta))
+                          .round();
+                    } else {
+                      calculatedEta = rawEta;
+                    }
+                  }
+                }
+
+                final updated = base.copyWith(
+                  fileName: fileNameOverride ?? base.fileName,
+                  localFilePath: localFilePathOverride ?? base.localFilePath,
+                  tempFilePath: tempFilePathOverride ?? base.tempFilePath,
+                  category: categoryOverride ?? base.category,
+                  fileSize: totalSize,
+                  downloadedBytes: totalDownloaded,
+                  speed: combinedSpeed,
+                  eta: calculatedEta,
+                  clearEta: calculatedEta == null,
+                  chunks: chunksOverride ?? base.chunks,
+                  supportsResume: supportsResumeOverride ?? base.supportsResume,
+                  torrentFiles: torrentFilesOverride ?? base.torrentFiles,
                 );
-              },
-              speedLimitBytesPerSecond: () {
-                final current = _findTask(task.id);
-                if (current != null && current.speedLimitKbps > 0) {
-                  return (current.speedLimitKbps * 1000) ~/ 8;
+
+                final now = DateTime.now().millisecondsSinceEpoch;
+                final lastUpdate = _lastProgressUpdateTimes[task.id] ?? 0;
+                if (now - lastUpdate >= 250) {
+                  _lastProgressUpdateTimes[task.id] = now;
+                  _tasks[index] = updated;
+                  notifyListeners();
+
+                  if (_settingsProvider.notificationsEnabled) {
+                    final progressPercent = totalSize > 0
+                        ? ((totalDownloaded / totalSize) * 100).round().clamp(
+                            0,
+                            100,
+                          )
+                        : 0;
+                    _notificationService.showDownloadProgress(
+                      notificationId: notificationId,
+                      title: task.fileName,
+                      progressPercent: progressPercent,
+                      speed: updated.speedFormatted,
+                      eta: updated.etaFormatted,
+                      languageCode: _settingsProvider.languageCode,
+                      payload: task.id,
+                      hasMultipleActive: downloadingTasksCount > 1,
+                    );
+                  }
+                  BackgroundService.sendHeartbeat();
+                } else {
+                  _tasks[index] = updated;
+                  _pendingProgressUpdates.add(task.id);
                 }
-                return _settingsProvider.speedLimitBytesPerSecond;
-              },
-              activeDownloadCount: () => downloadingTasksCount,
-              threadCount: streamThreadCount,
-              customUserAgent: _settingsProvider.customUserAgent,
-              enableProxy: _settingsProvider.enableProxy,
-              proxyAddress: _settingsProvider.proxyAddress,
-              proxyHost: _settingsProvider.proxyHost,
-              proxyPort: _settingsProvider.proxyPort,
-              proxyUsername: _settingsProvider.proxyUsername,
-              proxyPassword: _settingsProvider.proxyPassword,
-              bypassSSL: _settingsProvider.bypassSSL,
-            );
-          }
-
-          await Future.wait([runVideo(), runAudio()]);
-          return;
-        } catch (error) {
-          // Stop whichever side is still running before we retry or give up —
-          // otherwise a background download from this failed attempt can
-          // collide with the next attempt's writes to the same temp files.
-          if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
-          if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
-
-          final isYoutubeDownload = (task.downloadPageUrl != null &&
-                  YoutubeService.extractVideoId(task.downloadPageUrl!) != null) ||
-              task.url.contains('.googlevideo.com/') ||
-              task.youtubeQualityPreset != null;
-          bool shouldRefreshYoutube = false;
-          if (isYoutubeDownload) {
-            final errStr = error.toString();
-            final statusCode =
-                error is DioException ? error.response?.statusCode : null;
-            if (statusCode == 403 ||
-                statusCode == 410 ||
-                errStr.contains('403') ||
-                errStr.contains('410') ||
-                errStr.contains('Forbidden')) {
-              shouldRefreshYoutube = true;
-            }
-          }
-          if (shouldRefreshYoutube) {
-            final ytMaxRetries = maxRetries > 0 ? maxRetries : 3;
-            if (attempt > ytMaxRetries) {
-              rethrow;
-            }
-            try {
-              YoutubeService.resetClient();
-
-              final pageUrl =
-                  (task.downloadPageUrl != null && task.downloadPageUrl!.isNotEmpty)
-                      ? task.downloadPageUrl!
-                      : task.url;
-
-              Map<String, dynamic>? newUrlInfo;
-              if (hasAudio) {
-                final freshStreams = await YoutubeService.getFreshStreams(pageUrl);
-                if (freshStreams != null && freshStreams['url'] != null) {
-                  newUrlInfo = {
-                    'url': freshStreams['url'],
-                    'audioUrl': freshStreams['audioUrl'],
-                  };
-                }
-              } else {
-                newUrlInfo = await _refreshYoutubeStreamUrlSafe(pageUrl, task.url);
               }
 
-              if (newUrlInfo != null && newUrlInfo['url'] != null) {
-                final refreshedUrl = newUrlInfo['url'] as String;
-                final refreshedAudioUrl = newUrlInfo['audioUrl'] as String?;
+              while (true) {
+                attempt++;
 
-                if (!_youtubeMimeCompatible(task.url, refreshedUrl)) {
+                // Fresh cancel tokens every attempt — see note #3 above. Mirror the
+                // top-level cancelToken into both, same as before.
+                final videoCancelToken = CancelToken();
+                final audioCancelToken = CancelToken();
+                cancelToken.whenCancel.then((_) {
+                  if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
+                  if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
+                });
+
+                try {
+                  Future<void> runAudio() async {
+                    if (!hasAudio) return;
+                    debugPrint(
+                      '[DMX] Parallel download: starting audio stream.',
+                    );
+                    await _downloadEngine.download(
+                      url: task.mergedAudioUrl!,
+                      tempFilePath: audioTempPath!,
+                      localFilePath: audioTempPath,
+                      knownFileSize: task.audioSize,
+                      supportsResume: true,
+                      cancelToken: audioCancelToken,
+                      cookies: cookieString,
+                      oauthToken: YoutubeService.oauthToken,
+                      onProgress: (progress) {
+                        final t = _findTask(task.id);
+                        if (t == null || t.status != DownloadStatus.downloading)
+                          return;
+
+                        audioBytesSoFar = progress.downloadedBytes;
+                        audioSpeedNow = progress.speed;
+
+                        final size = t.audioSize > 0
+                            ? t.audioSize
+                            : progress.fileSize;
+                        final fraction = size > 0
+                            ? (progress.downloadedBytes / size).clamp(0.0, 1.0)
+                            : 0.0;
+                        final index = _tasks.indexWhere((x) => x.id == task.id);
+                        if (index != -1) {
+                          _tasks[index] = _tasks[index].copyWith(
+                            audioProgress: fraction,
+                            audioSize: size,
+                          );
+                        }
+                        pushCombinedProgress();
+                      },
+                      speedLimitBytesPerSecond: () {
+                        final current = _findTask(task.id);
+                        if (current != null && current.speedLimitKbps > 0) {
+                          return (current.speedLimitKbps * 1000) ~/ 8;
+                        }
+                        return _settingsProvider.speedLimitBytesPerSecond;
+                      },
+                      activeDownloadCount: () => downloadingTasksCount,
+                      threadCount: streamThreadCount,
+                      customUserAgent: _settingsProvider.customUserAgent,
+                      referer: isYoutube
+                          ? (task.downloadPageUrl ?? 'https://www.youtube.com/')
+                          : null,
+                      enableProxy: _settingsProvider.enableProxy,
+                      proxyAddress: _settingsProvider.proxyAddress,
+                      proxyHost: _settingsProvider.proxyHost,
+                      proxyPort: _settingsProvider.proxyPort,
+                      proxyUsername: _settingsProvider.proxyUsername,
+                      proxyPassword: _settingsProvider.proxyPassword,
+                      bypassSSL: _settingsProvider.bypassSSL,
+                      isNameAutoGenerated: false,
+                    );
+
+                    final audioFile = File(audioTempPath);
+                    if (!await audioFile.exists()) {
+                      throw Exception(
+                        'Audio file not found after download: $audioTempPath',
+                      );
+                    }
+                    final audioLen = await audioFile.length();
+                    debugPrint(
+                      '[DMX] Audio download complete: $audioTempPath ($audioLen bytes)',
+                    );
+                    if (audioLen == 0) {
+                      throw Exception('Audio file is empty: $audioTempPath');
+                    }
+                    audioBytesSoFar = task.audioSize > 0
+                        ? task.audioSize
+                        : audioLen;
+                    audioSpeedNow = 0.0;
+                    final idx = _tasks.indexWhere((x) => x.id == task.id);
+                    if (idx != -1) {
+                      _tasks[idx] = _tasks[idx].copyWith(audioProgress: 1.0);
+                    }
+                    pushCombinedProgress();
+                  }
+
+                  Future<void> runVideo() async {
+                    debugPrint(
+                      '[DMX] Parallel download: starting video stream.',
+                    );
+                    await _downloadEngine.download(
+                      url: task.url,
+                      tempFilePath: task.tempFilePath,
+                      localFilePath: task.localFilePath,
+                      knownFileSize: videoTransferSize,
+                      supportsResume: task.supportsResume,
+                      cancelToken: videoCancelToken,
+                      isNameAutoGenerated: isAutoName,
+                      referer: isYoutube ? task.downloadPageUrl : null,
+                      getTorrentFiles: () =>
+                          _findTask(task.id)?.torrentFiles ?? task.torrentFiles,
+                      torrentId: torrentId,
+                      cookies: cookieString,
+                      oauthToken: YoutubeService.oauthToken,
+                      onProgress: (progress) {
+                        final current = _findTask(task.id);
+                        if (current == null ||
+                            current.status != DownloadStatus.downloading) {
+                          return;
+                        }
+
+                        videoBytesSoFar = progress.downloadedBytes;
+                        videoSpeedNow = progress.speed;
+                        if (progress.fileSize > 0)
+                          videoSizeSoFar = progress.fileSize;
+
+                        // --- Throttling detection: unchanged from the original logic ---
+                        if (isYoutube &&
+                            progress.downloadedBytes > 1024 * 1024 &&
+                            progress.speed > 0 &&
+                            progress.speed < 120 * 1024) {
+                          final lowSpeedCount =
+                              (_ytLowSpeedCounts[task.id] ?? 0) + 1;
+                          _ytLowSpeedCounts[task.id] = lowSpeedCount;
+
+                          Logger.root.warning(
+                            'Suspiciously low YouTube download speed (${(progress.speed / 1024).toStringAsFixed(1)} KB/s) for video ${task.id} (sample $lowSpeedCount). '
+                            'The stream URL may be throttled due to n-parameter descrambling.',
+                          );
+
+                          if (lowSpeedCount >= 10 &&
+                              !(_ytThrottlingRefreshing[task.id] ?? false)) {
+                            _ytThrottlingRefreshing[task.id] = true;
+                            _ytLowSpeedCounts[task.id] = 0;
+                            Logger.root.info(
+                              'Persistent YouTube throttling detected for ${task.id}. Attempting automatic stream refresh...',
+                            );
+                            Future.microtask(() async {
+                              try {
+                                final pageUrl =
+                                    task.downloadPageUrl ?? task.url;
+                                final fresh =
+                                    await YoutubeService.getFreshStreams(
+                                      pageUrl,
+                                    );
+                                if (fresh != null && fresh['url'] != null) {
+                                  await updateTaskUrlAndResume(
+                                    task.id,
+                                    fresh['url']!,
+                                    newAudioUrl: fresh['audioUrl'],
+                                  );
+                                }
+                              } catch (err) {
+                                debugPrint(
+                                  'Auto YouTube stream refresh failed: $err',
+                                );
+                              } finally {
+                                _ytThrottlingRefreshing[task.id] = false;
+                              }
+                            });
+                          }
+                        } else if (isYoutube && progress.speed >= 120 * 1024) {
+                          _ytLowSpeedCounts[task.id] = 0;
+                        }
+                        // --- end throttling detection ---
+
+                        final speedQueue = _speedHistories[task.id] ??=
+                            Queue<double>();
+                        speedQueue.add(progress.speed);
+                        if (speedQueue.length > 20) speedQueue.removeFirst();
+
+                        final index = _tasks.indexWhere((t) => t.id == task.id);
+                        if (index == -1) return;
+                        final base = _tasks[index];
+
+                        final newFileName =
+                            isAutoName && progress.fileName != null
+                            ? progress.fileName!
+                            : base.fileName;
+                        final newLocalPath = newFileName != base.fileName
+                            ? p.join(
+                                p.dirname(base.localFilePath),
+                                safeFileName(newFileName),
+                              )
+                            : base.localFilePath;
+                        final newTempPath = newFileName != base.fileName
+                            ? newLocalPath
+                            : base.tempFilePath;
+                        final newCategory =
+                            newFileName != base.fileName &&
+                                base.category == 'Other'
+                            ? categoryFromFileName(newFileName)
+                            : base.category;
+
+                        // Optionally replace proportional per-file estimates with
+                        // disk-verified values every few seconds to improve accuracy on
+                        // filesystems that expose partial file sizes (non-sparse files).
+                        List<Map<String, dynamic>>? diskVerifiedFiles;
+                        if (task.isTorrent &&
+                            progress.torrentFiles != null &&
+                            progress.torrentFiles!.isNotEmpty) {
+                          final nowMs = DateTime.now().millisecondsSinceEpoch;
+                          if (nowMs -
+                                  (_lastTorrentFileDiskSync[task.id] ?? 0) >=
+                              4000) {
+                            _lastTorrentFileDiskSync[task.id] = nowMs;
+                            try {
+                              diskVerifiedFiles = checkRealTorrentDiskProgress(
+                                current.copyWith(
+                                  torrentFiles: progress.torrentFiles,
+                                ),
+                              );
+                            } catch (e) {
+                              debugPrint(
+                                '[DMX] Disk-verify torrent files failed: $e',
+                              );
+                            }
+                          }
+                        }
+
+                        pushCombinedProgress(
+                          chunksOverride:
+                              progress.chunks ??
+                              _buildChunks(
+                                streamThreadCount,
+                                videoSizeSoFar > 0
+                                    ? videoSizeSoFar
+                                    : videoTransferSize,
+                                progress.downloadedBytes,
+                              ),
+                          supportsResumeOverride: progress.supportsResume,
+                          torrentFilesOverride:
+                              diskVerifiedFiles ?? progress.torrentFiles,
+                          fileNameOverride: newFileName,
+                          localFilePathOverride: newLocalPath,
+                          tempFilePathOverride: newTempPath,
+                          categoryOverride: newCategory,
+                        );
+                      },
+                      speedLimitBytesPerSecond: () {
+                        final current = _findTask(task.id);
+                        if (current != null && current.speedLimitKbps > 0) {
+                          return (current.speedLimitKbps * 1000) ~/ 8;
+                        }
+                        return _settingsProvider.speedLimitBytesPerSecond;
+                      },
+                      activeDownloadCount: () => downloadingTasksCount,
+                      threadCount: streamThreadCount,
+                      customUserAgent: _settingsProvider.customUserAgent,
+                      enableProxy: _settingsProvider.enableProxy,
+                      proxyAddress: _settingsProvider.proxyAddress,
+                      proxyHost: _settingsProvider.proxyHost,
+                      proxyPort: _settingsProvider.proxyPort,
+                      proxyUsername: _settingsProvider.proxyUsername,
+                      proxyPassword: _settingsProvider.proxyPassword,
+                      bypassSSL: _settingsProvider.bypassSSL,
+                    );
+                  }
+
+                  await Future.wait([runVideo(), runAudio()]);
+                  return;
+                } catch (error) {
+                  // Stop whichever side is still running before we retry or give up —
+                  // otherwise a background download from this failed attempt can
+                  // collide with the next attempt's writes to the same temp files.
+                  if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
+                  if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
+
+                  final isYoutubeDownload =
+                      (task.downloadPageUrl != null &&
+                          YoutubeService.extractVideoId(
+                                task.downloadPageUrl!,
+                              ) !=
+                              null) ||
+                      task.url.contains('.googlevideo.com/') ||
+                      task.youtubeQualityPreset != null;
+                  bool shouldRefreshYoutube = false;
+                  if (isYoutubeDownload) {
+                    final errStr = error.toString();
+                    final statusCode = error is DioException
+                        ? error.response?.statusCode
+                        : null;
+                    if (statusCode == 403 ||
+                        statusCode == 410 ||
+                        errStr.contains('403') ||
+                        errStr.contains('410') ||
+                        errStr.contains('Forbidden')) {
+                      shouldRefreshYoutube = true;
+                    }
+                  }
+                  if (shouldRefreshYoutube) {
+                    final ytMaxRetries = maxRetries > 0 ? maxRetries : 3;
+                    if (attempt > ytMaxRetries) {
+                      rethrow;
+                    }
+                    try {
+                      YoutubeService.resetClient();
+
+                      final pageUrl =
+                          (task.downloadPageUrl != null &&
+                              task.downloadPageUrl!.isNotEmpty)
+                          ? task.downloadPageUrl!
+                          : task.url;
+
+                      Map<String, dynamic>? newUrlInfo;
+                      if (hasAudio) {
+                        final freshStreams =
+                            await YoutubeService.getFreshStreams(pageUrl);
+                        if (freshStreams != null &&
+                            freshStreams['url'] != null) {
+                          newUrlInfo = {
+                            'url': freshStreams['url'],
+                            'audioUrl': freshStreams['audioUrl'],
+                          };
+                        }
+                      } else {
+                        newUrlInfo = await _refreshYoutubeStreamUrlSafe(
+                          pageUrl,
+                          task.url,
+                        );
+                      }
+
+                      if (newUrlInfo != null && newUrlInfo['url'] != null) {
+                        final refreshedUrl = newUrlInfo['url'] as String;
+                        final refreshedAudioUrl =
+                            newUrlInfo['audioUrl'] as String?;
+
+                        if (!_youtubeMimeCompatible(task.url, refreshedUrl)) {
+                          rethrow;
+                        }
+
+                        final idx = _tasks.indexWhere((x) => x.id == task.id);
+                        if (idx != -1) {
+                          _tasks[idx] = _tasks[idx].copyWith(
+                            url: refreshedUrl,
+                            mergedAudioUrl:
+                                refreshedAudioUrl ?? task.mergedAudioUrl,
+                          );
+                          task = _tasks[idx];
+                        }
+                        await _databaseService.saveTask(task);
+
+                        // Re-derive audio/video sizing after URL refresh — the new stream
+                        // may have different file sizes if the format changed.
+                        if (hasAudio &&
+                            task.audioSize > 0 &&
+                            task.fileSize > task.audioSize) {
+                          videoTransferSize = task.fileSize - task.audioSize;
+                        } else if (hasAudio && task.audioSize > 0) {
+                          videoTransferSize = (task.fileSize - task.audioSize)
+                              .clamp(0, task.fileSize);
+                        } else {
+                          videoTransferSize = task.fileSize;
+                        }
+
+                        await Future.delayed(const Duration(seconds: 2));
+                        continue;
+                      }
+                    } catch (e) {
+                      // ignore
+                    }
+                  }
                   rethrow;
                 }
-
-                final idx = _tasks.indexWhere((x) => x.id == task.id);
-                if (idx != -1) {
-                  _tasks[idx] = _tasks[idx].copyWith(
-                    url: refreshedUrl,
-                    mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
-                  );
-                  task = _tasks[idx];
-                }
-                await _databaseService.saveTask(task);
-
-                // Re-derive audio/video sizing after URL refresh — the new stream
-                // may have different file sizes if the format changed.
-                if (hasAudio && task.audioSize > 0 && task.fileSize > task.audioSize) {
-                  videoTransferSize = task.fileSize - task.audioSize;
-                } else if (hasAudio && task.audioSize > 0) {
-                  videoTransferSize = (task.fileSize - task.audioSize).clamp(0, task.fileSize);
-                } else {
-                  videoTransferSize = task.fileSize;
-                }
-
-                await Future.delayed(const Duration(seconds: 2));
-                continue;
               }
-            } catch (e) {
-              // ignore
-            }
-          }
-          rethrow;
-        }
-      }
-    }().then((_) async {
+            }()
+            .then((_) async {
+              // Phase 3: Merge (only if audio was downloaded)
+              if (hasAudio) {
+                final currentForMerge = _findTask(task.id);
+                if (currentForMerge == null) return;
 
-          // Phase 3: Merge (only if audio was downloaded)
-          if (hasAudio) {
-            final currentForMerge = _findTask(task.id);
-            if (currentForMerge == null) return;
-
-            await _setTask(currentForMerge.copyWith(
-                statusMessage: DownloadStatusMessages.merging));
-
-            // Re-derive the actual video file path from the CURRENT task state
-            // (the engine may have auto-resolved a different filename)
-            var actualVideoPath = currentForMerge.localFilePath;
-            if (!await File(actualVideoPath).exists() && await File(currentForMerge.tempFilePath).exists()) {
-              actualVideoPath = currentForMerge.tempFilePath;
-            }
-            final actualAudioPath = audioTempPath!;
-            final videoExt = p.extension(actualVideoPath).isNotEmpty
-                ? p.extension(actualVideoPath)
-                : '.mp4';
-            final mergedPath = '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
-
-            debugPrint('[DMX] Phase 3 — Merge starting:');
-            debugPrint('[DMX]   Video: $actualVideoPath');
-            debugPrint('[DMX]   Audio: $actualAudioPath');
-            debugPrint('[DMX]   Output: $mergedPath');
-
-            // Verify both files exist BEFORE calling FFmpeg
-            final videoFile = File(actualVideoPath);
-            final audioFile = File(actualAudioPath);
-
-            if (!await videoFile.exists()) {
-              throw Exception('Video file missing after download: $actualVideoPath');
-            }
-            if (!await audioFile.exists()) {
-              throw Exception('Audio file missing after download: $actualAudioPath');
-            }
-
-            final videoLen = await videoFile.length();
-            final audioLen = await audioFile.length();
-            debugPrint('[DMX]   Video size: $videoLen bytes');
-            debugPrint('[DMX]   Audio size: $audioLen bytes');
-
-            if (videoLen == 0) {
-              throw Exception('Video file is empty: $actualVideoPath');
-            }
-            if (audioLen == 0) {
-              throw Exception('Audio file is empty: $actualAudioPath');
-            }
-
-            // Use deleteInputsIfTemp: false — we handle cleanup ourselves
-            final success = await FFmpegMuxService.mergeVideoAudio(
-              actualVideoPath,
-              actualAudioPath,
-              mergedPath,
-              deleteInputsIfTemp: false, // ← KEY FIX: don't let FFmpeg delete inputs
-            );
-
-            if (success) {
-              final mergedFile = File(mergedPath);
-              if (await mergedFile.exists()) {
-                final mergedLen = await mergedFile.length();
-                debugPrint('[DMX] Merge successful: $mergedPath ($mergedLen bytes)');
-
-                // Now safely delete the original video
-                try { await videoFile.delete(); } catch (_) {}
-                // Rename merged → final path
-                await mergedFile.rename(actualVideoPath);
-                debugPrint('[DMX] Original video replaced with merged file');
-              } else {
-                throw Exception('Merged output file not found after FFmpeg success');
-              }
-              // Clean up audio temp file
-              try { await audioFile.delete(); } catch (_) {}
-            } else {
-              // Merge failed — clean up audio but KEEP the video-only file
-              try { await audioFile.delete(); } catch (_) {}
-              throw Exception(
-                  'FFmpeg merge failed. The video-only file is saved at: $actualVideoPath');
-            }
-          }
-
-          await _flushPendingProgress(task.id);
-          _speedHistories.remove(task.id);
-          _lastProgressUpdateTimes.remove(task.id);
-          _lastDbSaveTimes.remove(task.id);
-
-          final current = _findTask(task.id);
-          if (current == null) return;
-          if (current.status != DownloadStatus.downloading) return;
-          
-          final now = DateTime.now();
-          final isSeedingTorrent = current.isTorrent &&
-              current.seedingEnabled;
-          if (!isSeedingTorrent && current.isTorrent) {
-            // Torrent completed but seeding disabled: remove from engine
-            final tid = _torrentIds[current.id];
-            if (tid != null) {
-              TorrentService.removeTorrent(tid);
-              _torrentIds.remove(current.id);
-            }
-          }
-
-          final finalFileSize = current.fileSize > 0
-              ? current.fileSize
-              : (current.downloadedBytes > 0 ? current.downloadedBytes : 0);
-          await _setTask(
-            current.copyWith(
-              clearError: true,
-              clearStatusMessage: true,
-              status: DownloadStatus.completed,
-              fileSize: finalFileSize,
-              downloadedBytes:
-                  (current.isTorrent || hasAudio) && finalFileSize > 0
-                  ? finalFileSize
-                  : current.downloadedBytes,
-              speed: 0,
-              eta: 0,
-              chunks: List<double>.filled(current.threadCount, 1.0),
-              completedAt: now,
-              updatedAt: now,
-              torrentFiles: current.torrentFiles != null
-                  ? markTorrentFilesCompleted(current.torrentFiles!)
-                  : null,
-            ),
-          );
-
-          if (_settingsProvider.vibration) {
-            HapticFeedback.vibrate();
-          }
-
-          final finalPath = p.join(current.savePath, current.fileName);
-          if (Platform.isAndroid && finalPath.isNotEmpty) {
-            try {
-              _mediaChannel.invokeMethod('scanMedia', {'path': finalPath});
-            } catch (e) {
-              debugPrint('Failed to scan media: $e');
-            }
-          }
-
-          if (_settingsProvider.notificationsEnabled) {
-            if (task.isAppUpdate) {
-              _notificationService.showDownloadComplete(
-                notificationId: notificationId,
-                title: 'Update ready',
-                body: 'App update ${task.fileName} downloaded. Tap to install.',
-                playSound: _settingsProvider.soundNotification,
-                payload: task.id,
-                actions: const [
-                  AndroidNotificationAction(
-                    'install_apk',
-                    'Install',
-                    showsUserInterface: true,
+                await _setTask(
+                  currentForMerge.copyWith(
+                    statusMessage: DownloadStatusMessages.merging,
                   ),
-                ],
+                );
+
+                // Re-derive the actual video file path from the CURRENT task state
+                // (the engine may have auto-resolved a different filename)
+                var actualVideoPath = currentForMerge.localFilePath;
+                if (!await File(actualVideoPath).exists() &&
+                    await File(currentForMerge.tempFilePath).exists()) {
+                  actualVideoPath = currentForMerge.tempFilePath;
+                }
+                final actualAudioPath = audioTempPath!;
+                final videoExt = p.extension(actualVideoPath).isNotEmpty
+                    ? p.extension(actualVideoPath)
+                    : '.mp4';
+                final mergedPath =
+                    '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
+
+                debugPrint('[DMX] Phase 3 — Merge starting:');
+                debugPrint('[DMX]   Video: $actualVideoPath');
+                debugPrint('[DMX]   Audio: $actualAudioPath');
+                debugPrint('[DMX]   Output: $mergedPath');
+
+                // Verify both files exist BEFORE calling FFmpeg
+                final videoFile = File(actualVideoPath);
+                final audioFile = File(actualAudioPath);
+
+                if (!await videoFile.exists()) {
+                  throw Exception(
+                    'Video file missing after download: $actualVideoPath',
+                  );
+                }
+                if (!await audioFile.exists()) {
+                  throw Exception(
+                    'Audio file missing after download: $actualAudioPath',
+                  );
+                }
+
+                final videoLen = await videoFile.length();
+                final audioLen = await audioFile.length();
+                debugPrint('[DMX]   Video size: $videoLen bytes');
+                debugPrint('[DMX]   Audio size: $audioLen bytes');
+
+                if (videoLen == 0) {
+                  throw Exception('Video file is empty: $actualVideoPath');
+                }
+                if (audioLen == 0) {
+                  throw Exception('Audio file is empty: $actualAudioPath');
+                }
+
+                // Use deleteInputsIfTemp: false — we handle cleanup ourselves
+                final success = await FFmpegMuxService.mergeVideoAudio(
+                  actualVideoPath,
+                  actualAudioPath,
+                  mergedPath,
+                  deleteInputsIfTemp:
+                      false, // ← KEY FIX: don't let FFmpeg delete inputs
+                );
+
+                if (success) {
+                  final mergedFile = File(mergedPath);
+                  if (await mergedFile.exists()) {
+                    final mergedLen = await mergedFile.length();
+                    debugPrint(
+                      '[DMX] Merge successful: $mergedPath ($mergedLen bytes)',
+                    );
+
+                    // Now safely delete the original video
+                    try {
+                      await videoFile.delete();
+                    } catch (_) {}
+                    // Rename merged → final path
+                    await mergedFile.rename(actualVideoPath);
+                    debugPrint(
+                      '[DMX] Original video replaced with merged file',
+                    );
+                  } else {
+                    throw Exception(
+                      'Merged output file not found after FFmpeg success',
+                    );
+                  }
+                  // Clean up audio temp file
+                  try {
+                    await audioFile.delete();
+                  } catch (_) {}
+                } else {
+                  // Merge failed — clean up audio but KEEP the video-only file
+                  try {
+                    await audioFile.delete();
+                  } catch (_) {}
+                  throw Exception(
+                    'FFmpeg merge failed. The video-only file is saved at: $actualVideoPath',
+                  );
+                }
+              }
+
+              await _flushPendingProgress(task.id);
+              _speedHistories.remove(task.id);
+              _lastProgressUpdateTimes.remove(task.id);
+              _lastDbSaveTimes.remove(task.id);
+
+              final current = _findTask(task.id);
+              if (current == null) return;
+              if (current.status != DownloadStatus.downloading) return;
+
+              final now = DateTime.now();
+              final isSeedingTorrent =
+                  current.isTorrent && current.seedingEnabled;
+              if (!isSeedingTorrent && current.isTorrent) {
+                // Torrent completed but seeding disabled: remove from engine
+                final tid = _torrentIds[current.id];
+                if (tid != null) {
+                  TorrentService.removeTorrent(tid);
+                  _torrentIds.remove(current.id);
+                }
+              }
+
+              final finalFileSize = current.fileSize > 0
+                  ? current.fileSize
+                  : (current.downloadedBytes > 0 ? current.downloadedBytes : 0);
+              await _setTask(
+                current.copyWith(
+                  clearError: true,
+                  clearStatusMessage: true,
+                  status: DownloadStatus.completed,
+                  fileSize: finalFileSize,
+                  downloadedBytes:
+                      (current.isTorrent || hasAudio) && finalFileSize > 0
+                      ? finalFileSize
+                      : current.downloadedBytes,
+                  speed: 0,
+                  eta: 0,
+                  chunks: List<double>.filled(current.threadCount, 1.0),
+                  completedAt: now,
+                  updatedAt: now,
+                  torrentFiles: current.torrentFiles != null
+                      ? markTorrentFilesCompleted(current.torrentFiles!)
+                      : null,
+                ),
               );
-            } else {
-              _notificationService.showDownloadComplete(
-                notificationId: notificationId,
-                title: task.fileName,
-                playSound: _settingsProvider.soundNotification,
+
+              if (_settingsProvider.vibration) {
+                HapticFeedback.vibrate();
+              }
+
+              final finalPath = p.join(current.savePath, current.fileName);
+              if (Platform.isAndroid && finalPath.isNotEmpty) {
+                try {
+                  _mediaChannel.invokeMethod('scanMedia', {'path': finalPath});
+                } catch (e) {
+                  debugPrint('Failed to scan media: $e');
+                }
+              }
+
+              if (_settingsProvider.notificationsEnabled) {
+                if (task.isAppUpdate) {
+                  _notificationService.showDownloadComplete(
+                    notificationId: notificationId,
+                    title: 'Update ready',
+                    body:
+                        'App update ${task.fileName} downloaded. Tap to install.',
+                    playSound: _settingsProvider.soundNotification,
+                    payload: task.id,
+                    actions: const [
+                      AndroidNotificationAction(
+                        'install_apk',
+                        'Install',
+                        showsUserInterface: true,
+                      ),
+                    ],
+                  );
+                } else {
+                  _notificationService.showDownloadComplete(
+                    notificationId: notificationId,
+                    title: task.fileName,
+                    playSound: _settingsProvider.soundNotification,
+                  );
+                }
+              }
+            })
+            .catchError((Object error, StackTrace stackTrace) async {
+              final realError = error;
+
+              debugPrint('================= DOWNLOAD ERROR =================');
+              debugPrint('Task ID: ${task.id}');
+              debugPrint('URL: ${task.url}');
+              debugPrint('Error: $realError');
+              if (realError is DioException) {
+                debugPrint('DioException Type: ${realError.type}');
+                debugPrint('DioException Message: ${realError.message}');
+                debugPrint(
+                  'DioException Response: ${realError.response?.data}',
+                );
+                debugPrint(
+                  'DioException Status: ${realError.response?.statusCode}',
+                );
+              }
+              debugPrint('Stacktrace: $stackTrace');
+              debugPrint('==================================================');
+
+              await _flushPendingProgress(task.id);
+              final current = _findTask(task.id);
+              if (current == null) return;
+
+              if (realError is DioException &&
+                  realError.type == DioExceptionType.cancel) {
+                _retryCounts.remove(task.id);
+                if (current.status == DownloadStatus.downloading) {
+                  await _setTask(current.copyWith(speed: 0, clearEta: true));
+                }
+                _notificationService.cancelNotification(notificationId);
+                return;
+              }
+
+              // Clean up orphaned temp files on failure (audio or video may have been partially downloaded)
+              try {
+                if (hasAudio && audioTempPath != null) {
+                  final audioFile = File(audioTempPath);
+                  if (await audioFile.exists()) await audioFile.delete();
+                }
+                final videoTemp = File(current.tempFilePath);
+                if (await videoTemp.exists()) await videoTemp.delete();
+              } catch (_) {}
+
+              final isRetryable = _isRetryableError(realError);
+              final maxRetries =
+                  _settingsProvider.autoRetryEnabled && isRetryable
+                  ? _settingsProvider.maxRetries
+                  : 0;
+              final currentRetry = _retryCounts[task.id] ?? 0;
+
+              if (currentRetry < maxRetries) {
+                _retryCounts[task.id] = currentRetry + 1;
+                final delaySeconds = _settingsProvider.retryDelaySeconds;
+                debugPrint(
+                  'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
+                );
+
+                await _setTask(
+                  current.copyWith(
+                    status: DownloadStatus.queued,
+                    speed: 0,
+                    errorMessage:
+                        'Retrying in $delaySeconds seconds: ${_errorMessage(realError)}',
+                  ),
+                );
+
+                _retryTimers[task.id]?.cancel();
+                _retryTimers[task.id] = Timer(
+                  Duration(seconds: delaySeconds),
+                  () {
+                    _retryTimers.remove(task.id);
+                    if (_disposed) return;
+                    final checkedTask = _findTask(task.id);
+                    if (checkedTask != null &&
+                        checkedTask.status == DownloadStatus.queued) {
+                      pumpQueue();
+                    }
+                  },
+                );
+                return;
+              }
+
+              _retryCounts.remove(task.id);
+              await _setTask(
+                current.copyWith(
+                  status: DownloadStatus.failed,
+                  speed: 0,
+                  clearEta: true,
+                  clearStatusMessage: true,
+                  errorMessage: _errorMessage(realError),
+                ),
               );
-            }
-          }
-        })
-        .catchError((Object error, StackTrace stackTrace) async {
-          final realError = error;
-          
-          debugPrint('================= DOWNLOAD ERROR =================');
-          debugPrint('Task ID: ${task.id}');
-          debugPrint('URL: ${task.url}');
-          debugPrint('Error: $realError');
-          if (realError is DioException) {
-            debugPrint('DioException Type: ${realError.type}');
-            debugPrint('DioException Message: ${realError.message}');
-            debugPrint('DioException Response: ${realError.response?.data}');
-            debugPrint('DioException Status: ${realError.response?.statusCode}');
-          }
-          debugPrint('Stacktrace: $stackTrace');
-          debugPrint('==================================================');
-          
-          await _flushPendingProgress(task.id);
-          final current = _findTask(task.id);
-          if (current == null) return;
-
-          if (realError is DioException && realError.type == DioExceptionType.cancel) {
-            _retryCounts.remove(task.id);
-            if (current.status == DownloadStatus.downloading) {
-              await _setTask(current.copyWith(speed: 0, clearEta: true));
-            }
-            _notificationService.cancelNotification(notificationId);
-            return;
-          }
-
-          // Clean up orphaned temp files on failure (audio or video may have been partially downloaded)
-          try {
-            if (hasAudio && audioTempPath != null) {
-              final audioFile = File(audioTempPath);
-              if (await audioFile.exists()) await audioFile.delete();
-            }
-            final videoTemp = File(current.tempFilePath);
-            if (await videoTemp.exists()) await videoTemp.delete();
-          } catch (_) {}
-
-          final isRetryable = _isRetryableError(realError);
-          final maxRetries = _settingsProvider.autoRetryEnabled && isRetryable
-              ? _settingsProvider.maxRetries
-              : 0;
-          final currentRetry = _retryCounts[task.id] ?? 0;
-
-          if (currentRetry < maxRetries) {
-            _retryCounts[task.id] = currentRetry + 1;
-            final delaySeconds = _settingsProvider.retryDelaySeconds;
-            debugPrint(
-              'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
-            );
-
-            await _setTask(
-              current.copyWith(
-                status: DownloadStatus.queued,
-                speed: 0,
-                errorMessage:
-                    'Retrying in $delaySeconds seconds: ${_errorMessage(realError)}',
-              ),
-            );
-
-            _retryTimers[task.id]?.cancel();
-            _retryTimers[task.id] = Timer(Duration(seconds: delaySeconds), () {
-              _retryTimers.remove(task.id);
-              if (_disposed) return;
-              final checkedTask = _findTask(task.id);
-              if (checkedTask != null &&
-                  checkedTask.status == DownloadStatus.queued) {
+              if (_settingsProvider.notificationsEnabled) {
+                _notificationService.showDownloadFailed(
+                  notificationId: notificationId,
+                  title: task.fileName,
+                  error: _errorMessage(realError),
+                  playSound: _settingsProvider.soundNotification,
+                );
+              }
+            })
+            .whenComplete(() {
+              _cancelTokens.remove(task.id);
+              _activeFutures.remove(task.id);
+              // Don't pumpQueue here if this task was set to queued (retry
+              // scheduled by catchError). The retry timer will restart it after
+              // the configured delay — immediate pumpQueue would defeat the delay
+              // and create a fast fail loop.
+              final status = _findTask(task.id)?.status;
+              if (status != DownloadStatus.queued) {
                 pumpQueue();
               }
+              if (activeOrSeedingCount == 0) {
+                BackgroundService.stop();
+                _stopWidgetTimer();
+              } else {
+                _updateBackgroundNotification();
+              }
+              _updateTelemetryWidget();
             });
-            return;
-          }
-
-          _retryCounts.remove(task.id);
-          await _setTask(
-            current.copyWith(
-              status: DownloadStatus.failed,
-              speed: 0,
-              clearEta: true,
-              clearStatusMessage: true,
-              errorMessage: _errorMessage(realError),
-            ),
-          );
-          if (_settingsProvider.notificationsEnabled) {
-            _notificationService.showDownloadFailed(
-              notificationId: notificationId,
-              title: task.fileName,
-              error: _errorMessage(realError),
-              playSound: _settingsProvider.soundNotification,
-            );
-          }
-        })
-        .whenComplete(() {
-          _cancelTokens.remove(task.id);
-          _activeFutures.remove(task.id);
-          // Don't pumpQueue here if this task was set to queued (retry
-          // scheduled by catchError). The retry timer will restart it after
-          // the configured delay — immediate pumpQueue would defeat the delay
-          // and create a fast fail loop.
-          final status = _findTask(task.id)?.status;
-          if (status != DownloadStatus.queued) {
-            pumpQueue();
-          }
-          if (activeOrSeedingCount == 0) {
-            BackgroundService.stop();
-            _stopWidgetTimer();
-          } else {
-            _updateBackgroundNotification();
-          }
-          _updateTelemetryWidget();
-        });
     _activeFutures[task.id] = downloadFuture;
   }
 
@@ -2237,8 +2471,10 @@ class DownloadProvider extends ChangeNotifier
     // downloadedBytes, chunks, eta) must NOT set filteredTasksDirty to true,
     // otherwise the filtered list would be recomputed on every tick, wasting CPU
     // and causing unnecessary widget rebuilds.
-    if (prev.status != updated.status || prev.category != updated.category ||
-        prev.fileName != updated.fileName || prev.url != updated.url ||
+    if (prev.status != updated.status ||
+        prev.category != updated.category ||
+        prev.fileName != updated.fileName ||
+        prev.url != updated.url ||
         prev.fileSize != updated.fileSize) {
       filteredTasksDirty = true;
     }
@@ -2312,8 +2548,12 @@ class DownloadProvider extends ChangeNotifier
 
   // FIX #4: Prevent YouTube refresh from swapping video/audio MIME type.
   bool _youtubeMimeCompatible(String oldUrl, String newUrl) {
-    final oldMime = Uri.tryParse(oldUrl)?.queryParameters['mime']?.split('/').first;
-    final newMime = Uri.tryParse(newUrl)?.queryParameters['mime']?.split('/').first;
+    final oldMime = Uri.tryParse(
+      oldUrl,
+    )?.queryParameters['mime']?.split('/').first;
+    final newMime = Uri.tryParse(
+      newUrl,
+    )?.queryParameters['mime']?.split('/').first;
     if (oldMime == null || newMime == null) return true;
     return oldMime == newMime;
   }
@@ -2344,11 +2584,11 @@ class DownloadProvider extends ChangeNotifier
       final statusCode = error.response?.statusCode;
       if (statusCode != null) {
         return switch (statusCode) {
-          403 =>
-            '403 Forbidden: Access denied. (Raw: ${error.message})',
+          403 => '403 Forbidden: Access denied. (Raw: ${error.message})',
           401 =>
             '401 Unauthorized: Authentication is required. (Raw: ${error.message})',
-          404 => '404 Not Found: The file was not found. (Raw: ${error.message})',
+          404 =>
+            '404 Not Found: The file was not found. (Raw: ${error.message})',
           410 =>
             '410 Gone: The file has been permanently removed. (Raw: ${error.message})',
           416 =>
@@ -2367,7 +2607,10 @@ class DownloadProvider extends ChangeNotifier
 
   bool _isRetryableError(Object error) {
     final msg = error.toString().toLowerCase();
-    if (msg.contains('merge') || msg.contains('ffmpeg') || msg.contains('missing') || msg.contains('not found')) {
+    if (msg.contains('merge') ||
+        msg.contains('ffmpeg') ||
+        msg.contains('missing') ||
+        msg.contains('not found')) {
       return false;
     }
     if (error is DioException) {
@@ -2398,7 +2641,10 @@ class DownloadProvider extends ChangeNotifier
 
   void _onSettingsChanged() {
     _checkNetworkConnectivity();
-    _downloadEngine.updateSpeedLimit(_settingsProvider.speedLimitBytesPerSecond, downloadingTasksCount);
+    _downloadEngine.updateSpeedLimit(
+      _settingsProvider.speedLimitBytesPerSecond,
+      downloadingTasksCount,
+    );
     updateActualTorrentUploadLimit();
     TorrentService.applyAdvancedSettings(_settingsProvider);
     if (_lastCleanupDays == null) {
@@ -2428,8 +2674,10 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _checkNetworkConnectivity({bool skipPump = false}) async {
-    final hasNoNetwork = _currentConnectivity.contains(ConnectivityResult.none) || _currentConnectivity.isEmpty;
-    
+    final hasNoNetwork =
+        _currentConnectivity.contains(ConnectivityResult.none) ||
+        _currentConnectivity.isEmpty;
+
     if (hasNoNetwork) {
       await _pauseForNetworkDisconnect();
       return;
@@ -2483,7 +2731,7 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> _resumeFromNetworkDisconnect({bool skipPump = false}) async {
     if (_tasksPausedDueToNetwork.isEmpty) return;
-    
+
     final waiting = _tasks.where(
       (task) =>
           _tasksPausedDueToNetwork.contains(task.id) &&
@@ -2553,7 +2801,10 @@ class DownloadProvider extends ChangeNotifier
   void _startSchedulingTimer() {
     _schedulingTimer?.cancel();
     _schedulingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
-      if (_disposed) { timer.cancel(); return; }
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
       _checkScheduledDownloads();
       _checkPeriodicAppUpdate();
       if (downloadingTasksCount > 0) {
@@ -2647,9 +2898,11 @@ class DownloadProvider extends ChangeNotifier
       // attempted even if an earlier one fails (unlike the default behaviour
       // which stops at the first error and silently drops remaining saves).
       await Future.wait(
-        saves.map((f) => f.catchError((Object e) {
-          debugPrint('Failed to save a scheduled task: $e');
-        })),
+        saves.map(
+          (f) => f.catchError((Object e) {
+            debugPrint('Failed to save a scheduled task: $e');
+          }),
+        ),
         eagerError: false,
       );
     }
@@ -2685,10 +2938,13 @@ class DownloadProvider extends ChangeNotifier
     _widgetTimer?.cancel();
     if (downloadingTasksCount > 0 || seedingTasksCount > 0) {
       _widgetTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-        if (_disposed) { timer.cancel(); return; }
+        if (_disposed) {
+          timer.cancel();
+          return;
+        }
         _updateTelemetryWidget();
         BackgroundService.sendHeartbeat();
-        
+
         final tasksToSave = <DownloadTask>[];
         for (var i = 0; i < _tasks.length; i++) {
           final t = _tasks[i];
@@ -2731,8 +2987,6 @@ class DownloadProvider extends ChangeNotifier
 
     final targetThreadCount = threadCount.clamp(1, 32);
     if (task.threadCount == targetThreadCount) return;
-
-
 
     var activeIdx = taskIndex;
     final wasDownloading = task.status == DownloadStatus.downloading;
@@ -2783,8 +3037,6 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
     _updateTelemetryWidget();
   }
-
-
 
   Future<void> updateTaskUrl(
     String taskId,
@@ -2875,7 +3127,8 @@ class DownloadProvider extends ChangeNotifier
 
     // Resolve metadata for standard URL
     DownloadMetadata? metadata;
-    final isYoutube = task.downloadPageUrl != null &&
+    final isYoutube =
+        task.downloadPageUrl != null &&
         (task.downloadPageUrl!.contains('youtube.com/') ||
             task.downloadPageUrl!.contains('youtu.be/'));
 
@@ -2899,15 +3152,18 @@ class DownloadProvider extends ChangeNotifier
     }
 
     final resolvedFileSize = newFileSize ?? metadata?.fileSize ?? task.fileSize;
-    final resolvedSupportsResume = isRefresh ? true : (metadata?.supportsResume ?? task.supportsResume);
+    final resolvedSupportsResume = isRefresh
+        ? true
+        : (metadata?.supportsResume ?? task.supportsResume);
 
     bool sizeChanged = false;
-    
+
     final oldUri = Uri.tryParse(task.url);
     final newUri = Uri.tryParse(cleanUrl);
     final oldItag = oldUri?.queryParameters['itag'];
     final newItag = newUri?.queryParameters['itag'];
-    final itagChanged = oldItag != null && newItag != null && oldItag != newItag;
+    final itagChanged =
+        oldItag != null && newItag != null && oldItag != newItag;
 
     if (isYoutube && itagChanged) {
       sizeChanged = true;
@@ -2927,11 +3183,11 @@ class DownloadProvider extends ChangeNotifier
     final updatedTask = task.copyWith(
       url: cleanUrl,
       mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
-      fileSize: sizeChanged || task.fileSize <= 0 
-          ? (resolvedFileSize > 0 ? resolvedFileSize : task.fileSize) 
+      fileSize: sizeChanged || task.fileSize <= 0
+          ? (resolvedFileSize > 0 ? resolvedFileSize : task.fileSize)
           : task.fileSize,
-      audioSize: sizeChanged || task.audioSize <= 0 
-          ? (newAudioSize ?? task.audioSize) 
+      audioSize: sizeChanged || task.audioSize <= 0
+          ? (newAudioSize ?? task.audioSize)
           : task.audioSize,
       supportsResume: resolvedSupportsResume,
       downloadedBytes: sizeChanged ? 0 : task.downloadedBytes,
@@ -2954,7 +3210,11 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-  Future<void> updateTaskUrlAndResume(String id, String newUrl, {String? newAudioUrl}) async {
+  Future<void> updateTaskUrlAndResume(
+    String id,
+    String newUrl, {
+    String? newAudioUrl,
+  }) async {
     final task = _findTask(id);
     if (task == null) return;
 
@@ -2970,7 +3230,12 @@ class DownloadProvider extends ChangeNotifier
       await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
     } else {
       // updateTaskUrl already handles resume internally for downloading tasks
-      await updateTaskUrl(id, newUrl, newAudioUrl: newAudioUrl, isRefresh: true);
+      await updateTaskUrl(
+        id,
+        newUrl,
+        newAudioUrl: newAudioUrl,
+        isRefresh: true,
+      );
       final updated = _findTask(id);
       // Only resume if the task was NOT already downloading
       if (updated != null &&
@@ -3000,7 +3265,7 @@ class DownloadProvider extends ChangeNotifier
     if (activeFuture != null && !fromError) {
       try {
         await activeFuture;
-      // ignore: avoid_catches_without_on_clauses
+        // ignore: avoid_catches_without_on_clauses
       } catch (e) {
         debugPrint('[DMX] activeFuture error in cancel: $e');
       }

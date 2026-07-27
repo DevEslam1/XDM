@@ -425,7 +425,7 @@ class YoutubeService {
             .where((s) => s['type'] == 'audio')
             .toList();
         if (audioStreams.isNotEmpty) return audioStreams.first;
-        return streams.first;
+        return streams.isNotEmpty ? streams.first : null;
       }
 
       if (preset == 'best_muxed') {
@@ -437,7 +437,7 @@ class YoutubeService {
             .where((s) => s['type'] == 'combined')
             .toList();
         if (combinedStreams.isNotEmpty) return combinedStreams.first;
-        return streams.first;
+        return streams.isNotEmpty ? streams.first : null;
       }
 
       if (preset == 'best_combined' || preset == 'best') {
@@ -449,7 +449,7 @@ class YoutubeService {
             .where((s) => s['type'] == 'muxed')
             .toList();
         if (muxedStreams.isNotEmpty) return muxedStreams.first;
-        return streams.first;
+        return streams.isNotEmpty ? streams.first : null;
       }
 
       final reqHeight = parseQualityHeight(preset);
@@ -504,7 +504,7 @@ class YoutubeService {
         if (muxedStreams.isNotEmpty) return muxedStreams.last;
       }
 
-      return streams.first;
+      return streams.isNotEmpty ? streams.first : null;
     } catch (e) {
       debugPrint('YoutubeService.getStreamForVideo error for $videoId: $e');
       throw Exception(_parseErrorMessage(e));
@@ -563,7 +563,7 @@ class YoutubeService {
     } on BackendException catch (e) {
       throw Exception(e.toUserMessage());
     } catch (e) {
-      debugPrint('[YoutubeService] Search error: $e');
+      debugPrint('[YouTubeService] Search error: $e');
       throw Exception('Search failed: $e');
     }
   }
@@ -620,12 +620,14 @@ class YoutubeService {
                         oldItag),
             orElse: () => <String, dynamic>{},
           );
-          if (matched.isNotEmpty) {
-            return {
-              'url': matched['src'] as String?,
-              'audioUrl': matched['audioSrc'] as String?,
-            };
+          if (matched.isEmpty) {
+            debugPrint('[YouTubeService] refreshStreamUrl: itag "$oldItag" not found in refreshed streams. Returning null.');
+            return null;
           }
+          return {
+            'url': matched['src'] as String?,
+            'audioUrl': matched['audioSrc'] as String?,
+          };
         }
 
         final oldQuality =
@@ -654,14 +656,16 @@ class YoutubeService {
           };
         }
 
-        final first = streams.first;
-        return {
-          'url': first['src'] as String?,
-          'audioUrl': first['audioSrc'] as String?,
-        };
+        if (streams.isNotEmpty) {
+          final first = streams.first;
+          return {
+            'url': first['src'] as String?,
+            'audioUrl': first['audioSrc'] as String?,
+          };
+        }
       }
     } catch (e) {
-      debugPrint('[YoutubeService] refreshStreamUrl error ($e).');
+      debugPrint('[YouTubeService] refreshStreamUrl error ($e).');
     }
     return null;
   }
@@ -695,7 +699,7 @@ class YoutubeService {
         };
       }
     } catch (e) {
-      debugPrint('[YoutubeService] Backend getFreshStreams error ($e).');
+      debugPrint('[YouTubeService] Backend getFreshStreams error ($e).');
     }
 
     return null;
