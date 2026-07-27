@@ -52,7 +52,10 @@ class NotificationService {
   /// Provides basic injection protection for notification payloads.
   static bool _isValidTaskId(String id) {
     if (id.isEmpty || id.length > 64) return false;
-    return RegExp(r'^\d+(_\d{1,10})?$').hasMatch(id);
+    // Matches standard UUID format (e.g. 550e8400-e29b-41d4-a716-446655440000)
+    return RegExp(
+      r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$',
+    ).hasMatch(id);
   }
 
   /// Request notification runtime permission (Android 13+).
@@ -328,7 +331,7 @@ class NotificationService {
       showProgress: false,
       playSound: playSound,
     );
-    final iosDetails = DarwinNotificationDetails(
+    final iosDetails = const DarwinNotificationDetails(
       presentAlert: true,
       interruptionLevel: InterruptionLevel.timeSensitive,
     );

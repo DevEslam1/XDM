@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/youtube_service.dart';
@@ -1124,13 +1125,48 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               const SizedBox(width: 6),
                               _HeaderAction(
                                 icon: Icons.language_rounded,
-                                tooltip: 'EN/AR',
+                                tooltip: isRtl ? 'فتح في المتصفح' : 'Open in browser',
                                 color: secClr,
-                                onTap: () {
-                                  final nextLang = settings.languageCode == 'en'
-                                      ? 'ar'
-                                      : 'en';
-                                  settings.setLanguageCode(nextLang);
+                                onTap: () async {
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  final url = _urlController.text.trim();
+                                  if (url.isEmpty) {
+                                    messenger.removeCurrentSnackBar();
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        backgroundColor: Colors.transparent,
+                                        elevation: 0,
+                                        behavior: SnackBarBehavior.floating,
+                                        duration: const Duration(milliseconds: 2600),
+                                        margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                                        padding: EdgeInsets.zero,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                        content: Text(isRtl ? 'لا يوجد رابط لفتحه' : 'No URL to open'),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  final uri = Uri.tryParse(url);
+                                  if (uri != null && await canLaunchUrl(uri)) {
+                                    await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  } else if (mounted) {
+                                    messenger.removeCurrentSnackBar();
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        backgroundColor: Colors.transparent,
+                                        elevation: 0,
+                                        behavior: SnackBarBehavior.floating,
+                                        duration: const Duration(milliseconds: 2600),
+                                        margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                                        padding: EdgeInsets.zero,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                        content: Text(isRtl ? 'لا يمكن فتح الرابط' : 'Cannot open URL'),
+                                      ),
+                                    );
+                                  }
                                 },
                               ),
                               const SizedBox(width: 6),
@@ -1199,148 +1235,168 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       : (isDark
                                             ? AppTheme.neonRed
                                             : AppTheme.lightNeonRed)),
+            child: AnimatedBuilder(
+              animation: Listenable.merge([
+                _urlController,
+                _urlFocus,
+              ]),
+              builder: (_, _) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: panelBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Stack(
+                    children: [
+                      // scanline sweep while focused
+                      if (_urlFocus.hasFocus && isDark)
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(
+                              12,
+                            ),
                             child: AnimatedBuilder(
-                              animation: Listenable.merge([
-                                _urlController,
-                                _urlFocus,
-                              ]),
-                              builder: (_, _) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    color: panelBg,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: _urlFocus.hasFocus
-                                          ? blueClr.withValues(alpha: 0.5)
-                                          : Colors.transparent,
-                                      width: 1.2,
-                                    ),
-                                  ),
-                                  child: Stack(
+                              animation: _scanController,
+                              builder: (_, _) => LayoutBuilder(
+                                builder: (_, c) {
+                                  final x =
+                                      (c.maxWidth + 60) *
+                                          _scanController
+                                              .value -
+                                      60;
+                                  return Stack(
                                     children: [
-                                      // scanline sweep while focused
-                                      if (_urlFocus.hasFocus && isDark)
-                                        Positioned.fill(
-                                          child: ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                            child: AnimatedBuilder(
-                                              animation: _scanController,
-                                              builder: (_, _) => LayoutBuilder(
-                                                builder: (_, c) {
-                                                  final x =
-                                                      (c.maxWidth + 60) *
-                                                          _scanController
-                                                              .value -
-                                                      60;
-                                                  return Stack(
-                                                    children: [
-                                                      Positioned(
-                                                        left: x,
-                                                        top: 0,
-                                                        bottom: 0,
-                                                        child: Container(
-                                                          width: 40,
-                                                          decoration: BoxDecoration(
-                                                            gradient: LinearGradient(
-                                                              colors: [
-                                                                blueClr
-                                                                    .withValues(
-                                                                      alpha: 0,
-                                                                    ),
-                                                                blueClr
-                                                                    .withValues(
-                                                                      alpha:
-                                                                          0.06,
-                                                                    ),
-                                                                blueClr
-                                                                    .withValues(
-                                                                      alpha: 0,
-                                                                    ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  );
-                                                },
-                                              ),
+                                      Positioned(
+                                        left: x,
+                                        top: 0,
+                                        bottom: 0,
+                                        child: Container(
+                                          width: 40,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                blueClr
+                                                    .withValues(
+                                                      alpha: 0,
+                                                    ),
+                                                blueClr
+                                                    .withValues(
+                                                      alpha:
+                                                          0.06,
+                                                    ),
+                                                blueClr
+                                                    .withValues(
+                                                      alpha: 0,
+                                                    ),
+                                              ],
                                             ),
                                           ),
-                                        ),
-                                      TextFormField(
-                                        controller: _urlController,
-                                        focusNode: _urlFocus,
-                                        maxLines: 3,
-                                        minLines: 1,
-                                        style: TextStyle(
-                                          color: textClr,
-                                          fontSize: 12,
-                                          fontFamily: 'monospace',
-                                          height: 1.4,
-                                        ),
-                                        validator: (val) {
-                                          if (val == null ||
-                                              val.trim().isEmpty) {
-                                            return L10n.of(
-                                              context,
-                                              'url_empty_error',
-                                            );
-                                          }
-                                          final lines = val
-                                              .split(RegExp(r'[\r\n]+'))
-                                              .map((l) => l.trim())
-                                              .where((l) => l.isNotEmpty)
-                                              .toList();
-                                          if (lines.isEmpty) {
-                                            return L10n.of(
-                                              context,
-                                              'url_empty_error',
-                                            );
-                                          }
-                                          for (final line in lines) {
-                                            if (!isValidTransmissionUrl(line)) {
-                                              return L10n.of(
-                                                context,
-                                                'url_invalid_error',
-                                              );
-                                            }
-                                          }
-                                          return null;
-                                        },
-                                        decoration: InputDecoration(
-                                          hintText:
-                                              'https:// …  |  magnet:?xt= …',
-                                          hintStyle: TextStyle(
-                                            color: mutedClr.withValues(
-                                              alpha: 0.6,
-                                            ),
-                                            fontSize: 12,
-                                            fontFamily: 'monospace',
-                                          ),
-                                          border: InputBorder.none,
-                                          enabledBorder: InputBorder.none,
-                                          focusedBorder: InputBorder.none,
-                                          errorBorder: InputBorder.none,
-                                          focusedErrorBorder: InputBorder.none,
-                                          errorStyle: const TextStyle(
-                                            fontSize: 10,
-                                            height: 0.8,
-                                          ),
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 14,
-                                                vertical: 12,
-                                              ),
                                         ),
                                       ),
                                     ],
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
+                          ),
+                        ),
+                      TextFormField(
+                        controller: _urlController,
+                        focusNode: _urlFocus,
+                        maxLines: 3,
+                        minLines: 1,
+                        style: TextStyle(
+                          color: textClr,
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                          height: 1.4,
+                        ),
+                        validator: (val) {
+                          if (val == null ||
+                              val.trim().isEmpty) {
+                            return L10n.of(
+                              context,
+                              'url_empty_error',
+                            );
+                          }
+                          final lines = val
+                              .split(RegExp(r'[\r\n]+'))
+                              .map((l) => l.trim())
+                              .where((l) => l.isNotEmpty)
+                              .toList();
+                          if (lines.isEmpty) {
+                            return L10n.of(
+                              context,
+                              'url_empty_error',
+                            );
+                          }
+                          for (final line in lines) {
+                            if (!isValidTransmissionUrl(line)) {
+                              return L10n.of(
+                                context,
+                                'url_invalid_error',
+                              );
+                            }
+                          }
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          hintText:
+                              'https:// …  |  magnet:?xt= …',
+                          hintStyle: TextStyle(
+                            color: mutedClr.withValues(
+                              alpha: 0.6,
+                            ),
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          ),
+                          filled: true,
+                          fillColor: panelBg,
+                          contentPadding:
+                              const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: blueClr.withValues(alpha: 0.5),
+                              width: 1.2,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                              width: 1.0,
+                            ),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
+                              width: 1.2,
+                            ),
+                          ),
+                          errorStyle: const TextStyle(
+                            fontSize: 10,
+                            height: 0.8,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
                           ),
                           // live validation readout
                           AnimatedBuilder(
@@ -1401,29 +1457,60 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           const SizedBox(height: 14),
 
                           // ── Referrer ──
-                          _FieldBox(
-                            panelBg: panelBg,
-                            child: TextFormField(
-                              controller: _referrerController,
-                              style: TextStyle(
-                                color: textClr,
-                                fontSize: 12,
-                                fontFamily: 'monospace',
+                          TextFormField(
+                            controller: _referrerController,
+                            style: TextStyle(
+                              color: textClr,
+                              fontSize: 12,
+                              fontFamily: 'monospace',
+                            ),
+                            decoration: InputDecoration(
+                              hintText: isRtl
+                                  ? 'رابط صفحة التنزيل (اختياري)'
+                                  : 'Download / referrer page link (optional)',
+                              hintStyle: TextStyle(
+                                color: mutedClr.withValues(alpha: 0.6),
+                                fontSize: 11,
                               ),
-                              decoration: InputDecoration(
-                                hintText: isRtl
-                                    ? 'رابط صفحة التنزيل (اختياري)'
-                                    : 'Download / referrer page link (optional)',
-                                hintStyle: TextStyle(
-                                  color: mutedClr.withValues(alpha: 0.6),
-                                  fontSize: 11,
+                              filled: true,
+                              fillColor: panelBg,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 11,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: borderClr.withValues(alpha: 0.5),
+                                  width: 0.8,
                                 ),
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 11,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: borderClr.withValues(alpha: 0.5),
+                                  width: 0.8,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: blueClr.withValues(alpha: 0.5),
+                                  width: 1.2,
+                                ),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                  width: 1.0,
+                                ),
+                              ),
+                              focusedErrorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
+                                  width: 1.2,
                                 ),
                               ),
                             ),
@@ -1447,46 +1534,77 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: _FieldBox(
-                                            panelBg: panelBg,
-                                            child: TextFormField(
-                                              controller: _nameController,
-                                              style: TextStyle(
-                                                color: textClr,
-                                                fontSize: 12,
+                                          child: TextFormField(
+                                            controller: _nameController,
+                                            style: TextStyle(
+                                              color: textClr,
+                                              fontSize: 12,
+                                            ),
+                                            onChanged: (v) =>
+                                                _userEditedName = v.trim().isNotEmpty,
+                                            validator: (val) {
+                                              if (val == null ||
+                                                  val.trim().isEmpty) {
+                                                return L10n.of(
+                                                  context,
+                                                  'filename_empty_error',
+                                                );
+                                              }
+                                              return null;
+                                            },
+                                            decoration: InputDecoration(
+                                              hintText: 'filename',
+                                              hintStyle: TextStyle(
+                                                color: mutedClr.withValues(
+                                                  alpha: 0.6,
+                                                ),
+                                                fontSize: 11,
                                               ),
-                                              onChanged: (v) =>
-                                                  _userEditedName = v.trim().isNotEmpty,
-                                              validator: (val) {
-                                                if (val == null ||
-                                                    val.trim().isEmpty) {
-                                                  return L10n.of(
-                                                    context,
-                                                    'filename_empty_error',
-                                                  );
-                                                }
-                                                return null;
-                                              },
-                                              decoration: InputDecoration(
-                                                hintText: 'filename',
-                                                hintStyle: TextStyle(
-                                                  color: mutedClr.withValues(
-                                                    alpha: 0.6,
+                                              filled: true,
+                                              fillColor: panelBg,
+                                              errorStyle: const TextStyle(
+                                                fontSize: 10,
+                                                height: 0.8,
+                                              ),
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 11,
                                                   ),
-                                                  fontSize: 11,
+                                              border: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  width: 0.8,
                                                 ),
-                                                border: InputBorder.none,
-                                                enabledBorder: InputBorder.none,
-                                                focusedBorder: InputBorder.none,
-                                                errorStyle: const TextStyle(
-                                                  fontSize: 10,
-                                                  height: 0.8,
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  width: 0.8,
                                                 ),
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 11,
-                                                    ),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: blueClr.withValues(alpha: 0.5),
+                                                  width: 1.2,
+                                                ),
+                                              ),
+                                              errorBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                                  width: 1.0,
+                                                ),
+                                              ),
+                                              focusedErrorBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
+                                                  width: 1.2,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -1506,32 +1624,63 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                         ),
                                         SizedBox(
                                           width: 62,
-                                          child: _FieldBox(
-                                            panelBg: panelBg,
-                                            child: TextFormField(
-                                              controller: _extController,
-                                              style: TextStyle(
-                                                color: textClr,
-                                                fontSize: 12,
+                                          child: TextFormField(
+                                            controller: _extController,
+                                            style: TextStyle(
+                                              color: textClr,
+                                              fontSize: 12,
+                                              fontFamily: 'monospace',
+                                            ),
+                                            decoration: InputDecoration(
+                                              hintText: 'ext',
+                                              hintStyle: TextStyle(
+                                                color: mutedClr.withValues(
+                                                  alpha: 0.6,
+                                                ),
+                                                fontSize: 11,
                                                 fontFamily: 'monospace',
                                               ),
-                                              decoration: InputDecoration(
-                                                hintText: 'ext',
-                                                hintStyle: TextStyle(
-                                                  color: mutedClr.withValues(
-                                                    alpha: 0.6,
+                                              filled: true,
+                                              fillColor: panelBg,
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 11,
                                                   ),
-                                                  fontSize: 11,
-                                                  fontFamily: 'monospace',
+                                              border: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  width: 0.8,
                                                 ),
-                                                border: InputBorder.none,
-                                                enabledBorder: InputBorder.none,
-                                                focusedBorder: InputBorder.none,
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 11,
-                                                    ),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  width: 0.8,
+                                                ),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: blueClr.withValues(alpha: 0.5),
+                                                  width: 1.2,
+                                                ),
+                                              ),
+                                              errorBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                                  width: 1.0,
+                                                ),
+                                              ),
+                                              focusedErrorBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(12),
+                                                borderSide: BorderSide(
+                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
+                                                  width: 1.2,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -1552,8 +1701,18 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       color: mutedClr,
                                     ),
                                     const SizedBox(height: 8),
-                                    _FieldBox(
-                                      panelBg: panelBg,
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: panelBg,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: borderClr.withValues(alpha: 0.5),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
                                       child: DropdownButtonHideUnderline(
                                         child: DropdownButton<String>(
                                           dropdownColor: isDark
@@ -1609,34 +1768,65 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           Row(
                             children: [
                               Expanded(
-                                child: _FieldBox(
-                                  panelBg: panelBg,
-                                  child: TextFormField(
-                                    controller: _pathController,
-                                    style: TextStyle(
-                                      color: textClr,
-                                      fontSize: 11,
-                                      fontFamily: 'monospace',
+                                child: TextFormField(
+                                  controller: _pathController,
+                                  style: TextStyle(
+                                    color: textClr,
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                  ),
+                                  validator: (val) {
+                                    if (val == null || val.trim().isEmpty) {
+                                      return 'Save path cannot be empty';
+                                    }
+                                    return null;
+                                  },
+                                  decoration: InputDecoration(
+                                    filled: true,
+                                    fillColor: panelBg,
+                                    errorStyle: const TextStyle(
+                                      fontSize: 10,
+                                      height: 0.8,
                                     ),
-                                    validator: (val) {
-                                      if (val == null || val.trim().isEmpty) {
-                                        return 'Save path cannot be empty';
-                                      }
-                                      return null;
-                                    },
-                                    decoration: InputDecoration(
-                                      border: InputBorder.none,
-                                      enabledBorder: InputBorder.none,
-                                      focusedBorder: InputBorder.none,
-                                      errorStyle: const TextStyle(
-                                        fontSize: 10,
-                                        height: 0.8,
+                                    contentPadding:
+                                        const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 11,
+                                        ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: borderClr.withValues(alpha: 0.5),
+                                        width: 0.8,
                                       ),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 11,
-                                          ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: borderClr.withValues(alpha: 0.5),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: blueClr.withValues(alpha: 0.5),
+                                        width: 1.2,
+                                      ),
+                                    ),
+                                    errorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                        width: 1.0,
+                                      ),
+                                    ),
+                                    focusedErrorBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
+                                        width: 1.2,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1677,7 +1867,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       height: 40,
                                       decoration: BoxDecoration(
                                         color: panelBg,
-                                        borderRadius: BorderRadius.circular(10),
+                                        borderRadius: BorderRadius.circular(12),
                                         border: Border.all(color: borderClr),
                                       ),
                                       child: Row(
@@ -1722,25 +1912,29 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       color: mutedClr,
                                     ),
                                     const SizedBox(height: 8),
-                                    _ToggleChip(
-                                      icon: Icons.wifi_rounded,
-                                      label: isRtl ? 'واي فاي' : 'WI-FI',
-                                      active: _wifiOnly,
-                                      color: blueClr,
-                                      isDark: isDark,
-                                      onTap: () => setState(
-                                        () => _wifiOnly = !_wifiOnly,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    _ToggleChip(
-                                      icon: Icons.refresh_rounded,
-                                      label: isRtl ? 'إعادة' : 'RETRY',
-                                      active: _retry,
-                                      color: greenClr,
-                                      isDark: isDark,
-                                      onTap: () =>
-                                          setState(() => _retry = !_retry),
+                                    Row(
+                                      children: [
+                                        _ToggleChip(
+                                          icon: Icons.wifi_rounded,
+                                          label: isRtl ? 'واي فاي' : 'WI-FI',
+                                          active: _wifiOnly,
+                                          color: blueClr,
+                                          isDark: isDark,
+                                          onTap: () => setState(
+                                            () => _wifiOnly = !_wifiOnly,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _ToggleChip(
+                                          icon: Icons.refresh_rounded,
+                                          label: isRtl ? 'إعادة' : 'RETRY',
+                                          active: _retry,
+                                          color: greenClr,
+                                          isDark: isDark,
+                                          onTap: () =>
+                                              setState(() => _retry = !_retry),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -1762,7 +1956,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               ),
                               decoration: BoxDecoration(
                                 color: panelBg,
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: borderClr),
                               ),
                               child: Row(
@@ -2064,27 +2258,6 @@ class _SectionLabel extends StatelessWidget {
         ),
         ?trailing,
       ],
-    );
-  }
-}
-
-class _FieldBox extends StatelessWidget {
-  final Widget child;
-  final Color panelBg;
-  const _FieldBox({required this.child, required this.panelBg});
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      decoration: BoxDecoration(
-        color: panelBg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
-          width: 0.8,
-        ),
-      ),
-      child: child,
     );
   }
 }

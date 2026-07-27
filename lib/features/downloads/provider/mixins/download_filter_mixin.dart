@@ -70,6 +70,13 @@ mixin DownloadFilterMixin {
 
   int get downloadingTasksCount =>
       providerTasks
+          .where((task) => task.status == DownloadStatus.downloading)
+          .length;
+
+  /// Number of active downloads including seeding torrents.
+  /// Used for background service and widget lifetime.
+  int get activeOrSeedingCount =>
+      providerTasks
           .where((task) =>
               task.status == DownloadStatus.downloading ||
               (task.status == DownloadStatus.completed &&

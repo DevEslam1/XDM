@@ -245,7 +245,7 @@ class DatabaseService {
   DownloadTask _rowToTask(DbDownloadTask row) {
     DateTime parseIntDate(int msSinceEpoch) {
       try {
-        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch, isUtc: true);
+        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
       } catch (e) {
         debugPrint('[DMX] Error parsing date millisecondsSinceEpoch $msSinceEpoch: $e');
         return DateTime(2000);
@@ -255,7 +255,7 @@ class DatabaseService {
     DateTime? parseNullableIntDate(int? msSinceEpoch) {
       if (msSinceEpoch == null) return null;
       try {
-        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch, isUtc: true);
+        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
       } catch (e) {
         debugPrint('[DMX] Error parsing nullable date millisecondsSinceEpoch $msSinceEpoch: $e');
         return null;
@@ -301,8 +301,8 @@ class DatabaseService {
       pausedByUser: row.pausedByUser,
       youtubeQualityPreset: row.youtubeQualityPreset,
       notes: row.notes,
-      playlistId: row.playlistId,
-      playlistTitle: row.playlistTitle,
+      playlistId: row.playlistId?.isNotEmpty == true ? row.playlistId : null,
+      playlistTitle: row.playlistTitle?.isNotEmpty == true ? row.playlistTitle : null,
     );
   }
 

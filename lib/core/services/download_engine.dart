@@ -230,6 +230,40 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) {
   );
 }
 
+/// Dio interceptor that retries once on transient connection errors with a
+/// 1-second delay. Does NOT retry on HTTP error responses or cancellation.
+class _RetryOnConnectionErrorInterceptor extends Interceptor {
+  bool _hasRetried = false;
+  Dio? _dio;
+
+  void bindDio(Dio dio) => _dio = dio;
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (_hasRetried || _dio == null) {
+      _hasRetried = false;
+      handler.next(err);
+      return;
+    }
+    if (err.type == DioExceptionType.connectionTimeout ||
+        err.type == DioExceptionType.receiveTimeout ||
+        err.type == DioExceptionType.sendTimeout ||
+        err.type == DioExceptionType.connectionError) {
+      _hasRetried = true;
+      Future.delayed(const Duration(seconds: 1), () async {
+        try {
+          final response = await _dio!.fetch(err.requestOptions);
+          handler.resolve(response);
+        } catch (retryError) {
+          handler.next(err);
+        }
+      });
+    } else {
+      handler.next(err);
+    }
+  }
+}
+
 class DownloadEngine {
   static const int _flushBufferSize = 1024 * 1024;
   static const int _progressReportIntervalMs = 250;
@@ -287,6 +321,9 @@ class DownloadEngine {
     String? oauthToken,
   }) {
     final client = Dio();
+    final retryInterceptor = _RetryOnConnectionErrorInterceptor();
+    client.interceptors.add(retryInterceptor);
+    retryInterceptor.bindDio(client);
     client.options.connectTimeout = const Duration(seconds: 30);
     client.options.sendTimeout = const Duration(seconds: 60);
     client.options.receiveTimeout = const Duration(seconds: 60);
@@ -1156,8 +1193,8 @@ class DownloadEngine {
       final remaining = totalSize > downloadedBytes
           ? totalSize - downloadedBytes
           : 0;
-      final eta = speed > 0 && remaining > 0
-          ? (remaining / speed).round()
+      final eta = speed.isFinite && speed > 0 && remaining > 0
+          ? (remaining / speed).round().clamp(0, 86400 * 365)
           : null;
 
       List<Map<String, dynamic>>? resolvedFiles;
@@ -1406,11 +1443,11 @@ class DownloadEngine {
 
         bool isTotalComplete() {
           if (totalSize <= 0) return false;
-          int sum = 0;
+          BigInt sum = BigInt.zero;
           for (int i = 0; i < chunkProgress.length; i++) {
-            sum += chunkProgress[i];
+            sum += BigInt.from(chunkProgress[i]);
           }
-          return sum >= totalSize;
+          return sum >= BigInt.from(totalSize);
         }
 
         Future<void> reportProgress() async {
@@ -1445,8 +1482,8 @@ class DownloadEngine {
           final remaining = totalSize > downloadedTotal
               ? totalSize - downloadedTotal
               : 0;
-          final eta = speed > 0 && remaining > 0
-              ? (remaining / speed).round()
+          final eta = speed.isFinite && speed > 0 && remaining > 0
+              ? (remaining / speed).round().clamp(0, 86400 * 365)
               : null;
 
           if (shouldReport) {
@@ -1683,7 +1720,7 @@ class DownloadEngine {
           }
 
           if (totalSize > 0) {
-            final downloadedChunkSum = chunkProgress.fold<int>(0, (s, c) => s + c);
+            final downloadedChunkSum = chunkProgress.fold<BigInt>(BigInt.zero, (s, c) => s + BigInt.from(c)).toInt();
             if (downloadedChunkSum != totalSize) {
               throw Exception(
                 'Download integrity check failed: expected $totalSize bytes, got $downloadedChunkSum bytes downloaded.',
@@ -1999,8 +2036,8 @@ class DownloadEngine {
         }
 
         final remaining = totalSize > 0 ? totalSize - downloadedTotal : 0;
-        final eta = speed > 0 && remaining > 0
-            ? (remaining / speed).round()
+        final eta = speed.isFinite && speed > 0 && remaining > 0
+            ? (remaining / speed).round().clamp(0, 86400 * 365)
             : null;
 
         final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
@@ -2101,9 +2138,11 @@ class DownloadEngine {
       }
     }
 
-    final stateFile = File('$tempFilePath.dmxstate');
-    if (await stateFile.exists()) {
-      await stateFile.delete();
+    if (tempFilePath.isNotEmpty) {
+      final stateFile = File('$tempFilePath.dmxstate');
+      if (await stateFile.exists()) {
+        await stateFile.delete();
+      }
     }
   }
 

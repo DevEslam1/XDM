@@ -170,18 +170,20 @@ class BencodeDecoder {
 
       if (info.containsKey('files')) {
         // Multi-file torrent
-        final files = info['files'] as List;
-        for (final f in files) {
-          if (f is Map) {
-            final length = f['length'] as int? ?? 0;
-            totalLength += length;
-            
-            final pathSegments = (f['path.utf-8'] ?? f['path']) as List? ?? [];
-            final pathList = pathSegments.map((s) => s is Uint8List ? utf8.decode(s) : s.toString()).toList();
-            filesList.add({
-              'name': pathList.join('/'),
-              'length': length,
-            });
+        final files = info['files'];
+        if (files is List) {
+          for (final f in files) {
+            if (f is Map) {
+              final length = (f['length'] as int?) ?? 0;
+              totalLength += length;
+              final rawPath = f['path.utf-8'] ?? f['path'];
+              final pathSegments = (rawPath is List ? rawPath : <dynamic>[]);
+              final pathList = pathSegments.map((s) => s is Uint8List ? utf8.decode(s) : s.toString()).toList();
+              filesList.add({
+                'name': pathList.join('/'),
+                'length': length,
+              });
+            }
           }
         }
       } else {

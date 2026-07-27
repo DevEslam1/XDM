@@ -16,20 +16,6 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  // SECURITY WARNING: The three string parts below form the built-in fallback
-  // API key used when no key is provided via the DMX_API_KEY build-time
-  // environment variable or secure storage. Because they are adjacent literals,
-  // the concatenated key is trivially recoverable from the compiled binary using
-  // strings(1) or any hex editor. This key should be treated as public and
-  // rotated regularly. To supply a secure key at build time, pass:
-  //   flutter build ... --dart-define=DMX_API_KEY=<your_key>
-  // The secure-storage path (loaded via loadApiKey()) takes precedence at runtime.
-  static String get _apiKeyFallback {
-    const fromEnv = String.fromEnvironment('DMX_API_KEY');
-    if (fromEnv.isNotEmpty) return fromEnv;
-    final parts = ['KxPgwFT0Vvq', 'oJUgVfcWuvE3', '-QSrc7qM-1YDS1dzNJv0'];
-    return parts.join();
-  }
   static String? _apiKey;
 
   late Dio _dio;
@@ -39,27 +25,56 @@ class XdmBackendClient {
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
-  /// Reads the API key from secure storage, falling back to the compile-time constant.
+  /// Reads the API key from secure storage or from the compile-time
+  /// [DMX_API_KEY] environment variable.  No hardcoded production fallback
+  /// exists; if neither source provides a key, [_apiKey] is set to null and
+  /// any subsequent API call will throw [BackendUnauthorizedException].
+  ///
   /// Call this once at app startup before using the client.
   static Future<void> loadApiKey() async {
     try {
       final stored = await _secureStorage.read(key: _apiKeyStorageKey);
+
       if (stored != null && stored.isNotEmpty) {
         _apiKey = stored;
         return;
       }
+
+      const envKey = String.fromEnvironment('DMX_API_KEY');
+
+      if (envKey.isNotEmpty) {
+        _apiKey = envKey;
+        return;
+      }
+
+      _apiKey = null;
     } catch (e) {
-      debugPrint('[XdmBackendClient] Failed to read API key from secure storage: $e');
+      debugPrint('[XdmBackendClient] Failed to load API key: $e');
+      _apiKey = null;
     }
-    _apiKey = _apiKeyFallback;
+  }
+
+  /// Returns the effective API key, throwing [BackendUnauthorizedException]
+  /// when no key has been configured.
+  String get _effectiveApiKey {
+    final key = _apiKey;
+
+    if (key == null || key.isEmpty) {
+      throw const BackendUnauthorizedException(
+        'Backend API key is not configured.',
+      );
+    }
+
+    return key;
   }
 
   /// Persists a new API key to secure storage and refreshes the Dio client.
-  /// Pass an empty string to reset to the built-in fallback key.
+  /// Pass an empty string to clear the stored key; subsequent calls will then
+  /// require a key via [DMX_API_KEY] env var or a later [loadApiKey] call.
   static Future<void> setApiKey(String key) async {
     if (key.isEmpty) {
       await _secureStorage.delete(key: _apiKeyStorageKey);
-      _apiKey = _apiKeyFallback;
+      _apiKey = null;
     } else {
       await _secureStorage.write(key: _apiKeyStorageKey, value: key);
       _apiKey = key;
@@ -73,28 +88,35 @@ class XdmBackendClient {
 
   /// Updates the backend configuration from SettingsProvider
   void _updateDioFromSettings() {
-    final key = _apiKey ?? _apiKeyFallback;
     final settings = SettingsProvider.instance;
     try {
       _dio.close(force: true);
     } catch (_) {
       // First initialization, nothing to close
     }
+
+    // Build headers without the key; the key is injected per-request via
+    // [_buildHeaders] so that a [BackendUnauthorizedException] is thrown at
+    // the call site rather than silently at construction time.
     _dio = Dio(
       BaseOptions(
-        baseUrl: settings.backendUrl.isNotEmpty ? settings.backendUrl : kDefaultBackendBaseUrl,
+        baseUrl: settings.backendUrl.isNotEmpty
+            ? settings.backendUrl
+            : kDefaultBackendBaseUrl,
         connectTimeout: const Duration(seconds: 15),
         // Backend extraction can take up to 45 s; give a comfortable margin.
         receiveTimeout: const Duration(seconds: 60),
-        headers: {
+        headers: const {
           'Accept': 'application/json',
-          'Authorization': 'Bearer $key',
         },
       ),
     );
 
     if (kDebugMode) {
-      debugPrint('[XdmBackendClient] Configured with backend URL: ${settings.backendUrl.isNotEmpty ? settings.backendUrl : kDefaultBackendBaseUrl}');
+      debugPrint(
+        '[XdmBackendClient] Configured with backend URL: '
+        '${settings.backendUrl.isNotEmpty ? settings.backendUrl : kDefaultBackendBaseUrl}',
+      );
     }
   }
 
@@ -114,18 +136,22 @@ class XdmBackendClient {
 
   Future<Map<String, dynamic>> health() async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>('/health');
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/health',
+        options: Options(headers: _buildHeaders()),
+      );
       return response.data ?? {};
     } catch (e) {
       throw _handleDioError(e);
     }
   }
 
+  /// Builds per-request headers, injecting the Authorization token.
+  /// Throws [BackendUnauthorizedException] if no API key is configured.
   Map<String, String> _buildHeaders([Map<String, String>? extra]) {
-    final key = _apiKey ?? _apiKeyFallback;
     return {
       'Accept': 'application/json',
-      'Authorization': 'Bearer $key',
+      'Authorization': 'Bearer $_effectiveApiKey',
       ...?extra,
     };
   }
@@ -202,6 +228,7 @@ class XdmBackendClient {
           queryParameters: {
             'url': url,
             if (pageToken != null) 'pageToken': pageToken.toString(),
+            // ignore: use_null_aware_elements — key is non-null; if-guard is correct here
             if (pageSize != null) 'pageSize': pageSize,
           },
           options: Options(headers: headers),
