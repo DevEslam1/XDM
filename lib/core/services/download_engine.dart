@@ -1188,35 +1188,6 @@ class DownloadEngine {
       final progress = torrent.progress;
       final stateLabel = torrent.stateLabel.toLowerCase();
 
-      final totalSize = torrent.totalWanted > 0
-          ? torrent.totalWanted
-          : (knownFileSize > 0 ? knownFileSize : 0);
-      final downloadedBytes = torrent.totalDone;
-      final isCheckingOrMetadata =
-          stateLabel.contains('checking') ||
-          stateLabel.contains('metadata') ||
-          stateLabel.contains('allocating');
-
-      final isFullyDownloaded = totalSize > 0 && downloadedBytes >= totalSize;
-      final isCompleted =
-          isFullyDownloaded &&
-          ((progress >= 1.0 && !isCheckingOrMetadata) ||
-              stateLabel == 'seeding' ||
-              stateLabel == 'completed' ||
-              stateLabel == 'finished');
-
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (!isCompleted && (nowMs - lastTorrentReportTime < 500)) return;
-      lastTorrentReportTime = nowMs;
-
-      final speed = torrent.downloadRate.toDouble();
-      final remaining = totalSize > downloadedBytes
-          ? totalSize - downloadedBytes
-          : 0;
-      final eta = speed.isFinite && speed > 0 && remaining > 0
-          ? (remaining / speed).round().clamp(0, 86400 * 365)
-          : null;
-
       List<Map<String, dynamic>>? resolvedFiles;
       String? resolvedName;
       if (torrent.hasMetadata) {
@@ -1244,6 +1215,45 @@ class DownloadEngine {
           debugPrint('[DownloadEngine] TorrentService.getFiles failed: $e');
         }
       }
+
+      final int calculatedTotalSize = (resolvedFiles != null && resolvedFiles.isNotEmpty)
+          ? resolvedFiles
+              .where((f) => f['selected'] == true)
+              .fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0))
+          : 0;
+
+      final totalSize = torrent.totalWanted > 0
+          ? torrent.totalWanted
+          : (calculatedTotalSize > 0
+              ? calculatedTotalSize
+              : (knownFileSize > 0 ? knownFileSize : 0));
+      final downloadedBytes = torrent.totalDone;
+      final isCheckingOrMetadata =
+          stateLabel.contains('checking') ||
+          stateLabel.contains('metadata') ||
+          stateLabel.contains('allocating');
+
+      final isFullyDownloaded = totalSize > 0 && downloadedBytes >= totalSize;
+      final isCompleted =
+          isFullyDownloaded &&
+          ((progress >= 1.0 && !isCheckingOrMetadata) ||
+              stateLabel == 'seeding' ||
+              stateLabel == 'completed' ||
+              stateLabel == 'finished');
+
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (!isCompleted && (nowMs - lastTorrentReportTime < 500)) return;
+      lastTorrentReportTime = nowMs;
+
+      final speed = torrent.downloadRate.toDouble();
+      final remaining = totalSize > downloadedBytes
+          ? totalSize - downloadedBytes
+          : 0;
+      final eta = speed.isFinite && speed > 0 && remaining > 0
+          ? (remaining / speed).round().clamp(0, 86400 * 365)
+          : null;
+
+
 
       onProgress(
         DownloadProgress(
