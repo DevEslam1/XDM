@@ -66,7 +66,10 @@ class NotificationService {
       onError: controller.addError,
       onDone: controller.close,
     );
-    controller.onCancel = sub.cancel;
+    controller.onCancel = () {
+      sub.cancel();
+      _actionListenerController = null;
+    };
     return controller.stream;
   }
 

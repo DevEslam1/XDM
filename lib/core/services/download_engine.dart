@@ -1392,53 +1392,59 @@ class DownloadEngine {
         final targetFile = File(currentTempFilePath);
         await targetFile.parent.create(recursive: true);
         final stateFile = File('$currentTempFilePath.dmxstate');
-
-        final fileExists = await targetFile.exists();
-        bool needPreallocate = true;
-        if (fileExists) {
-          final actualLen = await targetFile.length();
-          needPreallocate = actualLen != totalSize;
-        }
-        List<int>? loadedState;
-        if (!needPreallocate && await stateFile.exists()) {
-          try {
-            final content = await stateFile.readAsString();
-            final stateList = jsonDecode(content) as List;
-            if (stateList.length == threadCount) {
-              loadedState = stateList.cast<int>();
-              for (int i = 0; i < threadCount; i++) {
-                chunkProgress[i] = loadedState[i];
-              }
-            }
-          } catch (e) {
-            // state corrupt
-          }
-        }
-        if (needPreallocate || loadedState == null) {
-          if (await stateFile.exists()) await stateFile.delete();
-          for (int i = 0; i < threadCount; i++) {
-            chunkProgress[i] = 0;
-          }
-        }
-        // Per-chunk part files — avoids the O_APPEND write-position bug where
-        // setPosition() is silently ignored, corrupting resumed downloads.
         final partFiles = List.generate(
           threadCount,
           (i) => File('$currentTempFilePath.part$i'),
         );
 
-        // Pre-allocate part files on a fresh start.
-        if (needPreallocate) {
+        List<int>? loadedState;
+        bool canResume = await stateFile.exists();
+        
+        // Validate that part files exist if state file is present
+        if (canResume) {
+          try {
+            final content = await stateFile.readAsString();
+            final stateList = jsonDecode(content) as List;
+            if (stateList.length == threadCount) {
+              for (int i = 0; i < threadCount; i++) {
+                if (!await partFiles[i].exists()) {
+                  canResume = false;
+                  break;
+                }
+              }
+              if (canResume) {
+                loadedState = stateList.cast<int>();
+              }
+            } else {
+              canResume = false;
+            }
+          } catch (e) {
+            canResume = false;
+          }
+        }
+
+        if (!canResume) {
+          // Fresh start: clean up stale files and preallocate part files
+          if (await stateFile.exists()) await stateFile.delete();
+          for (int i = 0; i < threadCount; i++) {
+            if (await partFiles[i].exists()) await partFiles[i].delete();
+            chunkProgress[i] = 0;
+          }
+          
           for (int i = 0; i < threadCount; i++) {
             final start = i * partSize;
             final end = (i == threadCount - 1)
                 ? (totalSize - 1)
                 : (start + partSize - 1);
             final chunkLen = end - start + 1;
-            final pf = partFiles[i];
-            final raf = await pf.open(mode: FileMode.write);
+            final raf = await partFiles[i].open(mode: FileMode.write);
             await raf.truncate(chunkLen);
             await raf.close();
+          }
+        } else {
+          // Resume: load state into chunkProgress
+          for (int i = 0; i < threadCount; i++) {
+            chunkProgress[i] = loadedState![i];
           }
         }
 
