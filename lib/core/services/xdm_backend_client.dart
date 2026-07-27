@@ -17,7 +17,7 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  static String? _apiKey;
+  static String? _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
 
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
@@ -48,10 +48,11 @@ class XdmBackendClient {
         return;
       }
 
-      _apiKey = null;
+      // Default production token fallback
+      _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
     } catch (e) {
       debugPrint('[XdmBackendClient] Failed to load API key: $e');
-      _apiKey = null;
+      _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
     }
   }
 

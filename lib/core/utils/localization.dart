@@ -825,6 +825,12 @@ class L10n {
     DownloadStatus status,
     String rawEta,
   ) {
+    if (status == DownloadStatus.downloading) {
+      if (!isRtl(context)) {
+        return '$rawEta left';
+      }
+      return '${rawEta.replaceAllMapped(RegExp(r"(\d+)\s*h\b"), (m) => "${m[1]} ساعة").replaceAllMapped(RegExp(r"(\d+)\s*m\b"), (m) => "${m[1]} دقيقة").replaceAllMapped(RegExp(r"(\d+)\s*s\b"), (m) => "${m[1]} ثانية").trim()} متبقي';
+    }
     if (!isRtl(context)) return rawEta;
     switch (status) {
       case DownloadStatus.completed:
@@ -836,12 +842,8 @@ class L10n {
         return 'متوقف مؤقتاً';
       case DownloadStatus.failed:
         return 'فشل التنزيل';
-      case DownloadStatus.downloading:
-        return rawEta
-            .replaceAllMapped(RegExp(r'(\d+)\s*h\b'), (m) => '${m[1]} ساعة')
-            .replaceAllMapped(RegExp(r'(\d+)\s*m\b'), (m) => '${m[1]} دقيقة')
-            .replaceAllMapped(RegExp(r'(\d+)\s*s\b'), (m) => '${m[1]} ثانية')
-            .replaceAll(RegExp(r'\bleft\b'), 'متبقية');
+      default:
+        return rawEta;
     }
   }
 

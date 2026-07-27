@@ -666,9 +666,6 @@ class _NavItem extends StatelessWidget {
     final activeDownloadsCount = index == 0
         ? downloadProvider.downloadingTasksCount
         : 0;
-    final totalSpeed = index == 0
-        ? downloadProvider.currentDownloadSpeedFormatted
-        : '';
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? activeIcon : icon;
 
@@ -734,9 +731,7 @@ class _NavItem extends StatelessWidget {
                           ],
                         ),
                         child: Text(
-                          totalSpeed.isNotEmpty
-                              ? totalSpeed
-                              : '$activeDownloadsCount',
+                          '$activeDownloadsCount',
                           style: TextStyle(
                             color: isDark ? Colors.black : Colors.white,
                             fontSize: 9,

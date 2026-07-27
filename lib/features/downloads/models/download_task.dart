@@ -141,14 +141,14 @@ class DownloadTask {
     if (eta! >= 3600) {
       final hours = eta! ~/ 3600;
       final minutes = (eta! % 3600) ~/ 60;
-      return '${hours}h ${minutes}m left';
+      return '${hours}h ${minutes}m';
     }
     if (eta! >= 60) {
       final minutes = eta! ~/ 60;
       final seconds = eta! % 60;
-      return '${minutes}m ${seconds}s left';
+      return '${minutes}m ${seconds}s';
     }
-    return '${eta}s left';
+    return '${eta}s';
   }
 
   String get sizeFormatted {

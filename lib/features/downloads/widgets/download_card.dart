@@ -1202,7 +1202,7 @@ class _TorrentFileList extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 SizedBox(
-                  width: 70,
+                  width: 60,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(2),
                     child: Stack(
@@ -1227,6 +1227,22 @@ class _TorrentFileList extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '${(p * 100).toStringAsFixed(0)}%',
+                    textAlign: TextAlign.end,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 9.5,
+                      weight: FontWeight.w600,
+                      color: selected
+                          ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                          : mutedClr,
                     ),
                   ),
                 ),
