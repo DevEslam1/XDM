@@ -909,6 +909,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                         dropdownColor: isDark
                                             ? AppTheme.surface
                                             : AppTheme.lightSurface,
+                                        menuMaxHeight: 250,
                                         value: _qualityPreset,
                                         isExpanded: true,
                                         icon: Icon(

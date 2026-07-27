@@ -506,8 +506,8 @@ class _NavigationRailWidget extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
                 child: DmxAppIcon(size: 40, showGlow: true),
               ),
               const SizedBox(height: 8),

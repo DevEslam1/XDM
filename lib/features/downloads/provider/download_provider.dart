@@ -1911,7 +1911,7 @@ class DownloadProvider extends ChangeNotifier
           _lastProgressUpdateTimes.remove(task.id);
           _lastDbSaveTimes.remove(task.id);
 
-          var current = _findTask(task.id);
+          final current = _findTask(task.id);
           if (current == null) return;
           if (current.status != DownloadStatus.downloading) return;
           

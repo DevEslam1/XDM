@@ -19,14 +19,14 @@ class PremiumPageRoute<T> extends PageRouteBuilder<T> {
                 : const Offset(0.08, 0.0);
             const end = Offset.zero;
 
-            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            var offsetAnimation = animation.drive(tween);
+            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            final offsetAnimation = animation.drive(tween);
 
-            var fadeTween = Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: curve));
-            var fadeAnimation = animation.drive(fadeTween);
+            final fadeTween = Tween<double>(begin: 0.0, end: 1.0).chain(CurveTween(curve: curve));
+            final fadeAnimation = animation.drive(fadeTween);
 
-            var scaleTween = Tween<double>(begin: 0.96, end: 1.0).chain(CurveTween(curve: curve));
-            var scaleAnimation = animation.drive(scaleTween);
+            final scaleTween = Tween<double>(begin: 0.96, end: 1.0).chain(CurveTween(curve: curve));
+            final scaleAnimation = animation.drive(scaleTween);
 
             return FadeTransition(
               opacity: fadeAnimation,

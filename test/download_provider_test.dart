@@ -126,25 +126,25 @@ void main() {
     // Register mock handlers for platform channels
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('com.example.dmx/widget'),
-      (methodCall) async => null,
-    );
+          const MethodChannel('com.example.dmx/widget'),
+          (methodCall) async => null,
+        );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
-      (methodCall) async {
-        switch (methodCall.method) {
-          case 'read':
-            return null;
-          case 'write':
-          case 'delete':
-          case 'containsKey':
-          case 'readAll':
-          default:
-            return null;
-        }
-      },
-    );
+          const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+          (methodCall) async {
+            switch (methodCall.method) {
+              case 'read':
+                return null;
+              case 'write':
+              case 'delete':
+              case 'containsKey':
+              case 'readAll':
+              default:
+                return null;
+            }
+          },
+        );
   });
 
   tearDown(() async {
@@ -223,132 +223,140 @@ void main() {
     expect(engine.startedUrls, ['https://example.com/one.zip']);
   });
 
+  test(
+    'updateTaskThreadCount on task with zero progress only resizes chunks',
+    () async {
+      final (database, settings) = await _setupServices();
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      settings.autoStart = false;
+      await provider.load();
 
-  test('updateTaskThreadCount on task with zero progress only resizes chunks', () async {
-    final (database, settings) = await _setupServices();
-    final provider = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: FakeDownloadEngine(),
-      permissionService: FakePermissionService(),
-    );
-    settings.autoStart = false;
-    await provider.load();
+      await provider.addDownload(
+        name: 'test.zip',
+        url: 'https://example.com/test.zip',
+        size: 100,
+        category: '',
+        savePath: '',
+        threadCount: 2,
+      );
 
-    await provider.addDownload(
-      name: 'test.zip',
-      url: 'https://example.com/test.zip',
-      size: 100,
-      category: '',
-      savePath: '',
-      threadCount: 2,
-    );
+      final taskId = provider.tasks.first.id;
+      expect(provider.tasks.first.threadCount, 2);
+      expect(provider.tasks.first.chunks.length, 2);
 
-    final taskId = provider.tasks.first.id;
-    expect(provider.tasks.first.threadCount, 2);
-    expect(provider.tasks.first.chunks.length, 2);
+      await provider.updateTaskThreadCount(taskId, 5);
+      expect(provider.tasks.first.threadCount, 5);
+      expect(provider.tasks.first.chunks.length, 5);
+      expect(provider.tasks.first.downloadedBytes, 0);
+    },
+  );
 
-    await provider.updateTaskThreadCount(taskId, 5);
-    expect(provider.tasks.first.threadCount, 5);
-    expect(provider.tasks.first.chunks.length, 5);
-    expect(provider.tasks.first.downloadedBytes, 0);
-  });
-
-  test('updateTaskThreadCount on task with non-zero progress resets progress and chunks', () async {
-    final (database, settings) = await _setupServices();
-    final now = DateTime.now();
-    final task = DownloadTask(
-      id: 'active_task',
-      fileName: 'active.zip',
-      url: 'https://example.com/active.zip',
-      fileSize: 100,
-      downloadedBytes: 50,
-      category: 'Archive',
-      status: DownloadStatus.paused,
-      savePath: 'build',
-      localFilePath: 'build/active.zip',
-      tempFilePath: 'build/active.zip.dmxpart',
-      threadCount: 2,
-      chunks: const [0.5, 0.5],
-      createdAt: now,
-      updatedAt: now,
-    );
-    await database.saveTask(task);
-
-    final provider = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: FakeDownloadEngine(),
-      permissionService: FakePermissionService(),
-    );
-    await provider.load();
-
-    expect(provider.tasks.first.downloadedBytes, 50);
-    expect(provider.tasks.first.threadCount, 2);
-
-    await provider.updateTaskThreadCount('active_task', 4);
-    expect(provider.tasks.first.threadCount, 4);
-    expect(provider.tasks.first.chunks.length, 4);
-    expect(provider.tasks.first.downloadedBytes, 0);
-    expect(provider.tasks.first.status, DownloadStatus.paused);
-  });
-
-  test('load with pauseOrphanDownloads=false preserves active downloads', () async {
-    final (database, settings) = await _setupServices();
-    final now = DateTime.now();
-    await database.saveTask(
-      DownloadTask(
-        id: 'active',
+  test(
+    'updateTaskThreadCount on task with non-zero progress resets progress and chunks',
+    () async {
+      final (database, settings) = await _setupServices();
+      final now = DateTime.now();
+      final task = DownloadTask(
+        id: 'active_task',
         fileName: 'active.zip',
         url: 'https://example.com/active.zip',
         fileSize: 100,
-        downloadedBytes: 10,
+        downloadedBytes: 50,
         category: 'Archive',
-        status: DownloadStatus.downloading,
+        status: DownloadStatus.paused,
         savePath: 'build',
         localFilePath: 'build/active.zip',
         tempFilePath: 'build/active.zip.dmxpart',
         threadCount: 2,
-        chunks: const [0.1, 0.1],
+        chunks: const [0.5, 0.5],
         createdAt: now,
         updatedAt: now,
-      ),
-    );
+      );
+      await database.saveTask(task);
 
-    final provider = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: FakeDownloadEngine(),
-      permissionService: FakePermissionService(),
-    );
-    // Disable auto-resume to verify pause-orphan behavior in isolation
-    settings.autoStart = false;
-    await provider.load();
-    expect(provider.tasks.single.status, DownloadStatus.paused);
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      await provider.load();
 
-    // Simulate a fresh provider reload (e.g. pull-to-refresh).
-    await provider.load(pauseOrphanDownloads: false);
-    expect(
-      provider.tasks.single.status,
-      DownloadStatus.paused,
-      reason: 'No active stream → still paused on subsequent load',
-    );
+      expect(provider.tasks.first.downloadedBytes, 50);
+      expect(provider.tasks.first.threadCount, 2);
 
-    // Now add a fake active stream; reload should not pause it.
-    final second = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: FakeDownloadEngine(),
-      permissionService: FakePermissionService(),
-    );
-    settings.autoStart = false;
-    await second.load();
-    // No active stream from outside; the cancelTokens map is empty. So
-    // the "in-flight" condition can't be triggered from outside. The
-    // important regression test is the previous assertion (downloads
-    // started by a previous load are not silently paused on a user
-    // refresh).
-  });
+      await provider.updateTaskThreadCount('active_task', 4);
+      expect(provider.tasks.first.threadCount, 4);
+      expect(provider.tasks.first.chunks.length, 4);
+      expect(provider.tasks.first.downloadedBytes, 0);
+      expect(provider.tasks.first.status, DownloadStatus.paused);
+    },
+  );
+
+  test(
+    'load with pauseOrphanDownloads=false preserves active downloads',
+    () async {
+      final (database, settings) = await _setupServices();
+      final now = DateTime.now();
+      await database.saveTask(
+        DownloadTask(
+          id: 'active',
+          fileName: 'active.zip',
+          url: 'https://example.com/active.zip',
+          fileSize: 100,
+          downloadedBytes: 10,
+          category: 'Archive',
+          status: DownloadStatus.downloading,
+          savePath: 'build',
+          localFilePath: 'build/active.zip',
+          tempFilePath: 'build/active.zip.dmxpart',
+          threadCount: 2,
+          chunks: const [0.1, 0.1],
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      // Disable auto-resume to verify pause-orphan behavior in isolation
+      settings.autoStart = false;
+      await provider.load();
+      expect(provider.tasks.single.status, DownloadStatus.paused);
+
+      // Simulate a fresh provider reload (e.g. pull-to-refresh).
+      await provider.load(pauseOrphanDownloads: false);
+      expect(
+        provider.tasks.single.status,
+        DownloadStatus.paused,
+        reason: 'No active stream → still paused on subsequent load',
+      );
+
+      // Now add a fake active stream; reload should not pause it.
+      final second = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      settings.autoStart = false;
+      await second.load();
+      // No active stream from outside; the cancelTokens map is empty. So
+      // the "in-flight" condition can't be triggered from outside. The
+      // important regression test is the previous assertion (downloads
+      // started by a previous load are not silently paused on a user
+      // refresh).
+    },
+  );
 
   test('retryTask does not zero downloadedBytes or chunks', () async {
     final (database, settings) = await _setupServices();
@@ -381,13 +389,16 @@ void main() {
     await provider.load();
 
     await provider.retryTask('retry_target');
-    expect(provider.tasks.first.downloadedBytes, 80,
-        reason: 'retry must preserve the on-disk resume state');
+    expect(
+      provider.tasks.first.downloadedBytes,
+      80,
+      reason: 'retry must preserve the on-disk resume state',
+    );
     expect(provider.tasks.first.chunks, [0.4, 0.4]);
-    expect(provider.tasks.first.status, anyOf(
-      DownloadStatus.queued,
-      DownloadStatus.downloading,
-    ));
+    expect(
+      provider.tasks.first.status,
+      anyOf(DownloadStatus.queued, DownloadStatus.downloading),
+    );
   });
 
   test('categorySizes ignores failed and unknown categories', () async {
@@ -456,147 +467,205 @@ void main() {
     await provider.load();
 
     final sizes = provider.categorySizes;
-    expect(sizes['Video'] ?? 0.0, lessThan(0.001),
-        reason: 'Failed/queued tasks must not contribute to disk usage');
-    expect(sizes.containsKey('Alien'), false,
-        reason: 'Unknown categories must not be silently dropped into the map');
+    expect(
+      sizes['Video'] ?? 0.0,
+      lessThan(0.001),
+      reason: 'Failed/queued tasks must not contribute to disk usage',
+    );
+    expect(
+      sizes.containsKey('Alien'),
+      false,
+      reason: 'Unknown categories must not be silently dropped into the map',
+    );
   });
 
-  test('updateTorrentTaskFiles updates torrent selection and file size correctly', () async {
-    final (database, settings) = await _setupServices();
-    final now = DateTime.now();
-    final task = DownloadTask(
-      id: 'torrent_test',
-      fileName: 'test.torrent',
-      url: 'file:///path/test.torrent',
-      fileSize: 300,
-      downloadedBytes: 0,
-      category: 'Archive',
-      status: DownloadStatus.paused,
-      savePath: '',
-      localFilePath: '',
-      tempFilePath: '',
-      threadCount: 1,
-      chunks: const [0.0],
-      createdAt: now,
-      updatedAt: now,
-      torrentFiles: const [
-        {'name': 'file1.txt', 'length': 100, 'selected': true},
+  test(
+    'updateTorrentTaskFiles updates torrent selection and file size correctly',
+    () async {
+      final (database, settings) = await _setupServices();
+      final now = DateTime.now();
+      final task = DownloadTask(
+        id: 'torrent_test',
+        fileName: 'test.torrent',
+        url: 'file:///path/test.torrent',
+        fileSize: 300,
+        downloadedBytes: 0,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: const [0.0],
+        createdAt: now,
+        updatedAt: now,
+        torrentFiles: const [
+          {'name': 'file1.txt', 'length': 100, 'selected': true},
+          {'name': 'file2.txt', 'length': 200, 'selected': true},
+        ],
+      );
+      await database.saveTask(task);
+
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      await provider.load();
+
+      expect(provider.tasks.first.fileSize, 300);
+
+      // Unselect file1.txt
+      final updatedFiles = [
+        {'name': 'file1.txt', 'length': 100, 'selected': false},
         {'name': 'file2.txt', 'length': 200, 'selected': true},
-      ],
-    );
-    await database.saveTask(task);
+      ];
+      await provider.updateTorrentTaskFiles('torrent_test', updatedFiles);
 
-    final provider = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: FakeDownloadEngine(),
-      permissionService: FakePermissionService(),
-    );
-    await provider.load();
+      expect(provider.tasks.first.torrentFiles![0]['selected'], false);
+      expect(provider.tasks.first.fileSize, 200); // 300 - 100
+    },
+  );
 
-    expect(provider.tasks.first.fileSize, 300);
+  test(
+    'DownloadProvider handles 403 Forbidden error and does not retry',
+    () async {
+      final (database, settings) = await _setupServices();
+      await settings.setAutoRetryEnabled(true);
+      await settings.setMaxDownloads(2);
 
-    // Unselect file1.txt
-    final updatedFiles = [
-      {'name': 'file1.txt', 'length': 100, 'selected': false},
-      {'name': 'file2.txt', 'length': 200, 'selected': true},
-    ];
-    await provider.updateTorrentTaskFiles('torrent_test', updatedFiles);
+      final errorResponse = Response(
+        requestOptions: RequestOptions(path: 'https://example.com/403.zip'),
+        statusCode: 403,
+        statusMessage: DownloadStatusMessages.forbidden,
+      );
 
-    expect(provider.tasks.first.torrentFiles![0]['selected'], false);
-    expect(provider.tasks.first.fileSize, 200); // 300 - 100
-  });
+      final badEngine = FakeDownloadEngine403(errorResponse);
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: badEngine,
+        permissionService: FakePermissionService(),
+      );
+      await provider.load();
 
-  test('DownloadProvider handles 403 Forbidden error and does not retry', () async {
-    final (database, settings) = await _setupServices();
-    await settings.setAutoRetryEnabled(true);
-    await settings.setMaxDownloads(2);
+      await provider.addDownload(
+        name: '403.zip',
+        url: 'https://example.com/403.zip',
+        size: 0,
+        category: '',
+        savePath: '',
+      );
 
-    final errorResponse = Response(
-      requestOptions: RequestOptions(path: 'https://example.com/403.zip'),
-      statusCode: 403,
-      statusMessage: DownloadStatusMessages.forbidden,
-    );
-    
-    final badEngine = FakeDownloadEngine403(errorResponse);
-    final provider = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: badEngine,
-      permissionService: FakePermissionService(),
-    );
-    await provider.load();
+      // Wait for the async task to complete and fail
+      await Future<void>.delayed(const Duration(milliseconds: 100));
 
-    await provider.addDownload(
-      name: '403.zip',
-      url: 'https://example.com/403.zip',
-      size: 0,
-      category: '',
-      savePath: '',
-    );
+      expect(provider.tasks.first.status, DownloadStatus.failed);
+      expect(
+        provider.tasks.first.errorMessage,
+        contains('403 Forbidden: Access denied'),
+      );
+    },
+  );
 
-    // Wait for the async task to complete and fail
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+  test(
+    'load() auto-resume logic honors user pauses and wifi-waiting constraints',
+    () async {
+      final (database, settings) = await _setupServices();
+      await settings.setAutoStart(true);
+      await settings.setWifiOnly(false);
 
-    expect(provider.tasks.first.status, DownloadStatus.failed);
-    expect(provider.tasks.first.errorMessage, contains('403 Forbidden: Access denied'));
-  });
+      // Create 3 tasks: 1 orphaned, 1 user-paused, 1 wifi-waiting
+      final orphanTask = DownloadTask(
+        id: '1',
+        fileName: 'orphan.zip',
+        url: 'http://a.com',
+        fileSize: 100,
+        downloadedBytes: 50,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: [0.5],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        errorMessage:
+            'Paused because XDM was closed during a foreground download.',
+      );
+      final userPausedTask = DownloadTask(
+        id: '2',
+        fileName: 'user.zip',
+        url: 'http://b.com',
+        fileSize: 100,
+        downloadedBytes: 50,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: [0.5],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        pausedByUser: true,
+      );
+      final wifiWaitingTask = DownloadTask(
+        id: '3',
+        fileName: 'wifi.zip',
+        url: 'http://c.com',
+        fileSize: 100,
+        downloadedBytes: 50,
+        category: 'Archive',
+        status: DownloadStatus.paused,
+        savePath: '',
+        localFilePath: '',
+        tempFilePath: '',
+        threadCount: 1,
+        chunks: [0.5],
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        errorMessage: 'Waiting for WiFi connection',
+      );
 
-  test('load() auto-resume logic honors user pauses and wifi-waiting constraints', () async {
-    final (database, settings) = await _setupServices();
-    await settings.setAutoStart(true);
-    await settings.setWifiOnly(false);
+      await database.saveTask(orphanTask);
+      await database.saveTask(userPausedTask);
+      await database.saveTask(wifiWaitingTask);
 
-    // Create 3 tasks: 1 orphaned, 1 user-paused, 1 wifi-waiting
-    final orphanTask = DownloadTask(
-      id: '1', fileName: 'orphan.zip', url: 'http://a.com', fileSize: 100, downloadedBytes: 50,
-      category: 'Archive', status: DownloadStatus.paused, savePath: '', localFilePath: '', tempFilePath: '',
-      threadCount: 1, chunks: [0.5], createdAt: DateTime.now(), updatedAt: DateTime.now(),
-      errorMessage: 'Paused because XDM was closed during a foreground download.',
-    );
-    final userPausedTask = DownloadTask(
-      id: '2', fileName: 'user.zip', url: 'http://b.com', fileSize: 100, downloadedBytes: 50,
-      category: 'Archive', status: DownloadStatus.paused, savePath: '', localFilePath: '', tempFilePath: '',
-      threadCount: 1, chunks: [0.5], createdAt: DateTime.now(), updatedAt: DateTime.now(),
-      pausedByUser: true,
-    );
-    final wifiWaitingTask = DownloadTask(
-      id: '3', fileName: 'wifi.zip', url: 'http://c.com', fileSize: 100, downloadedBytes: 50,
-      category: 'Archive', status: DownloadStatus.paused, savePath: '', localFilePath: '', tempFilePath: '',
-      threadCount: 1, chunks: [0.5], createdAt: DateTime.now(), updatedAt: DateTime.now(),
-      errorMessage: 'Waiting for WiFi connection',
-    );
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      await provider.load(pauseOrphanDownloads: false);
+      // Wait briefly for the queue to pump
+      await Future<void>.delayed(const Duration(milliseconds: 100));
 
-    await database.saveTask(orphanTask);
-    await database.saveTask(userPausedTask);
-    await database.saveTask(wifiWaitingTask);
+      // The orphan task should be queued/downloading
+      final t1 = provider.tasks.firstWhere((t) => t.id == '1');
+      expect(
+        t1.status,
+        anyOf(DownloadStatus.queued, DownloadStatus.downloading),
+      );
 
-    final provider = DownloadProvider(
-      databaseService: database,
-      settingsProvider: settings,
-      downloadEngine: FakeDownloadEngine(),
-      permissionService: FakePermissionService(),
-    );
-    await provider.load(pauseOrphanDownloads: false);
-    // Wait briefly for the queue to pump
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+      // The user-paused task should remain paused
+      final t2 = provider.tasks.firstWhere((t) => t.id == '2');
+      expect(t2.status, DownloadStatus.paused);
 
-    // The orphan task should be queued/downloading
-    final t1 = provider.tasks.firstWhere((t) => t.id == '1');
-    expect(t1.status, anyOf(DownloadStatus.queued, DownloadStatus.downloading));
-
-    // The user-paused task should remain paused
-    final t2 = provider.tasks.firstWhere((t) => t.id == '2');
-    expect(t2.status, DownloadStatus.paused);
-
-    // The wifi-waiting task should remain paused (since wifi is simulated as available but task is explicitly waiting, actually the checkWifiOnly constraint might resume it if it's connected, wait, MockConnectivityPlatform returns wifi, so _resumeWaitingForWifi will unpause it!)
-    // Wait, let's verify wifi task: _resumeWaitingForWifi sets it to queued if it was waiting for WiFi.
-    // If we want it to stay paused, we should return mobile data in MockConnectivityPlatform, but it returns wifi.
-    // Let's assert it got resumed because wifi is available.
-    final t3 = provider.tasks.firstWhere((t) => t.id == '3');
-    expect(t3.status, anyOf(DownloadStatus.queued, DownloadStatus.downloading));
-  });
+      // The wifi-waiting task should remain paused (since wifi is simulated as available but task is explicitly waiting, actually the checkWifiOnly constraint might resume it if it's connected, wait, MockConnectivityPlatform returns wifi, so _resumeWaitingForWifi will unpause it!)
+      // Wait, let's verify wifi task: _resumeWaitingForWifi sets it to queued if it was waiting for WiFi.
+      // If we want it to stay paused, we should return mobile data in MockConnectivityPlatform, but it returns wifi.
+      // Let's assert it got resumed because wifi is available.
+      final t3 = provider.tasks.firstWhere((t) => t.id == '3');
+      expect(
+        t3.status,
+        anyOf(DownloadStatus.queued, DownloadStatus.downloading),
+      );
+    },
+  );
 }
 
 class FakeDownloadEngine403 extends DownloadEngine {
@@ -619,7 +688,7 @@ class FakeDownloadEngine403 extends DownloadEngine {
     String? cookies,
     String? oauthToken,
   }) async {
-    return DownloadMetadata(
+    return const DownloadMetadata(
       fileName: '403.zip',
       category: 'Archive',
       fileSize: 0,

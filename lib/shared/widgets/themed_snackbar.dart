@@ -315,7 +315,7 @@ class _SnackbarBodyState extends State<_SnackbarBody>
                         },
                         child: Text(
                           widget.actionLabel!,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontFamily: AppTheme.fontDisplay,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,

@@ -21,7 +21,7 @@ Future<void> showUpdateInfoDialog(
   final updatesDir = await UpdateService().getUpdatesDirectory();
   final fileName = 'XDM_${update.latestVersion}_v${update.versionCode}.apk';
   final apkFile = File('${updatesDir.path}/$fileName');
-  bool isDownloaded = await UpdateService().verifyApkIntegrity(
+  final bool isDownloaded = await UpdateService().verifyApkIntegrity(
     apkFile,
     expectedSha256: update.sha256,
   );

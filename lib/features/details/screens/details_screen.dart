@@ -2126,11 +2126,20 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
     return PopupMenuButton<int>(
       tooltip: isRtl ? 'تحديد الأولوية' : 'Set priority',
       padding: EdgeInsets.zero,
+      color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+          width: 0.6,
+        ),
+      ),
       onSelected: onChanged,
       child: child,
       itemBuilder: (context) => [
         PopupMenuItem<int>(
           value: 7,
+          height: 44,
           child: _priorityMenuItem(
             isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
             isRtl ? 'عالية' : 'High',
@@ -2138,6 +2147,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
         ),
         PopupMenuItem<int>(
           value: 4,
+          height: 44,
           child: _priorityMenuItem(
             isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             isRtl ? 'عادية' : 'Normal',
@@ -2145,6 +2155,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
         ),
         PopupMenuItem<int>(
           value: 1,
+          height: 44,
           child: _priorityMenuItem(
             isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
             isRtl ? 'منخفضة' : 'Low',
@@ -2162,13 +2173,15 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
           height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w500,
+              fontSize: 12,
+            ),
           ),
         ),
       ],

@@ -240,7 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               onPressed: () => Navigator.pop(context, null),
               child: Text(
                 isRtl ? 'إلغاء' : 'CANCEL',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   fontFamily: 'Space Grotesk',
                   fontWeight: FontWeight.w700,
@@ -2125,15 +2125,18 @@ class _DropdownTile<T> extends StatelessWidget {
                 child: DropdownButton<T>(
                   isDense: true,
                   dropdownColor: isDark
-                      ? AppTheme.surfaceRaised
-                      : AppTheme.lightSurfaceRaised,
+                      ? AppTheme.surface
+                      : AppTheme.lightSurface,
+                  borderRadius: BorderRadius.circular(14),
+                  elevation: 4,
+                  menuMaxHeight: 250,
                   value: value,
-                  icon: Icon(Icons.expand_more, color: accentColor, size: 18),
+                  icon: Icon(Icons.expand_more_rounded, color: accentColor, size: 18),
                   style: TextStyle(
                     color: accentColor,
                     fontFamily: 'Space Grotesk',
                     fontSize: 12.0,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w500,
                   ),
                   items: items.map((item) {
                     return DropdownMenuItem<T>(
@@ -2144,6 +2147,10 @@ class _DropdownTile<T> extends StatelessWidget {
                           itemLabels != null
                               ? itemLabels![item]!
                               : item.toString(),
+                          style: TextStyle(
+                            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     );
@@ -2227,43 +2234,46 @@ class _TextFieldTile extends StatelessWidget {
                 color: isDark
                     ? AppTheme.surfaceRaised
                     : AppTheme.lightSurfaceRaised,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: accentColor.withValues(alpha: 0.24),
                   width: 1,
                 ),
               ),
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
-                  fontFamily: 'Inter',
-                  fontSize: 12,
-                ),
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                      color: accentColor.withValues(alpha: 0.4),
-                      width: 1,
-                    ),
-                  ),
-                  hintText: subtitle,
-                  hintStyle: TextStyle(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: TextField(
+                  controller: controller,
+                  onChanged: onChanged,
+                  style: TextStyle(
                     color: isDark
-                        ? AppTheme.textMuted
-                        : AppTheme.lightTextMuted,
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
                     fontFamily: 'Inter',
                     fontSize: 12,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: accentColor.withValues(alpha: 0.4),
+                        width: 1,
+                      ),
+                    ),
+                    hintText: subtitle,
+                    hintStyle: TextStyle(
+                      color: isDark
+                          ? AppTheme.textMuted
+                          : AppTheme.lightTextMuted,
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
                   ),
                 ),
               ),

@@ -642,6 +642,7 @@ class _HomeScreenState extends State<HomeScreen>
     final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return PopupMenuItem<SortOption>(
       value: option,
+      height: 44,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1272,7 +1273,7 @@ class _DownloadTaskList extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             itemCount: renderItems.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) => RepaintBoundary(child: renderItems[index]),
           ),
         );

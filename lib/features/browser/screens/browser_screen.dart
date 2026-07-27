@@ -198,8 +198,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final prefs = await SharedPreferences.getInstance();
     final String? tabsJson = prefs.getString('persisted_browser_tabs');
     final int savedTabIndex = prefs.getInt('persisted_browser_tab_index') ?? 0;
-    final fallbackTitle =
-        mounted ? L10n.of(context, 'browser_new_tab') : 'New Tab';
+    final fallbackTitle = mounted
+        ? L10n.of(context, 'browser_new_tab')
+        : 'New Tab';
     if (tabsJson != null && tabsJson.isNotEmpty) {
       try {
         final List<dynamic> decoded = jsonDecode(tabsJson);
@@ -209,7 +210,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             final String url = item['url'] as String? ?? 'about:blank';
             final String title = item['title'] as String? ?? fallbackTitle;
             final uri = Uri.tryParse(url);
-            final isSafeScheme = uri == null ||
+            final isSafeScheme =
+                uri == null ||
                 url == 'about:blank' ||
                 url.isEmpty ||
                 uri.scheme == 'http' ||
@@ -332,13 +334,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       ..setUserAgent(
         tab.isIncognito
             ? (settings.desktopMode
-                ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')
+                  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                  : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')
             : (settings.desktopMode
-                ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                : (settings.customUserAgent.isNotEmpty
-                    ? settings.customUserAgent
-                    : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')),
+                  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                  : (settings.customUserAgent.isNotEmpty
+                        ? settings.customUserAgent
+                        : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')),
       )
       ..enableZoom(settings.pinchToZoom)
       ..setNavigationDelegate(
@@ -435,7 +437,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 ''');
             }
             if (!tab.isIncognito && !settings.incognitoEnabled) {
-              final isYoutubeDomain = url.contains('youtube.com') ||
+              final isYoutubeDomain =
+                  url.contains('youtube.com') ||
                   url.contains('accounts.google.com') ||
                   url.contains('google.com');
               if (isYoutubeDomain) {
@@ -452,10 +455,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _delayed(const Duration(milliseconds: 500), _updateNavState);
             _delayed(const Duration(milliseconds: 1200), _updateNavState);
             _mediaScanTimers[tab.id]?.cancel();
-            _mediaScanTimers[tab.id] =
-                Timer(const Duration(milliseconds: 1500), () {
-              _scanPageMedia(tab);
-            });
+            _mediaScanTimers[tab.id] = Timer(
+              const Duration(milliseconds: 1500),
+              () {
+                _scanPageMedia(tab);
+              },
+            );
           },
           onProgress: (progress) {
             tab.progress = progress / 100;
@@ -480,10 +485,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _detectedMediaSources.remove(tab.id);
                 _ytDetectionFailed.remove(tab.url);
                 _mediaScanTimers[tab.id]?.cancel();
-                _mediaScanTimers[tab.id] =
-                    Timer(const Duration(milliseconds: 1500), () {
-                  _scanPageMedia(tab);
-                });
+                _mediaScanTimers[tab.id] = Timer(
+                  const Duration(milliseconds: 1500),
+                  () {
+                    _scanPageMedia(tab);
+                  },
+                );
                 _delayed(const Duration(milliseconds: 1000), () {
                   if (mounted) {
                     tab.controller.getTitle().then((t) {
@@ -553,7 +560,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             final db = Provider.of<DatabaseService>(context, listen: false);
             db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
           } catch (e) {
-            debugPrint('[DMX Browser] Failed to update browser history title: $e');
+            debugPrint(
+              '[DMX Browser] Failed to update browser history title: $e',
+            );
           }
         } else {
           _pendingTitleUpdate = title;
@@ -679,7 +688,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       triggerHaptic(settings);
       _showLongPressSheet(context, url, type);
     } catch (e) {
-      debugPrint('[DMX Browser] Failed to decode/handle long press message: $e');
+      debugPrint(
+        '[DMX Browser] Failed to decode/handle long press message: $e',
+      );
     }
   }
 
@@ -998,9 +1009,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           await db.saveBookmark(
             Bookmark(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
-              title: activeTab.title.isNotEmpty
-                  ? activeTab.title
-                  : currentUrl,
+              title: activeTab.title.isNotEmpty ? activeTab.title : currentUrl,
               url: currentUrl,
               createdAt: DateTime.now(),
             ),
@@ -1104,9 +1113,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             color: settings.isDarkMode
                 ? AppTheme.neonGreen
                 : AppTheme.lightNeonGreen,
-            icon: _isSnifferEnabled
-                ? Icons.check_circle_outline
-                : Icons.block,
+            icon: _isSnifferEnabled ? Icons.check_circle_outline : Icons.block,
             isDarkMode: settings.isDarkMode,
           );
         }
@@ -1184,17 +1191,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         return Directionality(
           textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
           child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             child: DmxBackdropFilter(
               sigmaX: 15,
               sigmaY: 15,
               child: Container(
                 decoration: BoxDecoration(
-                  color: (isDark
-                          ? AppTheme.surface
-                          : AppTheme.lightSurface)
+                  color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
                       .withValues(alpha: 0.88),
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(28),
@@ -1261,11 +1264,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: accent.withValues(
-                                            alpha: 0.12,
+                                          color: accent.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(
+                                            5,
                                           ),
-                                          borderRadius:
-                                              BorderRadius.circular(5),
                                         ),
                                         child: Text(
                                           kindLabel,
@@ -1359,8 +1361,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   Navigator.pop(context);
                                   if (_currentTabIndex >= 0 &&
                                       _currentTabIndex < _tabs.length) {
-                                    final activeTab =
-                                        _tabs[_currentTabIndex];
+                                    final activeTab = _tabs[_currentTabIndex];
                                     _bypassedSniffUrls.add(downloadUrl);
                                     activeTab.controller.loadRequest(
                                       Uri.parse(downloadUrl),
@@ -1368,10 +1369,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   }
                                 },
                                 child: Text(
-                                  L10n.of(
-                                    context,
-                                    'browser_continue_browsing',
-                                  ),
+                                  L10n.of(context, 'browser_continue_browsing'),
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
@@ -1388,10 +1386,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   Navigator.pop(context);
                                   _startDirectDownload(downloadUrl);
                                 },
-                                text: L10n.of(
-                                  context,
-                                  'browser_download_btn',
-                                ),
+                                text: L10n.of(context, 'browser_download_btn'),
                                 icon: Icons.download_rounded,
                               ),
                             ),
@@ -1411,10 +1406,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   // DOM Page Media Scanner
   Future<void> _scanPageMedia(BrowserTab tab) async {
-    if (!mounted ||
-        !_tabs.contains(tab) ||
-        tab.isHome ||
-        !_isSnifferEnabled) {
+    if (!mounted || !_tabs.contains(tab) || tab.isHome || !_isSnifferEnabled) {
       return;
     }
     final scannedUrl = tab.url;
@@ -1441,9 +1433,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
           final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
-          if (youtubeStreams.isNotEmpty &&
-              mounted &&
-              tab.url == scannedUrl) {
+          if (youtubeStreams.isNotEmpty && mounted && tab.url == scannedUrl) {
             setState(() {
               _detectedMediaSources[tab.id] = youtubeStreams;
             });
@@ -1609,21 +1599,18 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           height: 4,
                           margin: const EdgeInsets.only(bottom: 20),
                           decoration: BoxDecoration(
-                            color: (isDark
-                                    ? AppTheme.textMuted
-                                    : AppTheme.lightTextMuted)
-                                .withValues(alpha: 0.4),
+                            color:
+                                (isDark
+                                        ? AppTheme.textMuted
+                                        : AppTheme.lightTextMuted)
+                                    .withValues(alpha: 0.4),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
                       Row(
                         children: [
-                          Icon(
-                            Icons.tune_rounded,
-                            color: accent,
-                            size: 20,
-                          ),
+                          Icon(Icons.tune_rounded, color: accent, size: 20),
                           const SizedBox(width: 10),
                           Text(
                             L10n.of(context, 'browser_select_video_quality'),
@@ -1640,7 +1627,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                       const SizedBox(height: 16),
                       if (detectedSources.isNotEmpty) ...[
                         ...detectedSources.map((src) {
-                          final label = src['label'] as String? ??
+                          final label =
+                              src['label'] as String? ??
                               L10n.of(context, 'browser_alternative_stream');
                           final srcUrl = src['src'] as String? ?? '';
                           return _buildQualityTile(
@@ -1727,11 +1715,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                     color: accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
-                    Icons.video_settings,
-                    color: accent,
-                    size: 16,
-                  ),
+                  child: Icon(Icons.video_settings, color: accent, size: 16),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1822,9 +1806,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               children: [
                                 Text(
                                   L10n.of(context, 'browser_detected_media'),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
+                                  style: Theme.of(context).textTheme.titleMedium
                                       ?.copyWith(
                                         color: accent,
                                         fontWeight: FontWeight.bold,
@@ -1861,12 +1843,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                               const SizedBox(height: 8),
                           itemBuilder: (context, i) {
                             final src = detectedSources[i];
-                            final label = src['label'] as String? ??
+                            final label =
+                                src['label'] as String? ??
                                 '${L10n.of(context, 'browser_media_stream')} ${i + 1}';
                             final srcUrl = src['src'] as String? ?? '';
-                            final isAudio = label
-                                .toLowerCase()
-                                .contains('audio');
+                            final isAudio = label.toLowerCase().contains(
+                              'audio',
+                            );
                             final tileClr = isAudio
                                 ? (isDark
                                       ? AppTheme.neonGreen
@@ -1942,8 +1925,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                             Text(
                                               srcUrl,
                                               maxLines: 1,
-                                              overflow:
-                                                  TextOverflow.ellipsis,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 color: isDark
                                                     ? AppTheme.textMuted
@@ -2032,7 +2014,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || tab.isHome) return;
     if (_customJs.isNotEmpty) {
       try {
-        final jsWrapper = """
+        final jsWrapper =
+            """
 if (!window._xdmCustomJsInjected) {
   window._xdmCustomJsInjected = true;
   (function() {
@@ -2048,7 +2031,8 @@ $_customJs
     if (_customCss.isNotEmpty) {
       try {
         final jsonCss = jsonEncode(_customCss);
-        final cssScript = """
+        final cssScript =
+            """
 (function() {
   var style = document.getElementById('xdm-custom-css');
   if (!style) {
@@ -2141,8 +2125,7 @@ $_customJs
         if (mounted) {
           ThemedSnackbar.show(
             context,
-            message:
-                '${L10n.of(context, 'browser_page_saved')} - $title.html',
+            message: '${L10n.of(context, 'browser_page_saved')} - $title.html',
             color: settings.isDarkMode
                 ? AppTheme.neonGreen
                 : AppTheme.lightNeonGreen,
@@ -2156,9 +2139,7 @@ $_customJs
         ThemedSnackbar.show(
           context,
           message: '${L10n.of(context, 'browser_page_save_error')}: $e',
-          color: settings.isDarkMode
-              ? AppTheme.neonRed
-              : AppTheme.lightNeonRed,
+          color: settings.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
           icon: Icons.error_outline,
           isDarkMode: settings.isDarkMode,
         );
@@ -2196,10 +2177,9 @@ $_customJs
                     sigmaY: 15,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: (isDark
-                                ? AppTheme.surface
-                                : AppTheme.lightSurface)
-                            .withValues(alpha: 0.95),
+                        color:
+                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                                .withValues(alpha: 0.95),
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(28),
                         ),
@@ -2383,9 +2363,7 @@ $_customJs
                                             : (isDark
                                                   ? AppTheme.cardBg
                                                   : AppTheme.lightCardBg),
-                                        borderRadius: BorderRadius.circular(
-                                          16,
-                                        ),
+                                        borderRadius: BorderRadius.circular(16),
                                         border: Border.all(
                                           color: isActive
                                               ? tabClr.withValues(alpha: 0.8)
@@ -2440,7 +2418,9 @@ $_customJs
                                                     setModalState(() {
                                                       setState(() {
                                                         // Centralised cleanup of all per-tab state.
-                                                        _cleanupTabState(tab.id);
+                                                        _cleanupTabState(
+                                                          tab.id,
+                                                        );
                                                         _tabs.removeAt(index);
                                                         if (_currentTabIndex >=
                                                             _tabs.length) {
@@ -2454,9 +2434,7 @@ $_customJs
                                                           _currentTabIndex = 0;
                                                         }
                                                         final activeTab =
-                                                            _tabs[
-                                                              _currentTabIndex
-                                                            ];
+                                                            _tabs[_currentTabIndex];
                                                         _urlController.text =
                                                             activeTab.isHome
                                                             ? ''
@@ -2489,8 +2467,7 @@ $_customJs
                                                     ? 'New Tab'
                                                     : tab.title,
                                                 maxLines: 2,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
+                                                overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
                                                   color: isDark
                                                       ? AppTheme.textPrimary
@@ -2512,8 +2489,7 @@ $_customJs
                                                   ? 'Dashboard'
                                                   : tab.url,
                                               maxLines: 1,
-                                              overflow:
-                                                  TextOverflow.ellipsis,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 color: isDark
                                                     ? AppTheme.textMuted
@@ -2609,16 +2585,13 @@ $_customJs
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: (isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen)
+                  color: (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
                       .withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: (isDark
-                            ? AppTheme.neonGreen
-                            : AppTheme.lightNeonGreen)
-                        .withValues(alpha: 0.25),
+                    color:
+                        (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                            .withValues(alpha: 0.25),
                     width: 0.8,
                   ),
                 ),
@@ -2732,20 +2705,15 @@ $_customJs
                 dropdownColor: isDark
                     ? AppTheme.surface
                     : AppTheme.lightSurface,
+                menuMaxHeight: 250,
                 underline: const SizedBox(),
                 style: TextStyle(
                   color: accentColor,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
-                icon: Icon(
-                  Icons.arrow_drop_down,
-                  color: accentColor,
-                  size: 16,
-                ),
-                items: ['Google', 'DuckDuckGo', 'Bing', 'Yahoo'].map((
-                  engine,
-                ) {
+                icon: Icon(Icons.arrow_drop_down, color: accentColor, size: 16),
+                items: ['Google', 'DuckDuckGo', 'Bing', 'Yahoo'].map((engine) {
                   return DropdownMenuItem<String>(
                     value: engine,
                     child: Text(engine),
@@ -2861,9 +2829,7 @@ $_customJs
                 title: 'Archive.org',
                 url: 'https://archive.org',
                 icon: Icons.history_edu,
-                color: isDark
-                    ? AppTheme.neonViolet
-                    : AppTheme.lightNeonViolet,
+                color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                 settings: settings,
               ),
               _buildShortcutCard(
@@ -2939,24 +2905,22 @@ $_customJs
                     children: [
                       Text(
                         title,
-                        style: Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: textPrimary,
-                              fontSize: 13,
-                            ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: textPrimary,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         url.replaceAll('https://', ''),
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(
-                              color: isDark
-                                  ? AppTheme.textMuted
-                                  : AppTheme.lightTextMuted,
-                              fontSize: 11,
-                              fontFamily: 'monospace',
-                            ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark
+                              ? AppTheme.textMuted
+                              : AppTheme.lightTextMuted,
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -2988,7 +2952,8 @@ $_customJs
       return const SizedBox.shrink();
     }
     final activeTab = _tabs[_currentTabIndex];
-    final showFab = !activeTab.isHome &&
+    final showFab =
+        !activeTab.isHome &&
         (_detectedDownloadUrls[activeTab.id] != null ||
             (_detectedMediaSources[activeTab.id]?.isNotEmpty ?? false) ||
             _detectedPlaylistUrls.containsKey(activeTab.id));
@@ -3031,8 +2996,7 @@ $_customJs
           floatingActionButton: showFab
               ? _buildDownloadFab(context, settings)
               : null,
-          floatingActionButtonLocation:
-              FloatingActionButtonLocation.endFloat,
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
           body: Column(
             children: [
               // ── Cockpit URL Bar ──
@@ -3040,9 +3004,7 @@ $_customJs
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
-                  height: _showBars
-                      ? (kToolbarHeight + statusBarHeight)
-                      : 0,
+                  height: _showBars ? (kToolbarHeight + statusBarHeight) : 0,
                   clipBehavior: Clip.hardEdge,
                   decoration: const BoxDecoration(),
                   child: DmxBackdropFilter(
@@ -3057,8 +3019,8 @@ $_customJs
                                   ? AppTheme.surface
                                   : AppTheme.lightSurface)
                             : (isDark
-                                  ? AppTheme.surface
-                                  : AppTheme.lightSurface)
+                                      ? AppTheme.surface
+                                      : AppTheme.lightSurface)
                                   .withValues(alpha: 0.88),
                         border: Border(
                           bottom: BorderSide(
@@ -3078,11 +3040,7 @@ $_customJs
                         child: Row(
                           children: [
                             IconButton(
-                              icon: Icon(
-                                Icons.close,
-                                size: 20,
-                                color: textClr,
-                              ),
+                              icon: Icon(Icons.close, size: 20, color: textClr),
                               tooltip: isRtl
                                   ? 'إغلاق المتصفح'
                                   : 'Close browser',
@@ -3107,30 +3065,34 @@ $_customJs
                                             ? const Color(0xFF141424)
                                             : const Color(0xFF0F0F16))
                                       : (_isFocused
-                                            ? AppTheme.lightNeonBlue
-                                                  .withValues(alpha: 0.08)
+                                            ? AppTheme.lightNeonBlue.withValues(
+                                                alpha: 0.08,
+                                              )
                                             : const Color(0xFFF1F5F9)),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: _isFocused
                                         ? (isDark
-                                              ? AppTheme.neonBlue
-                                              : AppTheme.lightNeonBlue)
+                                                  ? AppTheme.neonBlue
+                                                  : AppTheme.lightNeonBlue)
                                               .withValues(alpha: 0.5)
                                         : (isDark
                                               ? const Color(0x15FFFFFF)
                                               : const Color(0x0D000000)),
                                     width: _isFocused ? 1.2 : 0.8,
                                   ),
-                                  boxShadow: (_isFocused &&
+                                  boxShadow:
+                                      (_isFocused &&
                                           isDark &&
                                           settings.enableGlow)
                                       ? [
                                           BoxShadow(
-                                            color: (isDark
-                                                    ? AppTheme.neonBlue
-                                                    : AppTheme.lightNeonBlue)
-                                                .withValues(alpha: 0.25),
+                                            color:
+                                                (isDark
+                                                        ? AppTheme.neonBlue
+                                                        : AppTheme
+                                                              .lightNeonBlue)
+                                                    .withValues(alpha: 0.25),
                                             blurRadius: 8,
                                             spreadRadius: 0.5,
                                           ),
@@ -3152,9 +3114,7 @@ $_customJs
                                             ? Icons.visibility_off_rounded
                                             : activeTab.isHome
                                             ? Icons.search_rounded
-                                            : activeTab.url.startsWith(
-                                                'https',
-                                              )
+                                            : activeTab.url.startsWith('https')
                                             ? Icons.lock_rounded
                                             : Icons.info_outline_rounded,
                                         size: 14,
@@ -3177,124 +3137,110 @@ $_customJs
                                       ),
                                     ),
                                     Expanded(
-                                      child:
-                                          ValueListenableBuilder<
-                                            TextEditingValue
-                                          >(
-                                            valueListenable: _urlController,
-                                            builder: (context, value, child) {
-                                              return TextField(
-                                                controller: _urlController,
-                                                focusNode: _focusNode,
-                                                textAlignVertical:
-                                                    TextAlignVertical.center,
-                                                style: TextStyle(
-                                                  color: textClr,
-                                                  fontSize: 13,
-                                                ),
-                                                decoration: InputDecoration(
-                                                  isDense: true,
-                                                  suffixIcon: IconButton(
-                                                    padding: EdgeInsets.zero,
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                          minWidth: 32,
-                                                          minHeight: 32,
-                                                        ),
-                                                    icon: Icon(
-                                                      activeTab.isLoading
-                                                          ? Icons.close
-                                                          : (_isFocused &&
-                                                                value.text
-                                                                    .isNotEmpty)
-                                                          ? Icons.clear
-                                                          : Icons.refresh,
-                                                      size: 16,
-                                                      color: _isFocused
-                                                          ? (isDark
-                                                                ? AppTheme
-                                                                      .neonBlue
-                                                                : AppTheme
-                                                                      .lightNeonBlue)
-                                                          : (isDark
-                                                                ? AppTheme
-                                                                      .textSecondary
-                                                                : AppTheme
-                                                                      .lightTextSecondary),
+                                      child: ValueListenableBuilder<TextEditingValue>(
+                                        valueListenable: _urlController,
+                                        builder: (context, value, child) {
+                                          return TextField(
+                                            controller: _urlController,
+                                            focusNode: _focusNode,
+                                            textAlignVertical:
+                                                TextAlignVertical.center,
+                                            style: TextStyle(
+                                              color: textClr,
+                                              fontSize: 13,
+                                            ),
+                                            decoration: InputDecoration(
+                                              isDense: true,
+                                              suffixIcon: IconButton(
+                                                padding: EdgeInsets.zero,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      minWidth: 32,
+                                                      minHeight: 32,
                                                     ),
-                                                    tooltip: activeTab
-                                                            .isLoading
-                                                        ? (isRtl
-                                                              ? 'إلغاء التحميل'
-                                                              : 'Stop loading')
-                                                        : (_isFocused &&
-                                                              value.text
-                                                                  .isNotEmpty)
-                                                        ? (isRtl
-                                                              ? 'مسح'
-                                                              : 'Clear')
-                                                        : (isRtl
-                                                              ? 'إعادة تحميل الصفحة'
-                                                              : 'Refresh page'),
-                                                    onPressed: () {
-                                                      triggerHaptic(settings);
-                                                      if (activeTab
-                                                          .isLoading) {
-                                                        activeTab.controller
-                                                            .runJavaScript(
-                                                              'window.stop();',
-                                                            );
-                                                        setState(() {
-                                                          activeTab
-                                                              .isLoading = false;
-                                                        });
-                                                      } else if (_isFocused &&
-                                                          value.text
-                                                              .isNotEmpty) {
-                                                        _urlController.clear();
-                                                      } else {
-                                                        if (!activeTab
-                                                            .isHome) {
-                                                          activeTab.controller
-                                                              .reload();
-                                                        }
-                                                      }
-                                                    },
-                                                  ),
-                                                  suffixIconConstraints:
-                                                      const BoxConstraints(
-                                                        minWidth: 32,
-                                                        minHeight: 32,
-                                                      ),
-                                                  hintText: isRtl
-                                                      ? 'ابحث أو ادخل الرابط...'
-                                                      : 'Search or enter URL...',
-                                                  hintStyle: TextStyle(
-                                                    color: isDark
-                                                        ? AppTheme.textMuted
-                                                        : AppTheme
-                                                              .lightTextMuted,
-                                                    fontSize: 11,
-                                                  ),
-                                                  filled: false,
-                                                  border: InputBorder.none,
-                                                  enabledBorder:
-                                                      InputBorder.none,
-                                                  focusedBorder:
-                                                      InputBorder.none,
-                                                  contentPadding:
-                                                      const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 6,
-                                                      ),
+                                                icon: Icon(
+                                                  activeTab.isLoading
+                                                      ? Icons.close
+                                                      : (_isFocused &&
+                                                            value
+                                                                .text
+                                                                .isNotEmpty)
+                                                      ? Icons.clear
+                                                      : Icons.refresh,
+                                                  size: 16,
+                                                  color: _isFocused
+                                                      ? (isDark
+                                                            ? AppTheme.neonBlue
+                                                            : AppTheme
+                                                                  .lightNeonBlue)
+                                                      : (isDark
+                                                            ? AppTheme
+                                                                  .textSecondary
+                                                            : AppTheme
+                                                                  .lightTextSecondary),
                                                 ),
-                                                onSubmitted: (val) {
-                                                  _navigateToUrl(val);
+                                                tooltip: activeTab.isLoading
+                                                    ? (isRtl
+                                                          ? 'إلغاء التحميل'
+                                                          : 'Stop loading')
+                                                    : (_isFocused &&
+                                                          value.text.isNotEmpty)
+                                                    ? (isRtl ? 'مسح' : 'Clear')
+                                                    : (isRtl
+                                                          ? 'إعادة تحميل الصفحة'
+                                                          : 'Refresh page'),
+                                                onPressed: () {
+                                                  triggerHaptic(settings);
+                                                  if (activeTab.isLoading) {
+                                                    activeTab.controller
+                                                        .runJavaScript(
+                                                          'window.stop();',
+                                                        );
+                                                    setState(() {
+                                                      activeTab.isLoading =
+                                                          false;
+                                                    });
+                                                  } else if (_isFocused &&
+                                                      value.text.isNotEmpty) {
+                                                    _urlController.clear();
+                                                  } else {
+                                                    if (!activeTab.isHome) {
+                                                      activeTab.controller
+                                                          .reload();
+                                                    }
+                                                  }
                                                 },
-                                              );
+                                              ),
+                                              suffixIconConstraints:
+                                                  const BoxConstraints(
+                                                    minWidth: 32,
+                                                    minHeight: 32,
+                                                  ),
+                                              hintText: isRtl
+                                                  ? 'ابحث أو ادخل الرابط...'
+                                                  : 'Search or enter URL...',
+                                              hintStyle: TextStyle(
+                                                color: isDark
+                                                    ? AppTheme.textMuted
+                                                    : AppTheme.lightTextMuted,
+                                                fontSize: 11,
+                                              ),
+                                              filled: false,
+                                              border: InputBorder.none,
+                                              enabledBorder: InputBorder.none,
+                                              focusedBorder: InputBorder.none,
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 6,
+                                                  ),
+                                            ),
+                                            onSubmitted: (val) {
+                                              _navigateToUrl(val);
                                             },
-                                          ),
+                                          );
+                                        },
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -3325,15 +3271,15 @@ $_customJs
                               icon: Icon(
                                 Icons.arrow_back_ios_new,
                                 size: 15,
-                                color: (activeTab.canGoBack ||
-                                        !activeTab.isHome)
+                                color:
+                                    (activeTab.canGoBack || !activeTab.isHome)
                                     ? textClr
                                     : (isDark
                                           ? AppTheme.textMuted
                                           : AppTheme.lightTextMuted),
                               ),
-                              onPressed: (activeTab.canGoBack ||
-                                      !activeTab.isHome)
+                              onPressed:
+                                  (activeTab.canGoBack || !activeTab.isHome)
                                   ? () async {
                                       triggerHaptic(settings);
                                       await _goBack();
@@ -3378,8 +3324,8 @@ $_customJs
                                   borderRadius: BorderRadius.circular(7),
                                   color: _tabs.length > 1
                                       ? (isDark
-                                            ? AppTheme.neonBlue
-                                            : AppTheme.lightNeonBlue)
+                                                ? AppTheme.neonBlue
+                                                : AppTheme.lightNeonBlue)
                                             .withValues(alpha: 0.1)
                                       : Colors.transparent,
                                 ),
@@ -3433,7 +3379,12 @@ $_customJs
                                   'show_history',
                                   textClr,
                                 ),
-                                _menuItem(Icons.copy, 'Copy URL', 'copy', textClr),
+                                _menuItem(
+                                  Icons.copy,
+                                  'Copy URL',
+                                  'copy',
+                                  textClr,
+                                ),
                                 _menuItem(
                                   Icons.share,
                                   'Share URL',
@@ -3527,7 +3478,8 @@ $_customJs
                       child: _tabs.isEmpty
                           ? const SizedBox.shrink()
                           : IndexedStack(
-                              index: _currentTabIndex >= 0 &&
+                              index:
+                                  _currentTabIndex >= 0 &&
                                       _currentTabIndex < _tabs.length
                                   ? _currentTabIndex
                                   : 0,
@@ -3633,9 +3585,7 @@ $_customJs
       final choice = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: isDark
-              ? AppTheme.surface
-              : AppTheme.lightSurface,
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
@@ -3899,8 +3849,7 @@ $_customJs
             context,
             url,
             suggestedName: filename,
-            onQuality: () =>
-                _showQualityPicker(activeTab.id, fallbackUrl: url),
+            onQuality: () => _showQualityPicker(activeTab.id, fallbackUrl: url),
             downloadPageUrl: activeTab.isHome ? null : activeTab.url,
           );
         }
@@ -4212,9 +4161,7 @@ class _CornerBracketBox extends StatelessWidget {
                 .withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isDark
-                  ? AppTheme.glassBorder
-                  : AppTheme.lightGlassBorder,
+              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
               width: 0.7,
             ),
           ),
@@ -4273,15 +4220,15 @@ class _CornerPainter extends CustomPainter {
     final h = size.height;
     switch (side) {
       case _CornerSide.tl:
-        canvas.drawLine(Offset(0, h), Offset(0, 0), paint);
-        canvas.drawLine(Offset(0, 0), Offset(w, 0), paint);
+        canvas.drawLine(Offset(0, h), const Offset(0, 0), paint);
+        canvas.drawLine(const Offset(0, 0), Offset(w, 0), paint);
         break;
       case _CornerSide.tr:
         canvas.drawLine(Offset(w, h), Offset(w, 0), paint);
-        canvas.drawLine(Offset(w, 0), Offset(0, 0), paint);
+        canvas.drawLine(Offset(w, 0), const Offset(0, 0), paint);
         break;
       case _CornerSide.bl:
-        canvas.drawLine(Offset(0, 0), Offset(0, h), paint);
+        canvas.drawLine(const Offset(0, 0), Offset(0, h), paint);
         canvas.drawLine(Offset(0, h), Offset(w, h), paint);
         break;
       case _CornerSide.br:
@@ -4324,9 +4271,7 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.isDark
-        ? AppTheme.neonBlue
-        : AppTheme.lightNeonBlue;
+    final accent = widget.isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     return SizedBox(
       height: 3,
       child: AnimatedBuilder(
@@ -4340,7 +4285,9 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
               color: accent.withValues(alpha: 0.85),
             ),
             Positioned(
-              left: (widget.progress * MediaQuery.of(context).size.width *
+              left:
+                  (widget.progress *
+                      MediaQuery.of(context).size.width *
                       _c.value) -
                   30,
               child: Container(
@@ -4348,10 +4295,7 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
                 height: 3,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      accent.withValues(alpha: 0.9),
-                    ],
+                    colors: [Colors.transparent, accent.withValues(alpha: 0.9)],
                   ),
                 ),
               ),
@@ -4378,10 +4322,7 @@ class _RadarSweepState extends State<_RadarSweep>
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    );
+    _c = AnimationController(vsync: this, duration: const Duration(seconds: 3));
     if (widget.active) _c.repeat();
   }
 
@@ -4466,10 +4407,7 @@ class _RadarPainter extends CustomPainter {
         ..strokeWidth = 1.2;
       canvas.drawLine(
         center,
-        Offset(
-          center.dx + maxR * cos(sweep),
-          center.dy + maxR * sin(sweep),
-        ),
+        Offset(center.dx + maxR * cos(sweep), center.dy + maxR * sin(sweep)),
         linePaint,
       );
       // Blips
@@ -4477,20 +4415,25 @@ class _RadarPainter extends CustomPainter {
         ..color = color.withValues(alpha: 0.7)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
       canvas.drawCircle(
-        Offset(center.dx + maxR * 0.55 * cos(sweep - 0.5),
-            center.dy + maxR * 0.55 * sin(sweep - 0.5)),
+        Offset(
+          center.dx + maxR * 0.55 * cos(sweep - 0.5),
+          center.dy + maxR * 0.55 * sin(sweep - 0.5),
+        ),
         2,
         blipPaint,
       );
       canvas.drawCircle(
-        Offset(center.dx + maxR * 0.8 * cos(sweep - 1.2),
-            center.dy + maxR * 0.8 * sin(sweep - 1.2)),
+        Offset(
+          center.dx + maxR * 0.8 * cos(sweep - 1.2),
+          center.dy + maxR * 0.8 * sin(sweep - 1.2),
+        ),
         1.5,
         blipPaint,
       );
     }
     // Center dot
-    final dotPaint = Paint()..color = color.withValues(alpha: active ? 0.9 : 0.3);
+    final dotPaint = Paint()
+      ..color = color.withValues(alpha: active ? 0.9 : 0.3);
     canvas.drawCircle(center, 2.5, dotPaint);
   }
 
@@ -4515,7 +4458,9 @@ class _SnifferRadarCard extends StatelessWidget {
     final isRtl = L10n.isRtl(context);
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-    final statusClr = isEnabled ? green : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted);
+    final statusClr = isEnabled
+        ? green
+        : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted);
     return GlassCard(
       borderRadius: 20,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -4531,9 +4476,7 @@ class _SnifferRadarCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  isRtl
-                      ? 'كاشف الملفات (Sniffer)'
-                      : 'Stream sniffer',
+                  isRtl ? 'كاشف الملفات (Sniffer)' : 'Stream sniffer',
                   style: TextStyle(
                     fontFamily: 'Space Grotesk',
                     fontWeight: FontWeight.w700,
@@ -4550,8 +4493,12 @@ class _SnifferRadarCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         isEnabled
-                            ? (isRtl ? 'الاعتراض التلقائي نشط' : 'AUTO-INTERCEPT ACTIVE')
-                            : (isRtl ? 'الاعتراض التلقائي متوقف' : 'AUTO-INTERCEPT DEACTIVATED'),
+                            ? (isRtl
+                                  ? 'الاعتراض التلقائي نشط'
+                                  : 'AUTO-INTERCEPT ACTIVE')
+                            : (isRtl
+                                  ? 'الاعتراض التلقائي متوقف'
+                                  : 'AUTO-INTERCEPT DEACTIVATED'),
                         style: TextStyle(
                           fontFamily: 'Space Grotesk',
                           fontWeight: FontWeight.w800,
@@ -4572,7 +4519,9 @@ class _SnifferRadarCard extends StatelessWidget {
                       : 'Sniffs media files and documents dynamically',
                   style: TextStyle(
                     fontFamily: 'Inter',
-                    color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    color: isDark
+                        ? AppTheme.textMuted
+                        : AppTheme.lightTextMuted,
                     fontSize: 10.5,
                   ),
                 ),
@@ -4586,9 +4535,15 @@ class _SnifferRadarCard extends StatelessWidget {
               value: isEnabled,
               activeThumbColor: Colors.white,
               activeTrackColor: green,
-              inactiveThumbColor: isDark ? const Color(0xFF7F7F90) : const Color(0xFF94A3B8),
-              inactiveTrackColor: isDark ? const Color(0x1AFFFFFF) : const Color(0x0D000000),
-              trackOutlineColor: WidgetStateProperty.resolveWith((states) => Colors.transparent),
+              inactiveThumbColor: isDark
+                  ? const Color(0xFF7F7F90)
+                  : const Color(0xFF94A3B8),
+              inactiveTrackColor: isDark
+                  ? const Color(0x1AFFFFFF)
+                  : const Color(0x0D000000),
+              trackOutlineColor: WidgetStateProperty.resolveWith(
+                (states) => Colors.transparent,
+              ),
               onChanged: onToggle,
             ),
           ),
@@ -4658,9 +4613,7 @@ class _SignalFabState extends State<_SignalFab>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: widget.color.withValues(
-                    alpha: 0.5 * (1 - _c.value),
-                  ),
+                  color: widget.color.withValues(alpha: 0.5 * (1 - _c.value)),
                   width: 1.5,
                 ),
               ),
@@ -4761,7 +4714,10 @@ class _TabSwitcherAction extends StatelessWidget {
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: color.withValues(alpha: 0.25), width: 0.7),
+              border: Border.all(
+                color: color.withValues(alpha: 0.25),
+                width: 0.7,
+              ),
             ),
             child: Icon(icon, color: color, size: 18),
           ),
@@ -4847,9 +4803,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
                 children: [
                   Icon(
                     Icons.warning_amber_rounded,
-                    color: isDark
-                        ? AppTheme.neonRed
-                        : AppTheme.lightNeonRed,
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                     size: 18,
                   ),
                   const SizedBox(width: 8),

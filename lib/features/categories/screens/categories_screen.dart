@@ -451,7 +451,7 @@ class CategoriesScreen extends StatelessWidget {
                     final String name = card['name'];
                     final Color color = card['color'];
                     final sizeMb = sizes[name] ?? 0.0;
-                    String sizeText = sizeMb >= 1024
+                    final String sizeText = sizeMb >= 1024
                         ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
                         : '${sizeMb.toStringAsFixed(0)}M';
 

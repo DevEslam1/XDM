@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/app_theme.dart';
-import '../../../../core/utils/localization.dart';
-import '../../../../core/utils/haptic_helper.dart';
-import '../../../../core/utils/file_utils.dart';
-import '../../../../core/utils/file_opener.dart';
-import '../../../../shared/widgets/themed_snackbar.dart';
+import '../../../core/app_theme.dart';
+import '../../../core/utils/localization.dart';
+import '../../../core/utils/haptic_helper.dart';
+import '../../../core/utils/file_utils.dart';
+import '../../../core/utils/file_opener.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
@@ -79,11 +80,13 @@ class _CardShell extends StatelessWidget {
   final Color accent;
   final bool isDark;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   const _CardShell({
     required this.child,
     required this.accent,
     required this.isDark,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -92,6 +95,7 @@ class _CardShell extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(18),
         child: Container(
           decoration: AppTheme.panel(
@@ -475,6 +479,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
           MaterialPageRoute(builder: (_) => DetailsScreen(taskId: task.id)),
         );
       },
+      onLongPress: () => _showAdvancedControls(context, task, settings),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -647,6 +652,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
           MaterialPageRoute(builder: (_) => DetailsScreen(taskId: task.id)),
         );
       },
+      onLongPress: () => _showAdvancedControls(context, task, settings),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -885,6 +891,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
               ),
             );
           },
+          onLongPress: () =>
+              _showAdvancedControls(context, widget.task, settings),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -1491,6 +1499,197 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
       ),
     );
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Advanced Controls (Long Press)
+// ═══════════════════════════════════════════════════════════════
+void _showAdvancedControls(
+  BuildContext context,
+  DownloadTask task,
+  SettingsProvider settings,
+) {
+  final isDark = settings.isDarkMode;
+  final isRtl = L10n.isRtl(context);
+  final provider = context.read<DownloadProvider>();
+  final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+  final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(
+            color: AppTheme.accent(isDark).withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: secClr.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: Icon(
+                  task.status == DownloadStatus.paused
+                      ? Icons.play_arrow
+                      : Icons.pause,
+                  color: AppTheme.accent(isDark),
+                ),
+                title: Text(
+                  task.status == DownloadStatus.paused ? 'Resume' : 'Pause',
+                  style: TextStyle(color: textClr),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (task.status == DownloadStatus.paused) {
+                    provider.resumeTask(task.id);
+                  } else {
+                    provider.pauseTask(task.id);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.copy_rounded,
+                  color: AppTheme.neonBlue,
+                ),
+                title: Text(
+                  'Copy Download Link',
+                  style: TextStyle(color: textClr),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await Clipboard.setData(ClipboardData(text: task.url));
+                  if (context.mounted) {
+                    ThemedSnackbar.show(
+                      context,
+                      message: 'Link copied',
+                      color: AppTheme.neonGreen,
+                      icon: Icons.check,
+                    );
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.link_rounded,
+                  color: AppTheme.neonViolet,
+                ),
+                title: Text(
+                  'Update Download Link',
+                  style: TextStyle(color: textClr),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showUpdateLinkDialog(context, task, provider);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.folder_open_rounded,
+                  color: AppTheme.neonGreen,
+                ),
+                title: Text('Open File', style: TextStyle(color: textClr)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  if (task.localFilePath.isNotEmpty) {
+                    await openFile(context, task.localFilePath, settings);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: AppTheme.neonRed,
+                ),
+                title: Text('Delete', style: TextStyle(color: textClr)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDelete(context, task, provider);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+void _showUpdateLinkDialog(
+  BuildContext context,
+  DownloadTask task,
+  DownloadProvider provider,
+) {
+  final urlController = TextEditingController(text: task.url);
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Update Link'),
+      content: TextField(
+        controller: urlController,
+        decoration: const InputDecoration(hintText: 'Enter new URL'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            await provider.updateTaskUrlAndResume(
+              task.id,
+              urlController.text.trim(),
+            );
+          },
+          child: const Text('Update'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _confirmDelete(
+  BuildContext context,
+  DownloadTask task,
+  DownloadProvider provider,
+) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Download?'),
+      content: const Text('Are you sure you want to remove this download?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonRed),
+          onPressed: () {
+            Navigator.pop(context);
+            provider.deleteTask(task.id);
+          },
+          child: const Text('Delete', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════

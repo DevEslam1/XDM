@@ -158,7 +158,7 @@ mixin DownloadTorrentMixin {
         result.where((f) => f['selected'] == true).toList();
     if (selectedFiles.isEmpty) return result;
 
-    int selectedSize =
+    final int selectedSize =
         selectedFiles.fold(0, (sum, f) => sum + (f['length'] as int));
     if (selectedSize == 0) return result;
 

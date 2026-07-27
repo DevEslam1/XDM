@@ -45,8 +45,9 @@ class ShareService {
 
     if (!_initialMediaConsumed) {
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-        if (!_initialized)
+        if (!_initialized) {
           return; // If disposed before future resolves, skip processing
+        }
         for (final file in value) {
           handleUrl(file.path, isInitial: true);
         }
@@ -61,13 +62,9 @@ class ShareService {
     _intentSub?.cancel();
     _intentSub = null;
     _initialized = false;
-    // Do NOT reset _initialMediaConsumed here. If dispose is called before
-    // getInitialMedia() resolves, we want it to be processed on the next init.
-    // However, if it was already consumed, we mark it false so it can be fetched
-    // again if the app is fully restarted in memory.
-    // Actually, getInitialMedia only returns the initial media that caused the app launch.
-    // If it's consumed once, it shouldn't be consumed again in the same session.
-    // So we only reset it if it wasn't consumed yet.
+    // Note: _initialMediaConsumed is intentionally NOT reset here.
+    // getInitialMedia() only returns the media that launched the app.
+    // Once consumed, it should not be re-processed in the same session.
     _lastReceivedUrl = null;
   }
 

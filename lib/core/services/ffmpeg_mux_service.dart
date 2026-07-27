@@ -89,7 +89,7 @@ class FFmpegMuxService {
         outputPath,
       ];
 
-      int totalInputBytes = videoSize + audioSize;
+      final int totalInputBytes = videoSize + audioSize;
       final calculatedMinutes =
           (totalInputBytes / (200 * 1024 * 1024)).ceil() + 15;
       final timeoutDuration = Duration(

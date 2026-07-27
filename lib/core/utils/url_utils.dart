@@ -265,7 +265,7 @@ String _punycodeEncode(String input) {
   }
 
   int h = basic.length;
-  int b = basic.length;
+  final int b = basic.length;
   if (b > 0) {
     output.write('-');
   }
@@ -294,7 +294,7 @@ String _punycodeEncode(String input) {
     }
 
     delta += (m - n) * (h + 1);
-    if (delta < 0) throw FormatException('Punycode delta overflow');
+    if (delta < 0) throw const FormatException('Punycode delta overflow');
     n = m;
 
     for (final char in runes) {
@@ -307,7 +307,7 @@ String _punycodeEncode(String input) {
         while (true) {
           safety++;
           if (safety > 1000) {
-            throw FormatException('Punycode encode infinite loop guard triggered');
+            throw const FormatException('Punycode encode infinite loop guard triggered');
           }
           final t = k <= bias
               ? tmin

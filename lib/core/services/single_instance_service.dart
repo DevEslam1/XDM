@@ -110,7 +110,6 @@ class SingleInstanceService {
         // AppData directory is already restricted to the user by default ACLs on Windows
         await tokenF.writeAsString(_securityToken!);
       }
-
       _serverSubscription = _server?.listen((HttpRequest request) async {
         try {
           final tokenParam = request.uri.queryParameters['token'];
@@ -119,17 +118,19 @@ class SingleInstanceService {
             await request.response.close();
             return;
           }
-
           final urlParam = request.uri.queryParameters['url'];
           if (urlParam != null && urlParam.trim().isNotEmpty) {
             final decoded = Uri.decodeComponent(urlParam.trim());
             _onUrlListener?.call(decoded);
           }
-        } catch (e) {
-          debugPrint('SingleInstanceServer request error: $e');
-        } finally {
           request.response.statusCode = HttpStatus.ok;
           await request.response.close();
+        } catch (e) {
+          debugPrint('SingleInstanceServer request error: $e');
+          try {
+            request.response.statusCode = HttpStatus.internalServerError;
+            await request.response.close();
+          } catch (_) {}
         }
       });
 
