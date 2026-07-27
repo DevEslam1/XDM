@@ -246,13 +246,17 @@ class DownloadProvider extends ChangeNotifier
           for (final chunk in stateList) {
             total += (chunk as num).toInt();
           }
-          // Verify that state sum does not exceed actual file size on disk
+          // Verify that state sum does not exceed pre-allocated file size
           return total > targetSize ? targetSize : total;
         } catch (e) {
           debugPrint('Failed to parse .dmxstate: $e');
-          return targetSize;
+          return task.downloadedBytes > 0 ? task.downloadedBytes.clamp(0, targetSize) : 0;
         }
       }
+      // Multi-threaded: .dmxpart file is pre-allocated to full size via truncate.
+      // Without .dmxstate, the file size is meaningless as progress.
+      // Fall back to DB value or 0.
+      return task.downloadedBytes > 0 ? task.downloadedBytes.clamp(0, targetSize) : 0;
     }
 
     if (task.downloadedBytes > 0 && task.downloadedBytes <= targetSize) {
@@ -921,6 +925,7 @@ class DownloadProvider extends ChangeNotifier
     _lastDbSaveTimes.remove(id);
     _lastDbSaveBytes.remove(id);
     _pendingProgressUpdates.remove(id);
+    effectiveThreadOverrides.remove(id);
     _retryCounts.remove(id);
     _ytLowSpeedCounts.remove(id);
     _ytThrottlingRefreshing.remove(id);
@@ -1139,7 +1144,7 @@ class DownloadProvider extends ChangeNotifier
           final cookies = await WebviewCookieManager().getCookies(origin);
           cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
           _cookieCache[origin] = (cookie: cookieString, timestamp: now);
-          if (_cookieCache.length > _cookieCacheMaxSize) {
+          if (_cookieCache.length >= _cookieCacheMaxSize) {
             final oldest = _cookieCache.entries
                 .reduce((a, b) => a.value.timestamp.isBefore(b.value.timestamp) ? a : b)
                 .key;
@@ -1814,6 +1819,17 @@ class DownloadProvider extends ChangeNotifier
                   task = _tasks[idx];
                 }
                 await _databaseService.saveTask(task);
+
+                // Re-derive audio/video sizing after URL refresh — the new stream
+                // may have different file sizes if the format changed.
+                if (hasAudio && task.audioSize > 0 && task.fileSize > task.audioSize) {
+                  videoTransferSize = task.fileSize - task.audioSize;
+                } else if (hasAudio && task.audioSize > 0) {
+                  videoTransferSize = (task.fileSize - task.audioSize).clamp(0, task.fileSize);
+                } else {
+                  videoTransferSize = task.fileSize;
+                }
+
                 await Future.delayed(const Duration(seconds: 2));
                 continue;
               }
@@ -2173,7 +2189,7 @@ class DownloadProvider extends ChangeNotifier
       return [0.0];
     }
     final overallProgress = (downloadedBytes / fileSize).clamp(0.0, 1.0);
-    return [overallProgress];
+    return List<double>.filled(threadCount, overallProgress);
   }
 
   // FIX #4: Prevent YouTube refresh from swapping video/audio MIME type.

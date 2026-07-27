@@ -36,7 +36,7 @@ class MainNavigationContainer extends StatefulWidget {
 class _MainNavigationContainerState extends State<MainNavigationContainer>
     with WidgetsBindingObserver {
   String? _lastClipboardUrl;
-  DateTime _lastClipboardCheckTime = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastClipboardCheckTime = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 
   final List<Widget> _screens = [
     const HomeScreen(),

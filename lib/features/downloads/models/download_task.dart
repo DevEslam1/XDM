@@ -313,31 +313,38 @@ class DownloadTask {
         .toList();
     final threadCount = (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
 
-    // Validate chunks length matches threadCount — resize if mismatched
+    // Validate chunks length matches threadCount — resize if mismatched.
+    // When truncating, preserve overall progress by redistributing across new count.
     List<double> chunks;
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
     } else if (rawChunks.length > threadCount) {
+      // Preserve total progress across fewer chunks
+      final totalProgress = rawChunks.fold<double>(0.0, (s, c) => s + c);
+      final redistributed = totalProgress / threadCount;
+      chunks = List<double>.filled(threadCount, redistributed);
       if (kDebugMode) {
         debugPrint(
           'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
           'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Truncating chunks to match threadCount.',
+          'Redistributed total progress ${totalProgress.toStringAsFixed(2)} across $threadCount chunks.',
         );
       }
-      chunks = rawChunks.sublist(0, threadCount);
     } else {
-      if (kDebugMode) {
-        debugPrint(
-          'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
-          'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Padding chunks to match threadCount.',
-        );
-      }
+      // Preserve existing progress and pad new chunks at 0
+      final existingSum = rawChunks.fold<double>(0.0, (s, c) => s + c);
+      final remaining = threadCount - rawChunks.length;
       chunks = [
         ...rawChunks,
-        ...List.filled(threadCount - rawChunks.length, 0.0),
+        ...List.filled(remaining, 0.0),
       ];
+      if (kDebugMode) {
+        debugPrint(
+          'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
+          'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
+          'Padding with $remaining zero chunks (existing progress: ${existingSum.toStringAsFixed(2)}).',
+        );
+      }
     }
 
     return DownloadTask(

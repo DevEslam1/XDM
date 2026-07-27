@@ -3,6 +3,9 @@ import 'url_utils.dart';
 import 'file_utils.dart';
 import '../../features/downloads/provider/download_provider.dart';
 
+// TODO (perf): Consider maintaining a Set<String> of names in DownloadProvider
+// to avoid O(n) iteration over all tasks on every name resolution.
+
 class DownloadUtils {
   static String resolveDownloadName(
     DownloadProvider provider,

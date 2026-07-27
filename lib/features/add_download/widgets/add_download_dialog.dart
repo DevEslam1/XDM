@@ -77,6 +77,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   bool _isScheduled = false;
   bool _showAdvanced = false;
   DateTime? _scheduledDateTime;
+  bool _userEditedName = false;
 
   String? _resolvedYoutubeQualityPreset;
   String? _resolvedAudioUrl;
@@ -161,8 +162,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       final parsed = parseMagnetUrl(url);
       final dnName = parsed['name'] ?? 'Torrent Download';
       setState(() {
-        if (_nameController.text.isEmpty ||
-            _nameController.text == 'Torrent Download') {
+        if (!_userEditedName) {
           _setNameAndExt(dnName);
         }
         _resolvedFileName = _nameController.text.isNotEmpty
@@ -193,6 +193,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           _resolvedAudioSize = null;
           _nameController.clear();
           _extController.clear();
+          _userEditedName = false;
         });
       }
     }
@@ -261,15 +262,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           if (!mounted) return;
           if (meta != null) {
             setState(() {
-              _resolvedFileName = (meta['name'] as String? ?? '').replaceAll(
-                '+',
-                ' ',
-              );
+              _resolvedFileName = meta['name'] as String? ?? '';
               _resolvedCategory = categoryFromFileName(_resolvedFileName);
               _torrentFiles = (meta['files'] as List? ?? [])
                   .map(
                     (f) => ({
-                      'name': (f['name'] as String? ?? '').replaceAll('+', ' '),
+                      'name': f['name'] as String? ?? '',
                       'length': f['length'] as int? ?? 0,
                       'selected': true,
                       'priority': 4,
@@ -280,7 +278,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   .toList();
               _updateSelectedTorrentSize();
               _isMetadataResolved = true;
-              _setNameAndExt(_resolvedFileName);
+              if (!_userEditedName) _setNameAndExt(_resolvedFileName);
               if (_categories.contains(_resolvedCategory)) {
                 _selectedCategory = _resolvedCategory;
               }
@@ -482,10 +480,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (url.toLowerCase().startsWith('magnet:')) {
         final parsed = parseMagnetUrl(url);
         final rawDnName = parsed['name'] ?? 'Torrent Download';
-        final dnName = safeFileName(rawDnName.replaceAll('+', ' '));
+        final dnName = safeFileName(rawDnName);
         if (mounted) {
           setState(() {
-            _setNameAndExt(dnName);
+            if (!_userEditedName) _setNameAndExt(dnName);
             _resolvedFileName = dnName;
             final cat = categoryFromFileName(dnName);
             _resolvedCategory = cat != 'Other' ? cat : 'Video';
@@ -533,7 +531,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                   )
                   .toList();
               _isMetadataResolved = true;
-              _setNameAndExt(_resolvedFileName);
+              if (!_userEditedName) _setNameAndExt(_resolvedFileName);
               _selectedCategory = 'Archive';
             });
             return;
@@ -569,7 +567,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         _resolvedCategory = meta.category;
         _torrentFiles = meta.torrentFiles ?? [];
         _isMetadataResolved = true;
-        _setNameAndExt(_resolvedFileName);
+        if (!_userEditedName) _setNameAndExt(_resolvedFileName);
         if (_categories.contains(_resolvedCategory)) {
           _selectedCategory = _resolvedCategory;
         }
@@ -619,13 +617,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         if (enteredExt.isNotEmpty && !enteredName.endsWith(enteredExt)) {
           fullName = '$enteredName.$enteredExt';
         }
-        final suffix = addedCount + 1;
         String singleName;
         if (fullName.isNotEmpty) {
           final safeName = safeFileName(fullName);
           final ext = p.extension(safeName);
           final base = p.basenameWithoutExtension(safeName);
-          singleName = '${base}_$suffix$ext';
+          singleName = addedCount > 0 ? '${base}_$addedCount$ext' : safeName;
         } else {
           singleName = fileNameFromUrl(singleUrl);
         }
@@ -1458,6 +1455,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                 color: textClr,
                                                 fontSize: 12,
                                               ),
+                                              onChanged: (v) =>
+                                                  _userEditedName = v.trim().isNotEmpty,
                                               validator: (val) {
                                                 if (val == null ||
                                                     val.trim().isEmpty) {

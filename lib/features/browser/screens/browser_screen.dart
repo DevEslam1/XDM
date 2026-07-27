@@ -652,8 +652,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || tab.isHome) return;
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
+      final isYoutube = tab.url.contains('youtube.com') || tab.url.contains('youtu.be');
       try {
-        await tab.controller.runJavaScript(AdBlocker.adBlockJavaScript);
+        await tab.controller.runJavaScript(
+          isYoutube ? AdBlocker.youtubeAdBlockJavaScript : AdBlocker.adBlockJavaScript,
+        );
       } catch (e) {
         debugPrint('AdBlocker script injection failed: $e');
       }
@@ -738,11 +741,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   @override
   void dispose() {
     for (final tab in _tabs) {
-      try {
-        tab.controller.clearCache();
-        tab.controller.clearLocalStorage();
-      } catch (e) {
-        // ignore
+      if (tab.isIncognito) {
+        try {
+          tab.controller.clearCache();
+          tab.controller.clearLocalStorage();
+        } catch (e) {
+          // ignore
+        }
       }
       try {
         tab.progressNotifier.dispose();

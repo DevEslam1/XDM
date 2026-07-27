@@ -1607,6 +1607,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
   List<int> _diskBytes = [];
   Timer? _refreshTimer;
   bool _loading = true;
+  int _refreshGen = 0;
 
   @override
   void initState() {
@@ -1653,10 +1654,12 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
   }
 
   Future<void> _refresh() async {
+    _refreshGen++;
+    final capturedGen = _refreshGen;
     final bytes = await widget.provider.getTorrentFileActualBytes(
       widget.task.id,
     );
-    if (mounted) {
+    if (mounted && capturedGen == _refreshGen) {
       setState(() {
         _diskBytes = bytes;
         _loading = false;

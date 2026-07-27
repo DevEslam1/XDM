@@ -16,7 +16,7 @@ class TorrentService {
   static void resumeTorrent(int id) {}
   static void setFilePriorities(int id, List<int> priorities) {}
 
-  static int getFileCount(int id) => -1;
+  static int getFileCount(int id) => 0;
   static void setUploadLimit(int bps) {}
   static void setDownloadLimit(int bps) {}
   static List<TorrentFileItem> getFiles(int id) => [];

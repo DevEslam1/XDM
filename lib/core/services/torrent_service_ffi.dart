@@ -174,12 +174,12 @@ class TorrentService {
   }
 
   static int getFileCount(int id) {
-    if (_disposed || !isInitialized || id < 0) return -1;
+    if (_disposed || !isInitialized || id < 0) return 0;
     try {
       return LibtorrentFlutter.instance.getFiles(id).length;
     } catch (e) {
       _log.warning('getFileCount failed for id $id: $e');
-      return -1;
+      return 0;
     }
   }
 

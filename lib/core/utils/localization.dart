@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../features/downloads/models/download_task.dart';
 
+// TODO (perf): Split _translations into separate files per locale and lazy-load
+// only the selected language to reduce memory usage.
+// Consider using .arb files with flutter_localizations for standard i18n.
+
 class L10n {
   static const Map<String, Map<String, String>> _translations = {
     'en': {
@@ -65,6 +69,7 @@ class L10n {
       'delete_files_label': 'Delete downloaded files/parts from disk',
       'seeds': 'Seeds',
       'peers': 'Peers',
+      'resume_btn': 'Resume',
       'pause_btn': 'Pause',
       'clipboard_detected': 'Clipboard link detected',
       'clipboard_desc': 'XDM detected a download link in your clipboard:',
@@ -446,6 +451,7 @@ class L10n {
       'delete_files_label': 'حذف الملفات/الأجزاء المحملة من القرص',
       'seeds': 'المصادر',
       'peers': 'النظراء',
+      'resume_btn': 'استئناف',
       'pause_btn': 'إيقاف مؤقت',
       'clipboard_detected': 'تم كشف رابط في الحافظة',
       'clipboard_desc': 'اكتشف XDM رابطًا في حافظتك:',

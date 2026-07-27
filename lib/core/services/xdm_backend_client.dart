@@ -10,6 +10,7 @@ import '../../features/settings/provider/settings_provider.dart';
 import 'xdm_backend_exceptions.dart';
 
 // TODO: Add per-device anonymous JWTs issued by Firebase Auth if further backend auth hardening is needed.
+// TODO: Inject settings via constructor instead of direct SettingsProvider.instance dependency for testability.
 
 class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
@@ -74,6 +75,11 @@ class XdmBackendClient {
   void _updateDioFromSettings() {
     final key = _apiKey ?? _apiKeyFallback;
     final settings = SettingsProvider.instance;
+    try {
+      _dio.close(force: true);
+    } catch (_) {
+      // First initialization, nothing to close
+    }
     _dio = Dio(
       BaseOptions(
         baseUrl: settings.backendUrl.isNotEmpty ? settings.backendUrl : kDefaultBackendBaseUrl,
@@ -310,8 +316,11 @@ class _ApiRateLimiter {
     _endpoints[key]!.removeWhere((t) => now.difference(t).inSeconds >= 60);
 
     if (_endpoints[key]!.length >= limit) {
-      final wait = 60 - now.difference(_endpoints[key]!.first).inSeconds;
-      await Future.delayed(Duration(seconds: wait + 1));
+      final retryAfter = 60 - now.difference(_endpoints[key]!.first).inSeconds;
+      throw BackendRateLimitException(
+        retryAfterSeconds: retryAfter,
+        message: 'Rate limit exceeded for endpoint: $endpoint',
+      );
     }
 
     _endpoints[key]!.add(now);

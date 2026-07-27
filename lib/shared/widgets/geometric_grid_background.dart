@@ -1,8 +1,38 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../features/settings/provider/settings_provider.dart';
+
+/// Shared ambient animation state — one timer drives all background instances.
+class _AmbientProgress {
+  static final _instance = _AmbientProgress._();
+  factory _AmbientProgress() => _instance;
+  _AmbientProgress._();
+
+  final ValueNotifier<double> progress = ValueNotifier<double>(0);
+  Timer? _timer;
+  int _refCount = 0;
+  final _startTime = DateTime.now();
+
+  void addRef() {
+    _refCount++;
+    _timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+      final elapsed =
+          DateTime.now().difference(_startTime).inMilliseconds / 1000;
+      progress.value = (elapsed / 20) % 1.0;
+    });
+  }
+
+  void removeRef() {
+    _refCount--;
+    if (_refCount <= 0) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+}
 
 class GeometricGridBackground extends StatefulWidget {
   final Widget child;
@@ -14,23 +44,26 @@ class GeometricGridBackground extends StatefulWidget {
       _GeometricGridBackgroundState();
 }
 
-class _GeometricGridBackgroundState extends State<GeometricGridBackground>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
+  double _progress = 0;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 20), // Slow, relaxing movement
-    )..repeat();
+    _AmbientProgress().addRef();
+    _AmbientProgress().progress.addListener(_onProgress);
+    _progress = _AmbientProgress().progress.value;
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _AmbientProgress().progress.removeListener(_onProgress);
+    _AmbientProgress().removeRef();
     super.dispose();
+  }
+
+  void _onProgress() {
+    if (mounted) setState(() => _progress = _AmbientProgress().progress.value);
   }
 
   @override
@@ -52,22 +85,17 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground>
       child: Stack(
         children: [
           Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                return CustomPaint(
-                  painter: _AmbientBlobPainter(
-                    progress: _controller.value,
-                    isDark: isDark,
-                    intensity: gridOpacity / 40.0, // Normalize 0-1
-                    bgColor: bgColor,
-                    violetClr: violetClr,
-                    blueClr: blueClr,
-                    greenClr: greenClr,
-                  ),
-                  size: Size.infinite,
-                );
-              },
+            child: CustomPaint(
+              painter: _AmbientBlobPainter(
+                progress: _progress,
+                isDark: isDark,
+                intensity: gridOpacity / 40.0,
+                bgColor: bgColor,
+                violetClr: violetClr,
+                blueClr: blueClr,
+                greenClr: greenClr,
+              ),
+              size: Size.infinite,
             ),
           ),
           Positioned.fill(child: widget.child),

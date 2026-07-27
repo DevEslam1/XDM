@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'xdm_backend_client.dart';
 import 'xdm_backend_exceptions.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -11,11 +11,12 @@ import '../../features/settings/provider/settings_provider.dart';
 class YoutubeService {
   static String? _cookies;
   static String? _oauthToken;
+  static const _secureStorage = FlutterSecureStorage();
+  static const _cookiesStorageKey = 'youtube_cookies_persisted';
 
   static Future<void> init() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedCookies = prefs.getString('youtube_cookies_persisted');
+      final savedCookies = await _secureStorage.read(key: _cookiesStorageKey);
       if (savedCookies != null && savedCookies.isNotEmpty) {
         _cookies = savedCookies;
         debugPrint('[YouTubeService] Loaded persisted cookies');
@@ -38,8 +39,7 @@ class YoutubeService {
     _cookies = cookieString;
     _notifyAuthState();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('youtube_cookies_persisted', cookieString);
+      await _secureStorage.write(key: _cookiesStorageKey, value: cookieString);
     } catch (e) {
       debugPrint('[YouTubeService] Failed to persist cookies: $e');
     }
@@ -64,8 +64,7 @@ class YoutubeService {
     await resetClient();
     try {
       await WebviewCookieManager().clearCookies();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('youtube_cookies_persisted');
+      await _secureStorage.delete(key: _cookiesStorageKey);
     } catch (e) {
       debugPrint(
         '[YouTubeService] Failed to clear WebView cookies on signout: $e',
@@ -266,6 +265,71 @@ class YoutubeService {
     resetClient();
   }
 
+  static List<Map<String, dynamic>> _parseStreams(
+    Map<String, dynamic> backendRes,
+  ) {
+    final title = (backendRes['title'] as String?) ?? 'Untitled';
+    final rawStreams =
+        (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
+
+    if (rawStreams == null || rawStreams.isEmpty) return [];
+
+    final results = <Map<String, dynamic>>[];
+    final seenUrls = <String>{};
+
+    for (final s in rawStreams) {
+      final map = Map<String, dynamic>.from(s as Map);
+
+      final url = (map['direct_url'] as String?) ?? (map['url'] as String?);
+      if (url != null && !seenUrls.add(url)) continue;
+
+      if (map.containsKey('direct_url')) {
+        final rawType = map['type'] as String? ?? '';
+        final ext = map['ext'] as String? ?? 'mp4';
+        final quality = map['quality'] as String? ?? 'Unknown';
+        final filesize = (map['filesize'] as num?)?.toInt() ?? 0;
+        final directUrl = map['direct_url'] as String?;
+
+        String appType;
+        if (rawType == 'video_audio') {
+          appType = 'muxed';
+        } else if (rawType == 'video_only') {
+          appType = 'video_only';
+        } else if (rawType == 'audio_only') {
+          appType = 'audio';
+        } else {
+          appType = rawType;
+        }
+
+        results.add({
+          'type': appType,
+          'quality': quality,
+          'label': appType == 'audio'
+              ? 'Audio Only ${ext.toUpperCase()}'
+              : '$quality ${ext.toUpperCase()}',
+          'src': directUrl,
+          'audioSrc': map.containsKey('audioSrc')
+              ? map['audioSrc']?.toString()
+              : null,
+          'videoSize': map['videoSize'] as int? ?? 0,
+          'audioSize': map['audioSize'] as int? ?? 0,
+          'size': filesize,
+          'ext': ext,
+          'title': title,
+        });
+      } else {
+        if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
+          map['audioSrc'] = map['audioSrc'].toString();
+        } else {
+          map['audioSrc'] = null;
+        }
+        map['title'] = title;
+        results.add(map);
+      }
+    }
+    return results;
+  }
+
   static Future<List<Map<String, dynamic>>> getStreams(String url) async {
     final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
     final targetUrl = videoId != null
@@ -283,61 +347,8 @@ class YoutubeService {
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
       );
 
-      final title = (backendRes['title'] as String?) ?? 'Untitled';
-      final rawStreams =
-          (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
-
-      if (rawStreams != null && rawStreams.isNotEmpty) {
-        final results = <Map<String, dynamic>>[];
-
-        for (final s in rawStreams) {
-          final map = Map<String, dynamic>.from(s as Map);
-
-          if (map.containsKey('direct_url')) {
-            final rawType = map['type'] as String? ?? '';
-            final ext = map['ext'] as String? ?? 'mp4';
-            final quality = map['quality'] as String? ?? 'Unknown';
-            final filesize = (map['filesize'] as num?)?.toInt() ?? 0;
-            final directUrl = map['direct_url'] as String?;
-
-            String appType;
-            if (rawType == 'video_audio') {
-              appType = 'muxed';
-            } else if (rawType == 'video_only') {
-              appType = 'video_only';
-            } else if (rawType == 'audio_only') {
-              appType = 'audio';
-            } else {
-              appType = rawType;
-            }
-
-            results.add({
-              'type': appType,
-              'quality': quality,
-              'label': appType == 'audio'
-                  ? 'Audio Only ${ext.toUpperCase()}'
-                  : '$quality ${ext.toUpperCase()}',
-              'src': directUrl,
-              'audioSrc': map.containsKey('audioSrc')
-                  ? map['audioSrc']?.toString()
-                  : null,
-              'videoSize': map['videoSize'] as int? ?? 0,
-              'audioSize': map['audioSize'] as int? ?? 0,
-              'size': filesize,
-              'ext': ext,
-              'title': title,
-            });
-          } else {
-            if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
-              map['audioSrc'] = map['audioSrc'].toString();
-            } else {
-              map['audioSrc'] = null;
-            }
-            map['title'] = title;
-            results.add(map);
-          }
-        }
-
+      final results = _parseStreams(backendRes);
+      if (results.isNotEmpty) {
         if (kDebugMode) {
           final combinedCount = results
               .where((s) => s['type'] == 'combined')
@@ -371,7 +382,6 @@ class YoutubeService {
         host.contains('youtube.com') || host.contains('youtu.be');
 
     final videoId = extractVideoId(url);
-    // Use video ID URL if it's a YouTube video to leverage backend caching better
     final targetUrl = videoId != null
         ? 'https://www.youtube.com/watch?v=$videoId'
         : url;
@@ -385,61 +395,8 @@ class YoutubeService {
             : null,
       );
 
-      final title = (backendRes['title'] as String?) ?? 'Untitled';
-      final rawStreams =
-          (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
-
-      if (rawStreams != null && rawStreams.isNotEmpty) {
-        final results = <Map<String, dynamic>>[];
-
-        for (final s in rawStreams) {
-          final map = Map<String, dynamic>.from(s as Map);
-
-          if (map.containsKey('direct_url')) {
-            final rawType = map['type'] as String? ?? '';
-            final ext = map['ext'] as String? ?? 'mp4';
-            final quality = map['quality'] as String? ?? 'Unknown';
-            final filesize = (map['filesize'] as num?)?.toInt() ?? 0;
-            final directUrl = map['direct_url'] as String?;
-
-            String appType;
-            if (rawType == 'video_audio') {
-              appType = 'muxed';
-            } else if (rawType == 'video_only') {
-              appType = 'video_only';
-            } else if (rawType == 'audio_only') {
-              appType = 'audio';
-            } else {
-              appType = rawType;
-            }
-
-            results.add({
-              'type': appType,
-              'quality': quality,
-              'label': appType == 'audio'
-                  ? 'Audio Only ${ext.toUpperCase()}'
-                  : '$quality ${ext.toUpperCase()}',
-              'src': directUrl,
-              'audioSrc': map.containsKey('audioSrc')
-                  ? map['audioSrc']?.toString()
-                  : null,
-              'videoSize': map['videoSize'] as int? ?? 0,
-              'audioSize': map['audioSize'] as int? ?? 0,
-              'size': filesize,
-              'ext': ext,
-              'title': title,
-            });
-          } else {
-            if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
-              map['audioSrc'] = map['audioSrc'].toString();
-            } else {
-              map['audioSrc'] = null;
-            }
-            results.add(map);
-          }
-        }
-        return results;
-      }
+      final results = _parseStreams(backendRes);
+      if (results.isNotEmpty) return results;
     } on BackendBadRequestException {
       return null;
     } on BackendNotFoundException {

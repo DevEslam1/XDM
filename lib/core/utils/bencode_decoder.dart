@@ -53,18 +53,13 @@ class BencodeDecoder {
 
     final big = BigInt.tryParse(numStr);
     if (big == null) throw FormatException('Invalid bencode integer: $numStr');
-    final kMaxSafeInt = kIsWeb ? (BigInt.from(1) << 53) - BigInt.one : BigInt.from(0x7FFFFFFFFFFFFFFF);
-    if (big > kMaxSafeInt || big < -kMaxSafeInt) {
-      throw FormatException('Bencode integer out of Dart int range: $numStr');
+    final maxSafeInt = kIsWeb
+        ? (BigInt.from(1) << 53) - BigInt.one
+        : BigInt.from(0x7FFFFFFFFFFFFFFF);
+    if (big.abs() > maxSafeInt) {
+      throw FormatException('Bencode integer out of safe range: $numStr');
     }
-    final val = big.toInt();
-    if (kIsWeb) {
-      final webLimit = BigInt.from(1) << 53;
-      if (big > webLimit || big < -webLimit) {
-        throw const FormatException('Bencode integer too large for web platform');
-      }
-    }
-    return val;
+    return big.toInt();
   }
 
   Uint8List _decodeBytes() {
@@ -218,7 +213,7 @@ class BencodeDecoder {
   }
 }
 
-// TODO: Add unit tests for BencodeDecoder
+// TODO (tests): Add unit tests for BencodeDecoder (tracked as GitHub issue)
 //   - decodeInt: valid, negative zero, leading zero, out of range
 //   - decodeBytes: zero-length, exceed data
 //   - decodeList/decodeDict: nesting depth limit, unterminated

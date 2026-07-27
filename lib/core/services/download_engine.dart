@@ -231,6 +231,9 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) {
 }
 
 class DownloadEngine {
+  static const int _flushBufferSize = 1024 * 1024;
+  static const int _progressReportIntervalMs = 250;
+  static const int _stateSaveIntervalMs = 2000;
   final List<CancelToken> _activeCancelTokens = [];
   final List<SendPort> _activeIsolateCommandPorts = [];
   final List<Isolate> _activeIsolates = [];
@@ -359,6 +362,11 @@ class DownloadEngine {
         if (bypassSSL) {
           debugPrint(
             '[DMX] SSL verification is BYPASSED for host $downloadHost',
+          );
+          // AUDIT LOG: All SSL-bypassed connections are logged for security audit.
+          // This is a developer-only feature and should not be enabled in production.
+          debugPrint(
+            '[DMX AUDIT] SSL bypass active for URL: $url',
           );
           httpClient.badCertificateCallback = (cert, h, p) {
             final isTargetHost =
@@ -902,15 +910,15 @@ class DownloadEngine {
           final p = message['progress'] as Map;
           onProgress(
             DownloadProgress(
-              downloadedBytes: p['downloadedBytes'],
-              fileSize: p['fileSize'],
-              speed: p['speed'],
-              eta: p['eta'],
+              downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
+              fileSize: (p['fileSize'] as num?)?.toInt() ?? 0,
+              speed: (p['speed'] as num?)?.toDouble() ?? 0.0,
+              eta: (p['eta'] as num?)?.toInt(),
               chunks: p['chunks'] != null
                   ? List<double>.from(p['chunks'])
                   : null,
-              fileName: p['fileName'],
-              supportsResume: p['supportsResume'],
+              fileName: p['fileName'] as String?,
+              supportsResume: p['supportsResume'] as bool?,
             ),
           );
         } else if (type == 'done') {
@@ -1396,13 +1404,28 @@ class DownloadEngine {
           }
         }
 
+        bool isTotalComplete() {
+          if (totalSize <= 0) return false;
+          int sum = 0;
+          for (int i = 0; i < chunkProgress.length; i++) {
+            sum += chunkProgress[i];
+          }
+          return sum >= totalSize;
+        }
+
         Future<void> reportProgress() async {
-          int downloadedTotal = 0;
+          final nowMs = stopwatch.elapsedMilliseconds;
+          final isCompleted = isTotalComplete();
+          final shouldReport = isCompleted ||
+              nowMs - lastReportTime >= _progressReportIntervalMs;
+          final shouldSave = isCompleted ||
+              nowMs - lastStateSaveTime >= _stateSaveIntervalMs;
+          if (!shouldReport && !shouldSave) return;
+
           final snapshot = await lock.synchronized(
             () => List<int>.from(chunkProgress),
           );
-          downloadedTotal = snapshot.reduce((a, b) => a + b);
-          final nowMs = stopwatch.elapsedMilliseconds;
+          final downloadedTotal = snapshot.reduce((a, b) => a + b);
           speedSamples.add(_SpeedSample(nowMs, downloadedTotal));
 
           while (speedSamples.isNotEmpty &&
@@ -1426,8 +1449,7 @@ class DownloadEngine {
               ? (remaining / speed).round()
               : null;
 
-          final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
-          if (nowMs - lastReportTime >= 250 || isCompleted) {
+          if (shouldReport) {
             lastReportTime = nowMs;
 
             final chunksList = List<double>.generate(threadCount, (idx) {
@@ -1451,7 +1473,7 @@ class DownloadEngine {
             });
           }
 
-          if (nowMs - lastStateSaveTime >= 2000 || isCompleted) {
+          if (shouldSave) {
             lastStateSaveTime = nowMs;
             await saveState();
           }
@@ -1545,7 +1567,7 @@ class DownloadEngine {
                         buffer.add(chunk);
                         chunkDownloadedThisSession += chunk.length;
 
-                        if (buffer.length >= 1024 * 1024) {
+                        if (buffer.length >= _flushBufferSize) {
                           final bytesToWrite = buffer.takeBytes();
                           await lock.synchronized(() async {
                             await sharedRaf.setPosition(bufferStartOffset);
@@ -1554,18 +1576,6 @@ class DownloadEngine {
                           bufferStartOffset += bytesToWrite.length;
                           localWrittenBytes += bytesToWrite.length;
                           // Only update progress AFTER successful write:
-                          chunkProgress[idx] = resumeFrom + localWrittenBytes;
-                        }
-
-                        if (buffer.length >= 1024 * 1024) {
-                          final bytesToWrite = buffer.takeBytes();
-                          await lock.synchronized(() async {
-                            await sharedRaf.setPosition(bufferStartOffset);
-                            await sharedRaf.writeFrom(bytesToWrite);
-                          });
-                          bufferStartOffset += bytesToWrite.length;
-                          localWrittenBytes += bytesToWrite.length;
-                          // chunkProgress already reflects this, but keep it consistent
                           chunkProgress[idx] = resumeFrom + localWrittenBytes;
                         }
 
@@ -1673,10 +1683,10 @@ class DownloadEngine {
           }
 
           if (totalSize > 0) {
-            final actualSize = await targetFile.length();
-            if (actualSize != totalSize) {
+            final downloadedChunkSum = chunkProgress.fold<int>(0, (s, c) => s + c);
+            if (downloadedChunkSum != totalSize) {
               throw Exception(
-                'Download integrity check failed: expected $totalSize bytes, got $actualSize bytes.',
+                'Download integrity check failed: expected $totalSize bytes, got $downloadedChunkSum bytes downloaded.',
               );
             }
           }
@@ -1994,7 +2004,7 @@ class DownloadEngine {
             : null;
 
         final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
-        if (nowMs - lastReportTime >= 250 || isCompleted) {
+        if (nowMs - lastReportTime >= _progressReportIntervalMs || isCompleted) {
           lastReportTime = nowMs;
           Future.microtask(() {
             onProgress(
@@ -2169,6 +2179,10 @@ class DownloadEngine {
     _activeIsolateCommandPorts.clear();
   }
 }
+
+// TODO: Decompose download_engine.dart into separate classes:
+//   MultiThreadedDownloader, SingleThreadedDownloader, TorrentDownloader
+// TODO: Add per-device anonymous JWTs for backend auth (tracked as GitHub issue)
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
 

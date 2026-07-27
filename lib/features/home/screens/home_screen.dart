@@ -1186,8 +1186,7 @@ class _DownloadTaskList extends StatelessWidget {
           if (prev[i].id != next[i].id ||
               prev[i].status != next[i].status ||
               prev[i].downloadedBytes != next[i].downloadedBytes ||
-              prev[i].progress != next[i].progress ||
-              prev[i].speed != next[i].speed ||
+              (prev[i].speed ~/ 1024) != (next[i].speed ~/ 1024) ||
               prev[i].eta != next[i].eta ||
               prev[i].chunks.length != next[i].chunks.length) {
             return true;

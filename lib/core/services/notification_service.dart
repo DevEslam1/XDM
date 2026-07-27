@@ -10,7 +10,7 @@ import '../utils/localization.dart';
 void _onBackgroundNotificationResponse(NotificationResponse response) {
   final actionId = response.actionId;
   final payload = response.payload;
-  if (actionId != null && payload != null) {
+  if (actionId != null && payload != null && payload.isNotEmpty) {
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
       port.send({
@@ -47,6 +47,13 @@ class NotificationService {
       StreamController<Map<String, String>>.broadcast();
 
   Stream<Map<String, String>> get onActionTapped => _actionStreamController.stream;
+
+  /// Validates that a task ID has a plausible UUID format.
+  /// Provides basic injection protection for notification payloads.
+  static bool _isValidTaskId(String id) {
+    if (id.isEmpty || id.length > 64) return false;
+    return RegExp(r'^\d+(_\d{1,10})?$').hasMatch(id);
+  }
 
   /// Request notification runtime permission (Android 13+).
   /// Safe to call multiple times; returns `true` if granted.
@@ -120,7 +127,7 @@ class NotificationService {
       if (message is Map) {
         final action = message['action'] as String?;
         final taskId = message['taskId'] as String?;
-        if (action != null && taskId != null) {
+        if (action != null && taskId != null && _isValidTaskId(taskId)) {
           _actionStreamController.add({
             'action': action,
             'taskId': taskId,
@@ -134,7 +141,7 @@ class NotificationService {
       onDidReceiveNotificationResponse: (response) {
         final actionId = response.actionId ?? 'tap';
         final payload = response.payload;
-        if (payload != null) {
+        if (payload != null && _isValidTaskId(payload)) {
           _actionStreamController.add({
             'action': actionId,
             'taskId': payload,
@@ -246,7 +253,14 @@ class NotificationService {
       autoCancel: false,
       actions: actions,
     );
-    final details = NotificationDetails(android: androidDetails);
+    final iosDetails = DarwinNotificationDetails(
+      presentAlert: !isPaused,
+      interruptionLevel: InterruptionLevel.passive,
+    );
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
     await _plugin.show(
       id: notificationId,
       title: title,
@@ -278,7 +292,16 @@ class NotificationService {
       playSound: playSound,
       actions: actions,
     );
-    final details = NotificationDetails(android: androidDetails);
+    final iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      interruptionLevel: playSound
+          ? InterruptionLevel.timeSensitive
+          : InterruptionLevel.passive,
+    );
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
     await _plugin.show(
       id: notificationId,
       title: title,
@@ -305,7 +328,14 @@ class NotificationService {
       showProgress: false,
       playSound: playSound,
     );
-    final details = NotificationDetails(android: androidDetails);
+    final iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
     await _plugin.show(
       id: notificationId,
       title: title,

@@ -245,7 +245,7 @@ class DatabaseService {
   DownloadTask _rowToTask(DbDownloadTask row) {
     DateTime parseIntDate(int msSinceEpoch) {
       try {
-        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
+        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch, isUtc: true);
       } catch (e) {
         debugPrint('[DMX] Error parsing date millisecondsSinceEpoch $msSinceEpoch: $e');
         return DateTime(2000);
@@ -255,7 +255,7 @@ class DatabaseService {
     DateTime? parseNullableIntDate(int? msSinceEpoch) {
       if (msSinceEpoch == null) return null;
       try {
-        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
+        return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch, isUtc: true);
       } catch (e) {
         debugPrint('[DMX] Error parsing nullable date millisecondsSinceEpoch $msSinceEpoch: $e');
         return null;
@@ -398,15 +398,30 @@ class DatabaseService {
   Future<String> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return '';
-    final id = const Uuid().v4();
+    final visitedAt = entry['visitedAt'] as String? ??
+        DateTime.now().toIso8601String();
 
+    // Update existing entry for the same URL instead of creating a duplicate
+    final existing = await (_db.select(_db.browserHistory)
+          ..where((t) => t.url.equals(url)))
+        .get();
+    if (existing.isNotEmpty) {
+      final existingId = existing.first.id;
+      await (_db.update(_db.browserHistory)..where((t) => t.id.equals(existingId)))
+          .write(BrowserHistoryCompanion(
+            visitedAt: drift.Value(visitedAt),
+            title: drift.Value(entry['title'] as String? ?? url),
+          ));
+      return existingId;
+    }
+
+    final id = const Uuid().v4();
     await _db.into(_db.browserHistory).insert(
         BrowserHistoryCompanion.insert(
           id: id,
           url: url,
           title: entry['title'] as String? ?? url,
-          visitedAt: entry['visitedAt'] as String? ??
-              DateTime.now().toIso8601String(),
+          visitedAt: visitedAt,
         ),
         mode: drift.InsertMode.insertOrReplace);
 
