@@ -309,49 +309,48 @@ mixin DownloadTorrentMixin {
 
   /// Checks disk storage for existing torrent files and updates per-file downloadedBytes
   /// and total downloadedBytes to reflect real disk progress before continuing/resuming.
-  /// NOTE: Uses file.lengthSync() which on Windows returns the logical (sparse) size,
-  /// not actual bytes written. Therefore we only trust diskLen when it's *less* than
-  /// the full length (clearly partial). When diskLen >= length we preserve the stored
-  /// estimate rather than assuming 100%, because libtorrent sparse files report full
-  /// logical size even when only partially written.
   List<Map<String, dynamic>> checkRealTorrentDiskProgress(DownloadTask task) {
-    if (task.torrentFiles == null || task.torrentFiles!.isEmpty) {
-      return task.torrentFiles ?? [];
-    }
-
-    final updatedFiles = <Map<String, dynamic>>[];
-    for (final f in task.torrentFiles!) {
+    final files = task.torrentFiles;
+    if (files == null || files.isEmpty) return files ?? [];
+    final result = <Map<String, dynamic>>[];
+    for (final f in files) {
       final copy = Map<String, dynamic>.from(f);
+      final selected = copy['selected'] as bool? ?? true;
       final relPath = copy['name'] as String? ?? '';
-      final length = (copy['length'] as int?) ?? 0;
-      final storedDownloaded = (copy['downloadedBytes'] as int?) ?? 0;
-
-      int realBytes = storedDownloaded;
-      if (relPath.isNotEmpty && length > 0 && task.status != DownloadStatus.completed) {
+      final length = (copy['length'] as num?)?.toInt() ?? 0;
+      final stored = (copy['downloadedBytes'] as num?)?.toInt() ?? 0;
+      if (!selected) { copy['downloadedBytes'] = 0; result.add(copy); continue; }
+      int diskBytes = stored;
+      if (relPath.isNotEmpty && length > 0) {
         try {
-          final fullPath = p.normalize(p.join(task.savePath, relPath));
-          final file = File(fullPath);
-          if (file.existsSync()) {
+          final file = _locateTorrentFile(task, relPath);
+          if (file != null) {
             final diskLen = file.lengthSync();
-            // Only trust diskLen when file is clearly smaller than full size
-            // (indicates partial download). Do NOT assume full size == complete
-            // because sparse files report full logical size.
-            if (diskLen > storedDownloaded && diskLen < length) {
-              realBytes = diskLen;
-            }
-          } else {
-            realBytes = 0;
+            // Trust on-disk size only while BELOW declared length (sparse files
+            // report full logical size while partial). Completion is snapped to
+            // 100% later by markTorrentFilesCompleted.
+            if (diskLen > stored && diskLen < length) diskBytes = diskLen;
           }
-        } catch (e) {
-          debugPrint('Error checking disk progress for $relPath: $e');
-        }
+        } catch (_) {}
       }
-
-      copy['downloadedBytes'] = realBytes;
-      copy['speed'] = 0.0;
-      updatedFiles.add(copy);
+      copy['downloadedBytes'] = diskBytes;
+      result.add(copy);
     }
-    return updatedFiles;
+    return result;
+  }
+
+  File? _locateTorrentFile(DownloadTask task, String relPath) {
+    for (final candidate in <String>[
+      p.normalize(p.join(task.localFilePath, relPath)), // multi-file: root folder
+      p.normalize(p.join(task.savePath, relPath)),       // single-file: savePath/name
+      task.localFilePath,                                 // single-file: path IS file
+    ]) {
+      try {
+        final f = File(candidate);
+        if (f.existsSync()) return f;
+      } catch (_) {}
+    }
+    return null;
   }
 
   /// Returns each torrent file's confirmed downloaded byte count on disk.
@@ -372,9 +371,8 @@ mixin DownloadTorrentMixin {
       int diskBytes = downloaded;
       if (relPath.isNotEmpty && length > 0) {
         try {
-          final fullPath = p.normalize(p.join(task.savePath, relPath));
-          final file = File(fullPath);
-          if (file.existsSync()) {
+          final file = _locateTorrentFile(task, relPath);
+          if (file != null) {
             final diskLen = file.lengthSync();
             // Only trust diskLen when file is clearly smaller than full size
             // (partial download). Sparse files report full logical size even

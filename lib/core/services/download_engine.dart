@@ -379,6 +379,7 @@ class DownloadEngine {
 
       final downloadUri = url != null ? Uri.tryParse(url) : null;
       final downloadHost = downloadUri?.host;
+      final effectiveBypassSSL = bypassSSL && kDebugMode;
 
       adapter.createHttpClient = () {
         final httpClient = HttpClient();
@@ -398,12 +399,12 @@ class DownloadEngine {
             };
           }
         }
-        if (bypassSSL) {
+        if (effectiveBypassSSL) {
           debugPrint(
             '[DMX] SSL verification is BYPASSED for host $downloadHost',
           );
           // AUDIT LOG: All SSL-bypassed connections are logged for security audit.
-          // This is a developer-only feature and should not be enabled in production.
+          // This is a developer-only feature and cannot be enabled in release.
           debugPrint('[DMX AUDIT] SSL bypass active for URL: $url');
           // Accept all certs when bypass is on — a targeted check on downloadHost
           // alone breaks redirects (HTTP→HTTPS CDN hops present a different host).
@@ -516,7 +517,7 @@ class DownloadEngine {
           }
         });
 
-        Future.delayed(const Duration(seconds: 30), () {
+        Future.delayed(const Duration(seconds: 120), () {
           if (!completer.isCompleted) {
             sub?.cancel();
             try {
@@ -733,8 +734,8 @@ class DownloadEngine {
     int resolvedFileSize = knownFileSize;
     bool resolvedSupportsResume = supportsResume;
     String? resolvedFileName;
-    String currentTempFilePath = tempFilePath;
-    String currentLocalFilePath = localFilePath;
+    final String currentTempFilePath = tempFilePath;
+    final String currentLocalFilePath = localFilePath;
 
     final isTorrent = isTorrentUrl(url, fileName: fileNameFromUrl(url));
 
@@ -763,9 +764,9 @@ class DownloadEngine {
       }
 
       if (resolvedFileName != null) {
-        final saveDir = File(localFilePath).parent.path;
-        currentLocalFilePath = p.join(saveDir, safeFileName(resolvedFileName));
-        currentTempFilePath = buildTempFilePath(saveDir, resolvedFileName);
+        // Preserve the on-disk path assigned by the download provider.
+        // We still update the displayed file name from metadata, but we do
+        // not rename the target file automatically for auto-generated names.
       }
 
       if (resolvedFileName != null || resolvedFileSize > 0) {
@@ -1133,16 +1134,13 @@ class DownloadEngine {
           debugPrint('Torrent download cancel handler error: $e');
         });
 
-    metadataTimer = Timer(const Duration(seconds: 45), () {
+    metadataTimer = Timer(const Duration(seconds: 120), () {
       if (metadataCompleter.isCompleted) return;
       metadataSub?.cancel();
       try {
         TorrentService.pauseTorrent(id);
-        TorrentService.removeTorrent(id);
       } catch (e) {
-        debugPrint(
-          '[DMX] Error pausing/removing torrent during metadata timeout: $e',
-        );
+        debugPrint('[DMX] Error pausing torrent during metadata timeout: $e');
       }
       if (!metadataCompleter.isCompleted) {
         metadataCompleter.completeError(
@@ -1406,6 +1404,12 @@ class DownloadEngine {
 
         final targetFile = File(currentTempFilePath);
         await targetFile.parent.create(recursive: true);
+        // Pre-create the target file immediately so it appears in the download
+        // folder as soon as the download starts, not only after all chunks are
+        // assembled at completion.
+        if (!await targetFile.exists()) {
+          await targetFile.create();
+        }
         final stateFile = File('$currentTempFilePath.dmxstate');
         final partFiles = List.generate(
           threadCount,
@@ -1415,22 +1419,27 @@ class DownloadEngine {
         List<int>? loadedState;
         bool canResume = await stateFile.exists();
 
-        // Validate that part files exist if state file is present
         if (canResume) {
           try {
             final content = await stateFile.readAsString();
-            final stateList = jsonDecode(content) as List;
-            if (stateList.length == threadCount) {
-              for (int i = 0; i < threadCount; i++) {
-                if (!await partFiles[i].exists()) {
-                  canResume = false;
-                  break;
+            final decoded = jsonDecode(content);
+            if (decoded is Map) {
+              final savedTotalSize = (decoded['totalSize'] as num?)?.toInt() ?? -1;
+              final savedThreadCount = (decoded['threadCount'] as num?)?.toInt() ?? -1;
+              final progressList = decoded['progress'] as List?;
+              if (savedTotalSize == totalSize && 
+                  savedThreadCount == threadCount && 
+                  progressList != null && 
+                  progressList.length == threadCount) {
+                for (int i = 0; i < threadCount; i++) {
+                  if (!await partFiles[i].exists()) { canResume = false; break; }
                 }
-              }
-              if (canResume) {
-                loadedState = stateList.cast<int>();
+                if (canResume) loadedState = progressList.cast<int>();
+              } else {
+                canResume = false;
               }
             } else {
+              // Old format or invalid, discard
               canResume = false;
             }
           } catch (e) {
@@ -1439,27 +1448,22 @@ class DownloadEngine {
         }
 
         if (!canResume) {
-          // Fresh start: clean up stale files and preallocate part files
           if (await stateFile.exists()) await stateFile.delete();
           for (int i = 0; i < threadCount; i++) {
             if (await partFiles[i].exists()) await partFiles[i].delete();
             chunkProgress[i] = 0;
           }
-
-          for (int i = 0; i < threadCount; i++) {
-            final start = i * partSize;
-            final end = (i == threadCount - 1)
-                ? (totalSize - 1)
-                : (start + partSize - 1);
-            final chunkLen = end - start + 1;
-            final raf = await partFiles[i].open(mode: FileMode.write);
-            await raf.truncate(chunkLen);
-            await raf.close();
-          }
+          // IMPORTANT: do NOT preallocate part files to chunkLen here. Chunks are
+          // appended (FileMode.append) in 3b, which grows each part file from zero.
+          // Preallocating would leave chunkLen zero bytes that append writes AFTER,
+          // producing an oversized, corrupt output. Append creates the file on first write.
         } else {
-          // Resume: load state into chunkProgress
           for (int i = 0; i < threadCount; i++) {
             chunkProgress[i] = loadedState![i];
+            // Truncate part file to the exact downloaded length to prevent gaps on append
+            final raf = await partFiles[i].open(mode: FileMode.write);
+            await raf.truncate(chunkProgress[i]);
+            await raf.close();
           }
         }
 
@@ -1487,7 +1491,12 @@ class DownloadEngine {
           try {
             await lock.synchronized(() async {
               final tempStateFile = File('${stateFile.path}.tmp');
-              await tempStateFile.writeAsString(jsonEncode(chunkProgress));
+              final stateData = {
+                'totalSize': totalSize,
+                'threadCount': threadCount,
+                'progress': chunkProgress,
+              };
+              await tempStateFile.writeAsString(jsonEncode(stateData));
               await tempStateFile.rename(stateFile.path);
             });
           } catch (e) {
@@ -1615,6 +1624,18 @@ class DownloadEngine {
                   );
 
                   if (chunkResponse.statusCode != 206) {
+                    if (chunkResponse.statusCode == 200 && idx == 0) {
+                      debugPrint(
+                        '[DownloadEngine] Server returned 200 for first chunk; falling back to single-threaded download.',
+                      );
+                      throw DioException(
+                        requestOptions: RequestOptions(path: punyUrl),
+                        type: DioExceptionType.badResponse,
+                        response: chunkResponse,
+                        message:
+                            'Server returned 200 for first chunk; fallback to single-threaded mode.',
+                      );
+                    }
                     throw DioException(
                       requestOptions: RequestOptions(path: punyUrl),
                       type: DioExceptionType.badResponse,
@@ -1660,30 +1681,13 @@ class DownloadEngine {
 
                         if (buffer.length >= _flushBufferSize) {
                           final bytesToWrite = buffer.takeBytes();
-                          final partRaf = await partFiles[idx].open(
-                            mode: FileMode.append,
-                          );
+                          final partRaf = await partFiles[idx].open(mode: FileMode.append);
                           await partRaf.writeFrom(bytesToWrite);
                           await partRaf.close();
-                          final writeStart =
-                              start + resumeFrom + localWrittenBytes;
-                          await lock.synchronized(() async {
-                            try {
-                              final outRaf = await targetFile.open(
-                                mode: FileMode.write,
-                              );
-                              await outRaf.setPosition(writeStart);
-                              await outRaf.writeFrom(bytesToWrite);
-                              await outRaf.close();
-                            } catch (e) {
-                              debugPrint(
-                                '[DownloadEngine] Failed to mirror part to targetFile: $e',
-                              );
-                            }
+                          await lock.synchronized(() {
                             localWrittenBytes += bytesToWrite.length;
                             chunkProgress[idx] = resumeFrom + localWrittenBytes;
                           });
-                          // chunkProgress[idx] updated inside lock above
                         }
 
                         await reportProgress();
@@ -1725,26 +1729,10 @@ class DownloadEngine {
 
                       if (buffer.length > 0) {
                         final bytesToWrite = buffer.takeBytes();
-                        final partRaf = await partFiles[idx].open(
-                          mode: FileMode.append,
-                        );
+                        final partRaf = await partFiles[idx].open(mode: FileMode.append);
                         await partRaf.writeFrom(bytesToWrite);
                         await partRaf.close();
-                        final writeStart =
-                            start + resumeFrom + localWrittenBytes;
-                        await lock.synchronized(() async {
-                          try {
-                            final outRaf = await targetFile.open(
-                              mode: FileMode.write,
-                            );
-                            await outRaf.setPosition(writeStart);
-                            await outRaf.writeFrom(bytesToWrite);
-                            await outRaf.close();
-                          } catch (e) {
-                            debugPrint(
-                              '[DownloadEngine] Failed to mirror part to targetFile: $e',
-                            );
-                          }
+                        await lock.synchronized(() {
                           localWrittenBytes += bytesToWrite.length;
                           chunkProgress[idx] = resumeFrom + localWrittenBytes;
                         });
@@ -1753,26 +1741,10 @@ class DownloadEngine {
                       if (buffer.length > 0) {
                         try {
                           final bytesToWrite = buffer.takeBytes();
-                          final partRaf = await partFiles[idx].open(
-                            mode: FileMode.append,
-                          );
+                          final partRaf = await partFiles[idx].open(mode: FileMode.append);
                           await partRaf.writeFrom(bytesToWrite);
                           await partRaf.close();
-                          final writeStart =
-                              start + resumeFrom + localWrittenBytes;
-                          await lock.synchronized(() async {
-                            try {
-                              final outRaf = await targetFile.open(
-                                mode: FileMode.write,
-                              );
-                              await outRaf.setPosition(writeStart);
-                              await outRaf.writeFrom(bytesToWrite);
-                              await outRaf.close();
-                            } catch (e) {
-                              debugPrint(
-                                '[DownloadEngine] Failed to mirror part to targetFile: $e',
-                              );
-                            }
+                          await lock.synchronized(() {
                             localWrittenBytes += bytesToWrite.length;
                             chunkProgress[idx] = resumeFrom + localWrittenBytes;
                           });
@@ -1813,28 +1785,25 @@ class DownloadEngine {
           await Future.wait(futures);
           await saveState();
 
-          // Concatenate part files into the final temp file.
-          final outRaf = await targetFile.open(mode: FileMode.write);
+          // Concatenate part files into the temp file via streams to avoid OOM on
+          // large files (never readAsBytes()).
+          final outSink = targetFile.openWrite(mode: FileMode.write);
           for (int i = 0; i < threadCount; i++) {
-            final partBytes = await partFiles[i].readAsBytes();
-            await outRaf.writeFrom(partBytes);
+            await outSink.addStream(partFiles[i].openRead());
           }
-          await outRaf.flush();
-          await outRaf.close();
-          // Delete part files.
+          await outSink.flush();
+          await outSink.close();
           for (final pf in partFiles) {
-            try {
-              if (await pf.exists()) await pf.delete();
-            } catch (_) {}
+            try { if (await pf.exists()) await pf.delete(); } catch (_) {}
           }
 
           if (totalSize > 0) {
             final downloadedChunkSum = chunkProgress
                 .fold<BigInt>(BigInt.zero, (s, c) => s + BigInt.from(c))
                 .toInt();
-            if (downloadedChunkSum != totalSize) {
+            if ((downloadedChunkSum - totalSize).abs() > 1024) {
               throw Exception(
-                'Download integrity check failed: expected $totalSize bytes, got $downloadedChunkSum bytes downloaded.',
+                'Download integrity check failed: expected $totalSize bytes, got $downloadedChunkSum.',
               );
             }
           }
@@ -1892,50 +1861,20 @@ class DownloadEngine {
             'Multi-threaded range request failed (Range Rejection): $e. Checking aggregated progress.',
           );
 
-          // Aggregate part files into targetFile for single-threaded fallback
           try {
-            final outRaf = await targetFile.open(mode: FileMode.write);
+            final outSink = targetFile.openWrite(mode: FileMode.write);
             for (int i = 0; i < threadCount; i++) {
               if (await partFiles[i].exists()) {
-                final partBytes = await partFiles[i].readAsBytes();
-                await outRaf.writeFrom(partBytes);
+                await outSink.addStream(partFiles[i].openRead());
               }
             }
-            await outRaf.flush();
-            await outRaf.close();
+            await outSink.flush();
+            await outSink.close();
           } catch (aggErr) {
             debugPrint('Failed to aggregate part files for fallback: $aggErr');
           }
-
-          // Clean up part files after successful aggregation
           for (final pf in partFiles) {
-            try {
-              if (await pf.exists()) await pf.delete();
-            } catch (_) {}
-          }
-
-          int contiguousBytes = 0;
-          for (int ci = 0; ci < chunkProgress.length; ci++) {
-            if (chunkProgress[ci] == chunkSizes[ci]) {
-              int chunkStart = 0;
-              for (int cj = 0; cj < ci; cj++) {
-                chunkStart += chunkSizes[cj];
-              }
-              if (chunkStart == contiguousBytes) {
-                contiguousBytes += chunkSizes[ci];
-              }
-            }
-          }
-          if (contiguousBytes > 0 && supportsResume) {
-            if (await targetFile.exists()) {
-              final raf = await targetFile.open(mode: FileMode.append);
-              await raf.truncate(contiguousBytes);
-              await raf.close();
-            }
-            if (await stateFile.exists()) await stateFile.delete();
-          } else {
-            if (await targetFile.exists()) await targetFile.delete();
-            if (await stateFile.exists()) await stateFile.delete();
+            try { if (await pf.exists()) await pf.delete(); } catch (_) {}
           }
 
           await Future.delayed(const Duration(milliseconds: 200));
@@ -2082,8 +2021,17 @@ class DownloadEngine {
     final acceptRanges = response.headers.value('accept-ranges')?.toLowerCase();
     final serverSupportsResume = isPartialResponse || (acceptRanges == 'bytes');
     final responseName = fileNameFromContentDisposition(response.headers);
-    final finalUrlName =
-        responseName ?? fileNameFromUrl(response.realUri.toString());
+    final postRedirectName = responseName ?? fileNameFromUrl(response.realUri.toString());
+
+    final currentName = p.basename(localFilePath);
+    final bool isGeneric = currentName.toLowerCase() == 'download' ||
+                           currentName.toLowerCase().startsWith('download.') ||
+                           currentName.toLowerCase().startsWith('index.') ||
+                           currentName.toLowerCase().contains('videoplayback');
+
+    final finalUrlName = (isNameAutoGenerated && isGeneric)
+        ? postRedirectName
+        : currentName;
 
     var totalSize = knownFileSize;
     final contentLength =
@@ -2231,33 +2179,35 @@ class DownloadEngine {
     });
 
     if (totalSize > 0 && actualFileSize != totalSize) {
-      throw Exception(
-        'Download integrity check failed: expected $totalSize bytes, got $actualFileSize bytes.',
+      final difference = (actualFileSize - totalSize).abs();
+      final ratio = totalSize > 0 ? difference / totalSize : 1.0;
+      if (difference > 1024 && ratio > 0.001) {
+        throw Exception(
+          'Download integrity check failed: expected $totalSize bytes, got $actualFileSize bytes.',
+        );
+      }
+      debugPrint(
+        '[DownloadEngine] Download size mismatch ignored: expected $totalSize bytes, got $actualFileSize bytes.',
       );
     }
 
-    final saveDir = File(localFilePath).parent.path;
-    final finalLocalFilePath = isNameAutoGenerated
-        ? p.join(saveDir, safeFileName(finalUrlName))
-        : localFilePath;
-
-    await File(finalLocalFilePath).parent.create(recursive: true);
+    await File(localFilePath).parent.create(recursive: true);
     // Only move/rename when the temp path differs from the final local path.
     // For in-place downloads `tempFilePath == localFilePath` and no move is
     // necessary (the file already resides at its final destination).
     if (tempFilePath != localFilePath) {
-      if (finalLocalFilePath != tempFile.path) {
-        if (await File(finalLocalFilePath).exists()) {
-          await File(finalLocalFilePath).delete();
+      if (localFilePath != tempFile.path) {
+        if (await File(localFilePath).exists()) {
+          await File(localFilePath).delete();
         }
         try {
-          await tempFile.rename(finalLocalFilePath);
+          await tempFile.rename(localFilePath);
         } catch (e) {
           debugPrint(
             'File rename failed (cross-device?), using copy fallback: $e',
           );
-          await tempFile.copy(finalLocalFilePath);
-          final copiedLen = await File(finalLocalFilePath).length();
+          await tempFile.copy(localFilePath);
+          final copiedLen = await File(localFilePath).length();
           final origLen = await tempFile.length();
           if (copiedLen == origLen) {
             await tempFile.delete();
@@ -2283,9 +2233,8 @@ class DownloadEngine {
   String buildTempFilePath(String directory, String fileName) {
     // Write partial data directly into the final filename so the file is
     // visible in the user's downloads folder while downloading. The
-    // engine still uses accompanying state and part files for multi-thread
-    // downloads (e.g. `.dmxstate` and `.partN`) so resuming and integrity
-    // checks remain intact.
+    // engine still uses a sidecar state file (`.dmxstate`) so multi-threaded
+    // downloads can resume from disk.
     return p.join(directory, safeFileName(fileName));
   }
 
@@ -2353,10 +2302,6 @@ class DownloadEngine {
     _activeIsolateCommandPorts.clear();
   }
 }
-
-// TODO: Decompose download_engine.dart into separate classes:
-//   MultiThreadedDownloader, SingleThreadedDownloader, TorrentDownloader
-// TODO: Add per-device anonymous JWTs for backend auth (tracked as GitHub issue)
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
 

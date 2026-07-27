@@ -57,7 +57,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, String> _detectedDownloadUrls = {};
   final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {};
   final Map<String, int> _detectedPlaylistUrls = {};
-  final Set<String> _ytDetectionFailed = {};
+  final Map<String, DateTime> _ytDetectionFailed = {};
   // Per-tab YouTube auth cooldown — prevents one tab's auth suppressing others.
   final Map<String, DateTime> _lastYoutubeAuthTimes = {};
   static const _youtubeAuthCooldown = Duration(seconds: 30);
@@ -652,10 +652,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || tab.isHome) return;
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
-      final isYoutube = tab.url.contains('youtube.com') || tab.url.contains('youtu.be');
+      final isYoutube =
+          tab.url.contains('youtube.com') || tab.url.contains('youtu.be');
       try {
         await tab.controller.runJavaScript(
-          isYoutube ? AdBlocker.youtubeAdBlockJavaScript : AdBlocker.adBlockJavaScript,
+          isYoutube
+              ? AdBlocker.youtubeAdBlockJavaScript
+              : AdBlocker.adBlockJavaScript,
         );
       } catch (e) {
         debugPrint('AdBlocker script injection failed: $e');
@@ -672,8 +675,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _detectedMediaSources.remove(tabId);
     _detectedPlaylistUrls.remove(tabId);
     _lastYoutubeAuthTimes.remove(tabId);
-    // _ytDetectionFailed is keyed by URL (not tabId), so we don't remove here;
-    // it has its own size-capped eviction at 100 entries (_scanPageMedia).
+    // Evict expired entries older than 10 minutes
+    final now = DateTime.now();
+    _ytDetectionFailed.removeWhere((url, timestamp) => now.difference(timestamp) > const Duration(minutes: 10));
   }
 
   void _handleLongPressMessageForTab(
@@ -1466,11 +1470,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         debugPrint('YouTube stream detection error: $e');
       }
       if (mounted && tab.url == scannedUrl) {
-        if (_ytDetectionFailed.length > 100) {
-          _ytDetectionFailed.remove(_ytDetectionFailed.first);
-        }
         setState(() {
-          _ytDetectionFailed.add(scannedUrl);
+          _ytDetectionFailed.remove(scannedUrl);
+          if (_ytDetectionFailed.length >= 200) {
+            final oldestKey = _ytDetectionFailed.entries
+                .reduce((a, b) => a.value.isBefore(b.value) ? a : b)
+                .key;
+            _ytDetectionFailed.remove(oldestKey);
+          }
+          _ytDetectionFailed[scannedUrl] = DateTime.now();
         });
       }
     }
@@ -3807,7 +3815,7 @@ $_customJs
       );
     }
     if (YoutubeService.isYoutubeVideoUrl(activeTab.url) &&
-        _ytDetectionFailed.contains(activeTab.url)) {
+        _ytDetectionFailed.containsKey(activeTab.url)) {
       return _SignalFab(
         color: Colors.red.withValues(alpha: 0.6),
         icon: Icons.refresh_rounded,

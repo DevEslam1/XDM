@@ -153,3 +153,22 @@ int scanFolderBytesSync(String path) {
   }).toList();
   return (total: total, files: files);
 }
+
+/// Deletes all partial download files (.part0, .part1, etc.) and the state file
+/// associated with the given temp file path.
+Future<void> deleteDownloadParts(String tempFilePath) async {
+  try {
+    final dir = File(tempFilePath).parent;
+    final name = File(tempFilePath).uri.pathSegments.last;
+    await for (final entity in dir.list()) {
+      if (entity is File) {
+        final fileName = entity.uri.pathSegments.last;
+        if (fileName.startsWith('$name.part') || fileName == '$name.dmxstate') {
+          try {
+            await entity.delete();
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
+}

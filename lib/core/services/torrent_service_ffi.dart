@@ -178,20 +178,13 @@ class TorrentService {
   /// build without the method degrades gracefully to that default behaviour.
   static void forceReCheck(int id) {
     if (_disposed || !isInitialized) return;
-    if (id >= 0) {
-      try {
-        // Note: some builds of the libtorrent Flutter plugin may not expose
-        // a direct forceReCheck API. The safe fallback is to treat this as
-        // a no-op while informing the logs. If the plugin later exposes a
-        // compatible method, call it here.
-        _log.info(
-          'Requested force recheck for torrent $id (plugin support may vary).',
-        );
-      } catch (e) {
-        _log.warning(
-          "forceReCheck failed for id $id (plugin may not support recheck): $e",
-        );
-      }
+    if (id < 0) return;
+    try {
+      (LibtorrentFlutter.instance as dynamic).forceReCheck(id);
+    } on NoSuchMethodError {
+      _log.info('forceReCheck not exposed by plugin; relying on default add-time check.');
+    } catch (e) {
+      _log.warning('forceReCheck failed for torrent $id: $e');
     }
   }
 

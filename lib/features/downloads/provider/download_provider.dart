@@ -322,11 +322,12 @@ class DownloadProvider extends ChangeNotifier
 
     // Do not reconcile progress for active downloads (their memory state is accurate)
     if (_cancelTokens.containsKey(task.id) ||
-        task.status == DownloadStatus.downloading)
+        task.status == DownloadStatus.downloading) {
       return task;
+    }
 
     // Torrents manage their own fastresume data and piece maps.
-    // Reading .part files will break torrent progress.
+    // Reading temporary HTTP chunk files would break torrent progress.
     if (task.isTorrent) return task;
 
     final actualBytes = await _actualPartialBytes(task);
@@ -1000,8 +1001,8 @@ class DownloadProvider extends ChangeNotifier
       _torrentIds.remove(id);
     }
 
-    // Remove the .partN chunk files so a fresh download won't try to
-    // resume from a partial state.
+    // Remove temporary state files so a fresh download won't try to resume
+    // from stale progress data.
     await _cleanupPartFiles(task);
 
     await _setTask(
@@ -1025,8 +1026,8 @@ class DownloadProvider extends ChangeNotifier
 
     _retryCounts.remove(id);
 
-    // Don't reset downloadedBytes/chunks to 0 — the .partN files are still
-    // on disk and the download engine will resume from existing offsets.
+    // Don't reset downloadedBytes/chunks to 0 — the `.dmxstate` sidecar
+    // and final file contents still reflect resume progress.
     // The onProgress callback will pick up the real numbers from the next
     // chunk that arrives.
     await _setTask(
@@ -1166,7 +1167,11 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Deletes the partial .dmxpart and .partN files on disk for [task].
+  /// Deletes residual temporary download files on disk for [task].
+  ///
+  /// HTTP downloads now write directly into the final filename and use a
+  /// `.dmxstate` sidecar for resume tracking. Torrent downloads are handled
+  /// separately by the torrent engine.
   Future<void> _cleanupPartFiles(DownloadTask task) async {
     if (task.tempFilePath.trim().isEmpty) return;
     try {
@@ -1174,18 +1179,12 @@ class DownloadProvider extends ChangeNotifier
       if (await tempFile.exists()) {
         await tempFile.delete();
       }
-      for (int i = 0; i < task.threadCount; i++) {
-        final partFile = File('${task.tempFilePath}.part$i');
-        if (await partFile.exists()) {
-          await partFile.delete();
-        }
-      }
       final stateFile = File('${task.tempFilePath}.dmxstate');
       if (await stateFile.exists()) {
         await stateFile.delete();
       }
     } catch (e) {
-      debugPrint('Failed to clean up part files for ${task.id}: $e');
+      debugPrint('Failed to clean up temporary files for ${task.id}: $e');
     }
   }
 
@@ -1800,8 +1799,10 @@ class DownloadProvider extends ChangeNotifier
                       oauthToken: YoutubeService.oauthToken,
                       onProgress: (progress) {
                         final t = _findTask(task.id);
-                        if (t == null || t.status != DownloadStatus.downloading)
+                        if (t == null ||
+                            t.status != DownloadStatus.downloading) {
                           return;
+                        }
 
                         audioBytesSoFar = progress.downloadedBytes;
                         audioSpeedNow = progress.speed;
@@ -1895,8 +1896,9 @@ class DownloadProvider extends ChangeNotifier
 
                         videoBytesSoFar = progress.downloadedBytes;
                         videoSpeedNow = progress.speed;
-                        if (progress.fileSize > 0)
+                        if (progress.fileSize > 0) {
                           videoSizeSoFar = progress.fileSize;
+                        }
 
                         // --- Throttling detection: unchanged from the original logic ---
                         if (isYoutube &&

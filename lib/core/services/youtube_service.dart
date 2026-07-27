@@ -621,7 +621,9 @@ class YoutubeService {
             orElse: () => <String, dynamic>{},
           );
           if (matched.isEmpty) {
-            debugPrint('[YouTubeService] refreshStreamUrl: itag "$oldItag" not found in refreshed streams. Returning null.');
+            debugPrint(
+              '[YouTubeService] refreshStreamUrl: itag "$oldItag" not found in refreshed streams. Returning null.',
+            );
             return null;
           }
           return {
@@ -657,11 +659,16 @@ class YoutubeService {
         }
 
         if (streams.isNotEmpty) {
-          final first = streams.first;
-          return {
-            'url': first['src'] as String?,
-            'audioUrl': first['audioSrc'] as String?,
-          };
+          final first = streams.firstWhere(
+            (s) => s['src'] != null,
+            orElse: () => <String, dynamic>{},
+          );
+          if (first.isNotEmpty) {
+            return {
+              'url': first['src'] as String?,
+              'audioUrl': first['audioSrc'] as String?,
+            };
+          }
         }
       }
     } catch (e) {
@@ -681,22 +688,37 @@ class YoutubeService {
       if (streams.isNotEmpty) {
         final combined = streams.where((s) => s['type'] == 'combined').toList();
         if (combined.isNotEmpty) {
-          final best = combined.first;
-          return {
-            'url': best['src'] as String?,
-            'audioUrl': best['audioSrc'] as String?,
-          };
+          final best = combined.firstWhere(
+            (s) => s['src'] != null,
+            orElse: () => <String, dynamic>{},
+          );
+          if (best.isNotEmpty) {
+            return {
+              'url': best['src'] as String?,
+              'audioUrl': best['audioSrc'] as String?,
+            };
+          }
         }
         final muxed = streams.where((s) => s['type'] == 'muxed').toList();
         if (muxed.isNotEmpty) {
-          final best = muxed.first;
-          return {'url': best['src'] as String?, 'audioUrl': null};
+          final best = muxed.firstWhere(
+            (s) => s['src'] != null,
+            orElse: () => <String, dynamic>{},
+          );
+          if (best.isNotEmpty) {
+            return {'url': best['src'] as String?, 'audioUrl': null};
+          }
         }
-        final first = streams.first;
-        return {
-          'url': first['src'] as String?,
-          'audioUrl': first['audioSrc'] as String?,
-        };
+        final first = streams.firstWhere(
+          (s) => s['src'] != null,
+          orElse: () => <String, dynamic>{},
+        );
+        if (first.isNotEmpty) {
+          return {
+            'url': first['src'] as String?,
+            'audioUrl': first['audioSrc'] as String?,
+          };
+        }
       }
     } catch (e) {
       debugPrint('[YouTubeService] Backend getFreshStreams error ($e).');

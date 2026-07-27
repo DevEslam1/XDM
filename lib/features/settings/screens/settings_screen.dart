@@ -2913,14 +2913,14 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                     const Divider(height: 16),
                     _DiagRow(
                       label: isRtl
-                          ? 'حمل كارت الشاشة (GPU)'
-                          : 'GPU Rendering Load',
+                          ? 'حمل كارت الشاشة (ثابت GPU)'
+                          : 'GPU UI Load (Static)',
                       value: gpuLoad,
                       isDark: isDark,
                     ),
                     const Divider(height: 16),
                     _DiagRow(
-                      label: isRtl ? 'تأثير البطارية' : 'Battery Drainage Rate',
+                      label: isRtl ? 'ملف توفير البطارية (ثابت)' : 'Battery Saver Profile',
                       value: batteryImpact,
                       valueColor: batteryColor,
                       isDark: isDark,
