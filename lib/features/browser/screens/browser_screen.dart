@@ -31,6 +31,7 @@ import '../../settings/provider/settings_provider.dart';
 import '../models/bookmark.dart';
 import '../models/browser_tab.dart';
 import '../services/browser_detector.dart';
+import '../services/ad_blocker_service.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
 import '../widgets/browser_history_sheet.dart';
@@ -64,6 +65,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, Timer> _mediaScanTimers = {};
   bool _quitPersisted = false;
   bool _isRestoring = false;
+  final AdBlockerService _adBlocker = AdBlockerService.instance;
 
   void _ensureTabsExist() {
     if (_tabs.isEmpty && !_isRestoring) {
@@ -411,6 +413,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _loadCustomJsCss();
     _dashboardScrollController.addListener(_onDashboardScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTabs());
+    _adBlocker.init();
   }
 
   BrowserTab _createNewTab({
@@ -481,6 +484,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               downloadProvider.setNavbarVisible(true);
             }
             _injectTimerSpeedScript(tab);
+            if (_adBlocker.isEnabled) {
+              tab.controller.runJavaScript(_adBlocker.earlyJs).catchError((_) {});
+            }
             _injectLongPressScriptToTab(tab);
             _injectCustomJsCss(tab);
             _injectDesktopModeScript(tab, settings);
@@ -489,6 +495,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           },
           onPageFinished: (url) {
             _injectDesktopModeScript(tab, settings);
+            if (_adBlocker.isEnabled) {
+              _injectAdBlocker(tab);
+            }
             if (mounted) {
               setState(() {
                 tab.isLoading = false;
@@ -607,6 +616,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
           },
           onNavigationRequest: (NavigationRequest request) {
+            if (_adBlocker.isEnabled && _adBlocker.shouldBlockUrl(request.url)) {
+              debugPrint('[AdBlocker] Blocked: ${request.url}');
+              return NavigationDecision.prevent;
+            }
             if (_bypassedSniffUrls.contains(request.url)) {
               _bypassedSniffUrls.remove(request.url);
               return NavigationDecision.navigate;
@@ -796,6 +809,29 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       tab.controller.runJavaScript(_kDesktopModeScript);
     } catch (e) {
       debugPrint('[DMX Browser] Error injecting desktop script: $e');
+    }
+  }
+
+  void _injectAdBlocker(BrowserTab tab) {
+    final url = tab.url;
+
+    final cssJson = jsonEncode(_adBlocker.cssRules);
+    tab.controller.runJavaScript('''
+      (function() {
+        var s = document.getElementById('xdm-adblock-css');
+        if (!s) {
+          s = document.createElement('style');
+          s.id = 'xdm-adblock-css';
+          document.head.appendChild(s);
+        }
+        s.textContent = $cssJson;
+      })();
+    ''').catchError((_) {});
+
+    tab.controller.runJavaScript(_adBlocker.lateJs).catchError((_) {});
+
+    if (AdBlockerService.isYoutubePage(url)) {
+      tab.controller.runJavaScript(_adBlocker.youtubeJs).catchError((_) {});
     }
   }
 
@@ -1244,6 +1280,27 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             icon: _isSnifferEnabled ? Icons.check_circle_outline : Icons.block,
             isDarkMode: settings.isDarkMode,
           );
+        }
+        break;
+      case 'adblocker':
+        await _adBlocker.setEnabled(!_adBlocker.isEnabled);
+        if (mounted) {
+          ThemedSnackbar.show(
+            context,
+            message: _adBlocker.isEnabled
+                ? L10n.of(context, 'browser_adblocker_on')
+                : L10n.of(context, 'browser_adblocker_off'),
+            color: settings.isDarkMode
+                ? AppTheme.neonGreen
+                : AppTheme.lightNeonGreen,
+            icon: _adBlocker.isEnabled
+                ? Icons.check_circle_outline
+                : Icons.block,
+            isDarkMode: settings.isDarkMode,
+          );
+          if (!activeTab.isHome) {
+            await activeTab.controller.reload();
+          }
         }
         break;
       case 'incognito':
@@ -3570,6 +3627,16 @@ $_customJs
                                             ? 'كاشف الوسائط: معطل'
                                             : 'Media detector: OFF'),
                                   'sniffer',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  _adBlocker.isEnabled
+                                      ? Icons.shield
+                                      : Icons.shield_outlined,
+                                  _adBlocker.isEnabled
+                                      ? 'Ad blocker: ON'
+                                      : 'Ad blocker: OFF',
+                                  'adblocker',
                                   textClr,
                                 ),
                                 _menuItem(

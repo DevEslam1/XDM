@@ -35,6 +35,7 @@ class MediaQualitySheet extends StatefulWidget {
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.1),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),

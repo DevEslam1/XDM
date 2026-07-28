@@ -11,6 +11,7 @@ import android.os.Environment
 import android.view.WindowManager
 import java.util.concurrent.Executors
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterActivityLaunchConfigs
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -20,6 +21,10 @@ class MainActivity : FlutterActivity() {
     private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
     private val SAF_CHANNEL = "com.example.dmx/saf"
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
+
+    override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
+        return FlutterActivityLaunchConfigs.BackgroundMode.transparent
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val action = intent?.action

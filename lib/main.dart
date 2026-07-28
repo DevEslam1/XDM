@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'core/utils/url_utils.dart';
 import 'core/utils/constants.dart';
 import 'core/services/torrent_service.dart';
 import 'core/app_theme.dart';
@@ -87,12 +89,30 @@ Future<void> main(List<String> args) async {
           deleteTask: (id) => downloadProvider.deleteTask(id),
         );
 
+        String? initialUrl = SingleInstanceService().initialUrl;
+        if (initialUrl == null || initialUrl.trim().isEmpty) {
+          try {
+            final sharedFiles = await ReceiveSharingIntent.instance
+                .getInitialMedia()
+                .timeout(const Duration(milliseconds: 150));
+            if (sharedFiles.isNotEmpty) {
+              final raw = sharedFiles.first.path.trim();
+              final extracted = extractUrlFromText(raw) ?? raw;
+              if (isHttpUrl(extracted) ||
+                  isMagnetUrl(extracted) ||
+                  isTorrentFileUrl(extracted)) {
+                initialUrl = extracted;
+              }
+            }
+          } catch (_) {}
+        }
+
         runApp(
           DmxApp(
             databaseService: databaseService,
             settingsProvider: settingsProvider,
             downloadProvider: downloadProvider,
-            initialUrl: SingleInstanceService().initialUrl,
+            initialUrl: initialUrl,
           ),
         );
       } catch (e, stack) {
