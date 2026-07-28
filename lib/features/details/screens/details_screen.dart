@@ -1846,7 +1846,9 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                 final selected = (f['selected'] as bool?) ?? true;
                 final estimatedBytes = (f['downloadedBytes'] as int?) ?? 0;
                 final speed = (f['speed'] as num?)?.toDouble() ?? 0.0;
-                final resolvedBytes = _resolvedBytes(index, estimatedBytes);
+                final rawResolvedBytes = _resolvedBytes(index, estimatedBytes);
+                final resolvedBytes =
+                    isCompleted && selected ? length : rawResolvedBytes;
                 final diskVerified =
                     _diskBytes.length > index && _diskBytes[index] > 0;
                 final fileProgress = length > 0

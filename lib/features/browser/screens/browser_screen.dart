@@ -64,6 +64,27 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   static const _youtubeAuthCooldown = Duration(seconds: 30);
   final Map<String, Timer> _mediaScanTimers = {};
   bool _quitPersisted = false;
+  bool _isRestoring = false;
+
+  void _ensureTabsExist() {
+    if (_tabs.isEmpty && !_isRestoring) {
+      _isRestoring = true;
+      _restoreTabs().then((_) {
+        if (mounted) {
+          setState(() {
+            _isRestoring = false;
+          });
+        }
+      }).catchError((e) {
+        debugPrint('[Browser] _ensureTabsExist restore error: $e');
+        if (mounted) {
+          setState(() {
+            _isRestoring = false;
+          });
+        }
+      });
+    }
+  }
 
   DownloadProvider? _downloadProvider;
   String? _lastHistoryEntryUrl;
@@ -163,6 +184,63 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 })();
 ''';
 
+  static const String _kDesktopModeScript = '''
+(function() {
+  if (window.__xdmDesktopModeInjected) return;
+  window.__xdmDesktopModeInjected = true;
+  try {
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      if (document.head) document.head.appendChild(meta);
+    }
+    if (meta) {
+      meta.content = 'width=1280, initial-scale=0.75, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes';
+    }
+  } catch(e) {}
+  try {
+    Object.defineProperty(window, 'outerWidth', { get: () => 1280, configurable: true });
+    Object.defineProperty(screen, 'width', { get: () => 1280, configurable: true });
+    Object.defineProperty(screen, 'availWidth', { get: () => 1280, configurable: true });
+  } catch(e) {}
+  try {
+    Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
+  } catch(e) {}
+  try {
+    if (navigator.userAgentData) {
+      Object.defineProperty(navigator, 'userAgentData', {
+        get: () => ({
+          brands: [
+            { brand: 'Google Chrome', version: '131' },
+            { brand: 'Chromium', version: '131' },
+            { brand: 'Not_A Brand', version: '24' }
+          ],
+          mobile: false,
+          platform: 'Windows',
+          getHighEntropyValues: (hints) => Promise.resolve({
+            architecture: 'x86',
+            bitness: '64',
+            brands: [
+              { brand: 'Google Chrome', version: '131' },
+              { brand: 'Chromium', version: '131' },
+              { brand: 'Not_A Brand', version: '24' }
+            ],
+            mobile: false,
+            model: '',
+            platform: 'Windows',
+            platformVersion: '15.0.0',
+            uaFullVersion: '131.0.0.0'
+          })
+        }),
+        configurable: true
+      });
+    }
+  } catch(e) {}
+})();
+''';
+
+
   // ─────────────────────────────────────────────────────────────
   // Tab persistence
   // ─────────────────────────────────────────────────────────────
@@ -205,7 +283,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       if (saved.isNotEmpty && mounted) {
         await db.clearOpenTabs();
         if (!mounted) return;
-        _applyRestoredTabs(saved);
+        await _applyRestoredTabs(saved);
         return;
       }
     } catch (e) {
@@ -249,6 +327,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _tabs[_currentTabIndex].isHome ? '' : _tabs[_currentTabIndex].url;
           });
           _updateNavState();
+          // Load saved URLs after platform views initialize
+          _loadRestoredTabs();
           return;
         }
       }
@@ -266,26 +346,47 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     });
   }
 
-  void _applyRestoredTabs(List<SavedBrowserTab> saved) {
-    setState(() {
-      for (final tab in _tabs) {
-        try { tab.progressNotifier.dispose(); } catch (_) {}
-      }
-      _tabs.clear();
-    });
+  Future<void> _applyRestoredTabs(List<SavedBrowserTab> saved) async {
+    for (final tab in _tabs) {
+      try { tab.progressNotifier.dispose(); } catch (_) {}
+    }
     var activeIdx = 0;
+    final newTabs = <BrowserTab>[];
     for (var i = 0; i < saved.length; i++) {
       final row = saved[i];
       final isBlank = row.url.isEmpty || row.url == 'about:blank';
       final tab = _createNewTab(initialUrl: isBlank ? 'about:blank' : row.url);
       if (row.title.isNotEmpty) tab.title = row.title;
-      _tabs.add(tab);
+      newTabs.add(tab);
       if (row.isActive) activeIdx = i;
     }
     if (!mounted) return;
     setState(() {
+      _tabs
+        ..clear()
+        ..addAll(newTabs);
       _currentTabIndex = activeIdx.clamp(0, _tabs.length - 1);
-      if (_tabs.isNotEmpty) _urlController.text = _tabs[_currentTabIndex].url;
+      if (_tabs.isNotEmpty) {
+        _urlController.text = _tabs[_currentTabIndex].isHome ? '' : _tabs[_currentTabIndex].url;
+      }
+    });
+    _loadRestoredTabs();
+  }
+
+  void _loadRestoredTabs() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (!mounted) return;
+        for (final tab in _tabs) {
+          if (tab.url.isNotEmpty && !tab.isHome) {
+            try {
+              tab.controller.loadRequest(Uri.parse(tab.url));
+            } catch (e) {
+              debugPrint('[Browser] Restored tab load error: $e');
+            }
+          }
+        }
+      });
     });
   }
 
@@ -367,7 +468,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         },
       )
       ..setUserAgent(_resolveUserAgent(isIncognito: tab.isIncognito, settings: settings))
-      ..enableZoom(settings.pinchToZoom)
+      ..enableZoom(settings.desktopMode || settings.pinchToZoom)
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
@@ -409,11 +510,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _injectLongPressScriptToTab(tab);
             _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
+            _injectDesktopModeScript(tab, settings);
             _updateNavState();
             _delayed(const Duration(milliseconds: 500), _updateNavState);
-            _delayed(const Duration(milliseconds: 1200), _updateNavState);
           },
           onPageFinished: (url) {
+            _injectDesktopModeScript(tab, settings);
             if (mounted) {
               setState(() {
                 tab.isLoading = false;
@@ -561,13 +663,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         }
       });
 
-    if (cleanInitialUrl != 'about:blank') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          controller.loadRequest(Uri.parse(cleanInitialUrl));
-        }
-      });
-    }
     return tab;
   }
 
@@ -741,6 +836,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       );
     } catch (e) {
       debugPrint('[DMX Browser] UA apply failed for tab ${tab.id}: $e');
+    }
+  }
+
+  void _injectDesktopModeScript(BrowserTab tab, SettingsProvider settings) {
+    if (!settings.desktopMode) return;
+    try {
+      tab.controller.runJavaScript(_kDesktopModeScript);
+    } catch (e) {
+      debugPrint('[DMX Browser] Error injecting desktop script: $e');
     }
   }
 
@@ -1158,7 +1262,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             icon: settings.desktopMode ? Icons.desktop_windows : Icons.phone_android,
             isDarkMode: settings.isDarkMode,
           );
-          await Future.wait(_tabs.map((t) => _applyUserAgent(t, settings)));
+          await Future.wait(_tabs.map((t) async {
+            await _applyUserAgent(t, settings);
+            try {
+              await t.controller.enableZoom(settings.desktopMode || settings.pinchToZoom);
+            } catch (_) {}
+          }));
           for (final t in _tabs) {
             if (!t.isHome) {
               try {
@@ -3043,7 +3152,15 @@ $_customJs
     if (_tabs.isEmpty ||
         _currentTabIndex < 0 ||
         _currentTabIndex >= _tabs.length) {
-      return const SizedBox.shrink();
+      _ensureTabsExist();
+      return Scaffold(
+        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          ),
+        ),
+      );
     }
     final activeTab = _tabs[_currentTabIndex];
     final showFab =
@@ -4176,6 +4293,7 @@ $_customJs
     }
     _tabs.clear();
     _currentTabIndex = 0;
+    _quitPersisted = false;
   }
 }
 

@@ -1357,6 +1357,13 @@ class DownloadEngine {
           ? torrent.totalWantedDone
           : torrent.totalDone;
 
+      // Distribute downloaded bytes across files by priority for accurate
+      // per-file progress. Without this, every file shows the same percentage
+      // as the overall torrent progress (overallProgress × fileSize).
+      if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
+        _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
+      }
+
       final isCheckingOrMetadata =
           stateLabel.contains('checking') ||
           stateLabel.contains('metadata') ||
@@ -1436,6 +1443,69 @@ class DownloadEngine {
     _activeCancelTokens.remove(cancelToken);
     _completedConfirmations.remove(id);
     return;
+  }
+
+  /// Distributes total downloaded bytes across torrent files by priority order.
+  ///
+  /// libtorrent downloads high-priority files first, so this sequential model
+  /// is a much better approximation than the naïve proportional estimate.
+  /// Priority groups: 7 = high, 4 = normal (default), 1 = low, 0 = skip.
+  static void _distributeDownloadedBytesByPriority(
+    List<Map<String, dynamic>> files,
+    int totalDownloaded,
+  ) {
+    // Reset deselected files to 0.
+    for (final f in files) {
+      if (f['selected'] != true) {
+        f['downloadedBytes'] = 0;
+      }
+    }
+
+    final selected =
+        files.where((f) => f['selected'] == true).toList();
+    if (selected.isEmpty || totalDownloaded <= 0) return;
+
+    // Group selected files by descending priority (7 → 4 → 1).
+    final groups = <int, List<Map<String, dynamic>>>{};
+    for (final f in selected) {
+      final priority = (f['priority'] as int?) ?? 4;
+      (groups[priority] ??= []).add(f);
+    }
+    final sortedKeys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    int remaining = totalDownloaded;
+    for (final priority in sortedKeys) {
+      if (remaining <= 0) {
+        // No bytes left — later groups show 0.
+        for (final f in groups[priority]!) {
+          f['downloadedBytes'] = 0;
+        }
+        continue;
+      }
+      final group = groups[priority]!;
+      final groupSize = group.fold<int>(
+        0,
+        (s, f) => s + ((f['length'] as int?) ?? 0),
+      );
+      if (groupSize <= 0) continue;
+
+      if (remaining >= groupSize) {
+        // Entire group is complete.
+        for (final f in group) {
+          f['downloadedBytes'] = (f['length'] as int?) ?? 0;
+        }
+        remaining -= groupSize;
+      } else {
+        // Distribute remaining proportionally within this group.
+        for (final f in group) {
+          final length = (f['length'] as int?) ?? 0;
+          final share =
+              (remaining * (length / groupSize)).round().clamp(0, length);
+          f['downloadedBytes'] = share;
+        }
+        remaining = 0;
+      }
+    }
   }
 
   Future<void> _doHttpDownload({

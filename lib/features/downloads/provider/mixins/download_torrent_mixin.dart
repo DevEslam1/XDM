@@ -360,9 +360,6 @@ mixin DownloadTorrentMixin {
     if (task == null || task.torrentFiles == null) return [];
 
     final result = <int>[];
-    final selectedFiles = task.torrentFiles!.where((f) => (f['selected'] as bool? ?? true)).toList();
-    final totalSelectedSize = selectedFiles.fold(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-    final taskDownloaded = task.downloadedBytes;
 
     for (final f in task.torrentFiles!) {
       final relPath = f['name'] as String? ?? '';
@@ -389,9 +386,8 @@ mixin DownloadTorrentMixin {
 
       if (diskBytes > 0) {
         result.add(diskBytes.clamp(0, length > 0 ? length : diskBytes));
-      } else if (taskDownloaded > 0 && totalSelectedSize > 0 && (f['selected'] as bool? ?? true) && length > 0) {
-        final estimated = ((taskDownloaded * (length / totalSelectedSize))).round().clamp(0, length);
-        result.add(estimated);
+      } else if (downloaded > 0) {
+        result.add(downloaded.clamp(0, length > 0 ? length : downloaded));
       } else {
         result.add(0);
       }

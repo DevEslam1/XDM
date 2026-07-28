@@ -1159,24 +1159,16 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
 
   Widget _buildFilesSection(bool isDark, Color accent) {
     final files = widget.task.torrentFiles ?? [];
-    final totalSelectedSize = files
-        .where((f) => f['selected'] == true)
-        .fold<int>(0, (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0));
-    final totalDownloaded = widget.task.downloadedBytes;
     final displayFiles = files.map((f) {
       final selected = f['selected'] == true;
       final length = (f['length'] as num?)?.toInt() ?? 0;
       final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      final estimatedDownloaded = selected && totalSelectedSize > 0
-          ? ((totalDownloaded * length) / totalSelectedSize).round().clamp(
-              0,
-              length,
-            )
-          : 0;
+      // Trust the engine's priority-aware per-file byte distribution.
+      // Completed tasks always snap to 100% for selected files.
       final effectiveDownloaded =
           widget.task.status == DownloadStatus.completed && selected
           ? length
-          : (downloaded > 0 ? downloaded : estimatedDownloaded);
+          : downloaded;
       return {...f, 'downloadedBytes': effectiveDownloaded};
     }).toList();
 
