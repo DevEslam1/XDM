@@ -90,6 +90,12 @@ class UpdateService {
           return update;
         }
       }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        debugPrint('[UpdateService] Update manifest not found (404).');
+      } else {
+        debugPrint('[UpdateService] Failed to check for update: $e');
+      }
     } catch (e) {
       debugPrint('[UpdateService] Failed to check for update: $e');
     }

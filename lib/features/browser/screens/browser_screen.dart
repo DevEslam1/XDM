@@ -63,7 +63,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, DateTime> _lastYoutubeAuthTimes = {};
   static const _youtubeAuthCooldown = Duration(seconds: 30);
   final Map<String, Timer> _mediaScanTimers = {};
-  bool _restoredTabs = false;
   bool _quitPersisted = false;
 
   DownloadProvider? _downloadProvider;
@@ -198,28 +197,37 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   Future<void> _restoreTabs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? tabsJson = prefs.getString('persisted_browser_tabs');
-    final int savedTabIndex = prefs.getInt('persisted_browser_tab_index') ?? 0;
-    final fallbackTitle = mounted
-        ? L10n.of(context, 'browser_new_tab')
-        : 'New Tab';
-    if (tabsJson != null && tabsJson.isNotEmpty) {
-      try {
+    if (!mounted) return;
+    // Try Drift first (new persistence path from _quitBrowser)
+    try {
+      final db = context.read<DatabaseService>();
+      final saved = await db.loadOpenTabs();
+      if (saved.isNotEmpty && mounted) {
+        await db.clearOpenTabs();
+        if (!mounted) return;
+        _applyRestoredTabs(saved);
+        return;
+      }
+    } catch (e) {
+      debugPrint('[Browser] Drift restore failed, trying SharedPreferences: $e');
+    }
+    // Fall back to SharedPreferences (legacy persistence)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? tabsJson = prefs.getString('persisted_browser_tabs');
+      final int savedTabIndex =
+          prefs.getInt('persisted_browser_tab_index') ?? 0;
+      if (tabsJson != null && tabsJson.isNotEmpty && mounted) {
+        final fallbackTitle = L10n.of(context, 'browser_new_tab');
         final List<dynamic> decoded = jsonDecode(tabsJson);
         final List<BrowserTab> loadedTabs = [];
         for (final item in decoded) {
           if (item is Map<String, dynamic>) {
-            final String url = item['url'] as String? ?? 'about:blank';
-            final String title = item['title'] as String? ?? fallbackTitle;
+            final url = item['url'] as String? ?? 'about:blank';
+            final title = item['title'] as String? ?? fallbackTitle;
             final uri = Uri.tryParse(url);
-            final isSafeScheme =
-                uri == null ||
-                url == 'about:blank' ||
-                url.isEmpty ||
-                uri.scheme == 'http' ||
-                uri.scheme == 'https';
-            if (!isSafeScheme) {
+            if (uri != null && url != 'about:blank' && url.isNotEmpty &&
+                uri.scheme != 'http' && uri.scheme != 'https') {
               debugPrint('[Browser] Skipping unsafe restored URL: $url');
               continue;
             }
@@ -228,69 +236,57 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             loadedTabs.add(tab);
           }
         }
-        if (loadedTabs.isNotEmpty) {
-          if (mounted) {
-            setState(() {
-              for (final oldTab in _tabs) {
-                _cleanupTabState(oldTab.id);
-              }
-              _tabs
-                ..clear()
-                ..addAll(loadedTabs);
-              _currentTabIndex = savedTabIndex.clamp(0, _tabs.length - 1);
-              final activeTab = _tabs[_currentTabIndex];
-              _urlController.text = activeTab.isHome ? '' : activeTab.url;
-            });
-            _updateNavState();
-            return;
-          }
+        if (loadedTabs.isNotEmpty && mounted) {
+          setState(() {
+            for (final oldTab in _tabs) {
+              _cleanupTabState(oldTab.id);
+            }
+            _tabs
+              ..clear()
+              ..addAll(loadedTabs);
+            _currentTabIndex = savedTabIndex.clamp(0, _tabs.length - 1);
+            _urlController.text =
+                _tabs[_currentTabIndex].isHome ? '' : _tabs[_currentTabIndex].url;
+          });
+          _updateNavState();
+          return;
         }
-      } catch (e) {
-        debugPrint('Error restoring tabs: $e');
       }
+    } catch (e) {
+      debugPrint('[Browser] SharedPreferences restore failed: $e');
     }
-    if (mounted) {
-      final fallback = _createNewTab();
-      setState(() {
-        _tabs
-          ..clear()
-          ..add(fallback);
-        _currentTabIndex = 0;
-      });
-    }
+    // Nothing to restore — create a single blank tab
+    if (!mounted) return;
+    final fallback = _createNewTab();
+    setState(() {
+      _tabs
+        ..clear()
+        ..add(fallback);
+      _currentTabIndex = 0;
+    });
   }
 
-  Future<void> _restoreTabsIfNeeded() async {
-    if (_restoredTabs || !mounted) return;
-    _restoredTabs = true;
-    try {
-      final db = context.read<DatabaseService>();
-      final saved = await db.loadOpenTabs();
-      if (saved.isEmpty || !mounted) return;
-      await db.clearOpenTabs();
-      if (!mounted) return;
-      setState(() {
-        for (final tab in _tabs) {
-          try { tab.progressNotifier.dispose(); } catch (_) {}
-        }
-        _tabs.clear();
-      });
-      var activeIdx = 0;
-      for (var i = 0; i < saved.length; i++) {
-        final row = saved[i];
-        final isBlank = row.url.isEmpty || row.url == 'about:blank';
-        final tab = _createNewTab(initialUrl: isBlank ? 'about:blank' : row.url);
-        if (row.title.isNotEmpty) tab.title = row.title;
-        _tabs.add(tab);
-        if (row.isActive) activeIdx = i;
+  void _applyRestoredTabs(List<SavedBrowserTab> saved) {
+    setState(() {
+      for (final tab in _tabs) {
+        try { tab.progressNotifier.dispose(); } catch (_) {}
       }
-      setState(() {
-        _currentTabIndex = activeIdx.clamp(0, _tabs.length - 1);
-        if (_tabs.isNotEmpty) _urlController.text = _tabs[_currentTabIndex].url;
-      });
-    } catch (e) {
-      debugPrint('[DMX Browser] Tab restore failed: $e');
+      _tabs.clear();
+    });
+    var activeIdx = 0;
+    for (var i = 0; i < saved.length; i++) {
+      final row = saved[i];
+      final isBlank = row.url.isEmpty || row.url == 'about:blank';
+      final tab = _createNewTab(initialUrl: isBlank ? 'about:blank' : row.url);
+      if (row.title.isNotEmpty) tab.title = row.title;
+      _tabs.add(tab);
+      if (row.isActive) activeIdx = i;
     }
+    if (!mounted) return;
+    setState(() {
+      _currentTabIndex = activeIdx.clamp(0, _tabs.length - 1);
+      if (_tabs.isNotEmpty) _urlController.text = _tabs[_currentTabIndex].url;
+    });
   }
 
   @override
@@ -314,8 +310,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _loadSnifferPref();
     _loadCustomJsCss();
     _dashboardScrollController.addListener(_onDashboardScroll);
-    _restoreTabs();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTabsIfNeeded());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTabs());
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
       AdBlocker.initialize();
