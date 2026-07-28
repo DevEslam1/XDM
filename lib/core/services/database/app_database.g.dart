@@ -411,6 +411,9 @@ class $DownloadTasksTable extends DownloadTasks
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _priorityMeta = const VerificationMeta(
+    'priority',
+  );
   @override
   late final GeneratedColumn<int> priority = GeneratedColumn<int>(
     'priority',
@@ -419,6 +422,9 @@ class $DownloadTasksTable extends DownloadTasks
     type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _expectedSha256Meta = const VerificationMeta(
+    'expectedSha256',
   );
   @override
   late final GeneratedColumn<String> expectedSha256 = GeneratedColumn<String>(
@@ -754,6 +760,21 @@ class $DownloadTasksTable extends DownloadTasks
         ),
       );
     }
+    if (data.containsKey('priority')) {
+      context.handle(
+        _priorityMeta,
+        priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
+      );
+    }
+    if (data.containsKey('expected_sha256')) {
+      context.handle(
+        _expectedSha256Meta,
+        expectedSha256.isAcceptableOrUnknown(
+          data['expected_sha256']!,
+          _expectedSha256Meta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -910,7 +931,7 @@ class $DownloadTasksTable extends DownloadTasks
       priority: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}priority'],
-      ) ?? 0,
+      )!,
       expectedSha256: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}expected_sha256'],
@@ -1005,7 +1026,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     this.playlistId,
     this.playlistTitle,
     required this.isAppUpdate,
-    this.priority = 0,
+    required this.priority,
     this.expectedSha256,
   });
   @override
@@ -1089,34 +1110,56 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       fileSize: Value(fileSize),
       downloadedBytes: Value(downloadedBytes),
       speed: Value(speed),
-      eta: Value(eta),
+      eta: eta == null && nullToAbsent ? const Value.absent() : Value(eta),
       category: Value(category),
       status: Value(status),
       savePath: Value(savePath),
       localFilePath: Value(localFilePath),
       tempFilePath: Value(tempFilePath),
-      errorMessage: Value(errorMessage),
+      errorMessage: errorMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorMessage),
       threadCount: Value(threadCount),
-      chunks: Value(chunks),
+      chunks: chunks == null && nullToAbsent
+          ? const Value.absent()
+          : Value(chunks),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
-      completedAt: Value(completedAt),
-      scheduledAt: Value(scheduledAt),
+      completedAt: completedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedAt),
+      scheduledAt: scheduledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scheduledAt),
       supportsResume: Value(supportsResume),
       speedLimitKbps: Value(speedLimitKbps),
       seedingEnabled: Value(seedingEnabled),
       seedingLimited: Value(seedingLimited),
       seedingLimitKbps: Value(seedingLimitKbps),
-      torrentFiles: Value(torrentFiles),
-      downloadPageUrl: Value(downloadPageUrl),
-      mergedAudioUrl: Value(mergedAudioUrl),
+      torrentFiles: torrentFiles == null && nullToAbsent
+          ? const Value.absent()
+          : Value(torrentFiles),
+      downloadPageUrl: downloadPageUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(downloadPageUrl),
+      mergedAudioUrl: mergedAudioUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mergedAudioUrl),
       audioSize: Value(audioSize),
       audioProgress: Value(audioProgress),
       pausedByUser: Value(pausedByUser),
-      youtubeQualityPreset: Value(youtubeQualityPreset),
-      notes: Value(notes),
-      playlistId: Value(playlistId),
-      playlistTitle: Value(playlistTitle),
+      youtubeQualityPreset: youtubeQualityPreset == null && nullToAbsent
+          ? const Value.absent()
+          : Value(youtubeQualityPreset),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      playlistId: playlistId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(playlistId),
+      playlistTitle: playlistTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(playlistTitle),
       isAppUpdate: Value(isAppUpdate),
       priority: Value(priority),
       expectedSha256: expectedSha256 == null && nullToAbsent
@@ -1170,6 +1213,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       playlistId: serializer.fromJson<String?>(json['playlistId']),
       playlistTitle: serializer.fromJson<String?>(json['playlistTitle']),
       isAppUpdate: serializer.fromJson<bool>(json['isAppUpdate']),
+      priority: serializer.fromJson<int>(json['priority']),
+      expectedSha256: serializer.fromJson<String?>(json['expectedSha256']),
     );
   }
   @override
@@ -1213,6 +1258,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'playlistId': serializer.toJson<String?>(playlistId),
       'playlistTitle': serializer.toJson<String?>(playlistTitle),
       'isAppUpdate': serializer.toJson<bool>(isAppUpdate),
+      'priority': serializer.toJson<int>(priority),
+      'expectedSha256': serializer.toJson<String?>(expectedSha256),
     };
   }
 
@@ -1252,6 +1299,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     Value<String?> playlistId = const Value.absent(),
     Value<String?> playlistTitle = const Value.absent(),
     bool? isAppUpdate,
+    int? priority,
+    Value<String?> expectedSha256 = const Value.absent(),
   }) => DbDownloadTask(
     id: id ?? this.id,
     fileName: fileName ?? this.fileName,
@@ -1296,6 +1345,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         ? playlistTitle.value
         : this.playlistTitle,
     isAppUpdate: isAppUpdate ?? this.isAppUpdate,
+    priority: priority ?? this.priority,
+    expectedSha256: expectedSha256.present
+        ? expectedSha256.value
+        : this.expectedSha256,
   );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1376,6 +1429,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       isAppUpdate: data.isAppUpdate.present
           ? data.isAppUpdate.value
           : this.isAppUpdate,
+      priority: data.priority.present ? data.priority.value : this.priority,
+      expectedSha256: data.expectedSha256.present
+          ? data.expectedSha256.value
+          : this.expectedSha256,
     );
   }
 
@@ -1416,7 +1473,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('notes: $notes, ')
           ..write('playlistId: $playlistId, ')
           ..write('playlistTitle: $playlistTitle, ')
-          ..write('isAppUpdate: $isAppUpdate')
+          ..write('isAppUpdate: $isAppUpdate, ')
+          ..write('priority: $priority, ')
+          ..write('expectedSha256: $expectedSha256')
           ..write(')'))
         .toString();
   }
@@ -1458,6 +1517,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     playlistId,
     playlistTitle,
     isAppUpdate,
+    priority,
+    expectedSha256,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1497,7 +1558,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.notes == this.notes &&
           other.playlistId == this.playlistId &&
           other.playlistTitle == this.playlistTitle &&
-          other.isAppUpdate == this.isAppUpdate);
+          other.isAppUpdate == this.isAppUpdate &&
+          other.priority == this.priority &&
+          other.expectedSha256 == this.expectedSha256);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1665,6 +1728,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? playlistId,
     Expression<String>? playlistTitle,
     Expression<bool>? isAppUpdate,
+    Expression<int>? priority,
+    Expression<String>? expectedSha256,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1704,6 +1769,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (playlistId != null) 'playlist_id': playlistId,
       if (playlistTitle != null) 'playlist_title': playlistTitle,
       if (isAppUpdate != null) 'is_app_update': isAppUpdate,
+      if (priority != null) 'priority': priority,
+      if (expectedSha256 != null) 'expected_sha256': expectedSha256,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1744,6 +1811,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Value<String?>? playlistId,
     Value<String?>? playlistTitle,
     Value<bool>? isAppUpdate,
+    Value<int>? priority,
+    Value<String?>? expectedSha256,
     Value<int>? rowid,
   }) {
     return DownloadTasksCompanion(
@@ -1782,6 +1851,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       playlistId: playlistId ?? this.playlistId,
       playlistTitle: playlistTitle ?? this.playlistTitle,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
+      priority: priority ?? this.priority,
+      expectedSha256: expectedSha256 ?? this.expectedSha256,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1950,6 +2021,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('playlistId: $playlistId, ')
           ..write('playlistTitle: $playlistTitle, ')
           ..write('isAppUpdate: $isAppUpdate, ')
+          ..write('priority: $priority, ')
+          ..write('expectedSha256: $expectedSha256, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2315,12 +2388,16 @@ class $BrowserHistoryTable extends BrowserHistory
   $BrowserHistoryTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
     'id',
     aliasedName,
     false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
   );
   static const VerificationMeta _urlMeta = const VerificationMeta('url');
   @override
@@ -2367,8 +2444,6 @@ class $BrowserHistoryTable extends BrowserHistory
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    } else if (isInserting) {
-      context.missing(_idMeta);
     }
     if (data.containsKey('url')) {
       context.handle(
@@ -2404,7 +2479,7 @@ class $BrowserHistoryTable extends BrowserHistory
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DbBrowserHistory(
       id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}id'],
       )!,
       url: attachedDatabase.typeMapping.read(
@@ -2430,7 +2505,7 @@ class $BrowserHistoryTable extends BrowserHistory
 
 class DbBrowserHistory extends DataClass
     implements Insertable<DbBrowserHistory> {
-  final String id;
+  final int id;
   final String url;
   final String title;
   final String visitedAt;
@@ -2443,7 +2518,7 @@ class DbBrowserHistory extends DataClass
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
+    map['id'] = Variable<int>(id);
     map['url'] = Variable<String>(url);
     map['title'] = Variable<String>(title);
     map['visited_at'] = Variable<String>(visitedAt);
@@ -2465,7 +2540,7 @@ class DbBrowserHistory extends DataClass
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return DbBrowserHistory(
-      id: serializer.fromJson<String>(json['id']),
+      id: serializer.fromJson<int>(json['id']),
       url: serializer.fromJson<String>(json['url']),
       title: serializer.fromJson<String>(json['title']),
       visitedAt: serializer.fromJson<String>(json['visitedAt']),
@@ -2475,7 +2550,7 @@ class DbBrowserHistory extends DataClass
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
+      'id': serializer.toJson<int>(id),
       'url': serializer.toJson<String>(url),
       'title': serializer.toJson<String>(title),
       'visitedAt': serializer.toJson<String>(visitedAt),
@@ -2483,7 +2558,7 @@ class DbBrowserHistory extends DataClass
   }
 
   DbBrowserHistory copyWith({
-    String? id,
+    int? id,
     String? url,
     String? title,
     String? visitedAt,
@@ -2526,56 +2601,439 @@ class DbBrowserHistory extends DataClass
 }
 
 class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
-  final Value<String> id;
+  final Value<int> id;
   final Value<String> url;
   final Value<String> title;
   final Value<String> visitedAt;
-  final Value<int> rowid;
   const BrowserHistoryCompanion({
     this.id = const Value.absent(),
     this.url = const Value.absent(),
     this.title = const Value.absent(),
     this.visitedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
   });
   BrowserHistoryCompanion.insert({
-    required String id,
+    this.id = const Value.absent(),
     required String url,
     required String title,
     required String visitedAt,
-    this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       url = Value(url),
+  }) : url = Value(url),
        title = Value(title),
        visitedAt = Value(visitedAt);
   static Insertable<DbBrowserHistory> custom({
-    Expression<String>? id,
+    Expression<int>? id,
     Expression<String>? url,
     Expression<String>? title,
     Expression<String>? visitedAt,
-    Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (url != null) 'url': url,
       if (title != null) 'title': title,
       if (visitedAt != null) 'visited_at': visitedAt,
-      if (rowid != null) 'rowid': rowid,
     });
   }
 
   BrowserHistoryCompanion copyWith({
-    Value<String>? id,
+    Value<int>? id,
     Value<String>? url,
     Value<String>? title,
     Value<String>? visitedAt,
-    Value<int>? rowid,
   }) {
     return BrowserHistoryCompanion(
       id: id ?? this.id,
       url: url ?? this.url,
       title: title ?? this.title,
       visitedAt: visitedAt ?? this.visitedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (url.present) {
+      map['url'] = Variable<String>(url.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (visitedAt.present) {
+      map['visited_at'] = Variable<String>(visitedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BrowserHistoryCompanion(')
+          ..write('id: $id, ')
+          ..write('url: $url, ')
+          ..write('title: $title, ')
+          ..write('visitedAt: $visitedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $BrowserTabsTable extends BrowserTabs
+    with TableInfo<$BrowserTabsTable, SavedBrowserTab> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BrowserTabsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _urlMeta = const VerificationMeta('url');
+  @override
+  late final GeneratedColumn<String> url = GeneratedColumn<String>(
+    'url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    url,
+    title,
+    isActive,
+    position,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'browser_tabs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SavedBrowserTab> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('url')) {
+      context.handle(
+        _urlMeta,
+        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_urlMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SavedBrowserTab map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SavedBrowserTab(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      url: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}url'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BrowserTabsTable createAlias(String alias) {
+    return $BrowserTabsTable(attachedDatabase, alias);
+  }
+}
+
+class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
+  final String id;
+  final String url;
+  final String title;
+  final bool isActive;
+  final int position;
+  final int createdAt;
+  const SavedBrowserTab({
+    required this.id,
+    required this.url,
+    required this.title,
+    required this.isActive,
+    required this.position,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['url'] = Variable<String>(url);
+    map['title'] = Variable<String>(title);
+    map['is_active'] = Variable<bool>(isActive);
+    map['position'] = Variable<int>(position);
+    map['created_at'] = Variable<int>(createdAt);
+    return map;
+  }
+
+  BrowserTabsCompanion toCompanion(bool nullToAbsent) {
+    return BrowserTabsCompanion(
+      id: Value(id),
+      url: Value(url),
+      title: Value(title),
+      isActive: Value(isActive),
+      position: Value(position),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory SavedBrowserTab.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SavedBrowserTab(
+      id: serializer.fromJson<String>(json['id']),
+      url: serializer.fromJson<String>(json['url']),
+      title: serializer.fromJson<String>(json['title']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      position: serializer.fromJson<int>(json['position']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'url': serializer.toJson<String>(url),
+      'title': serializer.toJson<String>(title),
+      'isActive': serializer.toJson<bool>(isActive),
+      'position': serializer.toJson<int>(position),
+      'createdAt': serializer.toJson<int>(createdAt),
+    };
+  }
+
+  SavedBrowserTab copyWith({
+    String? id,
+    String? url,
+    String? title,
+    bool? isActive,
+    int? position,
+    int? createdAt,
+  }) => SavedBrowserTab(
+    id: id ?? this.id,
+    url: url ?? this.url,
+    title: title ?? this.title,
+    isActive: isActive ?? this.isActive,
+    position: position ?? this.position,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  SavedBrowserTab copyWithCompanion(BrowserTabsCompanion data) {
+    return SavedBrowserTab(
+      id: data.id.present ? data.id.value : this.id,
+      url: data.url.present ? data.url.value : this.url,
+      title: data.title.present ? data.title.value : this.title,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      position: data.position.present ? data.position.value : this.position,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SavedBrowserTab(')
+          ..write('id: $id, ')
+          ..write('url: $url, ')
+          ..write('title: $title, ')
+          ..write('isActive: $isActive, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, url, title, isActive, position, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SavedBrowserTab &&
+          other.id == this.id &&
+          other.url == this.url &&
+          other.title == this.title &&
+          other.isActive == this.isActive &&
+          other.position == this.position &&
+          other.createdAt == this.createdAt);
+}
+
+class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
+  final Value<String> id;
+  final Value<String> url;
+  final Value<String> title;
+  final Value<bool> isActive;
+  final Value<int> position;
+  final Value<int> createdAt;
+  final Value<int> rowid;
+  const BrowserTabsCompanion({
+    this.id = const Value.absent(),
+    this.url = const Value.absent(),
+    this.title = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.position = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BrowserTabsCompanion.insert({
+    required String id,
+    required String url,
+    this.title = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.position = const Value.absent(),
+    required int createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       url = Value(url),
+       createdAt = Value(createdAt);
+  static Insertable<SavedBrowserTab> custom({
+    Expression<String>? id,
+    Expression<String>? url,
+    Expression<String>? title,
+    Expression<bool>? isActive,
+    Expression<int>? position,
+    Expression<int>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (url != null) 'url': url,
+      if (title != null) 'title': title,
+      if (isActive != null) 'is_active': isActive,
+      if (position != null) 'position': position,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BrowserTabsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? url,
+    Value<String>? title,
+    Value<bool>? isActive,
+    Value<int>? position,
+    Value<int>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return BrowserTabsCompanion(
+      id: id ?? this.id,
+      url: url ?? this.url,
+      title: title ?? this.title,
+      isActive: isActive ?? this.isActive,
+      position: position ?? this.position,
+      createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2592,8 +3050,14 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     if (title.present) {
       map['title'] = Variable<String>(title.value);
     }
-    if (visitedAt.present) {
-      map['visited_at'] = Variable<String>(visitedAt.value);
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -2603,11 +3067,13 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
 
   @override
   String toString() {
-    return (StringBuffer('BrowserHistoryCompanion(')
+    return (StringBuffer('BrowserTabsCompanion(')
           ..write('id: $id, ')
           ..write('url: $url, ')
           ..write('title: $title, ')
-          ..write('visitedAt: $visitedAt, ')
+          ..write('isActive: $isActive, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2620,6 +3086,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DownloadTasksTable downloadTasks = $DownloadTasksTable(this);
   late final $BookmarksTable bookmarks = $BookmarksTable(this);
   late final $BrowserHistoryTable browserHistory = $BrowserHistoryTable(this);
+  late final $BrowserTabsTable browserTabs = $BrowserTabsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2628,6 +3095,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     downloadTasks,
     bookmarks,
     browserHistory,
+    browserTabs,
   ];
 }
 
@@ -2668,6 +3136,8 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<String?> playlistId,
       Value<String?> playlistTitle,
       Value<bool> isAppUpdate,
+      Value<int> priority,
+      Value<String?> expectedSha256,
       Value<int> rowid,
     });
 typedef $$DownloadTasksTableUpdateCompanionBuilder =
@@ -2707,6 +3177,8 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<String?> playlistId,
       Value<String?> playlistTitle,
       Value<bool> isAppUpdate,
+      Value<int> priority,
+      Value<String?> expectedSha256,
       Value<int> rowid,
     });
 
@@ -2899,6 +3371,16 @@ class $$DownloadTasksTableFilterComposer
     column: $table.isAppUpdate,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<int> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get expectedSha256 => $composableBuilder(
+    column: $table.expectedSha256,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -3084,6 +3566,16 @@ class $$DownloadTasksTableOrderingComposer
     column: $table.isAppUpdate,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get expectedSha256 => $composableBuilder(
+    column: $table.expectedSha256,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3242,6 +3734,14 @@ class $$DownloadTasksTableAnnotationComposer
     column: $table.isAppUpdate,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<String> get expectedSha256 => $composableBuilder(
+    column: $table.expectedSha256,
+    builder: (column) => column,
+  );
 }
 
 class $$DownloadTasksTableTableManager
@@ -3311,6 +3811,8 @@ class $$DownloadTasksTableTableManager
                 Value<String?> playlistId = const Value.absent(),
                 Value<String?> playlistTitle = const Value.absent(),
                 Value<bool> isAppUpdate = const Value.absent(),
+                Value<int> priority = const Value.absent(),
+                Value<String?> expectedSha256 = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion(
                 id: id,
@@ -3348,6 +3850,8 @@ class $$DownloadTasksTableTableManager
                 playlistId: playlistId,
                 playlistTitle: playlistTitle,
                 isAppUpdate: isAppUpdate,
+                priority: priority,
+                expectedSha256: expectedSha256,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3388,6 +3892,8 @@ class $$DownloadTasksTableTableManager
                 Value<String?> playlistId = const Value.absent(),
                 Value<String?> playlistTitle = const Value.absent(),
                 Value<bool> isAppUpdate = const Value.absent(),
+                Value<int> priority = const Value.absent(),
+                Value<String?> expectedSha256 = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion.insert(
                 id: id,
@@ -3425,6 +3931,8 @@ class $$DownloadTasksTableTableManager
                 playlistId: playlistId,
                 playlistTitle: playlistTitle,
                 isAppUpdate: isAppUpdate,
+                priority: priority,
+                expectedSha256: expectedSha256,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3651,19 +4159,17 @@ typedef $$BookmarksTableProcessedTableManager =
     >;
 typedef $$BrowserHistoryTableCreateCompanionBuilder =
     BrowserHistoryCompanion Function({
-      required String id,
+      Value<int> id,
       required String url,
       required String title,
       required String visitedAt,
-      Value<int> rowid,
     });
 typedef $$BrowserHistoryTableUpdateCompanionBuilder =
     BrowserHistoryCompanion Function({
-      Value<String> id,
+      Value<int> id,
       Value<String> url,
       Value<String> title,
       Value<String> visitedAt,
-      Value<int> rowid,
     });
 
 class $$BrowserHistoryTableFilterComposer
@@ -3675,7 +4181,7 @@ class $$BrowserHistoryTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get id => $composableBuilder(
+  ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
     builder: (column) => ColumnFilters(column),
   );
@@ -3705,7 +4211,7 @@ class $$BrowserHistoryTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get id => $composableBuilder(
+  ColumnOrderings<int> get id => $composableBuilder(
     column: $table.id,
     builder: (column) => ColumnOrderings(column),
   );
@@ -3735,7 +4241,7 @@ class $$BrowserHistoryTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get id =>
+  GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
   GeneratedColumn<String> get url =>
@@ -3785,31 +4291,27 @@ class $$BrowserHistoryTableTableManager
               $$BrowserHistoryTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
-                Value<String> id = const Value.absent(),
+                Value<int> id = const Value.absent(),
                 Value<String> url = const Value.absent(),
                 Value<String> title = const Value.absent(),
                 Value<String> visitedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
               }) => BrowserHistoryCompanion(
                 id: id,
                 url: url,
                 title: title,
                 visitedAt: visitedAt,
-                rowid: rowid,
               ),
           createCompanionCallback:
               ({
-                required String id,
+                Value<int> id = const Value.absent(),
                 required String url,
                 required String title,
                 required String visitedAt,
-                Value<int> rowid = const Value.absent(),
               }) => BrowserHistoryCompanion.insert(
                 id: id,
                 url: url,
                 title: title,
                 visitedAt: visitedAt,
-                rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -3836,6 +4338,225 @@ typedef $$BrowserHistoryTableProcessedTableManager =
       DbBrowserHistory,
       PrefetchHooks Function()
     >;
+typedef $$BrowserTabsTableCreateCompanionBuilder =
+    BrowserTabsCompanion Function({
+      required String id,
+      required String url,
+      Value<String> title,
+      Value<bool> isActive,
+      Value<int> position,
+      required int createdAt,
+      Value<int> rowid,
+    });
+typedef $$BrowserTabsTableUpdateCompanionBuilder =
+    BrowserTabsCompanion Function({
+      Value<String> id,
+      Value<String> url,
+      Value<String> title,
+      Value<bool> isActive,
+      Value<int> position,
+      Value<int> createdAt,
+      Value<int> rowid,
+    });
+
+class $$BrowserTabsTableFilterComposer
+    extends Composer<_$AppDatabase, $BrowserTabsTable> {
+  $$BrowserTabsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BrowserTabsTableOrderingComposer
+    extends Composer<_$AppDatabase, $BrowserTabsTable> {
+  $$BrowserTabsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get url => $composableBuilder(
+    column: $table.url,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BrowserTabsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BrowserTabsTable> {
+  $$BrowserTabsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get url =>
+      $composableBuilder(column: $table.url, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$BrowserTabsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BrowserTabsTable,
+          SavedBrowserTab,
+          $$BrowserTabsTableFilterComposer,
+          $$BrowserTabsTableOrderingComposer,
+          $$BrowserTabsTableAnnotationComposer,
+          $$BrowserTabsTableCreateCompanionBuilder,
+          $$BrowserTabsTableUpdateCompanionBuilder,
+          (
+            SavedBrowserTab,
+            BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
+          ),
+          SavedBrowserTab,
+          PrefetchHooks Function()
+        > {
+  $$BrowserTabsTableTableManager(_$AppDatabase db, $BrowserTabsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BrowserTabsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BrowserTabsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BrowserTabsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> url = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BrowserTabsCompanion(
+                id: id,
+                url: url,
+                title: title,
+                isActive: isActive,
+                position: position,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String url,
+                Value<String> title = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                required int createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => BrowserTabsCompanion.insert(
+                id: id,
+                url: url,
+                title: title,
+                isActive: isActive,
+                position: position,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BrowserTabsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BrowserTabsTable,
+      SavedBrowserTab,
+      $$BrowserTabsTableFilterComposer,
+      $$BrowserTabsTableOrderingComposer,
+      $$BrowserTabsTableAnnotationComposer,
+      $$BrowserTabsTableCreateCompanionBuilder,
+      $$BrowserTabsTableUpdateCompanionBuilder,
+      (
+        SavedBrowserTab,
+        BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
+      ),
+      SavedBrowserTab,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3846,4 +4567,6 @@ class $AppDatabaseManager {
       $$BookmarksTableTableManager(_db, _db.bookmarks);
   $$BrowserHistoryTableTableManager get browserHistory =>
       $$BrowserHistoryTableTableManager(_db, _db.browserHistory);
+  $$BrowserTabsTableTableManager get browserTabs =>
+      $$BrowserTabsTableTableManager(_db, _db.browserTabs);
 }

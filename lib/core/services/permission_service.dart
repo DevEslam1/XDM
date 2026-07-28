@@ -103,6 +103,7 @@ class PermissionService {
     if (!kIsWeb && Platform.isAndroid) {
       final sdk = await _androidSdkLevel();
 
+      // Always try the public Downloads folder first
       if (sdk >= 30) {
         try {
           final extDirs = await getExternalStorageDirectories(
@@ -121,66 +122,42 @@ class PermissionService {
             '[PermissionService] Failed to get external storage directories: $e',
           );
         }
-        try {
-          final dir = await getDownloadsDirectory();
-          if (dir != null) {
-            final pth = p.join(dir.path, 'XDM');
-            final xdmDir = Directory(pth);
-            if (!await xdmDir.exists()) {
-              await xdmDir.create(recursive: true);
-            }
-            return pth;
-          }
-        } catch (e) {
-          debugPrint(
-            '[PermissionService] Failed to get app downloads directory: $e',
-          );
-        }
-      } else if (await _isStorageGranted()) {
-        const publicPath = '/storage/emulated/0/Download/XDM';
-        try {
-          final dir = Directory(publicPath);
-          if (!await dir.exists()) {
-            await dir.create(recursive: true);
-          }
-          return publicPath;
-        } catch (e) {
-          debugPrint('Failed to create public download path: $e');
+      }
+
+      // Fallback to public Download path — never use Android/data paths
+      if (sdk < 30) {
+        // On older devices ensure storage permission is granted first
+        if (!await _isStorageGranted()) {
+          return _fallbackDirectory();
         }
       }
 
+      const publicDownloadPath = '/storage/emulated/0/Download/XDM';
       try {
-        final dir = await getDownloadsDirectory();
-        if (dir != null) {
-          final pth = p.join(dir.path, 'XDM');
-          final xdmDir = Directory(pth);
-          if (!await xdmDir.exists()) {
-            await xdmDir.create(recursive: true);
-          }
-          return pth;
+        final dir = Directory(publicDownloadPath);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
         }
+        return publicDownloadPath;
       } catch (e) {
         debugPrint(
-          '[PermissionService] Failed to get downloads directory fallback: $e',
+          '[PermissionService] Failed to create public download path: $e',
         );
       }
-      try {
-        final extDir = await getExternalStorageDirectory();
-        if (extDir != null) {
-          final pth = p.join(extDir.path, 'Download');
-          final dir = Directory(pth);
-          if (!await dir.exists()) {
-            await dir.create(recursive: true);
-          }
-          return pth;
-        }
-      } catch (e) {
-        debugPrint(
-          '[PermissionService] Failed to get external storage directory fallback: $e',
-        );
-      }
+
+      return _fallbackDirectory();
     }
 
+    final docs = await getApplicationDocumentsDirectory();
+    final pth = p.join(docs.path, 'XDM');
+    final dir = Directory(pth);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return pth;
+  }
+
+  Future<String> _fallbackDirectory() async {
     final docs = await getApplicationDocumentsDirectory();
     final pth = p.join(docs.path, 'XDM');
     final dir = Directory(pth);
@@ -242,34 +219,17 @@ class PermissionService {
       debugPrint(
         'ensureStorageAccess: failed to create download directory: $e',
       );
+      // Avoid Android/data fallbacks — always use public Downloads/XDM
+      const fallbackPath = '/storage/emulated/0/Download/XDM';
       try {
-        final dir = await getDownloadsDirectory();
-        if (dir != null) {
-          final xdmDir = Directory(p.join(dir.path, 'XDM'));
-          if (!await xdmDir.exists()) {
-            await xdmDir.create(recursive: true);
-          }
-          return true;
+        final xdmDir = Directory(fallbackPath);
+        if (!await xdmDir.exists()) {
+          await xdmDir.create(recursive: true);
         }
+        return true;
       } catch (err) {
         debugPrint(
-          '[PermissionService] ensureStorageAccess downloads dir fallback failed: $err',
-        );
-      }
-      try {
-        final extDirs = await getExternalStorageDirectories(
-          type: StorageDirectory.downloads,
-        );
-        if (extDirs != null && extDirs.isNotEmpty) {
-          final dir = extDirs.first;
-          if (!await dir.exists()) {
-            await dir.create(recursive: true);
-          }
-          return true;
-        }
-      } catch (err) {
-        debugPrint(
-          '[PermissionService] ensureStorageAccess external dir fallback failed: $err',
+          '[PermissionService] ensureStorageAccess public path fallback failed: $err',
         );
       }
       return false;

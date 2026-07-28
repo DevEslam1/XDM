@@ -267,14 +267,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               _resolvedCategory = categoryFromFileName(_resolvedFileName);
               _torrentFiles = (meta['files'] as List? ?? [])
                   .map(
-                    (f) => ({
-                      'name': f['name'] as String? ?? '',
-                      'length': f['length'] as int? ?? 0,
-                      'selected': true,
-                      'priority': 4,
-                      'downloadedBytes': 0,
-                      'speed': 0.0,
-                    }),
+                    (f) {
+                      final fileMap = f as Map;
+                      return {
+                        'name': fileMap['name'] as String? ?? '',
+                        'length': fileMap['length'] as int? ?? 0,
+                        'selected': true,
+                        'priority': 4,
+                        'downloadedBytes': 0,
+                        'speed': 0.0,
+                      };
+                    },
                   )
                   .toList();
               _updateSelectedTorrentSize();
@@ -521,14 +524,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               _resolvedCategory = 'Archive';
               _torrentFiles = (meta['files'] as List? ?? [])
                   .map(
-                    (f) => ({
-                      'name': f['name'] as String? ?? '',
-                      'length': f['length'] as int? ?? 0,
-                      'selected': true,
-                      'priority': 4,
-                      'downloadedBytes': 0,
-                      'speed': 0.0,
-                    }),
+                    (f) {
+                      final fileMap = f as Map;
+                      return {
+                        'name': fileMap['name'] as String? ?? '',
+                        'length': fileMap['length'] as int? ?? 0,
+                        'selected': true,
+                        'priority': 4,
+                        'downloadedBytes': 0,
+                        'speed': 0.0,
+                      };
+                    },
                   )
                   .toList();
               _isMetadataResolved = true;

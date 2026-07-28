@@ -175,13 +175,19 @@ class FFmpegMuxService {
           outputPath,
         ];
 
+        // Re-encode is ~10× slower than stream copy.
+        final reencodeMinutes =
+            (totalInputBytes / (5 * 1024 * 1024)).ceil() + 30;
+        final reencodeTimeout =
+            Duration(minutes: reencodeMinutes.clamp(30, 600));
+
         FFmpegSession? fallbackSession;
         try {
           fallbackSession =
               await FFmpegKit.executeWithArguments(fallbackArguments)
-                  .timeout(timeoutDuration, onTimeout: () {
+                  .timeout(reencodeTimeout, onTimeout: () {
             throw TimeoutException(
-              'FFmpeg fallback merge timed out after ${timeoutDuration.inMinutes} min',
+              'FFmpeg fallback merge timed out after ${reencodeTimeout.inMinutes} min',
             );
           });
         } on TimeoutException {

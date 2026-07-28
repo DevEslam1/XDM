@@ -159,7 +159,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     }
   }
 
-  Future<void> _deleteHistoryItem(String id) async {
+  Future<void> _deleteHistoryItem(int id) async {
     try {
       final db = context.read<DatabaseService>();
       await db.deleteBrowserHistory(id);
@@ -719,7 +719,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final url = item['url'] as String? ?? '';
     final title = item['title'] as String? ?? url;
-    final id = item['id'] as String? ?? '';
+    final id = item['id'] as int? ?? 0;
     final timeStr = _formatTimestamp(item['visitedAt'] as String?);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
@@ -812,7 +812,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                     danger: true,
                     onTap: () {
                       runHaptic(settings);
-                      if (id.isNotEmpty) _deleteHistoryItem(id);
+                      if (id > 0) _deleteHistoryItem(id);
                     },
                   ),
                 ],

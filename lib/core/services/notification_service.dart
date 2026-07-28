@@ -47,20 +47,31 @@ class NotificationService {
   // here and replayed on first listen, so pause/resume/cancel actions are
   // never silently lost during app startup.
   final List<Map<String, String>> _pendingActions = [];
-  final StreamController<Map<String, String>> _actionStreamController =
-      StreamController<Map<String, String>>.broadcast();
 
-  Stream<Map<String, String>> get onActionTapped {
-    // Drain buffered events on first subscription
-    while (_pendingActions.isNotEmpty) {
-      _actionStreamController.add(_pendingActions.removeAt(0));
-    }
-    return _actionStreamController.stream;
+  static StreamController<Map<String, String>> _createActionStreamController(
+    List<Map<String, String>> pending,
+  ) {
+    StreamController<Map<String, String>>? c;
+    c = StreamController<Map<String, String>>.broadcast(
+      sync: true,
+      onListen: () {
+        while (pending.isNotEmpty) {
+          c!.add(pending.removeAt(0));
+        }
+      },
+    );
+    return c;
   }
 
+  late StreamController<Map<String, String>> _actionStreamController =
+      _createActionStreamController(_pendingActions);
+
+  Stream<Map<String, String>> get onActionTapped =>
+      _actionStreamController.stream;
+
   void _addAction(Map<String, String> event) {
-    if (_actionStreamController.hasListener &&
-        !_actionStreamController.isClosed) {
+    if (!_actionStreamController.isClosed &&
+        _actionStreamController.hasListener) {
       _actionStreamController.add(event);
     } else {
       _pendingActions.add(event);
@@ -134,10 +145,7 @@ class NotificationService {
       _receivePort = null;
 
       if (_actionStreamController.isClosed) {
-        // Can't reassign final field; existing stream is already closed.
-        // The current stream will be garbage collected; new events are
-        // buffered in _pendingActions until a new subscription arrives.
-        _pendingActions.clear();
+        _actionStreamController = _createActionStreamController(_pendingActions);
       }
 
       const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');

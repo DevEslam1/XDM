@@ -123,10 +123,20 @@ class Bookmarks extends Table {
 
 @DataClassName('DbBrowserHistory')
 class BrowserHistory extends Table {
-  TextColumn get id => text()();
+  IntColumn get id => integer().autoIncrement()();
   TextColumn get url => text()();
   TextColumn get title => text()();
   TextColumn get visitedAt => text()();
+}
+
+@DataClassName('SavedBrowserTab')
+class BrowserTabs extends Table {
+  TextColumn get id => text()();
+  TextColumn get url => text()();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  BoolColumn get isActive => boolean().withDefault(const Constant(false))();
+  IntColumn get position => integer().withDefault(const Constant(0))();
+  IntColumn get createdAt => integer()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -144,13 +154,13 @@ LazyDatabase _openConnection(String path) {
   });
 }
 
-@DriftDatabase(tables: [DownloadTasks, Bookmarks, BrowserHistory])
+@DriftDatabase(tables: [DownloadTasks, Bookmarks, BrowserHistory, BrowserTabs])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(String path) : super(_openConnection(path));
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -323,6 +333,37 @@ class AppDatabase extends _$AppDatabase {
         // Migration 5 -> 6: Add priority and expectedSha256 columns
         await m.addColumn(downloadTasks, downloadTasks.priority);
         await m.addColumn(downloadTasks, downloadTasks.expectedSha256);
+      }
+      if (from < 7) {
+        await customStatement('''
+          CREATE TABLE IF NOT EXISTS browser_tabs (
+            id TEXT NOT NULL PRIMARY KEY,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            is_active INTEGER NOT NULL DEFAULT 0,
+            "position" INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+          )
+        ''');
+      }
+      if (from < 8) {
+        // Migration 7 -> 8: Change browser_history PK from text to auto-increment int
+        await customStatement('''
+          CREATE TABLE browser_history_new (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL,
+            visited_at TEXT NOT NULL
+          )
+        ''');
+        await customStatement('''
+          INSERT INTO browser_history_new (url, title, visited_at)
+          SELECT url, title, visited_at FROM browser_history
+        ''');
+        await customStatement('DROP TABLE browser_history');
+        await customStatement(
+          'ALTER TABLE browser_history_new RENAME TO browser_history',
+        );
       }
     },
   );

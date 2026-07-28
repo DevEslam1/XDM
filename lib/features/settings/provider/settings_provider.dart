@@ -11,9 +11,13 @@ class SettingsProvider extends ChangeNotifier {
   static SettingsProvider? _instance;
   bool _loaded = false;
   static SettingsProvider get instance {
-    _instance ??= SettingsProvider();
+    _instance ??= SettingsProvider._internal();
     return _instance!;
   }
+
+  SettingsProvider._internal();
+
+  factory SettingsProvider() => instance;
 
   /// Call this instead of `instance` when you need guaranteed-loaded settings.
   static SettingsProvider get loadedInstance {

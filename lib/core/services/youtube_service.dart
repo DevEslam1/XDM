@@ -327,6 +327,8 @@ class YoutubeService {
           'size': filesize,
           'ext': ext,
           'title': title,
+          if (map.containsKey('itag')) 'itag': map['itag'],
+          if (map.containsKey('format_id')) 'format_id': map['format_id'],
         });
       } else {
         if (map.containsKey('audioSrc') && map['audioSrc'] != null) {

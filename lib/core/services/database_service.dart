@@ -10,7 +10,6 @@ import '../../features/browser/models/bookmark.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseService {
@@ -20,6 +19,7 @@ class DatabaseService {
   static const String downloadsBoxName = 'downloads';
   static const String bookmarksBoxName = 'browser_bookmarks';
   static const String browserHistoryBoxName = 'browser_history';
+  static const String browserTabsBoxName = 'browser_tabs';
 
   Future<void> init({String? testPath}) async {
     if (testPath != null) {
@@ -153,6 +153,51 @@ class DatabaseService {
         }
       }
 
+      if (await Hive.boxExists(browserTabsBoxName)) {
+        final box = await Hive.openBox<dynamic>(browserTabsBoxName);
+        if (box.isNotEmpty) {
+          final tabs = <SavedBrowserTab>[];
+          final failedItems = <dynamic>[];
+          for (final key in box.keys) {
+            final val = box.get(key);
+            if (val is Map) {
+              try {
+                tabs.add(SavedBrowserTab(
+                  id: key.toString(),
+                  url: val['url'] as String? ?? '',
+                  title: val['title'] as String? ?? '',
+                  isActive: val['isActive'] as bool? ?? false,
+                  position: val['position'] as int? ?? 0,
+                  createdAt: DateTime.now().millisecondsSinceEpoch,
+                ));
+              } catch (e) {
+                failedItems.add(val);
+              }
+            } else {
+              failedItems.add(val);
+            }
+          }
+          if (tabs.isNotEmpty) {
+            try {
+              await _db.batch((batch) => batch.insertAll(
+                  _db.browserTabs, tabs,
+                  mode: drift.InsertMode.insertOrReplace));
+            } catch (e) {
+              failedItems.addAll(box.values);
+            }
+          }
+          if (failedItems.isNotEmpty) {
+            hasFailures = true;
+            debugPrint('Migration of $browserTabsBoxName had ${failedItems.length} failures; '
+                'keeping the Hive box intact for recovery.');
+          } else {
+            await box.deleteFromDisk();
+          }
+        } else {
+          await box.deleteFromDisk();
+        }
+      }
+
       if (await Hive.boxExists(browserHistoryBoxName)) {
         final box = await Hive.openBox<dynamic>(browserHistoryBoxName);
         if (box.isNotEmpty) {
@@ -163,7 +208,6 @@ class DatabaseService {
             if (val is Map) {
               try {
                 hist.add(BrowserHistoryCompanion.insert(
-                  id: 'hive_${key.toString()}',
                   url: val['url'] as String? ?? '',
                   title: val['title'] as String? ?? val['url'] as String? ?? '',
                   visitedAt: val['visitedAt'] as String? ??
@@ -407,27 +451,19 @@ class DatabaseService {
         .toList();
   }
 
-  Future<String> addBrowserHistory(Map<String, dynamic> entry) async {
+  Future<int> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
-    if (url.isEmpty || url == 'about:blank') return '';
+    if (url.isEmpty || url == 'about:blank') return 0;
     final visitedAt = entry['visitedAt'] as String? ??
         DateTime.now().toIso8601String();
     final title = entry['title'] as String? ?? url;
 
-    // Use URL as the primary key (hashed if URL > 2048 chars) so duplicates
-    // are naturally de-duplicated by the DB's PK constraint.
-    final id = url.length <= 2048
-        ? 'url_${url.hashCode.toRadixString(16)}'
-        : const Uuid().v4();
-
-    await _db.into(_db.browserHistory).insert(
+    final id = await _db.into(_db.browserHistory).insert(
       BrowserHistoryCompanion.insert(
-        id: id,
         url: url,
         title: title,
         visitedAt: visitedAt,
       ),
-      mode: drift.InsertMode.insertOrReplace,
     );
 
     await _db.customStatement(
@@ -442,12 +478,12 @@ class DatabaseService {
     return id;
   }
 
-  Future<void> updateBrowserHistoryTitle(String id, String title) async {
+  Future<void> updateBrowserHistoryTitle(int id, String title) async {
     await (_db.update(_db.browserHistory)..where((t) => t.id.equals(id)))
         .write(BrowserHistoryCompanion(title: drift.Value(title)));
   }
 
-  Future<void> deleteBrowserHistory(String id) {
+  Future<void> deleteBrowserHistory(int id) {
     return (_db.delete(_db.browserHistory)..where((t) => t.id.equals(id)))
         .go();
   }
@@ -455,6 +491,23 @@ class DatabaseService {
   Future<void> clearBrowserHistory() {
     return _db.delete(_db.browserHistory).go();
   }
+
+  Future<void> saveOpenTabs(List<SavedBrowserTab> tabs) async {
+    await _db.transaction(() async {
+      await _db.delete(_db.browserTabs).go();
+      for (final t in tabs) {
+        await _db.into(_db.browserTabs).insert(t);
+      }
+    });
+  }
+
+  Future<List<SavedBrowserTab>> loadOpenTabs() {
+    return (_db.select(_db.browserTabs)
+          ..orderBy([(t) => drift.OrderingTerm.asc(t.position)]))
+        .get();
+  }
+
+  Future<void> clearOpenTabs() => _db.delete(_db.browserTabs).go();
 
   Future<void> dispose() async {
     await _db.close();

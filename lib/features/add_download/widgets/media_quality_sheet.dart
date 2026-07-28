@@ -30,17 +30,6 @@ class MediaQualitySheet extends StatefulWidget {
     try {
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       runHaptic(settings);
-      if (preloadedStreams == null) {
-        try {
-          final fetched = await YoutubeService.getStreamsForAnyUrl(videoUrl);
-          if (fetched != null && fetched.length == 1) {
-            return fetched.first;
-          }
-          preloadedStreams = fetched;
-        } catch (_) {}
-      } else if (preloadedStreams.length == 1) {
-        return preloadedStreams.first;
-      }
       if (!context.mounted) return null;
       return await showModalBottomSheet<Map<String, dynamic>>(
         context: context,

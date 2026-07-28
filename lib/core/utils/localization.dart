@@ -407,6 +407,8 @@ class L10n {
       'browser_url_label': 'URL',
       'browser_folder_optional': 'Folder (optional)',
       'browser_save_btn': 'SAVE',
+      'browser_quit': 'Quit browser',
+      'browser_tabs_restored': 'Previous tabs restored',
     },
     'ar': {
       'app_title': 'XDM',
@@ -800,6 +802,8 @@ class L10n {
       'browser_url_label': 'الرابط',
       'browser_folder_optional': 'المجلد (اختياري)',
       'browser_save_btn': 'حفظ',
+      'browser_quit': 'إنهاء المتصفح',
+      'browser_tabs_restored': 'تمت استعادة التبويبات السابقة',
     },
   };
 

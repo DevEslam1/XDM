@@ -87,81 +87,115 @@ class SingleInstanceService {
     _securityToken = _generateSecurityToken();
 
     try {
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
-      _initialUrl = candidateUrl;
-
-      final tokenF = _tokenFile;
-      if (!Platform.isWindows) {
-        final tempTokenF = File('${tokenF.path}.tmp');
-        try {
-          await tempTokenF.writeAsString(_securityToken!);
-          await Process.run('chmod', ['600', tempTokenF.path]);
-          await tempTokenF.rename(tokenF.path);
-        } catch (e) {
-          debugPrint(
-            '[SingleInstanceService] Warning: Atomic token write failed ($e); falling back to direct write.',
-          );
-          await tokenF.writeAsString(_securityToken!);
-          try {
-            await Process.run('chmod', ['600', tokenF.path]);
-          } catch (_) {}
-        }
-      } else {
-        // AppData directory is already restricted to the user by default ACLs on Windows
-        await tokenF.writeAsString(_securityToken!);
-      }
-      _serverSubscription = _server?.listen((HttpRequest request) async {
-        try {
-          final tokenParam = request.uri.queryParameters['token'];
-          if (tokenParam == null || tokenParam != _securityToken) {
-            request.response.statusCode = HttpStatus.forbidden;
-            await request.response.close();
-            return;
-          }
-          final urlParam = request.uri.queryParameters['url'];
-          if (urlParam != null && urlParam.trim().isNotEmpty) {
-            final decoded = Uri.decodeComponent(urlParam.trim());
-            _onUrlListener?.call(decoded);
-          }
-          request.response.statusCode = HttpStatus.ok;
-          await request.response.close();
-        } catch (e) {
-          debugPrint('SingleInstanceServer request error: $e');
-          try {
-            request.response.statusCode = HttpStatus.internalServerError;
-            await request.response.close();
-          } catch (_) {}
-        }
-      });
-
+      await _startServer(candidateUrl);
       return true;
     } on SocketException {
-      if (candidateUrl != null && candidateUrl.isNotEmpty) {
-        final client = HttpClient();
-        try {
-          String? remoteToken;
-          if (await _tokenFile.exists()) {
-            remoteToken = (await _tokenFile.readAsString()).trim();
-          }
+      // Bind failed — either another instance is running, or the previous instance crashed.
+      final bool forwardedSuccessfully = await _tryForwardUrl(candidateUrl);
 
-          final queryParams = <String, String>{'url': candidateUrl};
-          if (remoteToken != null && remoteToken.isNotEmpty) {
-            queryParams['token'] = remoteToken;
-          }
-          final uri = Uri.http('127.0.0.1:$_port', '/', queryParams);
-          final req = await client.getUrl(uri);
-          await req.close();
-        } catch (e) {
-          debugPrint('Failed to forward url to primary instance: $e');
-        } finally {
-          client.close();
-        }
+      if (forwardedSuccessfully) {
+        // Primary instance is alive and received the URL. This instance should exit.
+        return false;
       }
-      return false;
+
+      // If forwarding failed, the existing instance is dead. Clean up stale token and retry.
+      debugPrint(
+        '[SingleInstanceService] Primary instance unresponsive. Cleaning up stale token.',
+      );
+      try {
+        await _tokenFile.delete();
+      } catch (_) {}
+
+      try {
+        await _startServer(candidateUrl);
+        return true;
+      } catch (e) {
+        debugPrint('SingleInstanceService retry bind failed: $e');
+        return false;
+      }
     } catch (e) {
       debugPrint('SingleInstanceService init error: $e');
       _initialUrl = candidateUrl;
       return true;
+    }
+  }
+
+  Future<void> _startServer(String? candidateUrl) async {
+    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+    _initialUrl = candidateUrl;
+
+    final tokenF = _tokenFile;
+    if (!Platform.isWindows) {
+      final tempTokenF = File('${tokenF.path}.tmp');
+      try {
+        await tempTokenF.writeAsString(_securityToken!);
+        await Process.run('chmod', ['600', tempTokenF.path]);
+        await tempTokenF.rename(tokenF.path);
+      } catch (e) {
+        debugPrint(
+          '[SingleInstanceService] Warning: Atomic token write failed ($e); falling back to direct write.',
+        );
+        await tokenF.writeAsString(_securityToken!);
+        try {
+          await Process.run('chmod', ['600', tokenF.path]);
+        } catch (_) {}
+      }
+    } else {
+      // AppData directory is already restricted to the user by default ACLs on Windows
+      await tokenF.writeAsString(_securityToken!);
+    }
+
+    _serverSubscription = _server?.listen((HttpRequest request) async {
+      try {
+        final tokenParam = request.uri.queryParameters['token'];
+        if (tokenParam == null || tokenParam != _securityToken) {
+          request.response.statusCode = HttpStatus.forbidden;
+          await request.response.close();
+          return;
+        }
+        final urlParam = request.uri.queryParameters['url'];
+        if (urlParam != null && urlParam.trim().isNotEmpty) {
+          final decoded = Uri.decodeComponent(urlParam.trim());
+          _onUrlListener?.call(decoded);
+        }
+        request.response.statusCode = HttpStatus.ok;
+        await request.response.close();
+      } catch (e) {
+        debugPrint('SingleInstanceServer request error: $e');
+        try {
+          request.response.statusCode = HttpStatus.internalServerError;
+          await request.response.close();
+        } catch (_) {}
+      }
+    });
+  }
+
+  Future<bool> _tryForwardUrl(String? candidateUrl) async {
+    if (candidateUrl == null || candidateUrl.isEmpty) return false;
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(
+      seconds: 3,
+    ); // Short timeout for ping
+    try {
+      String? remoteToken;
+      if (await _tokenFile.exists()) {
+        remoteToken = (await _tokenFile.readAsString()).trim();
+      }
+
+      final queryParams = <String, String>{'url': candidateUrl};
+      if (remoteToken != null && remoteToken.isNotEmpty) {
+        queryParams['token'] = remoteToken;
+      }
+      final uri = Uri.http('127.0.0.1:$_port', '/', queryParams);
+      final req = await client.getUrl(uri);
+      await req.close();
+      return true;
+    } catch (e) {
+      debugPrint('Failed to forward url to primary instance: $e');
+      return false;
+    } finally {
+      client.close();
     }
   }
 

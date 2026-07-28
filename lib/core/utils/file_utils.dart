@@ -170,7 +170,7 @@ Future<void> deleteDownloadParts(String tempFilePath) async {
       if (entity is File) {
         final fileName = entity.uri.pathSegments.last;
         final isPart = RegExp(
-          '^' + RegExp.escape(name) + r'\.part\d+$',
+          '^${RegExp.escape(name)}\\.part\\d+\$',
         ).hasMatch(fileName);
         final isState = fileName == '$name.dmxstate';
         if (isPart || isState) {

@@ -1,11 +1,34 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 class RemoteApiService {
   static HttpServer? _server;
   static const int _port = 37129;
-  
+  static String? _bearerToken;
+
+  static const _tokenFileName = '.xdm_remote_token';
+
+  /// Path to the token file (app support directory).
+  static String _tokenFilePath() {
+    final dir = Directory.systemTemp.path; // fallback; overridden per-platform
+    return '$dir$_tokenFileName';
+  }
+
+  static bool _isValidTaskId(String id) {
+    if (id.isEmpty || id.length > 128) return false;
+    if (RegExp(
+      r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$',
+    ).hasMatch(id)) {
+      return true;
+    }
+    if (RegExp(r'^\d{10,20}_\d{1,10}$').hasMatch(id)) {
+      return true;
+    }
+    return false;
+  }
+
   static Future<void> start({
     required Future<List<Map<String, dynamic>>> Function() getTasks,
     required Future<void> Function(String id) pauseTask,
@@ -13,30 +36,97 @@ class RemoteApiService {
     required Future<void> Function(String id) deleteTask,
   }) async {
     if (kIsWeb || (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)) return;
-    
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+
+    _bearerToken = _generateToken();
+    await _writeTokenFile(_bearerToken!);
+
+    try {
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+    } catch (e) {
+      // Bind failed — ping the existing server to check if it is still alive
+      try {
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 3);
+        final pingRequest = await client.getUrl(
+          Uri.parse('http://127.0.0.1:$_port/api/health'),
+        );
+        pingRequest.headers.set('Authorization', 'Bearer ping');
+        final pingResponse = await pingRequest.close();
+        if (pingResponse.statusCode == 401) {
+          // Server is alive — do nothing, piggyback on existing instance
+          debugPrint('Remote API: existing server on port $_port is alive');
+          return;
+        }
+      } catch (_) {
+        // No response — delete stale token file and retry
+        try {
+          await File(_tokenFilePath()).delete();
+        } catch (_) {}
+      }
+      // Retry bind
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+    }
+
     _server!.listen((request) async {
       final path = request.uri.path;
       final method = request.method;
-      
+
       request.response.headers.contentType = ContentType.json;
-      
+
+      // Health check — always allowed without auth
+      if (path == '/api/health' && method == 'GET') {
+        request.response.write(jsonEncode({'ok': true, 'token': _bearerToken}));
+        await request.response.close();
+        return;
+      }
+
+      // Require bearer token for all other endpoints
+      final authHeader = request.headers.value('authorization');
+      if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+        request.response.statusCode = 401;
+        request.response.write(jsonEncode({'error': 'Missing or invalid authorization header'}));
+        await request.response.close();
+        return;
+      }
+      final token = authHeader.substring(7).trim();
+      if (token != _bearerToken) {
+        request.response.statusCode = 401;
+        request.response.write(jsonEncode({'error': 'Invalid token'}));
+        await request.response.close();
+        return;
+      }
+
       try {
         if (path == '/api/tasks' && method == 'GET') {
           final tasks = await getTasks();
           request.response.write(jsonEncode(tasks));
         } else if (path.startsWith('/api/tasks/') && path.endsWith('/pause') && method == 'POST') {
           final id = path.split('/')[3];
-          await pauseTask(id);
-          request.response.write(jsonEncode({'ok': true}));
+          if (!_isValidTaskId(id)) {
+            request.response.statusCode = 400;
+            request.response.write(jsonEncode({'error': 'Invalid task ID'}));
+          } else {
+            await pauseTask(id);
+            request.response.write(jsonEncode({'ok': true}));
+          }
         } else if (path.startsWith('/api/tasks/') && path.endsWith('/resume') && method == 'POST') {
           final id = path.split('/')[3];
-          await resumeTask(id);
-          request.response.write(jsonEncode({'ok': true}));
+          if (!_isValidTaskId(id)) {
+            request.response.statusCode = 400;
+            request.response.write(jsonEncode({'error': 'Invalid task ID'}));
+          } else {
+            await resumeTask(id);
+            request.response.write(jsonEncode({'ok': true}));
+          }
         } else if (path.startsWith('/api/tasks/') && path.endsWith('/delete') && method == 'DELETE') {
           final id = path.split('/')[3];
-          await deleteTask(id);
-          request.response.write(jsonEncode({'ok': true}));
+          if (!_isValidTaskId(id)) {
+            request.response.statusCode = 400;
+            request.response.write(jsonEncode({'error': 'Invalid task ID'}));
+          } else {
+            await deleteTask(id);
+            request.response.write(jsonEncode({'ok': true}));
+          }
         } else {
           request.response.statusCode = 404;
           request.response.write(jsonEncode({'error': 'Not found'}));
@@ -48,9 +138,24 @@ class RemoteApiService {
       await request.response.close();
     });
   }
-  
+
+  static String _generateToken() {
+    final rand = Random.secure();
+    final bytes = List<int>.generate(32, (_) => rand.nextInt(256));
+    return base64Url.encode(bytes);
+  }
+
+  static Future<void> _writeTokenFile(String token) async {
+    try {
+      await File(_tokenFilePath()).writeAsString(token);
+    } catch (e) {
+      debugPrint('Remote API: failed to write token file: $e');
+    }
+  }
+
   static void stop() {
     _server?.close(force: true);
     _server = null;
+    _bearerToken = null;
   }
 }

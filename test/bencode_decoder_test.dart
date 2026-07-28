@@ -113,7 +113,7 @@ void main() {
       final raw = utf8.encode('d4:infod4:name4:test6:lengthi100eee');
       final result = BencodeDecoder(raw).decode();
       expect(result, isA<Map>());
-      final info = (result as Map)['info'];
+      final info = (result as Map)['info'] as Map;
       expect(info, isA<Map>());
       expect(info['name'], isA<Uint8List>());
       expect(utf8.decode(info['name'] as Uint8List), 'test');
@@ -179,7 +179,7 @@ void main() {
       expect((result['infoHash'] as String).length, 40);
       expect(result['files'], isA<List>());
       expect((result['files'] as List).length, 1);
-      expect((result['files'] as List).first['name'], 'test');
+      expect(((result['files'] as List).first as Map)['name'], 'test');
     });
 
     test('multi-file torrent', () {
@@ -207,8 +207,8 @@ void main() {
       expect(result!['name'], 'root');
       expect(result['length'], 800);
       expect((result['files'] as List).length, 2);
-      expect((result['files'] as List)[0]['name'], 'sub/file1');
-      expect((result['files'] as List)[1]['name'], 'sub/file2');
+      expect(((result['files'] as List)[0] as Map)['name'], 'sub/file1');
+      expect(((result['files'] as List)[1] as Map)['name'], 'sub/file2');
     });
 
     test('corrupt data returns null', () {
@@ -247,7 +247,7 @@ void main() {
       expect(result, isA<Map>());
       expect((result as Map)['key1'], 'value1');
       expect((result)['key2'], isA<List>());
-      expect((result)['key2'][0], 'item1');
+      expect(((result)['key2'] as List)[0], 'item1');
     });
   });
 
@@ -317,23 +317,23 @@ void main() {
     test('dict with nested list of dicts', () {
       // Build: {"files": [{"length": 100, "name": "test"}, {"length": 200, "name": "data"}]}
       final raw = Uint8List.fromList([
-        0x64,                                           // 'd' - outer dict start
-        ...utf8.encode('5:files'),                      // key "files"
-        0x6c,                                           // 'l' - list start
-        0x64,                                           // 'd' - inner dict 1 start
-        ...utf8.encode('6:length'),                     // key "length"
-        ...utf8.encode('i100e'),                        // value 100
-        ...utf8.encode('4:name'),                       // key "name"
-        ...utf8.encode('4:test'),                       // value "test"
-        0x65,                                           // 'e' - inner dict 1 end
-        0x64,                                           // 'd' - inner dict 2 start
-        ...utf8.encode('6:length'),                     // key "length"
-        ...utf8.encode('i200e'),                        // value 200
-        ...utf8.encode('4:name'),                       // key "name"
-        ...utf8.encode('4:data'),                       // value "data"
-        0x65,                                           // 'e' - inner dict 2 end
-        0x65,                                           // 'e' - list end
-        0x65,                                           // 'e' - outer dict end
+        0x64, // 'd' - outer dict start
+        ...utf8.encode('5:files'), // key "files"
+        0x6c, // 'l' - list start
+        0x64, // 'd' - inner dict 1 start
+        ...utf8.encode('6:length'), // key "length"
+        ...utf8.encode('i100e'), // value 100
+        ...utf8.encode('4:name'), // key "name"
+        ...utf8.encode('4:test'), // value "test"
+        0x65, // 'e' - inner dict 1 end
+        0x64, // 'd' - inner dict 2 start
+        ...utf8.encode('6:length'), // key "length"
+        ...utf8.encode('i200e'), // value 200
+        ...utf8.encode('4:name'), // key "name"
+        ...utf8.encode('4:data'), // value "data"
+        0x65, // 'e' - inner dict 2 end
+        0x65, // 'e' - list end
+        0x65, // 'e' - outer dict end
       ]);
       final result = BencodeDecoder(raw).decode();
       expect(result, isA<Map>());
@@ -346,12 +346,12 @@ void main() {
     test('zero-length string value in dict', () {
       // Build: {"foo": "", "bar": "test"}
       final raw = Uint8List.fromList([
-        0x64,                                           // 'd' - dict start
-        ...utf8.encode('3:foo'),                        // key "foo"
-        ...utf8.encode('0:'),                           // value "" (empty)
-        ...utf8.encode('3:bar'),                        // key "bar"
-        ...utf8.encode('4:test'),                       // value "test"
-        0x65,                                           // 'e' - dict end
+        0x64, // 'd' - dict start
+        ...utf8.encode('3:foo'), // key "foo"
+        ...utf8.encode('0:'), // value "" (empty)
+        ...utf8.encode('3:bar'), // key "bar"
+        ...utf8.encode('4:test'), // value "test"
+        0x65, // 'e' - dict end
       ]);
       final result = BencodeDecoder(raw).decode();
       expect(result, isA<Map>());

@@ -184,9 +184,9 @@ String _base32ToHex(String base32) {
       hex.write(hexDigit.toInt().toRadixString(16));
     }
   }
-  // Pad to 40 hex characters for 160-bit SHA-1 hash
   final result = hex.toString();
-  return result.length < 40 ? result.padLeft(40, '0') : result;
+  final targetLen = ((clean.length * 5) ~/ 8) * 2;
+  return result.length < targetLen ? result.padLeft(targetLen, '0') : result;
 }
 
 String fileNameFromUrl(String url) {

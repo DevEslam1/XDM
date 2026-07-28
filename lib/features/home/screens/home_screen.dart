@@ -1289,7 +1289,7 @@ class _DownloadTaskList extends StatelessWidget {
         final seenPlaylists = <String>{};
         for (final t in displayTasks) {
           if (t.isPlaylistItem) {
-            if (seenPlaylists.contains(t.playlistId!)) continue;
+            if (seenPlaylists.contains(t.playlistId)) continue;
             seenPlaylists.add(t.playlistId!);
             renderItems.add(
               PlaylistGroupCard(

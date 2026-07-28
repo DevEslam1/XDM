@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/youtube_service.dart';
@@ -62,10 +63,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, DateTime> _lastYoutubeAuthTimes = {};
   static const _youtubeAuthCooldown = Duration(seconds: 30);
   final Map<String, Timer> _mediaScanTimers = {};
+  bool _restoredTabs = false;
+  bool _quitPersisted = false;
 
   DownloadProvider? _downloadProvider;
   String? _lastHistoryEntryUrl;
-  String? _lastHistoryEntryId;
+  int? _lastHistoryEntryId;
   String? _pendingTitleUpdate;
   final Set<String> _bypassedSniffUrls = {};
   final ScrollController _dashboardScrollController = ScrollController();
@@ -257,6 +260,39 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
   }
 
+  Future<void> _restoreTabsIfNeeded() async {
+    if (_restoredTabs || !mounted) return;
+    _restoredTabs = true;
+    try {
+      final db = context.read<DatabaseService>();
+      final saved = await db.loadOpenTabs();
+      if (saved.isEmpty || !mounted) return;
+      await db.clearOpenTabs();
+      if (!mounted) return;
+      setState(() {
+        for (final tab in _tabs) {
+          try { tab.progressNotifier.dispose(); } catch (_) {}
+        }
+        _tabs.clear();
+      });
+      var activeIdx = 0;
+      for (var i = 0; i < saved.length; i++) {
+        final row = saved[i];
+        final isBlank = row.url.isEmpty || row.url == 'about:blank';
+        final tab = _createNewTab(initialUrl: isBlank ? 'about:blank' : row.url);
+        if (row.title.isNotEmpty) tab.title = row.title;
+        _tabs.add(tab);
+        if (row.isActive) activeIdx = i;
+      }
+      setState(() {
+        _currentTabIndex = activeIdx.clamp(0, _tabs.length - 1);
+        if (_tabs.isNotEmpty) _urlController.text = _tabs[_currentTabIndex].url;
+      });
+    } catch (e) {
+      debugPrint('[DMX Browser] Tab restore failed: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -279,6 +315,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _loadCustomJsCss();
     _dashboardScrollController.addListener(_onDashboardScroll);
     _restoreTabs();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTabsIfNeeded());
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     if (settings.adBlockerEnabled) {
       AdBlocker.initialize();
@@ -319,7 +356,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         'AdBlockerChannel',
         onMessageReceived: (msg) async {
           try {
-            final data = jsonDecode(msg.message);
+            final data = jsonDecode(msg.message) as Map<String, dynamic>;
             final requestId = data['id'];
             final url = data['url'];
             if (requestId != null && url != null) {
@@ -334,17 +371,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           }
         },
       )
-      ..setUserAgent(
-        tab.isIncognito
-            ? (settings.desktopMode
-                  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                  : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')
-            : (settings.desktopMode
-                  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                  : (settings.customUserAgent.isNotEmpty
-                        ? settings.customUserAgent
-                        : 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36')),
-      )
+      ..setUserAgent(_resolveUserAgent(isIncognito: tab.isIncognito, settings: settings))
       ..enableZoom(settings.pinchToZoom)
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -458,12 +485,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _delayed(const Duration(milliseconds: 500), _updateNavState);
             _delayed(const Duration(milliseconds: 1200), _updateNavState);
             _mediaScanTimers[tab.id]?.cancel();
-            _mediaScanTimers[tab.id] = Timer(
-              const Duration(milliseconds: 1500),
-              () {
+            if (!_isYoutubeHost(tab.url)) {
+              _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
                 _scanPageMedia(tab);
-              },
-            );
+              });
+            }
           },
           onProgress: (progress) {
             tab.progress = progress / 100;
@@ -488,12 +514,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _detectedMediaSources.remove(tab.id);
                 _ytDetectionFailed.remove(tab.url);
                 _mediaScanTimers[tab.id]?.cancel();
-                _mediaScanTimers[tab.id] = Timer(
-                  const Duration(milliseconds: 1500),
-                  () {
+                if (!_isYoutubeHost(tab.url)) {
+                  _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
                     _scanPageMedia(tab);
-                  },
-                );
+                  });
+                }
                 _delayed(const Duration(milliseconds: 1000), () {
                   if (mounted) {
                     tab.controller.getTitle().then((t) {
@@ -520,7 +545,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               _bypassedSniffUrls.remove(request.url);
               return NavigationDecision.navigate;
             }
-            if (BrowserDetector.isAutoDownloadable(request.url)) {
+            if (!_isYoutubeHost(tab.url) &&
+                BrowserDetector.isAutoDownloadable(request.url)) {
               setState(() {
                 _detectedDownloadUrls[tab.id] = request.url;
               });
@@ -586,7 +612,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           })
           .then((id) {
             if (!mounted) return;
-            if (clean == _lastHistoryEntryUrl) {
+            if (clean == _lastHistoryEntryUrl && id > 0) {
               _lastHistoryEntryId = id;
               if (_pendingTitleUpdate != null &&
                   _pendingTitleUpdate!.isNotEmpty &&
@@ -625,6 +651,15 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   bool _isMediaDomain(String url) {
     final host = Uri.tryParse(url)?.host.toLowerCase() ?? '';
     return _kMediaDomains.any((d) => host.contains(d));
+  }
+
+  static bool _isYoutubeHost(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    return host == 'youtube.com' ||
+        host.endsWith('.youtube.com') ||
+        host == 'youtu.be';
   }
 
   Future<void> _injectTimerSpeedScript(BrowserTab tab) async {
@@ -681,6 +716,37 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // Evict expired entries older than 10 minutes
     final now = DateTime.now();
     _ytDetectionFailed.removeWhere((url, timestamp) => now.difference(timestamp) > const Duration(minutes: 10));
+  }
+
+  static const _desktopUserAgent =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  static const _mobileUserAgent =
+      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+  static const _incognitoUserAgent =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+      'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 '
+      'Mobile/15E148 Safari/604.1';
+
+  String _resolveUserAgent({
+    required bool isIncognito,
+    required SettingsProvider settings,
+  }) {
+    if (settings.desktopMode) return _desktopUserAgent;
+    if (isIncognito) return _incognitoUserAgent;
+    if (settings.customUserAgent.isNotEmpty) return settings.customUserAgent;
+    return _mobileUserAgent;
+  }
+
+  Future<void> _applyUserAgent(BrowserTab tab, SettingsProvider settings) async {
+    try {
+      await tab.controller.setUserAgent(
+        _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
+      );
+    } catch (e) {
+      debugPrint('[DMX Browser] UA apply failed for tab ${tab.id}: $e');
+    }
   }
 
   void _handleLongPressMessageForTab(
@@ -747,6 +813,21 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   @override
   void dispose() {
+    if (!_quitPersisted && _tabs.isNotEmpty) {
+      final persistable = <SavedBrowserTab>[
+        for (var i = 0; i < _tabs.length; i++)
+          if (!_tabs[i].isIncognito)
+            SavedBrowserTab(
+              id: _tabs[i].id,
+              url: _tabs[i].url.isNotEmpty ? _tabs[i].url : 'about:blank',
+              title: _tabs[i].title,
+              isActive: i == _currentTabIndex,
+              position: i,
+              createdAt: DateTime.now().millisecondsSinceEpoch,
+            ),
+      ];
+      DatabaseService().saveOpenTabs(persistable).catchError((_) {});
+    }
     // Clean up ALL per-tab state maps
     for (final tab in _tabs) {
       _cleanupTabState(tab.id);
@@ -1078,24 +1159,18 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             message: settings.desktopMode
                 ? L10n.of(context, 'browser_desktop_mode_reload')
                 : L10n.of(context, 'browser_mobile_mode_reload'),
-            color: settings.isDarkMode
-                ? AppTheme.neonBlue
-                : AppTheme.lightNeonBlue,
-            icon: Icons.desktop_windows,
+            color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            icon: settings.desktopMode ? Icons.desktop_windows : Icons.phone_android,
             isDarkMode: settings.isDarkMode,
           );
+          await Future.wait(_tabs.map((t) => _applyUserAgent(t, settings)));
           for (final t in _tabs) {
-            await t.controller.setUserAgent(
-              settings.desktopMode
-                  ? 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-                  : (t.isIncognito
-                        ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-                        : (settings.customUserAgent.isNotEmpty
-                              ? settings.customUserAgent
-                              : null)),
-            );
             if (!t.isHome) {
-              await t.controller.reload();
+              try {
+                await t.controller.reload();
+              } catch (e) {
+                debugPrint('[DMX Browser] Reload failed after mode switch: $e');
+              }
             }
           }
         }
@@ -1163,6 +1238,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         break;
       case 'offline':
         _savePageOffline(activeTab);
+        break;
+      case 'quit':
+        await _quitBrowser();
         break;
     }
   }
@@ -1425,6 +1503,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || !_tabs.contains(tab) || tab.isHome || !_isSnifferEnabled) {
       return;
     }
+    if (_isYoutubeHost(tab.url)) return;
     final scannedUrl = tab.url;
     final activeIds = _tabs.map((t) => t.id).toSet();
     final staleKeys = _detectedMediaSources.keys
@@ -1556,14 +1635,14 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           return uri != null &&
               (uri.scheme == 'http' || uri.scheme == 'https') &&
               uri.host.isNotEmpty;
-        }).toList();
+        }).map((e) => e as Map).toList();
         if (safeSources.isNotEmpty) {
           setState(() {
             _detectedMediaSources[tab.id] = safeSources
-                .map((e) => Map<String, dynamic>.from(e as Map))
+                .map((e) => Map<String, dynamic>.from(e))
                 .toList();
             if (_detectedDownloadUrls[tab.id] == null) {
-              _detectedDownloadUrls[tab.id] = safeSources.first['src'];
+              _detectedDownloadUrls[tab.id] = safeSources.first['src'] as String;
             }
           });
         }
@@ -3468,6 +3547,12 @@ $_customJs
                                   'incognito',
                                   textClr,
                                 ),
+                                _menuItem(
+                                  Icons.exit_to_app_rounded,
+                                  L10n.isRtl(context) ? 'إنهاء المتصفح' : 'Quit browser',
+                                  'quit',
+                                  textClr,
+                                ),
                               ],
                             ),
                           ],
@@ -3756,6 +3841,12 @@ $_customJs
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final activeTab = _tabs[_currentTabIndex];
+
+    // Never show media detection on YouTube
+    if (_isYoutubeHost(activeTab.url)) {
+      return _buildDefaultDownloadFab(isDark, accent, settings, activeTab);
+    }
+
     final detectedSources = _detectedMediaSources[activeTab.id] ?? [];
     final isPlaylist = _detectedPlaylistUrls.containsKey(activeTab.id);
     final playlistCount = _detectedPlaylistUrls[activeTab.id] ?? 0;
@@ -3869,6 +3960,33 @@ $_customJs
             context,
             url,
             suggestedName: filename,
+            onQuality: () => _showQualityPicker(activeTab.id, fallbackUrl: url),
+            downloadPageUrl: activeTab.isHome ? null : activeTab.url,
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildDefaultDownloadFab(
+    bool isDark,
+    Color accent,
+    SettingsProvider settings,
+    BrowserTab activeTab,
+  ) {
+    final url = _detectedDownloadUrls[activeTab.id];
+    return _SignalFab(
+      color: accent,
+      icon: Icons.download_rounded,
+      label: 'Download',
+      pulse: false,
+      isDark: isDark,
+      onPressed: () {
+        triggerHaptic(settings);
+        if (url != null) {
+          BrowserDownloadSheet.show(
+            context,
+            url,
             onQuality: () => _showQualityPicker(activeTab.id, fallbackUrl: url),
             downloadPageUrl: activeTab.isHome ? null : activeTab.url,
           );
@@ -4011,6 +4129,58 @@ $_customJs
         );
       }
     }
+  }
+
+  Future<void> _quitBrowser() async {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    triggerHaptic(settings);
+
+    try {
+      final persistable = <SavedBrowserTab>[];
+      var position = 0;
+      for (var i = 0; i < _tabs.length; i++) {
+        final t = _tabs[i];
+        if (t.isIncognito) continue;
+        persistable.add(SavedBrowserTab(
+          id: t.id,
+          url: t.url.isNotEmpty ? t.url : 'about:blank',
+          title: t.title,
+          isActive: i == _currentTabIndex,
+          position: position++,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        ));
+      }
+      await context.read<DatabaseService>().saveOpenTabs(persistable);
+      _quitPersisted = true;
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to persist tabs on quit: $e');
+    }
+
+    _teardownBrowserServices();
+
+    if (!mounted) return;
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      context.read<DownloadProvider>().setActiveTabIndex(0);
+    }
+  }
+
+  void _teardownBrowserServices() {
+    for (final timer in _pendingTimers) { timer.cancel(); }
+    _pendingTimers.clear();
+    for (final timer in _mediaScanTimers.values) { timer.cancel(); }
+    _mediaScanTimers.clear();
+    _detectedDownloadUrls.clear();
+    _detectedPlaylistUrls.clear();
+    _detectedMediaSources.clear();
+    _ytDetectionFailed.clear();
+    _lastYoutubeAuthTimes.clear();
+    for (final tab in _tabs) {
+      try { tab.progressNotifier.dispose(); } catch (_) {}
+    }
+    _tabs.clear();
+    _currentTabIndex = 0;
   }
 }
 

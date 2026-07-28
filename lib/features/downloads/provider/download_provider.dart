@@ -137,6 +137,7 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, Future<void>> _dbSaveQueues = {};
   final Map<String, int> _ytLowSpeedCounts = {};
   final Map<String, bool> _ytThrottlingRefreshing = {};
+  final Map<String, int> _ytRefreshAttempts = {};
   final Map<String, int> _lastProgressUpdateTimes = {};
   final Map<String, int> _lastDbSaveTimes = {};
   final Map<String, int> _lastDbSaveBytes = {};
@@ -900,6 +901,10 @@ class DownloadProvider extends ChangeNotifier
         pausedByUser: true,
       ),
     );
+    _downloadEngine.updateSpeedLimit(
+      _effectiveSpeedLimit(),
+      activeOrSeedingCount,
+    );
     pumpQueue();
     if (activeOrSeedingCount == 0) {
       _stopWidgetTimer();
@@ -959,6 +964,10 @@ class DownloadProvider extends ChangeNotifier
         clearCompletedAt: true,
         pausedByUser: false,
       ),
+    );
+    _downloadEngine.updateSpeedLimit(
+      _effectiveSpeedLimit(),
+      activeOrSeedingCount,
     );
     pumpQueue();
     _updateTelemetryWidget();
@@ -1346,7 +1355,7 @@ class DownloadProvider extends ChangeNotifier
             resolvedFileName = safeFileName(resolvedFileName);
 
             // Rebuild file paths with the resolved name
-            final resolvedLocalPath = _downloadEngine.buildLocalFilePath(
+            final resolvedLocalPath = await getUniqueFilePath(
               task.savePath,
               resolvedFileName,
             );
@@ -1448,6 +1457,8 @@ class DownloadProvider extends ChangeNotifier
 
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
+    final earlyReturnCompleter = Completer<void>();
+    _activeFutures[task.id] = earlyReturnCompleter.future;
     // Guard: if a concurrent cancel/pause fired during the async gap above,
     // the task status will no longer be 'queued'. Re-check the live status
     // Instead of using a stale cancellation gate,
@@ -1455,6 +1466,8 @@ class DownloadProvider extends ChangeNotifier
     final latestBeforeStart = _findTask(task.id);
     if (latestBeforeStart == null ||
         latestBeforeStart.status != DownloadStatus.queued) {
+      earlyReturnCompleter.complete();
+      _activeFutures.remove(task.id);
       _cancelTokens.remove(task.id);
       return;
     }
@@ -1642,6 +1655,12 @@ class DownloadProvider extends ChangeNotifier
       } catch (e) {
         debugPrint('[DMX] Failed to resolve video transfer size: $e');
       }
+    }
+
+    if (videoTransferSize <= 0 && hasAudio && task.fileSize > 0) {
+      videoTransferSize = 1;
+      debugPrint('[DMX] videoTransferSize was 0 (fileSize=${task.fileSize}, '
+          'audioSize=${task.audioSize}); floored to 1');
     }
 
     // YouTube streams use multi-threaded mode as configured.
@@ -1950,6 +1969,10 @@ class DownloadProvider extends ChangeNotifier
                               'Persistent YouTube throttling detected for ${task.id}. Attempting automatic stream refresh...',
                             );
                             Future.microtask(() async {
+                              const maxRefreshAttempts = 3;
+                              final attempts =
+                                  (_ytRefreshAttempts[task.id] ?? 0) + 1;
+                              _ytRefreshAttempts[task.id] = attempts;
                               try {
                                 final pageUrl =
                                     task.downloadPageUrl ?? task.url;
@@ -1958,16 +1981,24 @@ class DownloadProvider extends ChangeNotifier
                                       pageUrl,
                                     );
                                 if (fresh != null && fresh['url'] != null) {
+                                  _ytRefreshAttempts.remove(task.id);
+                                  _ytLowSpeedCounts.remove(task.id);
                                   await updateTaskUrlAndResume(
                                     task.id,
                                     fresh['url']!,
                                     newAudioUrl: fresh['audioUrl'],
                                   );
+                                } else if (attempts < maxRefreshAttempts) {
+                                  debugPrint('[DMX] YT refresh attempt $attempts returned null, will retry');
+                                } else {
+                                  debugPrint('[DMX] YT refresh exhausted $maxRefreshAttempts attempts');
+                                  _ytRefreshAttempts.remove(task.id);
                                 }
                               } catch (err) {
-                                debugPrint(
-                                  'Auto YouTube stream refresh failed: $err',
-                                );
+                                debugPrint('[DMX] YT refresh attempt $attempts failed: $err');
+                                if (attempts >= maxRefreshAttempts) {
+                                  _ytRefreshAttempts.remove(task.id);
+                                }
                               } finally {
                                 _ytThrottlingRefreshing[task.id] = false;
                               }
@@ -2509,6 +2540,7 @@ class DownloadProvider extends ChangeNotifier
               }
               _updateTelemetryWidget();
             });
+    earlyReturnCompleter.complete();
     _activeFutures[task.id] = downloadFuture;
   }
 
@@ -3231,6 +3263,20 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
+    if (!sizeChanged && !isYoutube && task.downloadedBytes > 0) {
+      try {
+        final meta = await _downloadEngine.resolveMetadata(url: cleanUrl);
+        if (meta.fileSize > 0 && task.fileSize > 0 &&
+            (meta.fileSize - task.fileSize).abs() > 1024) {
+          sizeChanged = true;
+          debugPrint('[DMX] URL update: size changed ${task.fileSize} → '
+              '${meta.fileSize}, resetting progress');
+        }
+      } catch (e) {
+        debugPrint('[DMX] URL update: HEAD probe failed, assuming same size: $e');
+      }
+    }
+
     if (sizeChanged) {
       await _cleanupPartFiles(task);
     }
@@ -3462,6 +3508,7 @@ class DownloadProvider extends ChangeNotifier
     _pendingProgressUpdates.clear();
     _ytLowSpeedCounts.clear();
     _ytThrottlingRefreshing.clear();
+    _ytRefreshAttempts.clear();
     _lastTorrentFileDiskSync.clear();
     _torrentIds.clear();
     _notificationIds.clear();
