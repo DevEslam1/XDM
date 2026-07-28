@@ -1364,9 +1364,8 @@ class _TorrentFileRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 52,
             child: Text(
-              formatBytes(length.toDouble()),
+              '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}',
               textAlign: TextAlign.end,
               style: AppTheme.dataStyle(
                 isDark: isDark,

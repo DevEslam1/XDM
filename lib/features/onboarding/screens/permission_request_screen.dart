@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
@@ -31,18 +34,62 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
   bool _batteryGranted = false;
   bool _isNavigating = false;
   bool _batteryOpening = false;
+  String? _downloadPath;
+  bool _isPickingPath = false;
 
   @override
   void initState() {
     super.initState();
-    // Non-Android platforms don't need these permissions; auto-mark as granted.
     if (kIsWeb || !Platform.isAndroid) {
       _storageGranted = true;
       _notificationsGranted = true;
       _batteryGranted = true;
-      return;
     }
-    WidgetsBinding.instance.addObserver(this);
+    _loadDownloadPath();
+    if (!kIsWeb && Platform.isAndroid) {
+      WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  Future<void> _loadDownloadPath() async {
+    final settings = context.read<SettingsProvider>();
+    if (settings.customDownloadPath?.isNotEmpty == true) {
+      _downloadPath = settings.customDownloadPath;
+    } else {
+      _downloadPath = await _permissionService.defaultDownloadDirectory();
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _pickDownloadPath() async {
+    if (_isPickingPath) return;
+    setState(() => _isPickingPath = true);
+    try {
+      String? initialDir;
+      if (!kIsWeb && Platform.isAndroid) {
+        initialDir = '/storage/emulated/0/Download';
+      } else {
+        final dl = await getDownloadsDirectory();
+        initialDir = dl?.path;
+      }
+      final result = await FilePicker.getDirectoryPath(
+        dialogTitle: L10n.of(context, 'permission_download_location_title'),
+        initialDirectory: initialDir,
+      );
+      if (result != null && mounted) {
+        final xdmPath = p.join(result, 'XDM');
+        final xdmDir = Directory(xdmPath);
+        if (!await xdmDir.exists()) {
+          await xdmDir.create(recursive: true);
+        }
+        await context.read<SettingsProvider>().setCustomDownloadPath(xdmPath);
+        setState(() => _downloadPath = xdmPath);
+      }
+    } catch (e) {
+      debugPrint('[PermissionScreen] Pick download path failed: $e');
+    } finally {
+      if (mounted) setState(() => _isPickingPath = false);
+    }
   }
 
   @override
@@ -258,6 +305,13 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                   accentColor: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                   isDark: isDark,
                 ),
+                const SizedBox(height: 12),
+                _DownloadLocationCard(
+                  path: _downloadPath,
+                  isPicking: _isPickingPath,
+                  onPick: _pickDownloadPath,
+                  isDark: isDark,
+                ),
 
                 const Spacer(flex: 1),
 
@@ -415,5 +469,127 @@ class _PermissionCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _DownloadLocationCard extends StatelessWidget {
+  final String? path;
+  final bool isPicking;
+  final VoidCallback onPick;
+  final bool isDark;
+
+  const _DownloadLocationCard({
+    required this.path,
+    required this.isPicking,
+    required this.onPick,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bgClr = isDark ? AppTheme.cardBg : AppTheme.lightCardBg;
+    final txtClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final accentColor = isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan;
+
+    final shortPath = path != null ? _shortenPath(path!) : null;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: bgClr,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: path != null
+              ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+              : (isDark ? AppTheme.border : AppTheme.lightBorder),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.folder_open, size: 22, color: accentColor),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  L10n.of(context, 'permission_download_location_title'),
+                  style: TextStyle(
+                    color: txtClr,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  shortPath ?? L10n.of(context, 'permission_download_location_desc'),
+                  style: TextStyle(
+                    color: secClr,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (isPicking)
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: accentColor,
+              ),
+            )
+          else
+            SizedBox(
+              height: 34,
+              child: ElevatedButton(
+                onPressed: onPick,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 0,
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                child: Text(
+                  path != null
+                      ? L10n.of(context, 'permission_download_location_change')
+                      : L10n.of(context, 'permission_download_location_button'),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _shortenPath(String fullPath) {
+    final parts = fullPath.replaceAll('\\', '/').split('/');
+    if (parts.length <= 3) return fullPath;
+    final last = parts.sublist(parts.length - 2).join('/');
+    final first = parts.first;
+    return '$first/…/$last';
   }
 }

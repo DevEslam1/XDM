@@ -258,8 +258,6 @@ class TorrentService {
           }
         }() : null;
 
-        final overallProgress = _latestTorrentProgress[id] ?? 0.0;
-
         return List.generate(files.length, (i) {
           final f = files[i];
           return TorrentFileItem(
@@ -270,7 +268,7 @@ class TorrentService {
                 ? ((progress != null && i < progress.length)
                     ? (progress[i] as num).toInt().clamp(0, f.size)
                     : 0)
-                : (overallProgress * f.size).round().clamp(0, f.size),
+                : 0,
             priority: (priorities != null && i < priorities.length)
                 ? (priorities[i] as num).toInt()
                 : 4,

@@ -1357,10 +1357,11 @@ class DownloadEngine {
           ? torrent.totalWantedDone
           : torrent.totalDone;
 
-      // Distribute downloaded bytes across files by priority for accurate
-      // per-file progress. Without this, every file shows the same percentage
-      // as the overall torrent progress (overallProgress × fileSize).
-      if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
+      // Only distribute downloaded bytes by priority as a fallback when native
+      // per-file progress is NOT supported by libtorrent.
+      if (!TorrentService.fileProgressSupported &&
+          resolvedFiles != null &&
+          resolvedFiles.isNotEmpty) {
         _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
       }
 
@@ -1496,14 +1497,21 @@ class DownloadEngine {
         }
         remaining -= groupSize;
       } else {
-        // Distribute remaining proportionally within this group.
+        // Allocate remaining downloaded bytes sequentially across files in file order.
         for (final f in group) {
           final length = (f['length'] as int?) ?? 0;
-          final share =
-              (remaining * (length / groupSize)).round().clamp(0, length);
-          f['downloadedBytes'] = share;
+          if (length <= 0) {
+            f['downloadedBytes'] = 0;
+            continue;
+          }
+          if (remaining >= length) {
+            f['downloadedBytes'] = length;
+            remaining -= length;
+          } else {
+            f['downloadedBytes'] = remaining;
+            remaining = 0;
+          }
         }
-        remaining = 0;
       }
     }
   }
