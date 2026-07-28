@@ -18,7 +18,6 @@ import 'core/services/youtube_service.dart';
 import 'core/services/remote_api_service.dart';
 import 'features/downloads/provider/download_provider.dart';
 import 'features/settings/provider/settings_provider.dart';
-import 'features/browser/services/ad_blocker.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
 import 'shared/widgets/main_navigation_container.dart';
 import 'shared/widgets/share_intent_screen.dart';
@@ -61,11 +60,6 @@ Future<void> main(List<String> args) async {
 
         final settingsProvider = SettingsProvider.instance;
         await settingsProvider.load();
-
-        // AdBlocker is only needed in the browser — defer but start after
-        // settings are loaded so we can detect first-launch state.
-        // ignore: unawaited_futures
-        AdBlocker.initialize(forceUpdate: settingsProvider.showOnboarding);
 
         XdmBackendClient().refreshConfig();
 

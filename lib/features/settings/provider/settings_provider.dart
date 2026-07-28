@@ -64,7 +64,6 @@ class SettingsProvider extends ChangeNotifier {
   static const _customDownloadPathKey = 'customDownloadPath';
   static const _incognitoEnabledKey = 'incognitoEnabled';
   static const _desktopModeKey = 'desktopMode';
-  static const _adBlockerEnabledKey = 'adBlockerEnabled';
   static const _pinchToZoomKey = 'pinchToZoom';
   static const _batterySaverModeKey = 'batterySaverMode';
   static const _saveBrowserHistoryKey = 'saveBrowserHistory';
@@ -169,7 +168,6 @@ class SettingsProvider extends ChangeNotifier {
   // Browser settings
   bool incognitoEnabled = false;
   bool desktopMode = false;
-  bool adBlockerEnabled = true;
   bool pinchToZoom = true;
   bool saveBrowserHistory = true;
 
@@ -252,7 +250,6 @@ class SettingsProvider extends ChangeNotifier {
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
     incognitoEnabled = _prefs.getBool(_incognitoEnabledKey) ?? incognitoEnabled;
     desktopMode = _prefs.getBool(_desktopModeKey) ?? desktopMode;
-    adBlockerEnabled = _prefs.getBool(_adBlockerEnabledKey) ?? adBlockerEnabled;
     pinchToZoom = _prefs.getBool(_pinchToZoomKey) ?? pinchToZoom;
     saveBrowserHistory = _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
     notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
@@ -508,12 +505,6 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setAdBlockerEnabled(bool value) async {
-    adBlockerEnabled = value;
-    await _prefs.setBool(_adBlockerEnabledKey, value);
-    notifyListeners();
-  }
-
   Future<void> setPinchToZoom(bool value) async {
     pinchToZoom = value;
     await _prefs.setBool(_pinchToZoomKey, value);
@@ -706,7 +697,6 @@ class SettingsProvider extends ChangeNotifier {
       _customDownloadPathKey,
       _incognitoEnabledKey,
       _desktopModeKey,
-      _adBlockerEnabledKey,
       _pinchToZoomKey,
       _batterySaverModeKey,
       _saveBrowserHistoryKey,
@@ -768,7 +758,6 @@ class SettingsProvider extends ChangeNotifier {
     torrentConnectionsLimit = 200;
     incognitoEnabled = false;
     desktopMode = false;
-    adBlockerEnabled = true;
     pinchToZoom = true;
     saveBrowserHistory = true;
     notificationsEnabled = true;
@@ -822,7 +811,6 @@ class SettingsProvider extends ChangeNotifier {
     await _prefs.setInt(_torrentConnectionsLimitKey, torrentConnectionsLimit);
     await _prefs.setBool(_incognitoEnabledKey, incognitoEnabled);
     await _prefs.setBool(_desktopModeKey, desktopMode);
-    await _prefs.setBool(_adBlockerEnabledKey, adBlockerEnabled);
     await _prefs.setBool(_pinchToZoomKey, pinchToZoom);
     await _prefs.setBool(_saveBrowserHistoryKey, saveBrowserHistory);
     await _prefs.setBool(_notificationsEnabledKey, notificationsEnabled);

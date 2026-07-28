@@ -30,7 +30,6 @@ import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/bookmark.dart';
 import '../models/browser_tab.dart';
-import '../services/ad_blocker.dart';
 import '../services/browser_detector.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
@@ -412,12 +411,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _loadCustomJsCss();
     _dashboardScrollController.addListener(_onDashboardScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTabs());
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    if (settings.adBlockerEnabled) {
-      AdBlocker.initialize();
-      // ignore: unawaited_futures
-      AdBlocker.autoUpdateHosts();
-    }
   }
 
   BrowserTab _createNewTab({
@@ -447,25 +440,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       ..addJavaScriptChannel(
         _longPressChannel,
         onMessageReceived: (msg) => _handleLongPressMessageForTab(tab, msg),
-      )
-      ..addJavaScriptChannel(
-        'AdBlockerChannel',
-        onMessageReceived: (msg) async {
-          try {
-            final data = jsonDecode(msg.message) as Map<String, dynamic>;
-            final requestId = data['id'];
-            final url = data['url'];
-            if (requestId != null && url != null) {
-              await AdBlocker.initialize();
-              final shouldBlock = AdBlocker.shouldBlock(url);
-              final jsToRun =
-                  "if (window._adBlockPromiseResolvers && window._adBlockPromiseResolvers['$requestId']) { window._adBlockPromiseResolvers['$requestId']($shouldBlock); delete window._adBlockPromiseResolvers['$requestId']; }";
-              tab.controller.runJavaScript(jsToRun);
-            }
-          } catch (e) {
-            debugPrint('Error handling AdBlocker channel message: $e');
-          }
-        },
       )
       ..setUserAgent(_resolveUserAgent(isIncognito: tab.isIncognito, settings: settings))
       ..enableZoom(settings.desktopMode || settings.pinchToZoom)
@@ -508,7 +482,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
             _injectTimerSpeedScript(tab);
             _injectLongPressScriptToTab(tab);
-            _injectAdBlocker(tab);
             _injectCustomJsCss(tab);
             _injectDesktopModeScript(tab, settings);
             _updateNavState();
@@ -634,10 +607,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
           },
           onNavigationRequest: (NavigationRequest request) {
-            if (settings.adBlockerEnabled &&
-                AdBlocker.shouldBlock(request.url)) {
-              return NavigationDecision.prevent;
-            }
             if (_bypassedSniffUrls.contains(request.url)) {
               _bypassedSniffUrls.remove(request.url);
               return NavigationDecision.navigate;
@@ -773,24 +742,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       await tab.controller.runJavaScript(_kLongPressScript);
     } catch (e) {
       debugPrint('[DMX Browser] Failed to inject long press script: $e');
-    }
-  }
-
-  Future<void> _injectAdBlocker(BrowserTab tab) async {
-    if (!mounted || tab.isHome) return;
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    if (settings.adBlockerEnabled) {
-      final isYoutube =
-          tab.url.contains('youtube.com') || tab.url.contains('youtu.be');
-      try {
-        await tab.controller.runJavaScript(
-          isYoutube
-              ? AdBlocker.youtubeAdBlockJavaScript
-              : AdBlocker.adBlockJavaScript,
-        );
-      } catch (e) {
-        debugPrint('AdBlocker script injection failed: $e');
-      }
     }
   }
 
@@ -1277,24 +1228,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               }
             }
           }
-        }
-        break;
-      case 'adblock':
-        await settings.setAdBlockerEnabled(!settings.adBlockerEnabled);
-        if (mounted) {
-          ThemedSnackbar.show(
-            context,
-            message: settings.adBlockerEnabled
-                ? L10n.of(context, 'browser_ad_blocker_on')
-                : L10n.of(context, 'browser_ad_blocker_off'),
-            color: settings.isDarkMode
-                ? AppTheme.neonGreen
-                : AppTheme.lightNeonGreen,
-            icon: settings.adBlockerEnabled
-                ? Icons.check_circle_outline
-                : Icons.block,
-            isDarkMode: settings.isDarkMode,
-          );
         }
         break;
       case 'sniffer':
@@ -3623,16 +3556,6 @@ $_customJs
                                       ? 'Mobile mode'
                                       : 'Desktop mode',
                                   'desktop',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  settings.adBlockerEnabled
-                                      ? Icons.shield
-                                      : Icons.shield_outlined,
-                                  settings.adBlockerEnabled
-                                      ? 'Ad blocker: ON'
-                                      : 'Ad blocker: OFF',
-                                  'adblock',
                                   textClr,
                                 ),
                                 _menuItem(

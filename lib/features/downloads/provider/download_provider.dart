@@ -32,7 +32,6 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
-import '../../browser/services/ad_blocker.dart';
 
 import 'mixins/download_filter_mixin.dart';
 import 'mixins/download_queue_mixin.dart';
@@ -240,15 +239,7 @@ class DownloadProvider extends ChangeNotifier
   // ---------------------------------------------------------------------------
 
   void setActiveTabIndex(int index) {
-    // Delegates to the mixin, providing the ad-blocker callback.
-    setMixinActiveTabIndex(
-      index,
-      onBrowserTab: () {
-        if (_settingsProvider.adBlockerEnabled) {
-          AdBlocker.autoUpdateHosts();
-        }
-      },
-    );
+    setMixinActiveTabIndex(index);
   }
 
   // ---------------------------------------------------------------------------

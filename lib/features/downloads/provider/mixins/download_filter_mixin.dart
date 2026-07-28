@@ -253,20 +253,18 @@ mixin DownloadFilterMixin {
     }
   }
 
-  void setMixinActiveTabIndex(int index, {required void Function() onBrowserTab}) {
+  void setMixinActiveTabIndex(int index, {void Function()? onBrowserTab}) {
     if (_activeTabIndex == index) return;
     _activeTabIndex = index;
     _isNavbarVisible = true;
     notifyListeners();
     if (index == 1) {
-      onBrowserTab();
+      onBrowserTab?.call();
     }
   }
 
   void openUrlInBrowser(String url) {
     _browserUrlToLoad = url;
-    // We need to call setActiveTabIndex here, but we use a simplified path
-    // since the ad-blocker callback is handled from the host.
     _activeTabIndex = 1;
     _isNavbarVisible = true;
     notifyListeners();

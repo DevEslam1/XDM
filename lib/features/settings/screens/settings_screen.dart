@@ -21,7 +21,6 @@ import '../../../shared/widgets/dmx_app_icon.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
-import '../../browser/services/ad_blocker.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/update_dialogs.dart';
 
@@ -39,7 +38,6 @@ class _SettingsScreenState extends State<SettingsScreen>
   late final TextEditingController _proxyUsernameController;
   late final TextEditingController _proxyPasswordController;
   late final TextEditingController _backendUrlController;
-  bool _isUpdatingHosts = false;
   final Map<String, bool> _expandedSections = {};
   late AnimationController _reveal;
 
@@ -1208,62 +1206,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ),
                         ],
                         _Divider(isDark: isDark),
-                        _UpdateHostsTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          isUpdating: _isUpdatingHosts,
-                          onRefresh: () async {
-                            triggerHaptic(settings);
-                            setState(() => _isUpdatingHosts = true);
-                            ThemedSnackbar.show(
-                              context,
-                              message: L10n.isRtl(context)
-                                  ? 'جاري تنزيل وتحديث فلاتر حجب الإعلانات...'
-                                  : 'Updating adblocker filters...',
-                              color: isDark
-                                  ? AppTheme.neonBlue
-                                  : AppTheme.lightNeonBlue,
-                              icon: Icons.downloading,
-                              isDarkMode: isDark,
-                            );
-                            try {
-                              await AdBlocker.updateHosts();
-                              if (context.mounted) {
-                                ThemedSnackbar.show(
-                                  context,
-                                  message: L10n.isRtl(context)
-                                      ? 'تم تحديث فلاتر منع الإعلانات بنجاح!'
-                                      : 'Adblocker filters updated!',
-                                  color: isDark
-                                      ? AppTheme.neonGreen
-                                      : AppTheme.lightNeonGreen,
-                                  icon: Icons.check_circle_outline,
-                                  isDarkMode: isDark,
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ThemedSnackbar.show(
-                                  context,
-                                  message: L10n.isRtl(context)
-                                      ? 'فشل تحديث فلاتر منع الإعلانات'
-                                      : 'Failed to update filters',
-                                  color: isDark
-                                      ? AppTheme.neonRed
-                                      : AppTheme.lightNeonRed,
-                                  icon: Icons.error_outline,
-                                  isDarkMode: isDark,
-                                );
-                              }
-                            } finally {
-                              if (mounted) {
-                                setState(() => _isUpdatingHosts = false);
-                              }
-                            }
-                          },
-                        ),
-                        _Divider(isDark: isDark),
                         Padding(
                           padding: const EdgeInsets.all(16.0),
                           child: NeonGlowButton(
@@ -2408,125 +2350,7 @@ class _PathPickerTile extends StatelessWidget {
   }
 }
 
-class _UpdateHostsTile extends StatelessWidget {
-  final bool isUpdating;
-  final VoidCallback onRefresh;
-  final Color accentColor; // NEW
-  const _UpdateHostsTile({
-    required this.isUpdating,
-    required this.onRefresh,
-    required this.accentColor,
-  });
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: accentColor.withValues(alpha: 0.16),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: accentColor.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    L10n.isRtl(context)
-                        ? 'تحديث فلاتر الحجب'
-                        : 'UPDATE ADBLOCKER FILTERS',
-                    style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textPrimary
-                          : AppTheme.lightTextPrimary,
-                      fontFamily: 'Space Grotesk',
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    L10n.isRtl(context)
-                        ? 'تحديث يدوي لقوائم حجب الإعلانات والتعقب'
-                        : 'Manually update ad & tracker blocklists',
-                    style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
-                      fontFamily: 'Inter',
-                      fontSize: 11.5,
-                      height: 1.35,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            isUpdating
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-                    ),
-                  )
-                : GestureDetector(
-                    onTap: onRefresh,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: accentColor.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.sync, color: accentColor, size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            L10n.isRtl(context) ? 'تحديث' : 'UPDATE',
-                            style: TextStyle(
-                              color: accentColor,
-                              fontFamily: 'Space Grotesk',
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ─────────────────────────────────────────────────────────────
 // Backup Module
