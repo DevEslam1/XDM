@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/services/xdm_backend_client.dart';
 
-class SettingsProvider extends ChangeNotifier {
+class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// The global singleton instance, set once during app startup.
   /// Used by services like [YoutubeService] that need access to settings
   /// without receiving the instance via dependency injection.
@@ -194,7 +194,8 @@ class SettingsProvider extends ChangeNotifier {
   int get maxTotalConnections => _maxTotalConnections;
 
 
-  void _onPlatformBrightnessChanged() {
+  @override
+  void didChangePlatformBrightness() {
     if (themeMode == 'system') {
       final newDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
       if (newDark != _isDarkMode) {
@@ -206,7 +207,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
-    WidgetsBinding.instance.platformDispatcher.onPlatformBrightnessChanged = _onPlatformBrightnessChanged;
+    WidgetsBinding.instance.addObserver(this);
     autoStart = _prefs.getBool(_autoStartKey) ?? autoStart;
     _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
     if (![1, 2, 3, 5, 8].contains(_maxDownloads)) _maxDownloads = 3;
@@ -868,5 +869,11 @@ torrentConnectionsLimit = 200;
       await _secureStorage.write(key: _proxyPasswordKey, value: proxyPassword);
     }
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 }

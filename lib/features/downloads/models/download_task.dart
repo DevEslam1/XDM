@@ -59,6 +59,7 @@ class DownloadTask {
   final String? playlistId; // groups playlist videos into one card
   final String? playlistTitle;
   final String? expectedSha256;
+  final List<String>? mirrorUrls;
 
   DownloadTask({
     required this.id,
@@ -99,6 +100,7 @@ class DownloadTask {
     this.playlistId,
     this.playlistTitle,
     this.expectedSha256,
+    this.mirrorUrls,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -273,6 +275,7 @@ class DownloadTask {
     String? playlistTitle,
     bool clearPlaylist = false,
     String? expectedSha256,
+    List<String>? mirrorUrls,
   }) {
     return DownloadTask(
       id: id,
@@ -325,6 +328,7 @@ class DownloadTask {
       playlistId: clearPlaylist ? null : playlistId ?? this.playlistId,
       playlistTitle: clearPlaylist ? null : playlistTitle ?? this.playlistTitle,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
+      mirrorUrls: mirrorUrls ?? this.mirrorUrls,
     );
   }
 
@@ -368,6 +372,7 @@ class DownloadTask {
       'playlistId': playlistId,
       'playlistTitle': playlistTitle,
       'expectedSha256': expectedSha256,
+      'mirrorUrls': mirrorUrls,
     };
   }
 
@@ -473,6 +478,9 @@ class DownloadTask {
       playlistId: map['playlistId'] as String?,
       playlistTitle: map['playlistTitle'] as String?,
       expectedSha256: map['expectedSha256'] as String?,
+      mirrorUrls: map['mirrorUrls'] is List
+          ? (map['mirrorUrls'] as List).map((e) => e as String).toList()
+          : null,
     );
   }
 
