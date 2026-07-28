@@ -36,6 +36,14 @@ class DownloadMetadata {
   });
 }
 
+class IsolateSpawnTimeoutException implements Exception {
+  final String message;
+  const IsolateSpawnTimeoutException([this.message = 'Download engine failed to initialize. Please retry.']);
+
+  @override
+  String toString() => 'IsolateSpawnTimeoutException: $message';
+}
+
 class DownloadProgress {
   final int downloadedBytes;
   final int fileSize;
@@ -45,6 +53,7 @@ class DownloadProgress {
   final String? fileName;
   final List<Map<String, dynamic>>? torrentFiles;
   final bool? supportsResume;
+  final String? statusMessage;
 
   DownloadProgress({
     required this.downloadedBytes,
@@ -55,6 +64,7 @@ class DownloadProgress {
     this.fileName,
     this.torrentFiles,
     this.supportsResume,
+    this.statusMessage,
   });
 }
 
@@ -119,6 +129,14 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) {
       int currentSpeedLimit = args.speedLimit;
       int currentActiveCount = args.activeCount;
 
+      void safeSend(Object message) {
+        try {
+          sendPort.send(message);
+        } catch (e) {
+          debugPrint('[DMX Isolate] safeSend failed: $e');
+        }
+      }
+
       commandPort.listen((message) {
         try {
           if (message is Map) {
@@ -129,6 +147,12 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) {
               if (message['activeCount'] != null) {
                 currentActiveCount = message['activeCount'] as int;
               }
+            } else if (message['type'] == 'request_state') {
+              safeSend({
+                'type': 'state',
+                'speedLimit': currentSpeedLimit,
+                'activeCount': currentActiveCount,
+              });
             }
           }
         } catch (e) {
@@ -136,16 +160,9 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) {
         }
       });
 
-      void safeSend(Object message) {
-        try {
-          sendPort.send(message);
-        } catch (e) {
-          debugPrint('[DMX Isolate] safeSend failed: $e');
-        }
-      }
-
       try {
         safeSend(commandPort.sendPort);
+        safeSend({'type': 'request_state'});
         void onProgress(DownloadProgress p) {
           safeSend({
             'type': 'progress',
@@ -157,6 +174,7 @@ void _isolateHttpDownloadEntryPoint(_DownloadIsolateArgs args) {
               'chunks': p.chunks,
               'fileName': p.fileName,
               'supportsResume': p.supportsResume,
+              'statusMessage': p.statusMessage,
             },
           });
         }
@@ -285,6 +303,7 @@ class DownloadEngine {
   final Set<Dio> _activeDioClients = {};
   final Set<Dio> _reservedDioClients = {};
   final Map<Dio, DateTime> _dioClientCreationTimes = {};
+  final Map<Dio, Set<String>> _activeDownloadsPerClient = {};
   Timer? _cleanupTimer;
 
   DownloadEngine({Dio? dio, bool enableCleanupTimer = true})
@@ -294,6 +313,10 @@ class DownloadEngine {
         final now = DateTime.now();
         _activeDioClients.removeWhere((client) {
           if (_reservedDioClients.contains(client)) return false;
+          final activeDownloads = _activeDownloadsPerClient[client];
+          if (activeDownloads != null && activeDownloads.isNotEmpty) {
+            return false;
+          }
           final createdAt = _dioClientCreationTimes[client];
           final age = createdAt != null
               ? now.difference(createdAt)
@@ -308,6 +331,7 @@ class DownloadEngine {
               debugPrint('[DMX] Failed to close client during cleanup: $e');
             }
             _dioClientCreationTimes.remove(client);
+            _activeDownloadsPerClient.remove(client);
             return true;
           }
           return false;
@@ -424,6 +448,7 @@ class DownloadEngine {
     _activeDioClients.add(client);
     _reservedDioClients.add(client);
     _dioClientCreationTimes[client] = DateTime.now();
+    _activeDownloadsPerClient[client] = {};
     return client;
   }
 
@@ -525,7 +550,7 @@ class DownloadEngine {
           }
         });
 
-        Future.delayed(const Duration(seconds: 120), () {
+        Future.delayed(const Duration(seconds: 300), () {
           if (!completer.isCompleted) {
             sub?.cancel();
             try {
@@ -891,10 +916,8 @@ class DownloadEngine {
         isolate.kill(priority: Isolate.immediate);
         if (!completer.isCompleted) {
           completer.completeError(
-            DioException(
-              requestOptions: RequestOptions(path: punyUrl),
-              type: DioExceptionType.connectionTimeout,
-              message: 'Isolate failed to initialize within 30 seconds.',
+            const IsolateSpawnTimeoutException(
+              'Download engine failed to initialize within 30 seconds. Please retry.',
             ),
           );
         }
@@ -943,7 +966,7 @@ class DownloadEngine {
       }
     });
 
-    receivePort.listen((message) {
+      receivePort.listen((message) {
       if (message is SendPort) {
         if (isolateKilled) return;
         isolateCommandPort = message;
@@ -951,6 +974,9 @@ class DownloadEngine {
         if (isCancelledEarly) {
           isolateCommandPort!.send({'type': 'cancel'});
         }
+        isolateCommandPort!.send({
+          'type': 'request_state',
+        });
       } else if (message is Map) {
         final type = message['type'];
         if (type == 'progress') {
@@ -966,10 +992,21 @@ class DownloadEngine {
                   : null,
               fileName: p['fileName'] as String?,
               supportsResume: p['supportsResume'] as bool?,
+              statusMessage: p['statusMessage'] as String?,
             ),
           );
         } else if (type == 'done') {
           if (!completer.isCompleted) completer.complete();
+        } else if (type == 'request_state') {
+          if (isolateCommandPort != null) {
+            isolateCommandPort!.send({
+              'type': 'update_speed_limit',
+              'value': speedLimitBytesPerSecond(),
+              'activeCount': activeDownloadCount(),
+            });
+          }
+        } else if (type == 'state') {
+          // State messages from the isolate are informational
         } else if (type == 'error') {
           final errType = message['errorType'];
           final errMsg = message['errorMessage'];
@@ -1153,7 +1190,27 @@ class DownloadEngine {
           debugPrint('Torrent download cancel handler error: $e');
         });
 
-    metadataTimer = Timer(const Duration(seconds: 120), () {
+    int metadataElapsed = 0;
+    Timer? metadataProgressTimer;
+    metadataProgressTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (metadataCompleter.isCompleted) {
+        metadataProgressTimer?.cancel();
+        return;
+      }
+      metadataElapsed += 30;
+      onProgress(
+        DownloadProgress(
+          downloadedBytes: 0,
+          fileSize: 0,
+          speed: 0.0,
+          eta: null,
+          statusMessage: 'Fetching metadata… (${metadataElapsed}s elapsed)',
+        ),
+      );
+    });
+
+    metadataTimer = Timer(const Duration(seconds: 300), () {
+      metadataProgressTimer?.cancel();
       if (metadataCompleter.isCompleted) return;
       metadataSub?.cancel();
       if (!cancelToken.isCancelled) {
@@ -1180,6 +1237,7 @@ class DownloadEngine {
       await metadataCompleter.future;
     } finally {
       metadataTimer.cancel();
+      metadataProgressTimer.cancel();
     }
 
     final currentTorrentFiles = getTorrentFiles?.call();
@@ -1198,6 +1256,17 @@ class DownloadEngine {
 
     if (alreadyOnDisk) {
       TorrentService.forceReCheck(id);
+      if (!TorrentService.forceReCheckSupported) {
+        onProgress(
+          DownloadProgress(
+            downloadedBytes: 0,
+            fileSize: 0,
+            speed: 0.0,
+            eta: null,
+            statusMessage: 'Re-check unavailable; resume accuracy may be reduced.',
+          ),
+        );
+      }
       await _waitForState(
         id,
         cancelToken,
@@ -1344,9 +1413,11 @@ class DownloadEngine {
     } finally {
       await downloadSub.cancel();
       _activeTorrentIds.remove(id);
+      _completedConfirmations.remove(id);
     }
 
     _activeCancelTokens.remove(cancelToken);
+    _completedConfirmations.remove(id);
     return;
   }
 
@@ -1605,6 +1676,8 @@ class DownloadEngine {
           return sum >= BigInt.from(totalSize);
         }
 
+        int? prevEta;
+
         Future<void> reportProgress() async {
           final nowMs = stopwatch.elapsedMilliseconds;
           final isCompleted = await isTotalCompleteLocked();
@@ -1638,39 +1711,41 @@ class DownloadEngine {
           final remaining = totalSize > downloadedTotal
               ? totalSize - downloadedTotal
               : 0;
-          final eta = speed.isFinite && speed > 0 && remaining > 0
+          final rawEta = speed.isFinite && speed > 0 && remaining > 0
               ? (remaining / speed).round().clamp(0, 86400 * 365)
               : null;
+          final eta = _applyEtaSmoothing(rawEta, prevEta);
+          prevEta = eta;
 
-          if (shouldReport) {
-            lastReportTime = nowMs;
+    if (shouldReport) {
+      lastReportTime = nowMs;
 
-            final chunksList = List<double>.generate(threadCount, (idx) {
-              return chunkSizes[idx] > 0
-                  ? (snapshot[idx] / chunkSizes[idx]).clamp(0.0, 1.0)
-                  : 1.0;
-            });
+      final chunksList = List<double>.generate(threadCount, (idx) {
+        return chunkSizes[idx] > 0
+            ? (snapshot[idx] / chunkSizes[idx]).clamp(0.0, 1.0)
+            : 1.0;
+      });
 
-            Future.microtask(() {
-              onProgress(
-                DownloadProgress(
-                  downloadedBytes: downloadedTotal,
-                  fileSize: totalSize,
-                  speed: speed,
-                  eta: eta,
-                  chunks: chunksList,
-                  fileName: resolvedFileName,
-                  supportsResume: true,
-                ),
-              );
-            });
-          }
+      Future.microtask(() {
+        onProgress(
+          DownloadProgress(
+            downloadedBytes: downloadedTotal,
+            fileSize: totalSize,
+            speed: speed,
+            eta: eta,
+            chunks: chunksList,
+            fileName: resolvedFileName,
+            supportsResume: true,
+          ),
+        );
+      });
+    }
 
-          if (shouldSave) {
-            lastStateSaveTime = nowMs;
-            await saveState();
-          }
-        }
+    if (shouldSave) {
+      lastStateSaveTime = nowMs;
+      await saveState();
+    }
+  }
 
         Object? chunkError;
         try {
@@ -1977,24 +2052,41 @@ class DownloadEngine {
 
           await Future.delayed(const Duration(milliseconds: 200));
 
-          await _downloadSingleThreaded(
-            url: url,
-            punyUrl: punyUrl,
-            tempFilePath: currentTempFilePath,
-            localFilePath: currentLocalFilePath,
-            knownFileSize: resolvedFileSize,
-            // We just proved the server rejects Range requests, so don't
-            // attempt a resume here — it would send a Range header that's
-            // guaranteed to be rejected again, forcing a wasted round trip
-            // and a discarded temp file before restarting from zero anyway.
-            supportsResume: false,
-            cancelToken: cancelToken,
-            onProgress: onProgress,
-            speedLimitBytesPerSecond: speedLimitBytesPerSecond,
-            activeDownloadCount: activeDownloadCount,
-            isolatedDio: isolatedDio,
-            isNameAutoGenerated: isNameAutoGenerated,
-          );
+          final aggregatedSize = await targetFile.length();
+          if (aggregatedSize > 0 && aggregatedSize < totalSize) {
+            debugPrint(
+              '[DownloadEngine] Range rejection fallback: preserving $aggregatedSize bytes of partial data.',
+            );
+            await _downloadSingleThreaded(
+              url: url,
+              punyUrl: punyUrl,
+              tempFilePath: currentTempFilePath,
+              localFilePath: currentLocalFilePath,
+              knownFileSize: resolvedFileSize,
+              supportsResume: true,
+              cancelToken: cancelToken,
+              onProgress: onProgress,
+              speedLimitBytesPerSecond: speedLimitBytesPerSecond,
+              activeDownloadCount: activeDownloadCount,
+              isolatedDio: isolatedDio,
+              isNameAutoGenerated: isNameAutoGenerated,
+            );
+          } else {
+            await _downloadSingleThreaded(
+              url: url,
+              punyUrl: punyUrl,
+              tempFilePath: currentTempFilePath,
+              localFilePath: currentLocalFilePath,
+              knownFileSize: resolvedFileSize,
+              supportsResume: false,
+              cancelToken: cancelToken,
+              onProgress: onProgress,
+              speedLimitBytesPerSecond: speedLimitBytesPerSecond,
+              activeDownloadCount: activeDownloadCount,
+              isolatedDio: isolatedDio,
+              isNameAutoGenerated: isNameAutoGenerated,
+            );
+          }
         }
       }
     } finally {
@@ -2155,6 +2247,7 @@ class DownloadEngine {
     final speedSamples = Queue<_SpeedSample>();
     int lastReportTime = 0;
     var throttleBaseMs = 0;
+    int? prevEta;
 
     try {
       final stream = response.data?.stream;
@@ -2207,9 +2300,11 @@ class DownloadEngine {
         }
 
         final remaining = totalSize > 0 ? totalSize - downloadedTotal : 0;
-        final eta = speed.isFinite && speed > 0 && remaining > 0
+        final rawEta = speed.isFinite && speed > 0 && remaining > 0
             ? (remaining / speed).round().clamp(0, 86400 * 365)
             : null;
+        final eta = _applyEtaSmoothing(rawEta, prevEta);
+        prevEta = eta;
 
         final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
         if (nowMs - lastReportTime >= _progressReportIntervalMs ||
@@ -2406,6 +2501,7 @@ class DownloadEngine {
   void close() {
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
+    _completedConfirmations.clear();
     for (final token in List<CancelToken>.from(_activeCancelTokens)) {
       try {
         token.cancel('Engine closing');
@@ -2425,6 +2521,7 @@ class DownloadEngine {
     _activeDioClients.clear();
     _reservedDioClients.clear();
     _dioClientCreationTimes.clear();
+    _activeDownloadsPerClient.clear();
     for (final isolate in _activeIsolates) {
       try {
         isolate.kill(priority: Isolate.immediate);
@@ -2450,4 +2547,12 @@ class _SpeedSample {
   final int timestampMs;
   final int bytes;
   _SpeedSample(this.timestampMs, this.bytes);
+}
+
+int? _applyEtaSmoothing(int? rawEta, int? prevEta) {
+  if (rawEta == null) return null;
+  if (prevEta != null && prevEta > 0) {
+    return ((0.3 * rawEta) + (0.7 * prevEta)).round().clamp(0, 86400 * 365);
+  }
+  return rawEta.clamp(0, 86400 * 365);
 }

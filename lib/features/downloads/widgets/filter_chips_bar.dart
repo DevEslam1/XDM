@@ -94,11 +94,12 @@ class FilterChipsBar extends StatelessWidget {
 
                         final filterClr = switch (filter) {
                           'All' => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
-                          'Downloading' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                          'Downloading' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                           'Completed' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                           'Failed' => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          'Paused' => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                           'Scheduled' => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-                          'Torrents' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                          'Torrents' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                           _ => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                         };
 

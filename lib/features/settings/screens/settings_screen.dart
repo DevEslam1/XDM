@@ -1150,7 +1150,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                           title: L10n.of(context, 'settings_ua'),
                           subtitle: L10n.of(context, 'settings_ua_sub'),
                           controller: _uaController,
-                          onSubmitted: (val) => settings.setCustomUserAgent(val),
+                          onSubmitted: (val) =>
+                              settings.setCustomUserAgent(val),
                         ),
                         _Divider(isDark: isDark),
                         _SwitchTile(
@@ -1894,7 +1895,9 @@ class _SwitchTile extends StatelessWidget {
             title: Text(
               title,
               style: TextStyle(
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color: isDark
+                    ? AppTheme.textPrimary
+                    : AppTheme.lightTextPrimary,
                 fontFamily: 'Space Grotesk',
                 fontSize: 14.0,
                 fontWeight: FontWeight.w700,
@@ -2115,7 +2118,8 @@ class _DropdownTile<T> extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              width: 90,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: accentColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
@@ -2127,6 +2131,7 @@ class _DropdownTile<T> extends StatelessWidget {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<T>(
                   isDense: true,
+                  isExpanded: true,
                   dropdownColor: isDark
                       ? AppTheme.surface
                       : AppTheme.lightSurface,
@@ -2134,7 +2139,11 @@ class _DropdownTile<T> extends StatelessWidget {
                   elevation: 4,
                   menuMaxHeight: 250,
                   value: value,
-                  icon: Icon(Icons.expand_more_rounded, color: accentColor, size: 18),
+                  icon: Icon(
+                    Icons.expand_more_rounded,
+                    color: accentColor,
+                    size: 18,
+                  ),
                   style: TextStyle(
                     color: accentColor,
                     fontFamily: 'Space Grotesk',
@@ -2151,7 +2160,9 @@ class _DropdownTile<T> extends StatelessWidget {
                               ? itemLabels![item]!
                               : item.toString(),
                           style: TextStyle(
-                            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                            color: isDark
+                                ? AppTheme.textPrimary
+                                : AppTheme.lightTextPrimary,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -2324,20 +2335,22 @@ class _PathPickerTile extends StatelessWidget {
             ),
           ],
         ),
-          child: Material(
-            color: Colors.transparent,
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              title: Text(
+        child: Material(
+          color: Colors.transparent,
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            title: Text(
               title,
               style: TextStyle(
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color: isDark
+                    ? AppTheme.textPrimary
+                    : AppTheme.lightTextPrimary,
                 fontFamily: 'Space Grotesk',
                 fontSize: 14.0,
                 fontWeight: FontWeight.w700,
@@ -2905,7 +2918,9 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                     ),
                     const SizedBox(height: 12),
                     _DiagBar(
-                      label: isRtl ? 'استهلاك الذاكرة (تقديري)' : 'RAM Load (est.)',
+                      label: isRtl
+                          ? 'استهلاك الذاكرة (تقديري)'
+                          : 'RAM Load (est.)',
                       value: ramLoadValue,
                       accentColor: accentColor,
                       isDark: isDark,
@@ -2920,7 +2935,9 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                     ),
                     const Divider(height: 16),
                     _DiagRow(
-                      label: isRtl ? 'ملف توفير البطارية (ثابت)' : 'Battery Saver Profile',
+                      label: isRtl
+                          ? 'ملف توفير البطارية (ثابت)'
+                          : 'Battery Saver Profile',
                       value: batteryImpact,
                       valueColor: batteryColor,
                       isDark: isDark,

@@ -10,6 +10,9 @@ class TorrentService {
   static StreamSubscription? _updatesSub;
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
   static bool _disposed = false;
+  static bool fileProgressSupported = true;
+  static bool filePrioritiesSupported = true;
+  static final Map<int, double> _latestTorrentProgress = {};
 
   static bool get isSupported => true;
   static bool get isInitialized => LibtorrentFlutter.isInitialized;
@@ -60,6 +63,9 @@ class TorrentService {
                   numPeers: value.numPeers,
                 ),
               ),
+            );
+            _latestTorrentProgress.addAll(
+              mapped.map((key, value) => MapEntry(key, value.progress)),
             );
             if (!controller!.isClosed) controller.add(mapped);
           } catch (e) {
@@ -180,6 +186,8 @@ class TorrentService {
     }
   }
 
+  static bool forceReCheckSupported = true;
+
   static void forceReCheck(int id) {
     if (_disposed || !isInitialized) return;
     if (id < 0) return;
@@ -189,6 +197,7 @@ class TorrentService {
         // ignore: avoid_dynamic_calls
         (instance as dynamic).forceReCheck(id);
       } on NoSuchMethodError {
+        forceReCheckSupported = false;
         _log.warning(
           'forceReCheck not available in this plugin version. '
           'Torrent $id will rely on default add-time check. '
@@ -226,22 +235,30 @@ class TorrentService {
     if (id >= 0) {
       try {
         final files = LibtorrentFlutter.instance.getFiles(id);
-        final progress = () {
+        final progress = fileProgressSupported ? () {
           try {
             return (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
                 as List<dynamic>?;
           } on NoSuchMethodError {
+            fileProgressSupported = false;
+            return null;
+          } catch (_) {
             return null;
           }
-        }();
-        final priorities = () {
+        }() : null;
+        final priorities = filePrioritiesSupported ? () {
           try {
             return (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
                 as List<dynamic>?;
           } on NoSuchMethodError {
+            filePrioritiesSupported = false;
+            return null;
+          } catch (_) {
             return null;
           }
-        }();
+        }() : null;
+
+        final overallProgress = _latestTorrentProgress[id] ?? 0.0;
 
         return List.generate(files.length, (i) {
           final f = files[i];
@@ -249,9 +266,11 @@ class TorrentService {
             index: f.index,
             name: f.name,
             size: f.size,
-            downloadedBytes: (progress != null && i < progress.length)
-                ? (progress[i] as num).toInt().clamp(0, f.size)
-                : 0,
+            downloadedBytes: fileProgressSupported
+                ? ((progress != null && i < progress.length)
+                    ? (progress[i] as num).toInt().clamp(0, f.size)
+                    : 0)
+                : (overallProgress * f.size).round().clamp(0, f.size),
             priority: (priorities != null && i < priorities.length)
                 ? (priorities[i] as num).toInt()
                 : 4,

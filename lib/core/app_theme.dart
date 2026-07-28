@@ -73,7 +73,7 @@ class AppTheme {
   static const Duration motionSlow = Duration(milliseconds: 420);
   static const Duration motionReveal = Duration(milliseconds: 600);
   static const Curve motionCurve = Curves.easeOutCubic;
-  static const Curve motionSpring = Curves.easeOutBack;
+  static const Curve motionSpring = Curves.easeOutQuart;
 
   static Color inkOn(Color accent) =>
       accent.computeLuminance() > 0.45 ? const Color(0xFF101318) : Colors.white;
@@ -370,6 +370,38 @@ class AppTheme {
       color: color.withValues(alpha: alpha),
       blurRadius: blur,
       spreadRadius: spread,
+    );
+  }
+
+  /// Returns a vertical gradient for progress fills with a subtle glow effect.
+  static LinearGradient glowGradient(Color base, {bool reverse = false}) {
+    return LinearGradient(
+      begin: reverse ? Alignment.bottomCenter : Alignment.topCenter,
+      end: reverse ? Alignment.topCenter : Alignment.bottomCenter,
+      colors: [
+        base.withValues(alpha: 0.7),
+        base,
+        base.withValues(alpha: 0.9),
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    );
+  }
+
+  /// DRY helper for consistent chip/pill decoration.
+  static BoxDecoration chipDecoration({
+    required Color color,
+    required bool isDark,
+    double radius = 8,
+    double borderAlpha = 0.25,
+    double fillAlpha = 0.10,
+  }) {
+    return BoxDecoration(
+      color: color.withValues(alpha: fillAlpha),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: color.withValues(alpha: borderAlpha),
+        width: 0.8,
+      ),
     );
   }
 

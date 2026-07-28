@@ -99,11 +99,11 @@ class _CardShell extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         child: Container(
           decoration: AppTheme.panel(
             isDark: isDark,
-            radius: 18,
+            radius: 22,
             accentColor: accent,
             accentAlpha: 0.22,
           ),
@@ -117,8 +117,8 @@ class _CardShell extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: accent,
                     borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(18),
-                      bottomLeft: Radius.circular(18),
+                      topLeft: Radius.circular(22),
+                      bottomLeft: Radius.circular(22),
                     ),
                     boxShadow: [
                       AppTheme.glow(accent, alpha: 0.30, blur: 6, spread: 0),
@@ -139,7 +139,7 @@ class _CardShell extends StatelessWidget {
 // Status chip — pulses while downloading / seeding
 // ────────────────────────────────────────────────────────────────────────────
 
-class _StatusChip extends StatefulWidget {
+class _StatusChip extends StatelessWidget {
   final DownloadTask task;
   final bool isDark;
   final String? overrideLabel;
@@ -150,134 +150,44 @@ class _StatusChip extends StatefulWidget {
     this.overrideLabel,
   });
 
-  @override
-  State<_StatusChip> createState() => _StatusChipState();
-}
-
-class _StatusChipState extends State<_StatusChip>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1300),
-  );
-
-  bool get _isActive =>
-      widget.task.status == DownloadStatus.downloading ||
-      _isSeeding(widget.task);
-
-  @override
-  void initState() {
-    super.initState();
-    if (_isActive) _pulse.repeat(reverse: true);
-  }
-
-  @override
-  void didUpdateWidget(covariant _StatusChip old) {
-    super.didUpdateWidget(old);
-    if (_isActive && !_pulse.isAnimating) _pulse.repeat(reverse: true);
-    if (!_isActive && _pulse.isAnimating) _pulse.stop();
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
+  IconData get _icon {
+    if (_isSeeding(task)) return Icons.cloud_upload;
+    return switch (task.status) {
+      DownloadStatus.queued => Icons.hourglass_empty,
+      DownloadStatus.downloading => Icons.downloading,
+      DownloadStatus.paused => Icons.pause_circle,
+      DownloadStatus.completed => Icons.check_circle,
+      DownloadStatus.failed => Icons.error,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = _statusColor(widget.task.status, widget.isDark);
+    final color = _statusColor(task.status, isDark);
     final label =
-        widget.overrideLabel ?? _statusLabel(context, widget.task.status);
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (context, _) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(
-              color: color.withValues(
-                alpha: _isActive ? 0.35 + _pulse.value * 0.3 : 0.3,
-              ),
-              width: 0.8,
-            ),
-          ),
-          child: Text(
-            label.toUpperCase(),
-            style: AppTheme.microLabel(
-              isDark: widget.isDark,
+        overrideLabel ?? L10n.translateStatusName(context, task.status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: AppTheme.chipDecoration(
+        color: color,
+        isDark: isDark,
+        radius: 12,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
               color: color,
-              size: 8.5,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
-        );
-      },
-    );
-  }
-}
-
-String _statusLabel(BuildContext context, DownloadStatus status) {
-  return L10n.translateStatusName(context, status);
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Telemetry strip — DOWNLOADED / TOTAL / ELAPSED / REMAIN / SPEED
-// ────────────────────────────────────────────────────────────────────────────
-
-class _StatCell extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool isDark;
-  final Color? valueColor;
-  final IconData? icon;
-
-  const _StatCell({
-    required this.label,
-    required this.value,
-    required this.isDark,
-    this.valueColor,
-    this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 9, color: muted),
-              const SizedBox(width: 3),
-            ],
-            Flexible(
-              child: Text(
-                label,
-                style: AppTheme.microLabel(isDark: isDark, size: 7.5),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: AppTheme.dataStyle(
-            isDark: isDark,
-            size: 10.5,
-            weight: FontWeight.w700,
-            color: valueColor,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -297,95 +207,58 @@ class _TelemetryStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final seeding = _isSeeding(task);
 
-    final String remain;
+    final String etaText;
     if (task.status == DownloadStatus.downloading) {
-      remain = task.etaFormatted;
+      etaText = task.etaFormatted;
     } else if (task.status == DownloadStatus.completed) {
-      remain = 'DONE';
+      etaText = 'DONE';
     } else {
-      remain = '--';
+      etaText = '--';
     }
 
-    final String speed;
+    final String speedText;
     if (task.status == DownloadStatus.downloading) {
-      speed = task.speedFormatted;
+      speedText = task.speedFormatted;
     } else if (seeding) {
-      speed = '${formatBytes(seedingUploadSpeed)}/s';
+      speedText = '${formatBytes(seedingUploadSpeed)}/s';
     } else {
-      speed = '--';
+      speedText = '--';
     }
 
-    Widget divider() => Container(
-      width: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
-    );
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: AppTheme.well(isDark: isDark, radius: 12),
-      child: IntrinsicHeight(
-        child: Row(
-          children: [
-            Expanded(
-              child: _StatCell(
-                label: 'DOWNLOADED',
-                value: task.downloadedSizeFormatted,
-                isDark: isDark,
-                icon: Icons.arrow_downward_rounded,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _TelemetryTile(
+                icon: Icons.speed,
+                label: speedText,
               ),
-            ),
-            divider(),
-            Expanded(
-              child: _StatCell(
-                label: 'TOTAL SIZE',
-                value: task.sizeFormatted,
-                isDark: isDark,
-                icon: Icons.storage_outlined,
+              const SizedBox(width: 16),
+              _TelemetryTile(
+                icon: Icons.access_time,
+                label: etaText,
               ),
-            ),
-            divider(),
-            Expanded(
-              child: _StatCell(
-                label: 'ELAPSED',
-                value: task.elapsedFormatted,
-                isDark: isDark,
-                icon: Icons.timer_outlined,
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _TelemetryTile(
+                icon: Icons.storage,
+                label: task.downloadedSizeFormatted,
               ),
-            ),
-            divider(),
-            Expanded(
-              child: _StatCell(
-                label: 'REMAIN',
-                value: remain,
-                isDark: isDark,
-                valueColor: task.status == DownloadStatus.downloading
-                    ? accent
-                    : muted,
-                icon: Icons.hourglass_bottom_rounded,
+              const SizedBox(width: 16),
+              _TelemetryTile(
+                icon: Icons.percent,
+                label: '${(task.progress * 100).toInt()}%',
               ),
-            ),
-            divider(),
-            Expanded(
-              child: _StatCell(
-                label: seeding ? 'UPLOAD' : 'SPEED',
-                value: speed,
-                isDark: isDark,
-                valueColor:
-                    (task.status == DownloadStatus.downloading || seeding)
-                    ? accent
-                    : muted,
-                icon: seeding
-                    ? Icons.arrow_upward_rounded
-                    : Icons.speed_rounded,
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -409,57 +282,70 @@ class _ChunkedProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chunks = task.chunks;
+    final Widget bar;
     if (chunks.length <= 1) {
-      return ClipRRect(
+      bar = ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: Stack(
           children: [
             Container(
-              height: 6,
+              height: 8,
               decoration: AppTheme.progressTrack(isDark: isDark),
             ),
             FractionallySizedBox(
               widthFactor: task.progress.clamp(0.0, 1.0),
               child: Container(
-                height: 6,
+                height: 8,
                 decoration: AppTheme.progressFill(color),
               ),
             ),
           ],
         ),
       );
-    }
-    return Row(
-      children: List.generate(chunks.length, (i) {
-        final p = chunks[i].clamp(0.0, 1.0);
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: i == 0 ? 0 : 2.5,
-              right: i == chunks.length - 1 ? 0 : 2.5,
-            ),
-            child: Stack(
-              children: [
-                Container(
-                  height: 6,
-                  decoration: AppTheme.progressTrack(isDark: isDark, radius: 3),
-                ),
-                FractionallySizedBox(
-                  widthFactor: p,
-                  child: Container(
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: color,
-                      borderRadius: BorderRadius.circular(3),
+    } else {
+      bar = Row(
+        children: List.generate(chunks.length, (i) {
+          final p = chunks[i].clamp(0.0, 1.0);
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: i == 0 ? 0 : 2.5,
+                right: i == chunks.length - 1 ? 0 : 2.5,
+              ),
+              child: Stack(
+                children: [
+                  Container(
+                    height: 8,
+                    decoration: AppTheme.progressTrack(isDark: isDark, radius: 3),
+                  ),
+                  FractionallySizedBox(
+                    widthFactor: p,
+                    child: Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      }),
-    );
+          );
+        }),
+      );
+    }
+    if (task.status == DownloadStatus.downloading) {
+      return TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.6, end: 1.0),
+        duration: const Duration(milliseconds: 1500),
+        builder: (context, opacity, child) {
+          return Opacity(opacity: opacity, child: child);
+        },
+        child: bar,
+      );
+    }
+    return bar;
   }
 }
 
@@ -539,7 +425,8 @@ class _ControlButtonState extends State<_ControlButton> {
           duration: AppTheme.motionFast,
           curve: AppTheme.motionSpring,
           child: Container(
-            padding: const EdgeInsets.all(8),
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: widget.filled
                   ? widget.color
@@ -552,7 +439,7 @@ class _ControlButtonState extends State<_ControlButton> {
             ),
             child: Icon(
               widget.icon,
-              size: 17,
+              size: 18,
               color: widget.filled
                   ? AppTheme.inkOn(widget.color)
                   : widget.color,
@@ -1413,7 +1300,7 @@ class _TorrentFileRow extends StatelessWidget {
     final name = (file['name'] as String? ?? '').replaceAll('+', ' ');
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(left: 12, bottom: 8),
       child: Row(
         children: [
           Icon(
@@ -1442,23 +1329,23 @@ class _TorrentFileRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(1),
                   child: Stack(
                     children: [
                       Container(
-                        height: 3,
+                        height: 2,
                         decoration: AppTheme.progressTrack(
                           isDark: isDark,
-                          radius: 2,
+                          radius: 1,
                         ),
                       ),
                       FractionallySizedBox(
                         widthFactor: p,
                         child: Container(
-                          height: 3,
+                          height: 2,
                           decoration: BoxDecoration(
                             color: done ? greenClr : accent,
-                            borderRadius: BorderRadius.circular(2),
+                            borderRadius: BorderRadius.circular(1),
                           ),
                         ),
                       ),
@@ -2067,4 +1954,36 @@ Future<bool?> showDeleteConfirmationDialog(
     }
     return null;
   });
+}
+
+class _TelemetryTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _TelemetryTile({
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Expanded(
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: isDark ? Colors.white54 : Colors.black54),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: isDark ? Colors.white54 : Colors.black54,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

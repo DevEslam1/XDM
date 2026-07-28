@@ -240,6 +240,8 @@ class DatabaseService {
       playlistId: drift.Value(task.playlistId),
       playlistTitle: drift.Value(task.playlistTitle),
       isAppUpdate: drift.Value(task.isAppUpdate),
+      priority: drift.Value(task.priority),
+      expectedSha256: drift.Value(task.expectedSha256),
     );
   }
 
@@ -311,6 +313,8 @@ class DatabaseService {
       playlistId: row.playlistId?.isNotEmpty == true ? row.playlistId : null,
       playlistTitle: row.playlistTitle?.isNotEmpty == true ? row.playlistTitle : null,
       isAppUpdate: row.isAppUpdate,
+      priority: row.priority,
+      expectedSha256: row.expectedSha256,
     );
   }
 

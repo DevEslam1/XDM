@@ -5,6 +5,9 @@ import '../../features/settings/provider/settings_provider.dart';
 class TorrentService {
   static bool get isSupported => false;
   static bool get isInitialized => false;
+  static bool forceReCheckSupported = true;
+  static bool fileProgressSupported = true;
+  static bool filePrioritiesSupported = true;
   static Future<void> init() async {}
   static Future<void> dispose() async {}
   static int addMagnet(String magnetUri, String savePath) => -1;

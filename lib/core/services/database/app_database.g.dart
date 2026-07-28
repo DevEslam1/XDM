@@ -412,6 +412,23 @@ class $DownloadTasksTable extends DownloadTasks
     defaultValue: const Constant(false),
   );
   @override
+  late final GeneratedColumn<int> priority = GeneratedColumn<int>(
+    'priority',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  late final GeneratedColumn<String> expectedSha256 = GeneratedColumn<String>(
+    'expected_sha256',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
   List<GeneratedColumn> get $columns => [
     id,
     fileName,
@@ -448,6 +465,8 @@ class $DownloadTasksTable extends DownloadTasks
     playlistId,
     playlistTitle,
     isAppUpdate,
+    priority,
+    expectedSha256,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -888,6 +907,14 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.bool,
         data['${effectivePrefix}is_app_update'],
       )!,
+      priority: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}priority'],
+      ) ?? 0,
+      expectedSha256: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}expected_sha256'],
+      ),
     );
   }
 
@@ -940,6 +967,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? playlistId;
   final String? playlistTitle;
   final bool isAppUpdate;
+  final int priority;
+  final String? expectedSha256;
   const DbDownloadTask({
     required this.id,
     required this.fileName,
@@ -976,6 +1005,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     this.playlistId,
     this.playlistTitle,
     required this.isAppUpdate,
+    this.priority = 0,
+    this.expectedSha256,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1043,6 +1074,10 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       map['playlist_title'] = Variable<String>(playlistTitle);
     }
     map['is_app_update'] = Variable<bool>(isAppUpdate);
+    map['priority'] = Variable<int>(priority);
+    if (!nullToAbsent || expectedSha256 != null) {
+      map['expected_sha256'] = Variable<String>(expectedSha256);
+    }
     return map;
   }
 
@@ -1054,57 +1089,39 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       fileSize: Value(fileSize),
       downloadedBytes: Value(downloadedBytes),
       speed: Value(speed),
-      eta: eta == null && nullToAbsent ? const Value.absent() : Value(eta),
+      eta: Value(eta),
       category: Value(category),
       status: Value(status),
       savePath: Value(savePath),
       localFilePath: Value(localFilePath),
       tempFilePath: Value(tempFilePath),
-      errorMessage: errorMessage == null && nullToAbsent
-          ? const Value.absent()
-          : Value(errorMessage),
+      errorMessage: Value(errorMessage),
       threadCount: Value(threadCount),
-      chunks: chunks == null && nullToAbsent
-          ? const Value.absent()
-          : Value(chunks),
+      chunks: Value(chunks),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
-      completedAt: completedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(completedAt),
-      scheduledAt: scheduledAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(scheduledAt),
+      completedAt: Value(completedAt),
+      scheduledAt: Value(scheduledAt),
       supportsResume: Value(supportsResume),
       speedLimitKbps: Value(speedLimitKbps),
       seedingEnabled: Value(seedingEnabled),
       seedingLimited: Value(seedingLimited),
       seedingLimitKbps: Value(seedingLimitKbps),
-      torrentFiles: torrentFiles == null && nullToAbsent
-          ? const Value.absent()
-          : Value(torrentFiles),
-      downloadPageUrl: downloadPageUrl == null && nullToAbsent
-          ? const Value.absent()
-          : Value(downloadPageUrl),
-      mergedAudioUrl: mergedAudioUrl == null && nullToAbsent
-          ? const Value.absent()
-          : Value(mergedAudioUrl),
+      torrentFiles: Value(torrentFiles),
+      downloadPageUrl: Value(downloadPageUrl),
+      mergedAudioUrl: Value(mergedAudioUrl),
       audioSize: Value(audioSize),
       audioProgress: Value(audioProgress),
       pausedByUser: Value(pausedByUser),
-      youtubeQualityPreset: youtubeQualityPreset == null && nullToAbsent
-          ? const Value.absent()
-          : Value(youtubeQualityPreset),
-      notes: notes == null && nullToAbsent
-          ? const Value.absent()
-          : Value(notes),
-      playlistId: playlistId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(playlistId),
-      playlistTitle: playlistTitle == null && nullToAbsent
-          ? const Value.absent()
-          : Value(playlistTitle),
+      youtubeQualityPreset: Value(youtubeQualityPreset),
+      notes: Value(notes),
+      playlistId: Value(playlistId),
+      playlistTitle: Value(playlistTitle),
       isAppUpdate: Value(isAppUpdate),
+      priority: Value(priority),
+      expectedSha256: expectedSha256 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedSha256),
     );
   }
 
@@ -1519,6 +1536,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> playlistId;
   final Value<String?> playlistTitle;
   final Value<bool> isAppUpdate;
+  final Value<int> priority;
+  final Value<String?> expectedSha256;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1556,6 +1575,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.playlistId = const Value.absent(),
     this.playlistTitle = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.expectedSha256 = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -1594,6 +1615,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.playlistId = const Value.absent(),
     this.playlistTitle = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.expectedSha256 = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        fileName = Value(fileName),
@@ -1876,6 +1899,12 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     }
     if (isAppUpdate.present) {
       map['is_app_update'] = Variable<bool>(isAppUpdate.value);
+    }
+    if (priority.present) {
+      map['priority'] = Variable<int>(priority.value);
+    }
+    if (expectedSha256.present) {
+      map['expected_sha256'] = Variable<String>(expectedSha256.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);

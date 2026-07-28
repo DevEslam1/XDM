@@ -18,9 +18,10 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
       if (decoded is List) {
         return decoded.map((e) => (e as num).toDouble()).toList();
       }
+      debugPrint('[DMX] DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
       return [];
     } catch (e) {
-      debugPrint('[DMX] Error decoding DoubleList from DB: $e');
+      debugPrint('[DMX] Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
       return [];
     }
   }
@@ -40,9 +41,10 @@ class TorrentFilesConverter
       if (decoded is List) {
         return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
+      debugPrint('[DMX] TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
       return [];
     } catch (e) {
-      debugPrint('[DMX] Error decoding TorrentFiles from DB: $e');
+      debugPrint('[DMX] Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
       return [];
     }
   }
@@ -100,6 +102,8 @@ class DownloadTasks extends Table {
   TextColumn get playlistTitle => text().nullable()();
   BoolColumn get isAppUpdate =>
       boolean().withDefault(const Constant(false))();
+  IntColumn get priority => integer().withDefault(const Constant(0))();
+  TextColumn get expectedSha256 => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -146,7 +150,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -281,6 +285,30 @@ class AppDatabase extends _$AppDatabase {
         if (badCount > 0) {
           debugPrint('WARNING: $badCount tasks have epoch (0) created_at after migration');
         }
+
+        // Recovery: fix rows where created_at = 0 but updated_at > 0
+        final recoveredFromUpdated = await customSelect(
+          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0'
+        ).get();
+        final recoverFromUpdatedCount = recoveredFromUpdated.first.read<int>('cnt');
+        if (recoverFromUpdatedCount > 0) {
+          await customStatement(
+            'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0'
+          );
+          debugPrint('[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
+        }
+
+        // Recovery: fix rows where BOTH created_at and updated_at are 0
+        final recoveredFromNow = await customSelect(
+          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0'
+        ).get();
+        final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
+        if (recoverFromNowCount > 0) {
+          await customStatement(
+            "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0"
+          );
+          debugPrint('[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
+        }
       }
       if (from < 4) {
         // Migration 3 -> 4: Add playlistId and playlistTitle columns
@@ -290,6 +318,11 @@ class AppDatabase extends _$AppDatabase {
       if (from < 5) {
         // Migration 4 -> 5: Add isAppUpdate column
         await m.addColumn(downloadTasks, downloadTasks.isAppUpdate);
+      }
+      if (from < 6) {
+        // Migration 5 -> 6: Add priority and expectedSha256 columns
+        await m.addColumn(downloadTasks, downloadTasks.priority);
+        await m.addColumn(downloadTasks, downloadTasks.expectedSha256);
       }
     },
   );

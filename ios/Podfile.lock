@@ -1,0 +1,46 @@
+PODS:
+  - Flutter (1.0.0)
+  - flutter_background_service_ios (0.0.3):
+    - Flutter
+  - libtorrent_flutter (1.7.0):
+    - Flutter
+  - open_filex (0.0.2):
+    - Flutter
+  - receive_sharing_intent (1.8.1):
+    - Flutter
+  - webview_cookie_manager (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - flutter_background_service_ios (from `.symlinks/plugins/flutter_background_service_ios/ios`)
+  - libtorrent_flutter (from `.symlinks/plugins/libtorrent_flutter/ios`)
+  - open_filex (from `.symlinks/plugins/open_filex/ios`)
+  - receive_sharing_intent (from `.symlinks/plugins/receive_sharing_intent/ios`)
+  - webview_cookie_manager (from `.symlinks/plugins/webview_cookie_manager/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  flutter_background_service_ios:
+    :path: ".symlinks/plugins/flutter_background_service_ios/ios"
+  libtorrent_flutter:
+    :path: ".symlinks/plugins/libtorrent_flutter/ios"
+  open_filex:
+    :path: ".symlinks/plugins/open_filex/ios"
+  receive_sharing_intent:
+    :path: ".symlinks/plugins/receive_sharing_intent/ios"
+  webview_cookie_manager:
+    :path: ".symlinks/plugins/webview_cookie_manager/ios"
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_background_service_ios: 00d31bdff7b4bfe06d32375df358abe0329cf87e
+  libtorrent_flutter: 74ac0b3c3bd647942214cf2ba7897cfd24dc3ab8
+  open_filex: 432f3cd11432da3e39f47fcc0df2b1603854eff1
+  receive_sharing_intent: 222384f00ffe7e952bbfabaa9e3967cb87e5fe00
+  webview_cookie_manager: d63a76cabdf42a7ea3d92768ac67d4853a1367f8
+
+PODFILE CHECKSUM: 53a6aebc29ccee84c41f92f409fc20cd4ca011f1
+
+COCOAPODS: 1.16.2

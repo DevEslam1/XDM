@@ -29,18 +29,8 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isSearching = false;
   bool _showAnalytics = false;
   int _selectedTab = 0;
-
-  late final AnimationController _tabIndicatorController = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 300),
-  );
-  late final Animation<double> _tabIndicatorAnimation =
-      Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-          parent: _tabIndicatorController,
-          curve: Curves.easeInOutCubic,
-        ),
-      );
+  int selectedSegment = 0;
+  bool isFabExpanded = true;
 
   @override
   void initState() {
@@ -50,19 +40,16 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     _searchController.dispose();
-    _tabIndicatorController.dispose();
     super.dispose();
   }
 
   void _switchTab(int index) {
     if (_selectedTab == index) return;
     triggerHaptic(context.read<SettingsProvider>());
-    setState(() => _selectedTab = index);
-    if (index == 1) {
-      _tabIndicatorController.forward();
-    } else {
-      _tabIndicatorController.reverse();
-    }
+    setState(() {
+      _selectedTab = index;
+      selectedSegment = index;
+    });
     context.read<DownloadProvider>().setStatusFilter('All');
   }
 
@@ -83,8 +70,7 @@ class _HomeScreenState extends State<HomeScreen>
           child: Scaffold(
             backgroundColor: Colors.transparent,
             extendBody: true,
-            floatingActionButtonLocation:
-                FloatingActionButtonLocation.endDocked,
+            floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
             appBar: _buildAppBar(
               context,
               isDark: isDark,
@@ -270,10 +256,10 @@ class _HomeScreenState extends State<HomeScreen>
     return Container(
       height: 40,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+        color: isDark ? AppTheme.surface : AppTheme.lightBgSunken,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+          color: isDark ? AppTheme.border : AppTheme.lightBorder,
           width: 0.8,
         ),
       ),
@@ -329,131 +315,124 @@ class _HomeScreenState extends State<HomeScreen>
     required bool isDark,
     required bool isRtl,
   }) {
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final activeClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final inactiveClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
-    final bgClr = settings.classicUi
-        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-        : (isDark ? const Color(0x1A000000) : const Color(0x0A000000));
-    final borderClr = settings.classicUi
-        ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-        : (isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder);
+    return Selector<DownloadProvider, List<DownloadTask>>(
+      selector: (_, p) => p.filteredTasks,
+      builder: (context, allTasks, _) {
+        final activeCount = allTasks.where((t) {
+          final isSeeding =
+              t.status == DownloadStatus.completed &&
+              t.isTorrent &&
+              t.seedingEnabled;
+          return (t.status != DownloadStatus.completed &&
+                  t.status != DownloadStatus.failed) ||
+              isSeeding;
+        }).length;
+        final completedCount = allTasks.where((t) {
+          final isSeeding =
+              t.status == DownloadStatus.completed &&
+              t.isTorrent &&
+              t.seedingEnabled;
+          return (t.status == DownloadStatus.completed ||
+                  t.status == DownloadStatus.failed) &&
+              !isSeeding;
+        }).length;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: bgClr,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: borderClr, width: 0.8),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final itemWidth = constraints.maxWidth / 2;
-            return Stack(
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
               children: [
-                // Sliding indicator
-                AnimatedBuilder(
-                  animation: _tabIndicatorAnimation,
-                  builder: (context, child) {
-                    final offset = isRtl
-                        ? (1 - _tabIndicatorAnimation.value) * itemWidth
-                        : _tabIndicatorAnimation.value * itemWidth;
-                    return Positioned(
-                      left: offset + 3,
-                      top: 3,
-                      bottom: 3,
-                      width: itemWidth - 6,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: activeClr.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(11),
-                          border: Border.all(
-                            color: activeClr.withValues(alpha: 0.35),
-                            width: 1.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: activeClr.withValues(alpha: 0.08),
-                              blurRadius: 8,
-                              spreadRadius: -2,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                _buildSegment(
+                  context,
+                  0,
+                  isRtl ? 'النشطة' : 'Active',
+                  activeCount,
+                  isDark,
                 ),
-                // Tab buttons
-                Row(
-                  children: [
-                    _buildTabButton(
-                      context,
-                      label: isRtl ? 'النشطة' : 'ACTIVE',
-                      icon: Icons.download_rounded,
-                      isActive: _selectedTab == 0,
-                      activeColor: activeClr,
-                      inactiveColor: inactiveClr,
-                      onTap: () => _switchTab(0),
-                    ),
-                    _buildTabButton(
-                      context,
-                      label: isRtl ? 'المكتملة' : 'COMPLETED',
-                      icon: Icons.check_circle_outline_rounded,
-                      isActive: _selectedTab == 1,
-                      activeColor: activeClr,
-                      inactiveColor: inactiveClr,
-                      onTap: () => _switchTab(1),
-                    ),
-                  ],
+                _buildSegment(
+                  context,
+                  1,
+                  isRtl ? 'المكتملة' : 'Completed',
+                  completedCount,
+                  isDark,
                 ),
               ],
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildTabButton(
-    BuildContext context, {
-    required String label,
-    required IconData icon,
-    required bool isActive,
-    required Color activeColor,
-    required Color inactiveColor,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildSegment(
+    BuildContext context,
+    int index,
+    String label,
+    int count,
+    bool isDark,
+  ) {
+    final selected = selectedSegment == index;
     return Expanded(
       child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Center(
+        onTap: () => _switchTab(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutQuart,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? (index == 1
+                    ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                    : Theme.of(context).colorScheme.primary)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  icon,
-                  key: ValueKey('$label-$isActive'),
-                  size: 15,
-                  color: isActive ? activeColor : inactiveColor,
-                ),
-              ),
-              const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
-                  color: isActive ? activeColor : inactiveColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
-                  letterSpacing: 0.8,
+                  color: selected
+                      ? Colors.white
+                      : (isDark ? Colors.white70 : Colors.black87),
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
+              if (count > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.25)
+                        : (isDark
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : Colors.black.withValues(alpha: 0.08)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    count > 99 ? '99+' : '$count',
+                    style: TextStyle(
+                      color: selected
+                          ? Colors.white
+                          : (isDark ? Colors.white70 : Colors.black54),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -482,16 +461,44 @@ class _HomeScreenState extends State<HomeScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _selectedTab == 0
-                      ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
-                      : (isRtl ? 'سجل المكتملة' : 'COMPLETED'),
-                  style: TextStyle(
-                    color: textClr,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      _selectedTab == 0
+                          ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
+                          : (isRtl ? 'سجل المكتملة' : 'COMPLETED'),
+                      style: TextStyle(
+                        color: textClr,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Selector<DownloadProvider, int>(
+                      selector: (_, p) => p.filteredTasks.length,
+                      builder: (context, count, _) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : Colors.black.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: mutedClr,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Selector<DownloadProvider, int>(
@@ -670,24 +677,47 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildFAB(BuildContext context, bool isDark, bool classicUi) {
     final accentClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).padding.bottom + 76.0,
-      ),
+    final screenType = getScreenType(context);
+    final downloadProvider = context.watch<DownloadProvider>();
+    final isNavbarVisible = downloadProvider.isNavbarVisible;
+    final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
+
+    final double bottomPadding;
+    switch (screenType) {
+      case ScreenType.phone:
+        bottomPadding = isNavbarVisible
+            ? (20.0 + safeAreaBottom)
+            : (16.0 + safeAreaBottom);
+        break;
+      case ScreenType.tablet:
+        bottomPadding = isNavbarVisible
+            ? (96.0 + safeAreaBottom)
+            : (16.0 + safeAreaBottom);
+        break;
+      case ScreenType.desktop:
+        bottomPadding = 0.0;
+        break;
+    }
+
+    return AnimatedPadding(
+      padding: EdgeInsets.only(bottom: bottomPadding),
+      duration: AppTheme.motionBase,
+      curve: AppTheme.motionCurve,
       child: Container(
         decoration: classicUi
             ? null
             : BoxDecoration(
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
                     color: accentClr.withValues(alpha: 0.35),
-                    blurRadius: 20.0,
-                    spreadRadius: -2,
+                    blurRadius: 16.0,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
-        child: FloatingActionButton(
+        child: FloatingActionButton.extended(
           heroTag: null,
           backgroundColor: accentClr,
           foregroundColor: Colors.white,
@@ -699,7 +729,17 @@ class _HomeScreenState extends State<HomeScreen>
               width: 0.8,
             ),
           ),
-          child: const Icon(Icons.add_rounded, size: 26),
+          icon: const Icon(Icons.add_rounded, size: 22),
+          label: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutQuart,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: isFabExpanded ? 14 : 0,
+              fontWeight: FontWeight.w600,
+            ),
+            child: Text(isFabExpanded ? 'New Download' : ''),
+          ),
           onPressed: () {
             triggerHaptic(context.read<SettingsProvider>());
             showDialog(
@@ -847,6 +887,8 @@ class _AppBarIconButton extends StatelessWidget {
       onPressed: onPressed,
       style: IconButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        highlightColor: color.withValues(alpha: 0.12),
+        hoverColor: color.withValues(alpha: 0.08),
       ),
     );
   }
@@ -1002,11 +1044,26 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
             children: [
               // Donut chart
               SizedBox(
-                width: 90,
-                height: 90,
+                width: 120,
+                height: 120,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.08),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
                     PieChart(
                       PieChartData(
                         pieTouchData: PieTouchData(
@@ -1030,7 +1087,7 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                               },
                         ),
                         sections: sections,
-                        centerSpaceRadius: 26,
+                        centerSpaceRadius: 35,
                         sectionsSpace: 2.0,
                       ),
                     ),
@@ -1040,7 +1097,7 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.donut_large_rounded,
-                          size: 14,
+                          size: 18,
                           color: mutedClr.withValues(alpha: 0.5),
                         ),
                       ],
@@ -1373,68 +1430,82 @@ class _EmptyState extends StatelessWidget {
               ? 'أدخل رابطاً لبدء التنزيل.'
               : 'Insert a URL to start downloading.');
 
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: settings.classicUi
-                  ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                  : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
-              border: Border.all(
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutQuart,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 20 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
                 color: settings.classicUi
-                    ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                    : (isDark
-                          ? AppTheme.glassBorder
-                          : AppTheme.lightGlassBorder),
-                width: 0.8,
+                    ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                    : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
+                border: Border.all(
+                  color: settings.classicUi
+                      ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                      : (isDark
+                            ? AppTheme.glassBorder
+                            : AppTheme.lightGlassBorder),
+                  width: 0.8,
+                ),
+                boxShadow: isDark && !settings.classicUi
+                    ? [
+                        BoxShadow(
+                          color: accentClr.withValues(alpha: 0.04),
+                          blurRadius: 24,
+                          spreadRadius: 4,
+                        ),
+                      ]
+                    : null,
               ),
-              boxShadow: isDark && !settings.classicUi
-                  ? [
-                      BoxShadow(
-                        color: accentClr.withValues(alpha: 0.04),
-                        blurRadius: 24,
-                        spreadRadius: 4,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Icon(
-              icon,
-              size: 40,
-              color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
-                  .withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
-              letterSpacing: 0.5,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                fontSize: 11,
-                height: 1.4,
+              child: Icon(
+                icon,
+                size: 40,
+                color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
+                    .withValues(alpha: 0.6),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
+                letterSpacing: 0.5,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  fontSize: 11,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

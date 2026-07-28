@@ -47,52 +47,41 @@ class NotificationService {
   // here and replayed on first listen, so pause/resume/cancel actions are
   // never silently lost during app startup.
   final List<Map<String, String>> _pendingActions = [];
-  StreamController<Map<String, String>>? _actionListenerController;
-  StreamController<Map<String, String>> _actionStreamController =
+  final StreamController<Map<String, String>> _actionStreamController =
       StreamController<Map<String, String>>.broadcast();
 
   Stream<Map<String, String>> get onActionTapped {
-    // Return a stream that replays any queued events to the first subscriber.
-    final controller = StreamController<Map<String, String>>();
-    _actionListenerController = controller;
-    // Replay buffered events
-    for (final event in _pendingActions) {
-      controller.add(event);
+    // Drain buffered events on first subscription
+    while (_pendingActions.isNotEmpty) {
+      _actionStreamController.add(_pendingActions.removeAt(0));
     }
-    _pendingActions.clear();
-    // Forward future events
-    final sub = _actionStreamController.stream.listen(
-      controller.add,
-      onError: controller.addError,
-      onDone: controller.close,
-    );
-    controller.onCancel = () {
-      sub.cancel();
-      _actionListenerController = null;
-    };
-    return controller.stream;
+    return _actionStreamController.stream;
   }
 
   void _addAction(Map<String, String> event) {
-    // Always buffer first, then try to forward
-    _pendingActions.add(event);
-    if (_actionListenerController != null &&
-        !(_actionListenerController!.isClosed)) {
-      // Drain all pending into the live stream
-      while (_pendingActions.isNotEmpty) {
-        _actionStreamController.add(_pendingActions.removeAt(0));
-      }
+    if (_actionStreamController.hasListener &&
+        !_actionStreamController.isClosed) {
+      _actionStreamController.add(event);
+    } else {
+      _pendingActions.add(event);
     }
   }
 
-  /// Validates that a task ID has a plausible UUID format.
+  /// Validates that a task ID has a plausible UUID or native format.
   /// Provides basic injection protection for notification payloads.
   static bool _isValidTaskId(String id) {
-    if (id.isEmpty || id.length > 64) return false;
+    if (id.isEmpty || id.length > 128) return false;
     // Matches standard UUID format (e.g. 550e8400-e29b-41d4-a716-446655440000)
-    return RegExp(
+    if (RegExp(
       r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$',
-    ).hasMatch(id);
+    ).hasMatch(id)) {
+      return true;
+    }
+    // Native format: <microseconds>_<random>
+    if (RegExp(r'^\d{10,20}_\d{1,10}$').hasMatch(id)) {
+      return true;
+    }
+    return false;
   }
 
   /// Request notification runtime permission (Android 13+).
@@ -145,9 +134,11 @@ class NotificationService {
       _receivePort = null;
 
       if (_actionStreamController.isClosed) {
-        _actionStreamController = StreamController<Map<String, String>>.broadcast();
+        // Can't reassign final field; existing stream is already closed.
+        // The current stream will be garbage collected; new events are
+        // buffered in _pendingActions until a new subscription arrives.
+        _pendingActions.clear();
       }
-      _actionListenerController = null;
 
       const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosSettings = DarwinInitializationSettings(

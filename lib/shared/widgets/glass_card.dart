@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 
 /// A surface panel with an optional accent rail, tinted border, and a subtle
-/// press response. `enableBlur` is kept for API compatibility but the card
-/// now renders as a solid layered surface (crisper + cheaper than glass).
+/// press response.
 class GlassCard extends StatefulWidget {
   final Widget child;
   final double borderRadius;
   final EdgeInsetsGeometry? padding;
   final bool isDarkMode;
-  final bool enableBlur;
   final Border? border;
   final Color? accentColor;
   final bool showRail;
+  final bool elevated;
+  final LinearGradient? gradientBorder;
   final VoidCallback? onTap;
 
   const GlassCard({
@@ -21,10 +21,11 @@ class GlassCard extends StatefulWidget {
     this.borderRadius = 16.0,
     this.padding,
     required this.isDarkMode,
-    this.enableBlur = false,
     this.border,
     this.accentColor,
     this.showRail = false,
+    this.elevated = false,
+    this.gradientBorder,
     this.onTap,
   });
 
@@ -57,20 +58,44 @@ class _GlassCardState extends State<GlassCard> {
                   : (isDark ? AppTheme.border : AppTheme.lightBorder),
               width: widget.accentColor != null ? 1.0 : 0.5,
             ),
-        boxShadow: [
-          if (widget.accentColor != null)
-            AppTheme.glow(
-              accent,
-              alpha: isDark ? 0.12 : 0.08,
-              blur: 14,
-              spread: -4,
-            ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        boxShadow: widget.elevated
+            ? [
+                if (widget.accentColor != null)
+                  AppTheme.glow(
+                    accent,
+                    alpha: isDark ? 0.12 : 0.08,
+                    blur: 14,
+                    spread: -4,
+                  ),
+                BoxShadow(
+                  color: (isDark
+                          ? Colors.black
+                          : Colors.black.withValues(alpha: 0.5))
+                      .withValues(alpha: 0.25),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                  spreadRadius: -1,
+                ),
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [
+                if (widget.accentColor != null)
+                  AppTheme.glow(
+                    accent,
+                    alpha: isDark ? 0.12 : 0.08,
+                    blur: 14,
+                    spread: -4,
+                  ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
       ),
       child: widget.child,
     );
@@ -101,7 +126,21 @@ class _GlassCardState extends State<GlassCard> {
           )
         : base;
 
-    if (widget.onTap == null) return withRail;
+    final withBorder = widget.gradientBorder != null
+        ? Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(widget.borderRadius + 1.5),
+              gradient: widget.gradientBorder,
+            ),
+            padding: const EdgeInsets.all(1.5),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(widget.borderRadius),
+              child: withRail,
+            ),
+          )
+        : withRail;
+
+    if (widget.onTap == null) return withBorder;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -112,7 +151,7 @@ class _GlassCardState extends State<GlassCard> {
         scale: _pressed ? 0.98 : 1.0,
         duration: AppTheme.motionFast,
         curve: AppTheme.motionSpring,
-        child: withRail,
+        child: withBorder,
       ),
     );
   }

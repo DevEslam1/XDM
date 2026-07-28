@@ -36,8 +36,8 @@ class BackgroundService {
   /// How long without an [updateNotification] event before the service
   /// auto-stops itself. If no download progress is received within this
   /// window the service is considered stale and killed to save battery.
-  /// Set to 5 minutes to avoid premature shutdown on slow networks.
-  static const _heartbeatTimeout = Duration(minutes: 5);
+  /// Set to 10 minutes to avoid premature shutdown on slow networks.
+  static const _heartbeatTimeout = Duration(minutes: 10);
 
   @pragma('vm:entry-point')
   static void _onStart(ServiceInstance service) {

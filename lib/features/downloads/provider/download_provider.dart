@@ -1686,6 +1686,7 @@ class DownloadProvider extends ChangeNotifier
                 String? localFilePathOverride,
                 String? tempFilePathOverride,
                 String? categoryOverride,
+                String? statusMessageOverride,
               }) {
                 final index = _tasks.indexWhere((t) => t.id == task.id);
                 if (index == -1) return;
@@ -1741,6 +1742,7 @@ class DownloadProvider extends ChangeNotifier
                   chunks: chunksOverride ?? base.chunks,
                   supportsResume: supportsResumeOverride ?? base.supportsResume,
                   torrentFiles: torrentFilesOverride ?? base.torrentFiles,
+                  statusMessage: statusMessageOverride,
                 );
 
                 final now = DateTime.now().millisecondsSinceEpoch;
@@ -1834,12 +1836,14 @@ class DownloadProvider extends ChangeNotifier
                             audioSize: size,
                           );
                         }
-                        pushCombinedProgress();
+                        pushCombinedProgress(
+                          statusMessageOverride: progress.statusMessage,
+                        );
                       },
                       speedLimitBytesPerSecond: () {
                         final current = _findTask(task.id);
                         if (current != null && current.speedLimitKbps > 0) {
-                          return (current.speedLimitKbps * 1000) ~/ 8;
+                          return (current.speedLimitKbps * 1024) ~/ 8;
                         }
                         return _effectiveSpeedLimit();
                       },
@@ -2045,12 +2049,13 @@ class DownloadProvider extends ChangeNotifier
                           localFilePathOverride: newLocalPath,
                           tempFilePathOverride: newTempPath,
                           categoryOverride: newCategory,
+                          statusMessageOverride: progress.statusMessage,
                         );
                       },
                       speedLimitBytesPerSecond: () {
                         final current = _findTask(task.id);
                         if (current != null && current.speedLimitKbps > 0) {
-                          return (current.speedLimitKbps * 1000) ~/ 8;
+                          return (current.speedLimitKbps * 1024) ~/ 8;
                         }
                         return _effectiveSpeedLimit();
                       },
@@ -2419,14 +2424,12 @@ class DownloadProvider extends ChangeNotifier
                 return;
               }
 
-              // Clean up orphaned temp files on failure (audio or video may have been partially downloaded)
+              // Clean up transient audio sidecar files on failure if present, while preserving main partial file for resume
               try {
                 if (hasAudio && audioTempPath != null) {
                   final audioFile = File(audioTempPath);
                   if (await audioFile.exists()) await audioFile.delete();
                 }
-                final videoTemp = File(current.tempFilePath);
-                if (await videoTemp.exists()) await videoTemp.delete();
               } catch (_) {}
 
               final isRetryable = _isRetryableError(realError);
@@ -2629,6 +2632,9 @@ class DownloadProvider extends ChangeNotifier
   }
 
   String _errorMessage(Object error) {
+    if (error is IsolateSpawnTimeoutException) {
+      return error.message;
+    }
     if (error is DioException) {
       final statusCode = error.response?.statusCode;
       if (statusCode != null) {
@@ -3382,9 +3388,11 @@ class DownloadProvider extends ChangeNotifier
 
   TimeOfDay _parseTimeOfDay(String value) {
     final parts = value.split(':');
+    final hour = parts.isNotEmpty ? (int.tryParse(parts[0]) ?? 0) : 0;
+    final minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
     return TimeOfDay(
-      hour: int.tryParse(parts[0]) ?? 0,
-      minute: int.tryParse(parts[1]) ?? 0,
+      hour: hour.clamp(0, 23),
+      minute: minute.clamp(0, 59),
     );
   }
 

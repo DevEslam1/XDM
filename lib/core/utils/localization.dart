@@ -30,7 +30,8 @@ class L10n {
       'settings_wifi_only_sub': 'Pause downloads when on cellular data',
       'settings_cockpit': 'App Interface & Theme',
       'settings_glow': 'Neon Glow Effects',
-      'settings_glow_sub': 'Show subtle glowing highlights on active UI elements',
+      'settings_glow_sub':
+          'Show subtle glowing highlights on active UI elements',
       'settings_grid': 'Background Grid Pattern',
       'settings_grid_sub': 'Grid Density',
       'settings_alerters': 'Sound & Alerts',
@@ -63,7 +64,8 @@ class L10n {
       'add_download_empty_url': 'Url link required',
       'add_download_invalid_url': 'Invalid http/https url',
       'delete_title': 'Delete download',
-      'delete_desc': 'Are you sure you want to remove this download from the list?',
+      'delete_desc':
+          'Are you sure you want to remove this download from the list?',
       'delete_btn': 'Delete',
       'cancel_btn': 'Cancel',
       'delete_files_label': 'Delete downloaded files/parts from disk',
@@ -93,7 +95,8 @@ class L10n {
       'onboarding_next': 'Next',
       'onboarding_skip': 'Skip',
       'permission_title': 'App Permissions',
-      'permission_subtitle': 'Allow the following permissions for the best experience',
+      'permission_subtitle':
+          'Allow the following permissions for the best experience',
       'permission_storage_title': 'Storage',
       'permission_storage_desc': 'Save downloaded files to your device',
       'permission_notifications_title': 'Notifications',
@@ -148,8 +151,7 @@ class L10n {
       'settings_reduce_visuals_sub':
           'Disable blur and glow effects for better performance',
       'settings_classic_ui': 'Classic ui mode',
-      'settings_classic_ui_sub':
-          'Switch to a flat native UI design styling',
+      'settings_classic_ui_sub': 'Switch to a flat native UI design styling',
 
       'settings_cleanup': 'Auto-cleanup logs',
       'settings_cleanup_sub': 'Purge completed task histories',
@@ -222,14 +224,16 @@ class L10n {
       'unlimited_upload': 'Unlimited upload',
       'update_download_link': 'Update download link',
       'enter_new_url': 'Enter the new URL to continue downloading:',
-      'link_updated_success': 'Link updated successfully. You can resume download now.',
+      'link_updated_success':
+          'Link updated successfully. You can resume download now.',
       'torrent_connection_status': 'Torrent connection status',
       'download': 'Download',
       'upload': 'Upload',
       'overall_progress': 'Overall progress',
       'transferred': 'Transferred',
       'confirm_close_tab_title': 'Confirm Close Tab',
-      'confirm_close_tab_desc': 'This tab has an active download. Close anyway?',
+      'confirm_close_tab_desc':
+          'This tab has an active download. Close anyway?',
       'file_name_label': 'File name:',
       'save_path_label': 'Save path:',
       'filename_empty_error': 'Filename cannot be empty',
@@ -246,7 +250,8 @@ class L10n {
       'video_label': 'VIDEO',
       'audio_label': 'AUDIO',
       'quality_label': 'QUALITY',
-      'yt_legal_warning': 'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
+      'yt_legal_warning':
+          'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
 
       // Browser – general
       'browser_new_tab': 'New Tab',
@@ -269,11 +274,13 @@ class L10n {
       'browser_already_completed': 'This download is already completed.',
       'browser_already_in_progress': 'This download is already in progress.',
       'browser_download_resumed': 'Download resumed.',
-      'browser_transmission_established': 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
+      'browser_transmission_established':
+          'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
 
       // Browser – interception sheet
       'browser_intercepted_signal': 'INTERCEPTED DOWNLOAD SIGNAL',
-      'browser_xdm_scanner': 'XDM Scanner intercepted a downloadable stream signal:',
+      'browser_xdm_scanner':
+          'XDM Scanner intercepted a downloadable stream signal:',
       'browser_continue_browsing': 'CONTINUE BROWSING',
       'browser_download_btn': 'DOWNLOAD',
 
@@ -316,7 +323,8 @@ class L10n {
       'browser_stream_sniffer_status': 'STREAM SNIFFER STATUS',
       'browser_auto_intercept_active': 'AUTO-INTERCEPT ACTIVE',
       'browser_auto_intercept_off': 'AUTO-INTERCEPT DEACTIVATED',
-      'browser_sniff_description': 'Sniffs media files and documents dynamically',
+      'browser_sniff_description':
+          'Sniffs media files and documents dynamically',
       'browser_quick_signals': 'QUICK SIGNALS (BOOKMARKS)',
 
       // Browser – popup menu
@@ -339,7 +347,8 @@ class L10n {
 
       // Browser – dialogs
       'browser_download_choice': 'What do you want to download?',
-      'browser_single_and_playlist': 'This link contains both a single video and a playlist.',
+      'browser_single_and_playlist':
+          'This link contains both a single video and a playlist.',
       'browser_single_video': 'Single Video',
       'browser_entire_playlist': 'Entire Playlist',
 
@@ -351,7 +360,8 @@ class L10n {
 
       // Browser – JS/CSS Injector
       'browser_js_css_injector': 'JS / CSS INJECTOR',
-      'browser_js_css_warning': 'WARNING: Code runs on web pages. Do not enter sensitive data.',
+      'browser_js_css_warning':
+          'WARNING: Code runs on web pages. Do not enter sensitive data.',
       'browser_javascript': 'JavaScript',
       'browser_css_style': 'CSS Style',
       'browser_cancel_uppercase': 'CANCEL',
@@ -371,9 +381,11 @@ class L10n {
       'browser_no_history_found': 'No history found',
       'browser_no_history_desc': 'Websites you visit will be listed here.',
       'browser_no_downloads_yet': 'No downloads yet',
-      'browser_no_downloads_desc': 'Files you download from the browser will appear here.',
+      'browser_no_downloads_desc':
+          'Files you download from the browser will appear here.',
       'browser_clear_history_title': 'CLEAR HISTORY?',
-      'browser_clear_history_desc': 'Are you sure you want to clear all history?',
+      'browser_clear_history_desc':
+          'Are you sure you want to clear all history?',
       'browser_clear_history_content':
           'Are you sure you want to clear all browsing history?',
       'browser_export_failed': 'Export failed',
@@ -408,13 +420,15 @@ class L10n {
       'settings_auto_resume': 'الاستئناف التلقائي للتنزيلات',
       'settings_auto_resume_sub': 'استئناف التنزيلات المتبقية عند فتح التطبيق',
       'settings_max_channels': 'أقصى عدد للتنزيلات المتزامنة',
-      'settings_max_channels_sub': 'تحديد عدد الملفات التي يتم تنزيلها في وقت واحد',
+      'settings_max_channels_sub':
+          'تحديد عدد الملفات التي يتم تنزيلها في وقت واحد',
       'settings_bandwidth': 'إعدادات الشبكة والسرعة',
       'settings_speed_limit': 'حد سرعة التنزيل العام',
       'settings_unlimited': 'غير محدود',
       'settings_limit_to': 'ميجابايت/ثانية كحد أقصى',
       'settings_wifi_only': 'الواي فاي فقط',
-      'settings_wifi_only_sub': 'إيقاف التنزيلات مؤقتاً عند استخدام بيانات الهاتف',
+      'settings_wifi_only_sub':
+          'إيقاف التنزيلات مؤقتاً عند استخدام بيانات الهاتف',
       'settings_cockpit': 'المظهر والواجهة',
       'settings_glow': 'تأثيرات التوهج النيوني',
       'settings_glow_sub': 'إظهار إضاءة خفيفة حول الأزرار والتطبيقات',
@@ -465,8 +479,7 @@ class L10n {
       'clipboard_ignore': 'تجاهل',
       'clipboard_establish': 'تنزيل',
       'onboarding_title_1': 'محرك السرعة',
-      'onboarding_sub_1':
-          'تنزيل متعدد الخيوط مع استئناف ذكي لأقصى سرعة.',
+      'onboarding_sub_1': 'تنزيل متعدد الخيوط مع استئناف ذكي لأقصى سرعة.',
       'onboarding_title_2': 'أي موقع',
       'onboarding_sub_2':
           'تنزيل من يوتيوب، فيسبوك، تويتر، تيك توك، إنستغرام، ومئات المواقع الأخرى.',
@@ -535,8 +548,7 @@ class L10n {
       'settings_reduce_visuals_sub':
           'تعطيل تأثيرات التمويه والتوهج لتحسين الأداء',
       'settings_classic_ui': 'المظهر الكلاسيكي',
-      'settings_classic_ui_sub':
-          'التبديل إلى نمط واجهة مستخدم مسطح وبسيط',
+      'settings_classic_ui_sub': 'التبديل إلى نمط واجهة مستخدم مسطح وبسيط',
 
       'settings_cleanup': 'التنظيف التلقائي للسجلات',
       'settings_cleanup_sub': 'حذف تاريخ المهام المكتملة',
@@ -613,14 +625,16 @@ class L10n {
       'unlimited_upload': 'رفع غير محدود',
       'update_download_link': 'تحديث رابط التنزيل',
       'enter_new_url': 'أدخل الرابط الجديد لاستكمال التنزيل:',
-      'link_updated_success': 'تم تحديث الرابط بنجاح. يمكنك استئناف التنزيل الآن.',
+      'link_updated_success':
+          'تم تحديث الرابط بنجاح. يمكنك استئناف التنزيل الآن.',
       'torrent_connection_status': 'حالة اتصال التورنت',
       'download': 'تنزيل',
       'upload': 'رفع',
       'overall_progress': 'التقدم العام',
       'transferred': 'تم النقل',
       'confirm_close_tab_title': 'تأكيد إغلاق التبويب',
-      'confirm_close_tab_desc': 'يوجد تنزيل نشط في هذا التبويب. هل تريد الإغلاق؟',
+      'confirm_close_tab_desc':
+          'يوجد تنزيل نشط في هذا التبويب. هل تريد الإغلاق؟',
       'yt_playlist': 'قائمة تشغيل يوتيوب',
       'loading_playlist': 'جاري تحميل قائمة التشغيل...',
       'retry_btn': 'إعادة المحاولة',
@@ -633,7 +647,8 @@ class L10n {
       'video_label': 'فيديو',
       'audio_label': 'صوت',
       'quality_label': 'الجودة',
-      'yt_legal_warning': 'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
+      'yt_legal_warning':
+          'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
 
       // Browser – general
       'browser_new_tab': 'تبويب جديد',
@@ -703,7 +718,8 @@ class L10n {
       'browser_stream_sniffer_status': 'حالة كاشف الملفات',
       'browser_auto_intercept_active': 'الاعتراض التلقائي نشط',
       'browser_auto_intercept_off': 'الاعتراض التلقائي متوقف',
-      'browser_sniff_description': 'يكتشف روابط التحميل المباشرة والوسائط تلقائياً',
+      'browser_sniff_description':
+          'يكتشف روابط التحميل المباشرة والوسائط تلقائياً',
       'browser_quick_signals': 'إشارات سريعة (روابط)',
 
       // Browser – popup menu
@@ -738,7 +754,8 @@ class L10n {
 
       // Browser – JS/CSS Injector
       'browser_js_css_injector': 'محقن JS / CSS',
-      'browser_js_css_warning': 'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
+      'browser_js_css_warning':
+          'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
       'browser_javascript': 'JavaScript',
       'browser_css_style': 'نمط CSS',
       'browser_cancel_uppercase': 'إلغاء',
@@ -760,7 +777,8 @@ class L10n {
       'browser_no_downloads_yet': 'لا توجد تنزيلات بعد',
       'browser_no_downloads_desc': 'ستظهر الملفات التي تنزلها من المتصفح هنا.',
       'browser_clear_history_title': 'مسح السجل؟',
-      'browser_clear_history_desc': 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟',
+      'browser_clear_history_desc':
+          'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟',
       'browser_clear_history_content':
           'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
       'browser_export_failed': 'فشل التصدير',
@@ -798,7 +816,10 @@ class L10n {
   }
 
   static bool isRtl(BuildContext context, {bool listen = false}) {
-    return Provider.of<SettingsProvider>(context, listen: listen).languageCode ==
+    return Provider.of<SettingsProvider>(
+          context,
+          listen: listen,
+        ).languageCode ==
         'ar';
   }
 
