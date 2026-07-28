@@ -12,8 +12,6 @@ class TorrentService {
   static void removeTorrent(int id, {bool deleteFiles = false}) {}
   static void pauseTorrent(int id) {}
   static void resumeTorrent(int id) {}
-  /// Forces libtorrent to re-hash the files already on disk so a download
-  /// resumes from the existing pieces instead of starting over.
   static void forceReCheck(int id) {}
   static void setFilePriorities(int id, List<int> priorities) {}
   static int getFileCount(int id) => 0;

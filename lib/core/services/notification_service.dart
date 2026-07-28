@@ -10,7 +10,7 @@ import '../utils/localization.dart';
 void _onBackgroundNotificationResponse(NotificationResponse response) {
   final actionId = response.actionId;
   final payload = response.payload;
-  if (actionId != null && payload != null && payload.isNotEmpty) {
+  if (actionId != null) {
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
       port.send({
@@ -109,6 +109,8 @@ class NotificationService {
     return false;
   }
 
+  static const Set<String> _groupActions = {'pause_all', 'resume_all'};
+
   ReceivePort? _receivePort;
   StreamSubscription<dynamic>? _receivePortSub;
   Future<void>? _initFuture;
@@ -134,101 +136,93 @@ class NotificationService {
     final completer = Completer<void>();
     _initFuture = completer.future;
     try {
-    IsolateNameServer.removePortNameMapping('dmx_notification_port');
-    _receivePortSub?.cancel();
-    _receivePortSub = null;
-    _receivePort?.close();
-    _receivePort = null;
+      IsolateNameServer.removePortNameMapping('dmx_notification_port');
+      _receivePortSub?.cancel();
+      _receivePortSub = null;
+      _receivePort?.close();
+      _receivePort = null;
 
-    if (_actionStreamController.isClosed) {
-      _actionStreamController = StreamController<Map<String, String>>.broadcast();
-    }
-    _actionListenerController = null;
-    _pendingActions.clear();
-
-    const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
-    );
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    // Register ReceivePort for background actions
-    _receivePort = ReceivePort();
-    IsolateNameServer.registerPortWithName(_receivePort!.sendPort, 'dmx_notification_port');
-
-    _receivePortSub = _receivePort!.listen((message) {
-      if (message is Map) {
-        final action = message['action'] as String?;
-        final taskId = message['taskId'] as String?;
-        if (action != null && taskId != null && _isValidTaskId(taskId)) {
-          _addAction({
-            'action': action,
-            'taskId': taskId,
-          });
-        }
+      if (_actionStreamController.isClosed) {
+        _actionStreamController = StreamController<Map<String, String>>.broadcast();
       }
-    });
+      _actionListenerController = null;
+      _pendingActions.clear();
 
-    await _plugin.initialize(
-      settings: settings,
-      onDidReceiveNotificationResponse: (response) {
-        final actionId = response.actionId ?? 'tap';
-        final payload = response.payload;
-        if (payload != null && _isValidTaskId(payload)) {
-          _addAction({
-            'action': actionId,
-            'taskId': payload,
-          });
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+      const settings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+
+      _receivePort = ReceivePort();
+      IsolateNameServer.registerPortWithName(_receivePort!.sendPort, 'dmx_notification_port');
+
+      _receivePortSub = _receivePort!.listen((message) {
+        if (message is Map) {
+          final action = message['action'] as String?;
+          final taskId = message['taskId'] as String?;
+          if (action != null) {
+            if (_groupActions.contains(action)) {
+              _addAction({'action': action});
+            } else if (taskId != null && _isValidTaskId(taskId)) {
+              _addAction({'action': action, 'taskId': taskId});
+            }
+          }
         }
-      },
-      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
-    );
+      });
 
-    // Request runtime notification permission and create channels on Android 13+
-    final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-    if (androidPlugin != null) {
-      if (requestPermission) {
-        await androidPlugin.requestNotificationsPermission();
+      await _plugin.initialize(
+        settings: settings,
+        onDidReceiveNotificationResponse: (response) {
+          final actionId = response.actionId ?? 'tap';
+          final payload = response.payload;
+          if (_groupActions.contains(actionId)) {
+            _addAction({'action': actionId});
+          } else if (payload != null && _isValidTaskId(payload)) {
+            _addAction({'action': actionId, 'taskId': payload});
+          }
+        },
+        onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
+      );
+
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        if (requestPermission) {
+          await androidPlugin.requestNotificationsPermission();
+        }
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            _downloadChannelId,
+            _downloadChannelName,
+            description: _downloadChannelDesc,
+            importance: Importance.low,
+            playSound: false,
+          ),
+        );
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            'dmx_download_alerts_sound',
+            'Download Alerts (Sound)',
+            description: 'Notifications for completed or failed downloads with sound',
+            importance: Importance.defaultImportance,
+            playSound: true,
+          ),
+        );
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            'dmx_background_service',
+            'XDM Background Service',
+            description: 'Used for XDM background download service',
+            importance: Importance.low,
+            playSound: false,
+          ),
+        );
       }
-      await androidPlugin.createNotificationChannel(
-        const AndroidNotificationChannel(
-          _downloadChannelId,
-          _downloadChannelName,
-          description: _downloadChannelDesc,
-          importance: Importance.low,
-          playSound: false,
-        ),
-      );
-      await androidPlugin.createNotificationChannel(
-        const AndroidNotificationChannel(
-          'dmx_download_alerts_sound',
-          'Download Alerts (Sound)',
-          description: 'Notifications for completed or failed downloads with sound',
-          importance: Importance.defaultImportance,
-          playSound: true,
-        ),
-      );
-      await androidPlugin.createNotificationChannel(
-        const AndroidNotificationChannel(
-          'dmx_background_service',
-          'XDM Background Service',
-          description: 'Used for XDM background download service',
-          importance: Importance.low,
-          playSound: false,
-        ),
-      );
-    }
-    _initialized = true;
-    completer.complete();
+      _initialized = true;
+      completer.complete();
     } catch (e) {
       _initFuture = null;
       completer.completeError(e);

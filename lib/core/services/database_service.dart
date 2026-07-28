@@ -408,33 +408,24 @@ class DatabaseService {
     if (url.isEmpty || url == 'about:blank') return '';
     final visitedAt = entry['visitedAt'] as String? ??
         DateTime.now().toIso8601String();
+    final title = entry['title'] as String? ?? url;
 
-    // Update existing entry for the same URL instead of creating a duplicate
-    final existing = await (_db.select(_db.browserHistory)
-          ..where((t) => t.url.equals(url)))
-        .get();
-    if (existing.isNotEmpty) {
-      final existingId = existing.first.id;
-      await (_db.update(_db.browserHistory)..where((t) => t.id.equals(existingId)))
-          .write(BrowserHistoryCompanion(
-            visitedAt: drift.Value(visitedAt),
-            title: drift.Value(entry['title'] as String? ?? url),
-          ));
-      return existingId;
-    }
+    // Use URL as the primary key (hashed if URL > 2048 chars) so duplicates
+    // are naturally de-duplicated by the DB's PK constraint.
+    final id = url.length <= 2048
+        ? 'url_${url.hashCode.toRadixString(16)}'
+        : const Uuid().v4();
 
-    final id = const Uuid().v4();
     await _db.into(_db.browserHistory).insert(
-        BrowserHistoryCompanion.insert(
-          id: id,
-          url: url,
-          title: entry['title'] as String? ?? url,
-          visitedAt: visitedAt,
-        ),
-        mode: drift.InsertMode.insertOrReplace);
+      BrowserHistoryCompanion.insert(
+        id: id,
+        url: url,
+        title: title,
+        visitedAt: visitedAt,
+      ),
+      mode: drift.InsertMode.insertOrReplace,
+    );
 
-    // Prune old entries atomically — a single DELETE with a subquery avoids
-    // the count-then-delete race condition.
     await _db.customStatement(
       'DELETE FROM browser_history '
       'WHERE id NOT IN ('

@@ -43,14 +43,32 @@ String categoryFromFileName(String fileName) {
 }
 
 const _windowsReserved = {
-  'CON', 'PRN', 'AUX', 'NUL',
-  'COM1','COM2','COM3','COM4','COM5','COM6','COM7','COM8','COM9',
-  'LPT1','LPT2','LPT3','LPT4','LPT5','LPT6','LPT7','LPT8','LPT9',
+  'CON',
+  'PRN',
+  'AUX',
+  'NUL',
+  'COM1',
+  'COM2',
+  'COM3',
+  'COM4',
+  'COM5',
+  'COM6',
+  'COM7',
+  'COM8',
+  'COM9',
+  'LPT1',
+  'LPT2',
+  'LPT3',
+  'LPT4',
+  'LPT5',
+  'LPT6',
+  'LPT7',
+  'LPT8',
+  'LPT9',
 };
 
 String safeFileName(String value) {
   var sanitized = value
-      .replaceAll('+', ' ')
       .replaceAll(RegExp(r'[<>:"/\|?*\x00-\x1F]'), '_')
       .replaceAll(RegExp(r'\s+'), ' ')
       .replaceAll(RegExp(r'^\.+|\.+$'), '')
@@ -62,7 +80,10 @@ String safeFileName(String value) {
         ? sanitized.substring(0, sanitized.length - ext.length)
         : sanitized;
     final maxBaseLength = (120 - ext.length).clamp(0, 120);
-    final truncatedBase = baseWithoutExt.substring(0, baseWithoutExt.length.clamp(0, maxBaseLength));
+    final truncatedBase = baseWithoutExt.substring(
+      0,
+      baseWithoutExt.length.clamp(0, maxBaseLength),
+    );
     sanitized = '$truncatedBase$ext'.trim();
     if (sanitized.isEmpty) return 'download.bin';
   }
@@ -71,11 +92,6 @@ String safeFileName(String value) {
   return sanitized;
 }
 
-/// Generates a unique file path in [directoryPath] for [fileName].
-/// If a file with the name already exists, appends `(1)`, `(2)`, etc.
-///
-/// NOTE: Do NOT use this for torrents/magnets — use [torrentSavePath] instead
-/// so an existing folder is reused and the download can resume.
 Future<String> getUniqueFilePath(String directoryPath, String fileName) async {
   final safeName = safeFileName(fileName);
   final ext = p.extension(safeName);
@@ -91,17 +107,10 @@ Future<String> getUniqueFilePath(String directoryPath, String fileName) async {
   return candidatePath;
 }
 
-/// For torrents/magnets: returns the intended save path WITHOUT renaming.
-///
-/// Pro torrent clients (qBittorrent, Transmission) resume into the SAME
-/// folder. Renaming to "Name (1)" would orphan the existing data and force a
-/// full re-download, so torrents must always target their original folder.
 String torrentSavePath(String directoryPath, String name) {
   return p.join(directoryPath, safeFileName(name));
 }
 
-/// Recursively counts the total bytes of every file under [path].
-/// Returns 0 if the path doesn't exist or isn't a directory.
 int scanFolderBytesSync(String path) {
   try {
     final dir = Directory(path);
@@ -120,13 +129,10 @@ int scanFolderBytesSync(String path) {
   }
 }
 
-/// Scans a torrent's files on disk and reports how much of each file is
-/// already present, so a torrent can resume from existing partial data.
-///
-/// [saveRoot] is the torrent's root folder (the folder with the torrent's
-/// name). Each entry in [fileList] is expected to carry `name` (path relative
-/// to the root) and `length` (declared size). Returns the per-file list with
-/// `downloadedBytes` filled in, plus the grand total.
+/// BEST-EFFORT disk scan. The authoritative source for per-file progress
+/// is libtorrent's piece-bitfield (getFileProgress), NOT the file size on
+/// disk. This function is only used to seed the initial display BEFORE the
+/// engine has fetched live progress from libtorrent.
 ({int total, List<Map<String, dynamic>> files}) scanTorrentFilesOnDisk(
   String saveRoot,
   List<Map<String, dynamic>> fileList,
@@ -137,25 +143,25 @@ int scanFolderBytesSync(String path) {
     final relPath = copy['name'] as String? ?? '';
     final length = (copy['length'] as num?)?.toInt() ?? 0;
     var downloaded = 0;
-    if (relPath.isNotEmpty) {
+    if (relPath.isNotEmpty && length > 0) {
       try {
         final file = File(p.join(saveRoot, relPath));
         if (file.existsSync()) {
           final diskLen = file.lengthSync();
-          // Trust the on-disk size only up to the declared length.
-          downloaded = diskLen <= length ? diskLen : length;
+          if (diskLen > 0) {
+            downloaded = diskLen < length ? diskLen : length;
+          }
         }
       } catch (_) {}
     }
     copy['downloadedBytes'] = downloaded;
+    copy['progressSource'] = 'disk-scan';
     total += downloaded;
     return copy;
   }).toList();
   return (total: total, files: files);
 }
 
-/// Deletes all partial download files (.part0, .part1, etc.) and the state file
-/// associated with the given temp file path.
 Future<void> deleteDownloadParts(String tempFilePath) async {
   try {
     final dir = File(tempFilePath).parent;
@@ -163,7 +169,11 @@ Future<void> deleteDownloadParts(String tempFilePath) async {
     await for (final entity in dir.list()) {
       if (entity is File) {
         final fileName = entity.uri.pathSegments.last;
-        if (fileName.startsWith('$name.part') || fileName == '$name.dmxstate') {
+        final isPart = RegExp(
+          '^' + RegExp.escape(name) + r'\.part\d+$',
+        ).hasMatch(fileName);
+        final isState = fileName == '$name.dmxstate';
+        if (isPart || isState) {
           try {
             await entity.delete();
           } catch (_) {}

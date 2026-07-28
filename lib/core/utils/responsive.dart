@@ -52,6 +52,10 @@ const double kGridTileGap = 24.0;
 double gridChildAspectRatio(BuildContext context, {int columns = 2, double horizontalPadding = 32.0}) {
   final w = MediaQuery.of(context).size.width;
   final availableWidth = w - horizontalPadding * 2;
-  final ratio = (availableWidth / columns - kGridTileGap) / kGridTileHeight;
+  // There are (columns - 1) gaps between `columns` tiles in a row, not one
+  // gap per tile — subtracting a full gap per column (the previous formula)
+  // made every tile narrower than intended, increasingly so as columns grew.
+  final tileWidth = (availableWidth - kGridTileGap * (columns - 1)) / columns;
+  final ratio = tileWidth / kGridTileHeight;
   return ratio.clamp(0.3, 3.0);
 }

@@ -2,7 +2,18 @@ class TorrentFileItem {
   final int index;
   final String name;
   final int size;
-  TorrentFileItem({required this.index, required this.name, required this.size});
+  final int downloadedBytes;
+  final int priority;
+  final bool selected;
+
+  TorrentFileItem({
+    required this.index,
+    required this.name,
+    required this.size,
+    this.downloadedBytes = 0,
+    this.priority = 4,
+    this.selected = true,
+  });
 }
 
 class TorrentUpdateInfo {
@@ -13,6 +24,7 @@ class TorrentUpdateInfo {
   final int uploadRate;
   final int totalDone;
   final int totalWanted;
+  final int totalWantedDone;
   final bool hasMetadata;
   final String stateLabel;
   final int numSeeds;
@@ -26,6 +38,7 @@ class TorrentUpdateInfo {
     required this.uploadRate,
     required this.totalDone,
     required this.totalWanted,
+    required this.totalWantedDone,
     required this.hasMetadata,
     required this.stateLabel,
     this.numSeeds = 0,

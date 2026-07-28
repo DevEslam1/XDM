@@ -1925,28 +1925,20 @@ void _confirmDelete(
   BuildContext context,
   DownloadTask task,
   DownloadProvider provider,
-) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Delete Download?'),
-      content: const Text('Are you sure you want to remove this download?'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonRed),
-          onPressed: () {
-            Navigator.pop(context);
-            provider.deleteTask(task.id);
-          },
-          child: const Text('Delete', style: TextStyle(color: Colors.white)),
-        ),
-      ],
-    ),
+) async {
+  final settings = context.read<SettingsProvider>();
+  // Reuse the shared dialog (with the "also delete files from disk"
+  // checkbox) instead of a bare Cancel/Delete confirm — otherwise deleting
+  // from this menu silently never removed files on disk, unlike the card's
+  // own delete button.
+  final deleteFiles = await showDeleteConfirmationDialog(
+    context,
+    task,
+    settings,
   );
+  if (deleteFiles != null) {
+    provider.deleteTask(task.id, deleteFiles: deleteFiles);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -16,8 +16,12 @@ class TorrentService {
 
   static Future<void> init() async {
     _disposed = false;
-    _updatesSub?.cancel();
+    await _updatesSub?.cancel();
     _updatesSub = null;
+    // Close the previous controller (if any) before dropping the reference —
+    // otherwise a re-init without an intervening dispose() leaks the old
+    // broadcast StreamController and any listeners still attached to it.
+    await _updateController?.close();
     _updateController = null;
     _isStartingTracking = false;
     await LibtorrentFlutter.init();
@@ -30,10 +34,11 @@ class TorrentService {
     if (_disposed || !isInitialized) return;
     if (_updatesSub != null || _isStartingTracking) return;
     _isStartingTracking = true;
+    StreamController<Map<int, TorrentUpdateInfo>>? controller;
+    StreamSubscription? sub;
     try {
-      final controller =
-          StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
-      final sub = LibtorrentFlutter.instance.torrentUpdates.listen(
+      controller = StreamController<Map<int, TorrentUpdateInfo>>.broadcast();
+      sub = LibtorrentFlutter.instance.torrentUpdates.listen(
         (torrents) {
           try {
             _activeTorrentIds = Set<int>.from(torrents.keys);
@@ -48,6 +53,7 @@ class TorrentService {
                   uploadRate: value.uploadRate,
                   totalDone: value.totalDone,
                   totalWanted: value.totalWanted,
+                  totalWantedDone: value.totalDone,
                   hasMetadata: value.hasMetadata,
                   stateLabel: value.state.label,
                   numSeeds: value.numSeeds,
@@ -55,7 +61,7 @@ class TorrentService {
                 ),
               ),
             );
-            controller.add(mapped);
+            if (!controller!.isClosed) controller.add(mapped);
           } catch (e) {
             _log.warning('Error processing torrent update: $e');
           }
@@ -65,14 +71,21 @@ class TorrentService {
           _log.warning('Torrent updates stream error: $e');
         },
         onDone: () {
-          _updatesSub = null;
+          if (identical(_updatesSub, sub)) _updatesSub = null;
         },
       );
+
+      if (_disposed) {
+        sub.cancel();
+        controller.close();
+        return;
+      }
       _updateController = controller;
       _updatesSub = sub;
     } catch (e) {
       _log.warning('Failed to start torrent tracking: $e');
-      _updatesSub = null;
+      sub?.cancel();
+      controller?.close();
     } finally {
       _isStartingTracking = false;
     }
@@ -167,22 +180,15 @@ class TorrentService {
     }
   }
 
-  /// Forces libtorrent to re-hash the files already on disk for this torrent.
-  ///
-  /// This is what makes "resume into an existing folder" work like a proper
-  /// BitTorrent client: libtorrent verifies which pieces are already present
-  /// and only downloads the missing ones, instead of starting from zero.
-  ///
-  /// libtorrent also performs an initial check when a torrent is first added,
-  /// so this call is a belt-and-braces trigger; it's wrapped so that a plugin
-  /// build without the method degrades gracefully to that default behaviour.
   static void forceReCheck(int id) {
     if (_disposed || !isInitialized) return;
     if (id < 0) return;
     try {
       (LibtorrentFlutter.instance as dynamic).forceReCheck(id);
     } on NoSuchMethodError {
-      _log.info('forceReCheck not exposed by plugin; relying on default add-time check.');
+      _log.info(
+        'forceReCheck not exposed by plugin; relying on default add-time check.',
+      );
     } catch (e) {
       _log.warning('forceReCheck failed for torrent $id: $e');
     }
@@ -214,12 +220,30 @@ class TorrentService {
     if (id >= 0) {
       try {
         final files = LibtorrentFlutter.instance.getFiles(id);
-        return files
-            .map(
-              (f) =>
-                  TorrentFileItem(index: f.index, name: f.name, size: f.size),
-            )
-            .toList();
+        final progress =
+            (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
+                as List<dynamic>?;
+        final priorities =
+            (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
+                as List<dynamic>?;
+
+        return List.generate(files.length, (i) {
+          final f = files[i];
+          return TorrentFileItem(
+            index: f.index,
+            name: f.name,
+            size: f.size,
+            downloadedBytes: (progress != null && i < progress.length)
+                ? (progress[i] as num).toInt().clamp(0, f.size)
+                : 0,
+            priority: (priorities != null && i < priorities.length)
+                ? (priorities[i] as num).toInt()
+                : 4,
+            selected: (priorities != null && i < priorities.length)
+                ? (priorities[i] as num).toInt() > 0
+                : true,
+          );
+        });
       } catch (e) {
         _log.warning('getFiles failed for id $id: $e');
       }
@@ -230,7 +254,36 @@ class TorrentService {
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates {
     if (_disposed || !isInitialized) return const Stream.empty();
     _startTrackingUpdates();
-    return _updateController?.stream ?? const Stream.empty();
+    final existing = _updateController;
+    if (existing != null) return existing.stream;
+
+    late StreamController<Map<int, TorrentUpdateInfo>> bridging;
+    Timer? poller;
+    StreamSubscription? innerSub;
+    bridging = StreamController<Map<int, TorrentUpdateInfo>>(
+      onListen: () {
+        poller = Timer.periodic(const Duration(milliseconds: 200), (_) {
+          if (_disposed) {
+            bridging.close();
+            return;
+          }
+          final c = _updateController;
+          if (c != null) {
+            poller?.cancel();
+            innerSub = c.stream.listen(
+              bridging.add,
+              onError: bridging.addError,
+              onDone: bridging.close,
+            );
+          }
+        });
+      },
+      onCancel: () {
+        poller?.cancel();
+        innerSub?.cancel();
+      },
+    );
+    return bridging.stream;
   }
 
   static void setUploadLimit(int bps) {

@@ -34,7 +34,7 @@ bool isMagnetUrl(String value) {
   final parsed = parseMagnetUrl(clean);
   final infoHash = parsed['infoHash'];
   if (infoHash == null || infoHash.isEmpty) return false;
-  
+
   // BitTorrent info hash validation:
   // - 40 character hex string (SHA-1)
   // - 32 character base32 string
@@ -84,8 +84,17 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
   if (!trimmed.toLowerCase().startsWith('magnet:')) return result;
 
   String normalizeHash(String hash) {
-    final clean = hash.trim().toUpperCase();
-    if (RegExp(r'^[A-F0-9]{40}$').hasMatch(clean) || RegExp(r'^[A-F0-9]{64}$').hasMatch(clean)) {
+    var clean = hash.trim().toUpperCase();
+    // BitTorrent v2 (BEP52) magnet links carry a SHA-256 multihash under
+    // xt=urn:btmh: — a 2-byte header (0x12 = SHA-256 code, 0x20 = 32-byte
+    // length, i.e. hex "1220") followed by the 64-hex-char digest, so the
+    // captured value is 68 hex chars, not 64. Strip the header so the hash
+    // validates and normalizes like any other SHA-256 hex hash.
+    if (clean.length == 68 && clean.startsWith('1220')) {
+      clean = clean.substring(4);
+    }
+    if (RegExp(r'^[A-F0-9]{40}$').hasMatch(clean) ||
+        RegExp(r'^[A-F0-9]{64}$').hasMatch(clean)) {
       return clean;
     }
     if (RegExp(r'^[A-Z2-7]{32}$').hasMatch(clean)) {
@@ -99,15 +108,23 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
   }
 
   // Try regex extraction first, as it's robust to unescaped query chars
-  final xtMatch = RegExp(r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)', caseSensitive: false).firstMatch(trimmed);
+  final xtMatch = RegExp(
+    r'xt=urn:bt(?:ih|mh):([a-zA-Z0-9]+)',
+    caseSensitive: false,
+  ).firstMatch(trimmed);
   if (xtMatch != null) {
     result['infoHash'] = normalizeHash(xtMatch.group(1)!);
   }
 
-  final dnMatch = RegExp(r'dn=([^&]+)', caseSensitive: false).firstMatch(trimmed);
+  final dnMatch = RegExp(
+    r'dn=([^&]+)',
+    caseSensitive: false,
+  ).firstMatch(trimmed);
   if (dnMatch != null) {
     try {
-      result['name'] = Uri.decodeComponent(dnMatch.group(1)!.replaceAll('+', ' '));
+      result['name'] = Uri.decodeComponent(
+        dnMatch.group(1)!.replaceAll('+', ' '),
+      );
     } catch (_) {
       result['name'] = dnMatch.group(1)!.replaceAll('+', ' ');
     }
@@ -132,7 +149,9 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
       final dnList = queryParams['dn'] ?? [];
       if (dnList.isNotEmpty) {
         try {
-          result['name'] = Uri.decodeComponent(dnList.first.replaceAll('+', ' '));
+          result['name'] = Uri.decodeComponent(
+            dnList.first.replaceAll('+', ' '),
+          );
         } catch (_) {
           result['name'] = dnList.first.replaceAll('+', ' ');
         }
@@ -307,13 +326,15 @@ String _punycodeEncode(String input) {
         while (true) {
           safety++;
           if (safety > 1000) {
-            throw const FormatException('Punycode encode infinite loop guard triggered');
+            throw const FormatException(
+              'Punycode encode infinite loop guard triggered',
+            );
           }
           final t = k <= bias
               ? tmin
               : k >= bias + tmax
-                  ? tmax
-                  : k - bias;
+              ? tmax
+              : k - bias;
           if (q < t) break;
           final code = t + ((q - t) % (base - t));
           output.writeCharCode(_punycodeDigit(code));

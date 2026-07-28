@@ -219,6 +219,17 @@ class YoutubeService {
   static String? extractVideoId(String url) {
     try {
       final uri = Uri.parse(url);
+      final host = uri.host.toLowerCase();
+      final isYoutubeHost =
+          host.contains('youtube.com') ||
+          host == 'youtu.be' ||
+          host.endsWith('.youtu.be');
+      // Without this check, ANY url with a `v=` query parameter or a
+      // `/watch` path segment (e.g. https://example.com/watch?v=xyz) was
+      // treated as a YouTube video id, since the checks below never looked
+      // at the host. That falsely routed unrelated links through the
+      // YouTube-specific download path (special headers/OAuth/etc).
+      if (!isYoutubeHost) return null;
       if (uri.host == 'youtu.be' || uri.host.endsWith('.youtu.be')) {
         if (uri.pathSegments.isNotEmpty) {
           return uri.pathSegments.first;
@@ -592,7 +603,13 @@ class YoutubeService {
     String downloadPageUrl,
     String oldStreamUrl,
   ) async {
-    final videoId = extractVideoId(downloadPageUrl);
+    // Mirror getStreams' own fallback: a bare 11-character YouTube video id
+    // is a valid input here too (getStreamForVideo passes ids around, not
+    // just full URLs), so don't bail out just because extractVideoId — which
+    // only understands full URLs — returns null for it.
+    final videoId =
+        extractVideoId(downloadPageUrl) ??
+        (downloadPageUrl.length == 11 ? downloadPageUrl : null);
     if (videoId == null) return null;
 
     try {
@@ -680,7 +697,9 @@ class YoutubeService {
   static Future<Map<String, String?>?> getFreshStreams(
     String downloadPageUrl,
   ) async {
-    final videoId = extractVideoId(downloadPageUrl);
+    final videoId =
+        extractVideoId(downloadPageUrl) ??
+        (downloadPageUrl.length == 11 ? downloadPageUrl : null);
     if (videoId == null) return null;
 
     try {

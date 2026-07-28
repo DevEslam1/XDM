@@ -33,6 +33,7 @@ mixin DownloadTorrentMixin {
   DatabaseService get providerDatabaseService;
   void providerNotifyListeners();
   void providerStartWidgetTimer();
+  set filteredTasksDirty(bool value);
 
   // ---------------------------------------------------------------------------
   // Seeding lifecycle
@@ -510,6 +511,7 @@ mixin DownloadTorrentMixin {
       seedingLimited: limited,
       seedingLimitKbps: limitKbps,
     );
+    filteredTasksDirty = true;
     await providerDatabaseService.saveTask(providerTasks[index]);
 
     if (oldTask.isTorrent) {
@@ -584,6 +586,7 @@ mixin DownloadTorrentMixin {
     );
 
     providerTasks[index] = updated;
+    filteredTasksDirty = true;
     await providerDatabaseService.saveTask(updated);
 
     // Propagate priority changes to the live torrent engine.
