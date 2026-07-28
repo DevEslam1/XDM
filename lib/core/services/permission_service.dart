@@ -261,12 +261,11 @@ class PermissionService {
     try {
       final status = await Permission.ignoreBatteryOptimizations.status;
       if (status.isGranted) return true;
-      final result = await Permission.ignoreBatteryOptimizations.request();
-      if (result.isGranted) return true;
 
-      if (result.isPermanentlyDenied || result.isDenied) {
-        await openAppSettings();
-      }
+      // On many Android versions Permission.ignoreBatteryOptimizations.request()
+      // silently fails without showing a dialog. Instead, open system app
+      // settings where the user can manually disable battery optimization.
+      await openAppSettings();
       return (await Permission.ignoreBatteryOptimizations.status).isGranted;
     } catch (e) {
       debugPrint(
