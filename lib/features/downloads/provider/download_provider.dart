@@ -2740,6 +2740,19 @@ class DownloadProvider extends ChangeNotifier
       _lastCleanupDays = _settingsProvider.cleanupDays;
       load(pauseOrphanDownloads: false);
     }
+    // When battery saver is toggled ON, pause excess active downloads so the
+    // queue pump restarts only `maxDownloads` tasks with reduced thread counts.
+    if (_settingsProvider.batterySaverMode) {
+      final maxSlots = _settingsProvider.maxDownloads;
+      final active = providerTasks
+          .where((t) => t.status == DownloadStatus.downloading)
+          .toList();
+      if (active.length > maxSlots) {
+        for (var i = maxSlots; i < active.length; i++) {
+          pauseTask(active[i].id);
+        }
+      }
+    }
     pumpQueue();
   }
 

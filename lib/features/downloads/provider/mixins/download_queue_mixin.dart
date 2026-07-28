@@ -110,8 +110,13 @@ mixin DownloadQueueMixin {
 
         // Enforce global connection cap: distribute connections evenly across
         // all concurrent downloads (including the ones being started this pass).
+        // Also respect battery-saver thread limit (if active) via providerSettingsProvider.
         final totalConcurrent = max(1, activePlusPending + 1);
-        final effectiveThreads = max(1, maxTotalConn ~/ totalConcurrent);
+        final baseLimit = min(
+          maxTotalConn ~/ totalConcurrent,
+          providerSettingsProvider.defaultThreadCount,
+        );
+        final effectiveThreads = max(1, baseLimit);
         final clampedThreads = min(task.threadCount, effectiveThreads);
         effectiveThreadOverrides[task.id] = clampedThreads;
 
