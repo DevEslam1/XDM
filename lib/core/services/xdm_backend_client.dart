@@ -17,7 +17,7 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  static String? _apiKey;
+  static String? _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
 
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
@@ -26,10 +26,9 @@ class XdmBackendClient {
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
-  /// Reads the API key from secure storage or from the compile-time
-  /// [DMX_API_KEY] environment variable.  No hardcoded production fallback
-  /// exists; if neither source provides a key, [_apiKey] is set to null and
-  /// any subsequent API call will throw [BackendUnauthorizedException].
+  /// Reads the API key from secure storage, from the compile-time
+  /// [DMX_API_KEY] environment variable, or falls back to a hardcoded
+  /// default token.
   ///
   /// Call this once at app startup before using the client.
   static Future<void> loadApiKey() async {
@@ -48,12 +47,11 @@ class XdmBackendClient {
         return;
       }
 
-      // No production fallback — let _effectiveApiKey throw
-      // BackendUnauthorizedException if no key is configured.
+      // Default production token fallback
+      _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
     } catch (e) {
       debugPrint('[XdmBackendClient] Failed to load API key: $e');
-      // No production fallback — let _effectiveApiKey throw
-      // BackendUnauthorizedException if no key is configured.
+      _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
     }
   }
 
