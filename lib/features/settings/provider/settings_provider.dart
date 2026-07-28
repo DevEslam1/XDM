@@ -9,8 +9,16 @@ class SettingsProvider extends ChangeNotifier {
   /// Used by services like [YoutubeService] that need access to settings
   /// without receiving the instance via dependency injection.
   static SettingsProvider? _instance;
+  bool _loaded = false;
   static SettingsProvider get instance {
     _instance ??= SettingsProvider();
+    return _instance!;
+  }
+
+  /// Call this instead of `instance` when you need guaranteed-loaded settings.
+  static SettingsProvider get loadedInstance {
+    assert(_instance != null && _instance!._loaded,
+        'SettingsProvider accessed before load() completed');
     return _instance!;
   }
 
@@ -28,6 +36,11 @@ class SettingsProvider extends ChangeNotifier {
   static const _showOnboardingKey = 'showOnboarding';
   static const _classicUiKey = 'classicUi';
 
+
+  static const _bandwidthScheduleEnabledKey = 'bandwidthScheduleEnabled';
+  static const _scheduleStartTimeKey = 'scheduleStartTime';
+  static const _scheduleEndTimeKey = 'scheduleEndTime';
+  static const _scheduleSpeedLimitMbKey = 'scheduleSpeedLimitMb';
 
   static const _enableProxyKey = 'enableProxy';
   static const _proxyAddressKey = 'proxyAddress';
@@ -81,6 +94,10 @@ class SettingsProvider extends ChangeNotifier {
   /// when battery saver is disabled.
   int get maxDownloads => batterySaverMode ? 1 : _maxDownloads;
   double speedLimitMb = 0.0;
+  bool bandwidthScheduleEnabled = false;
+  String scheduleStartTime = '23:00';
+  String scheduleEndTime = '07:00';
+  double scheduleSpeedLimitMb = 0.0;
   bool enableGlow = true;
   double gridOpacity = 12.0;
   bool soundNotification = true;
@@ -184,6 +201,10 @@ class SettingsProvider extends ChangeNotifier {
     _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
     if (![1, 2, 3, 5, 8].contains(_maxDownloads)) _maxDownloads = 3;
     speedLimitMb = _prefs.getDouble(_speedLimitKey) ?? speedLimitMb;
+    bandwidthScheduleEnabled = _prefs.getBool(_bandwidthScheduleEnabledKey) ?? bandwidthScheduleEnabled;
+    scheduleStartTime = _prefs.getString(_scheduleStartTimeKey) ?? scheduleStartTime;
+    scheduleEndTime = _prefs.getString(_scheduleEndTimeKey) ?? scheduleEndTime;
+    scheduleSpeedLimitMb = _prefs.getDouble(_scheduleSpeedLimitMbKey) ?? scheduleSpeedLimitMb;
     enableGlow = _prefs.getBool(_enableGlowKey) ?? enableGlow;
     gridOpacity = _prefs.getDouble(_gridOpacityKey) ?? gridOpacity;
     soundNotification =
@@ -254,6 +275,7 @@ class SettingsProvider extends ChangeNotifier {
     _maxTotalConnections = _prefs.getInt(_maxTotalConnectionsKey) ?? 32;
     if (![8, 16, 24, 32, 48, 64].contains(_maxTotalConnections)) _maxTotalConnections = 32;
 
+    _loaded = true;
     _instance = this;
   }
 
@@ -713,6 +735,10 @@ class SettingsProvider extends ChangeNotifier {
     autoStart = true;
     customDownloadPath = null;
     speedLimitMb = 0.0;
+    bandwidthScheduleEnabled = false;
+    scheduleStartTime = '23:00';
+    scheduleEndTime = '07:00';
+    scheduleSpeedLimitMb = 0.0;
     enableGlow = true;
     gridOpacity = 12.0;
     soundNotification = true;
@@ -763,6 +789,10 @@ class SettingsProvider extends ChangeNotifier {
     await _prefs.setInt(_defaultThreadCountKey, _defaultThreadCount);
     await _prefs.setBool(_autoStartKey, autoStart);
     await _prefs.setDouble(_speedLimitKey, speedLimitMb);
+    await _prefs.setBool(_bandwidthScheduleEnabledKey, bandwidthScheduleEnabled);
+    await _prefs.setString(_scheduleStartTimeKey, scheduleStartTime);
+    await _prefs.setString(_scheduleEndTimeKey, scheduleEndTime);
+    await _prefs.setDouble(_scheduleSpeedLimitMbKey, scheduleSpeedLimitMb);
     await _prefs.setBool(_enableGlowKey, enableGlow);
     await _prefs.setDouble(_gridOpacityKey, gridOpacity);
     await _prefs.setBool(_soundNotificationKey, soundNotification);

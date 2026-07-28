@@ -88,6 +88,8 @@ mixin DownloadQueueMixin {
               !isTaskWaitingForRetry(task.id))
           .toList();
 
+      queued.sort((a, b) => b.priority.compareTo(a.priority));
+
       // Remove overrides for tasks no longer queued
       effectiveThreadOverrides.removeWhere(
         (id, _) => !queued.any((t) => t.id == id),

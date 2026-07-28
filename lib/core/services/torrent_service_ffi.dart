@@ -184,11 +184,17 @@ class TorrentService {
     if (_disposed || !isInitialized) return;
     if (id < 0) return;
     try {
-      (LibtorrentFlutter.instance as dynamic).forceReCheck(id);
-    } on NoSuchMethodError {
-      _log.info(
-        'forceReCheck not exposed by plugin; relying on default add-time check.',
-      );
+      final instance = LibtorrentFlutter.instance;
+      try {
+        // ignore: avoid_dynamic_calls
+        (instance as dynamic).forceReCheck(id);
+      } on NoSuchMethodError {
+        _log.warning(
+          'forceReCheck not available in this plugin version. '
+          'Torrent $id will rely on default add-time check. '
+          'Update libtorrent_flutter plugin to enable forced re-check.',
+        );
+      }
     } catch (e) {
       _log.warning('forceReCheck failed for torrent $id: $e');
     }
@@ -220,12 +226,22 @@ class TorrentService {
     if (id >= 0) {
       try {
         final files = LibtorrentFlutter.instance.getFiles(id);
-        final progress =
-            (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
+        final progress = () {
+          try {
+            return (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
                 as List<dynamic>?;
-        final priorities =
-            (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
+          } on NoSuchMethodError {
+            return null;
+          }
+        }();
+        final priorities = () {
+          try {
+            return (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
                 as List<dynamic>?;
+          } on NoSuchMethodError {
+            return null;
+          }
+        }();
 
         return List.generate(files.length, (i) {
           final f = files[i];

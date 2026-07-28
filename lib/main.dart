@@ -15,6 +15,7 @@ import 'core/services/notification_service.dart';
 import 'core/services/single_instance_service.dart';
 import 'core/services/xdm_backend_client.dart';
 import 'core/services/youtube_service.dart';
+import 'core/services/remote_api_service.dart';
 import 'features/downloads/provider/download_provider.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/browser/services/ad_blocker.dart';
@@ -84,6 +85,13 @@ Future<void> main(List<String> args) async {
           notificationService: notificationService,
         );
         await downloadProvider.load();
+
+        RemoteApiService.start(
+          getTasks: () async => downloadProvider.tasks.map((t) => t.toMap()).toList(),
+          pauseTask: (id) => downloadProvider.pauseTask(id),
+          resumeTask: (id) => downloadProvider.resumeTask(id),
+          deleteTask: (id) => downloadProvider.deleteTask(id),
+        );
 
         runApp(
           DmxApp(

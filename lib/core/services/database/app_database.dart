@@ -173,6 +173,20 @@ class AppDatabase extends _$AppDatabase {
         // Migration 2 -> 3: Convert timestamp columns from text to integer
         // and add indexes.
 
+        // Pre-migration: normalize date strings that julianday can't handle
+        await customStatement('''
+          UPDATE download_tasks SET
+            created_at = REPLACE(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', ''),
+              SUBSTR(created_at, INSTR(created_at, '.'),
+                CASE WHEN INSTR(created_at, '+') > 0
+                  THEN INSTR(created_at, '+') - INSTR(created_at, '.')
+                  WHEN INSTR(created_at, '-') > INSTR(created_at, ' ')
+                  THEN INSTR(created_at, '-') - INSTR(created_at, '.')
+                  ELSE LENGTH(created_at) - INSTR(created_at, '.') + 1
+                END), '')
+          WHERE created_at LIKE '%.%'
+        ''');
+
         // Step 1: Create a temporary table with the new schema
         await customStatement('''
               CREATE TABLE download_tasks_new (
@@ -258,6 +272,15 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
         );
+
+        // Post-migration: validate no dates are stuck at epoch
+        final badDates = await customSelect(
+          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0'
+        ).get();
+        final badCount = badDates.first.read<int>('cnt');
+        if (badCount > 0) {
+          debugPrint('WARNING: $badCount tasks have epoch (0) created_at after migration');
+        }
       }
       if (from < 4) {
         // Migration 3 -> 4: Add playlistId and playlistTitle columns

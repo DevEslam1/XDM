@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/services/database_service.dart';
+import '../../../../core/utils/url_utils.dart';
 import '../../models/download_task.dart';
 
 /// Mixin that encapsulates backup export/import and encryption/decryption
@@ -215,6 +218,144 @@ mixin DownloadBackupMixin {
       debugPrint('Backup import error: $e');
       return false;
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Import from other download managers
+  // ---------------------------------------------------------------------------
+
+  Future<int> importFromAria2(String filePath) async {
+    int count = 0;
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return 0;
+      final lines = await file.readAsLines();
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        final uri = Uri.tryParse(trimmed);
+        if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https' || uri.scheme == 'magnet')) {
+          final id = const Uuid().v4();
+          final fileName = fileNameFromUrl(trimmed);
+          final task = DownloadTask(
+            id: id,
+            url: trimmed,
+            fileName: fileName,
+            fileSize: 0,
+            downloadedBytes: 0,
+            category: 'Other',
+            status: DownloadStatus.paused,
+            savePath: '',
+            localFilePath: '',
+            tempFilePath: '',
+            threadCount: 1,
+            chunks: [0.0],
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          providerTasks.add(task);
+          await providerDatabaseService.saveTask(task);
+          count++;
+        }
+      }
+      if (count > 0) {
+        filteredTasksDirty = true;
+        notifyListeners();
+        updateTelemetryWidget();
+      }
+    } catch (e) {
+      debugPrint('[DMX] Failed to import from aria2: $e');
+    }
+    return count;
+  }
+
+  Future<int> importFromIdm(String filePath) async {
+    int count = 0;
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return 0;
+      final content = await file.readAsString();
+      final urlRegex = RegExp(r'(https?://\S+)', caseSensitive: false);
+      final matches = urlRegex.allMatches(content);
+      for (final match in matches) {
+        final url = match.group(1)!;
+        final id = const Uuid().v4();
+        final fileName = fileNameFromUrl(url);
+        final task = DownloadTask(
+          id: id,
+          url: url,
+          fileName: fileName,
+          fileSize: 0,
+          downloadedBytes: 0,
+          category: 'Other',
+          status: DownloadStatus.paused,
+          savePath: '',
+          localFilePath: '',
+          tempFilePath: '',
+          threadCount: 1,
+          chunks: [0.0],
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        providerTasks.add(task);
+        await providerDatabaseService.saveTask(task);
+        count++;
+      }
+      if (count > 0) {
+        filteredTasksDirty = true;
+        notifyListeners();
+        updateTelemetryWidget();
+      }
+    } catch (e) {
+      debugPrint('[DMX] Failed to import from IDM: $e');
+    }
+    return count;
+  }
+
+  Future<int> importFromJdownloader(String folderPath) async {
+    int count = 0;
+    try {
+      final dir = Directory(folderPath);
+      if (!await dir.exists()) return 0;
+      await for (final entity in dir.list()) {
+        if (entity is File && entity.path.endsWith('.crawljob')) {
+          final content = await entity.readAsString();
+          final urlMatch = RegExp(r'url\s*=\s*(\S+)', caseSensitive: false).firstMatch(content);
+          if (urlMatch != null) {
+            final url = urlMatch.group(1)!;
+            final id = const Uuid().v4();
+            final fileName = fileNameFromUrl(url);
+            final task = DownloadTask(
+              id: id,
+              url: url,
+              fileName: fileName,
+              fileSize: 0,
+              downloadedBytes: 0,
+              category: 'Other',
+              status: DownloadStatus.paused,
+              savePath: '',
+              localFilePath: '',
+              tempFilePath: '',
+              threadCount: 1,
+              chunks: [0.0],
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+            providerTasks.add(task);
+            await providerDatabaseService.saveTask(task);
+            count++;
+          }
+        }
+      }
+      if (count > 0) {
+        filteredTasksDirty = true;
+        notifyListeners();
+        updateTelemetryWidget();
+      }
+    } catch (e) {
+      debugPrint('[DMX] Failed to import from JDownloader: $e');
+    }
+    return count;
   }
 }
 

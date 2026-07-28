@@ -90,7 +90,16 @@ class XdmBackendClient {
 
   /// Updates the backend configuration from SettingsProvider
   void _updateDioFromSettings() {
-    final settings = SettingsProvider.instance;
+    String baseUrl;
+    try {
+      final settings = SettingsProvider.instance;
+      baseUrl = settings.backendUrl.isNotEmpty
+          ? settings.backendUrl
+          : kDefaultBackendBaseUrl;
+    } catch (e) {
+      baseUrl = kDefaultBackendBaseUrl;
+      debugPrint('[XdmBackendClient] Settings not available yet, using default base URL: $e');
+    }
     // Do NOT force-close the old _dio instance — that would cancel any
     // in-flight API requests. Simply replace the reference and let the old
     // instance be garbage-collected after its current requests finish.
@@ -100,9 +109,7 @@ class XdmBackendClient {
     // the call site rather than silently at construction time.
     _dio = Dio(
       BaseOptions(
-        baseUrl: settings.backendUrl.isNotEmpty
-            ? settings.backendUrl
-            : kDefaultBackendBaseUrl,
+        baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 15),
         // Backend extraction can take up to 45 s; give a comfortable margin.
         receiveTimeout: const Duration(seconds: 60),
@@ -115,7 +122,7 @@ class XdmBackendClient {
     if (kDebugMode) {
       debugPrint(
         '[XdmBackendClient] Configured with backend URL: '
-        '${settings.backendUrl.isNotEmpty ? settings.backendUrl : kDefaultBackendBaseUrl}',
+        '$baseUrl',
       );
     }
   }

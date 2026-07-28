@@ -228,6 +228,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         if (loadedTabs.isNotEmpty) {
           if (mounted) {
             setState(() {
+              for (final oldTab in _tabs) {
+                _cleanupTabState(oldTab.id);
+              }
               _tabs
                 ..clear()
                 ..addAll(loadedTabs);
@@ -744,6 +747,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   @override
   void dispose() {
+    // Clean up ALL per-tab state maps
+    for (final tab in _tabs) {
+      _cleanupTabState(tab.id);
+    }
     for (final tab in _tabs) {
       if (tab.isIncognito) {
         try {

@@ -1593,18 +1593,21 @@ class DownloadEngine {
           }
         }
 
-        bool isTotalComplete() {
+        Future<bool> isTotalCompleteLocked() async {
           if (totalSize <= 0) return false;
+          final snapshot = await lock.synchronized(
+            () => List<int>.from(chunkProgress),
+          );
           BigInt sum = BigInt.zero;
-          for (int i = 0; i < chunkProgress.length; i++) {
-            sum += BigInt.from(chunkProgress[i]);
+          for (int i = 0; i < snapshot.length; i++) {
+            sum += BigInt.from(snapshot[i]);
           }
           return sum >= BigInt.from(totalSize);
         }
 
         Future<void> reportProgress() async {
           final nowMs = stopwatch.elapsedMilliseconds;
-          final isCompleted = isTotalComplete();
+          final isCompleted = await isTotalCompleteLocked();
           final shouldReport =
               isCompleted ||
               nowMs - lastReportTime >= _progressReportIntervalMs;

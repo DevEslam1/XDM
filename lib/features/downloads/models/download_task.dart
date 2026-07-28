@@ -55,8 +55,10 @@ class DownloadTask {
   final String? youtubeQualityPreset;
   final String? notes;
   final bool isAppUpdate;
+  final int priority; // 0 = normal, 1 = high, 2 = urgent
   final String? playlistId; // groups playlist videos into one card
   final String? playlistTitle;
+  final String? expectedSha256;
 
   DownloadTask({
     required this.id,
@@ -93,8 +95,10 @@ class DownloadTask {
     this.youtubeQualityPreset,
     this.notes,
     this.isAppUpdate = false,
+    this.priority = 0,
     this.playlistId,
     this.playlistTitle,
+    this.expectedSha256,
   });
 
   bool get isTorrent => isTorrentUrl(url, fileName: fileName);
@@ -264,9 +268,11 @@ class DownloadTask {
     bool clearYoutubeQualityPreset = false,
     String? notes,
     bool? isAppUpdate,
+    int? priority,
     String? playlistId,
     String? playlistTitle,
     bool clearPlaylist = false,
+    String? expectedSha256,
   }) {
     return DownloadTask(
       id: id,
@@ -315,8 +321,10 @@ class DownloadTask {
           : youtubeQualityPreset ?? this.youtubeQualityPreset,
       notes: notes ?? this.notes,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
+      priority: priority ?? this.priority,
       playlistId: clearPlaylist ? null : playlistId ?? this.playlistId,
       playlistTitle: clearPlaylist ? null : playlistTitle ?? this.playlistTitle,
+      expectedSha256: expectedSha256 ?? this.expectedSha256,
     );
   }
 
@@ -356,8 +364,10 @@ class DownloadTask {
       'youtubeQualityPreset': youtubeQualityPreset,
       'notes': notes,
       'isAppUpdate': isAppUpdate,
+      'priority': priority,
       'playlistId': playlistId,
       'playlistTitle': playlistTitle,
+      'expectedSha256': expectedSha256,
     };
   }
 
@@ -459,8 +469,10 @@ class DownloadTask {
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
       notes: map['notes'] as String?,
       isAppUpdate: map['isAppUpdate'] as bool? ?? false,
+      priority: map['priority'] as int? ?? 0,
       playlistId: map['playlistId'] as String?,
       playlistTitle: map['playlistTitle'] as String?,
+      expectedSha256: map['expectedSha256'] as String?,
     );
   }
 

@@ -74,12 +74,14 @@ class NotificationService {
   }
 
   void _addAction(Map<String, String> event) {
+    // Always buffer first, then try to forward
+    _pendingActions.add(event);
     if (_actionListenerController != null &&
         !(_actionListenerController!.isClosed)) {
-      _actionStreamController.add(event);
-    } else {
-      // Buffer until a listener subscribes
-      _pendingActions.add(event);
+      // Drain all pending into the live stream
+      while (_pendingActions.isNotEmpty) {
+        _actionStreamController.add(_pendingActions.removeAt(0));
+      }
     }
   }
 
@@ -146,7 +148,6 @@ class NotificationService {
         _actionStreamController = StreamController<Map<String, String>>.broadcast();
       }
       _actionListenerController = null;
-      _pendingActions.clear();
 
       const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
       const iosSettings = DarwinInitializationSettings(
