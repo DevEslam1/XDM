@@ -1,5 +1,3 @@
-import 'dart:io';
-import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/torrent_service.dart';
@@ -146,153 +144,8 @@ mixin DownloadTorrentMixin {
   }
 
   // ---------------------------------------------------------------------------
-  // Torrent file progress distribution
+  // Torrent file progress — native getFileProgress provides exact per-file bytes
   // ---------------------------------------------------------------------------
-  List<Map<String, dynamic>> updateTorrentFilesProgress(
-    List<Map<String, dynamic>> files,
-    int totalDownloaded,
-    double totalSpeed,
-  ) {
-    final result = files.map((f) => Map<String, dynamic>.from(f)).toList();
-
-    final selectedFiles =
-        result.where((f) => f['selected'] == true).toList();
-    if (selectedFiles.isEmpty) return result;
-
-    final int selectedSize =
-        selectedFiles.fold(0, (sum, f) => sum + (f['length'] as int));
-    if (selectedSize == 0) return result;
-
-    // 10% of totalDownloaded is distributed proportionally to simulate background downloading
-    final proportionalTotal = (totalDownloaded * 0.1).round();
-    final phasedTotal = totalDownloaded - proportionalTotal;
-
-    // Calculate proportional shares
-    final proportionalShares = <String, int>{};
-    for (final f in selectedFiles) {
-      final length = (f['length'] as num?)?.toInt() ?? 0;
-      final name = f['name'] as String;
-      final share = selectedSize > 0
-          ? (proportionalTotal * (length / selectedSize)).round()
-          : 0;
-      proportionalShares[name] = share.clamp(0, length);
-    }
-
-    // Distribute the remaining 90% (phasedTotal) sequentially by priority: High (7), Normal (4), Low (1)
-    final highFiles = selectedFiles
-        .where((f) => (f['priority'] as int? ?? 4) == 7)
-        .toList();
-    final normalFiles = selectedFiles
-        .where((f) => (f['priority'] as int? ?? 4) == 4)
-        .toList();
-    final lowFiles = selectedFiles
-        .where((f) => (f['priority'] as int? ?? 4) == 1)
-        .toList();
-
-    int remainingPhased = phasedTotal;
-    final phasedShares = <String, int>{};
-    for (final f in selectedFiles) {
-      phasedShares[f['name'] as String] = 0;
-    }
-
-    // Phase 1: High priority
-    if (highFiles.isNotEmpty) {
-      final highSize =
-          highFiles.fold(0, (sum, f) => sum + (f['length'] as int));
-      if (remainingPhased <= highSize) {
-        for (final f in highFiles) {
-          final length = f['length'] as int;
-          final share = highSize > 0
-              ? (remainingPhased * (length / highSize)).round()
-              : 0;
-          phasedShares[f['name'] as String] = share.clamp(0, length);
-        }
-        remainingPhased = 0;
-      } else {
-        for (final f in highFiles) {
-          phasedShares[f['name'] as String] = f['length'] as int;
-        }
-        remainingPhased -= highSize;
-      }
-    }
-
-    // Phase 2: Normal priority
-    if (remainingPhased > 0 && normalFiles.isNotEmpty) {
-      final normalSize =
-          normalFiles.fold(0, (sum, f) => sum + (f['length'] as int));
-      if (remainingPhased <= normalSize) {
-        for (final f in normalFiles) {
-          final length = f['length'] as int;
-          final share = normalSize > 0
-              ? (remainingPhased * (length / normalSize)).round()
-              : 0;
-          phasedShares[f['name'] as String] = share.clamp(0, length);
-        }
-        remainingPhased = 0;
-      } else {
-        for (final f in normalFiles) {
-          phasedShares[f['name'] as String] = f['length'] as int;
-        }
-        remainingPhased -= normalSize;
-      }
-    }
-
-    // Phase 3: Low priority
-    if (remainingPhased > 0 && lowFiles.isNotEmpty) {
-      final lowSize =
-          lowFiles.fold(0, (sum, f) => sum + (f['length'] as int));
-      if (remainingPhased <= lowSize) {
-        for (final f in lowFiles) {
-          final length = f['length'] as int;
-          final share = lowSize > 0
-              ? (remainingPhased * (length / lowSize)).round()
-              : 0;
-          phasedShares[f['name'] as String] = share.clamp(0, length);
-        }
-      } else {
-        for (final f in lowFiles) {
-          phasedShares[f['name'] as String] = f['length'] as int;
-        }
-      }
-    }
-    // If any bytes remain unassigned (all phases exhausted), distribute proportionally
-    if (remainingPhased > 0 && selectedSize > 0) {
-      for (final f in selectedFiles) {
-        final name = f['name'] as String;
-        final length = f['length'] as int;
-        final current = phasedShares[name] ?? 0;
-        final remaining = length - current;
-        if (remaining > 0) {
-          final share = (remainingPhased * (remaining / selectedSize)).round();
-          phasedShares[name] = current + share.clamp(0, remaining);
-        }
-      }
-    }
-
-    // Combine proportional and phased shares, and calculate speeds
-    for (var f in result) {
-      if (f['selected'] != true) {
-        f['downloadedBytes'] = 0;
-        f['speed'] = 0.0;
-        continue;
-      }
-      final name = f['name'] as String;
-      final length = f['length'] as int;
-
-      final combined =
-          (proportionalShares[name] ?? 0) + (phasedShares[name] ?? 0);
-      final downloadedBytes = combined.clamp(0, length);
-      f['downloadedBytes'] = downloadedBytes;
-
-      f['speed'] = totalSpeed > 0 && downloadedBytes < length
-          ? totalSpeed * (length / selectedSize)
-          : 0.0;
-    }
-
-    return result;
-  }
-
-  /// Marks all selected torrent files as completed (downloadedBytes = length).
   List<Map<String, dynamic>> markTorrentFilesCompleted(
     List<Map<String, dynamic>> files,
   ) {
@@ -308,96 +161,28 @@ mixin DownloadTorrentMixin {
     }).toList();
   }
 
-  /// Checks disk storage for existing torrent files and updates per-file downloadedBytes
-  /// and total downloadedBytes to reflect real disk progress before continuing/resuming.
-  List<Map<String, dynamic>> checkRealTorrentDiskProgress(DownloadTask task) {
-    final files = task.torrentFiles;
-    if (files == null || files.isEmpty) return files ?? [];
-    final result = <Map<String, dynamic>>[];
-    for (final f in files) {
-      final copy = Map<String, dynamic>.from(f);
-      final selected = copy['selected'] as bool? ?? true;
-      final relPath = copy['name'] as String? ?? '';
-      final length = (copy['length'] as num?)?.toInt() ?? 0;
-      final stored = (copy['downloadedBytes'] as num?)?.toInt() ?? 0;
-      if (!selected) { copy['downloadedBytes'] = 0; result.add(copy); continue; }
-      int diskBytes = stored;
-      if (relPath.isNotEmpty && length > 0) {
-        try {
-          final file = _locateTorrentFile(task, relPath);
-          if (file != null) {
-            final diskLen = file.lengthSync();
-            // Trust on-disk size only while BELOW declared length (sparse files
-            // report full logical size while partial). Completion is snapped to
-            // 100% later by markTorrentFilesCompleted.
-            if (diskLen > stored && diskLen < length) diskBytes = diskLen;
-          }
-        } catch (_) {}
-      }
-      copy['downloadedBytes'] = diskBytes;
-      result.add(copy);
-    }
-    return result;
-  }
+  // ---------------------------------------------------------------------------
+  // Upload limit management
+  // ---------------------------------------------------------------------------
 
-  File? _locateTorrentFile(DownloadTask task, String relPath) {
-    for (final candidate in <String>[
-      p.normalize(p.join(task.localFilePath, relPath)), // multi-file: root folder
-      p.normalize(p.join(task.savePath, relPath)),       // single-file: savePath/name
-      task.localFilePath,                                 // single-file: path IS file
-    ]) {
-      try {
-        final f = File(candidate);
-        if (f.existsSync()) return f;
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  /// Returns each torrent file's confirmed downloaded byte count on disk.
+  /// Returns each torrent file's confirmed downloaded byte count using native
+  /// getFileProgress from the engine.
   Future<List<int>> getTorrentFileActualBytes(String taskId) async {
     final task = findTaskById(taskId);
     if (task == null || task.torrentFiles == null) return [];
 
-    final result = <int>[];
+    final torrentId = providerTorrentIds[taskId];
+    if (torrentId == null) return [];
 
-    for (final f in task.torrentFiles!) {
-      final relPath = f['name'] as String? ?? '';
-      final length = (f['length'] as int?) ?? 0;
-      final downloaded = (f['downloadedBytes'] as int?) ?? 0;
-
-      int diskBytes = downloaded;
-      if (relPath.isNotEmpty && length > 0) {
-        try {
-          final file = _locateTorrentFile(task, relPath);
-          if (file != null) {
-            final diskLen = file.lengthSync();
-            // Only trust diskLen when file is clearly smaller than full size
-            // (partial download). Sparse files report full logical size even
-            // when only partially written, so we preserve stored estimate.
-            if (diskLen > diskBytes && diskLen < length) {
-              diskBytes = diskLen;
-            }
-          } else {
-            diskBytes = 0;
-          }
-        } catch (_) {}
-      }
-
-      if (diskBytes > 0) {
-        result.add(diskBytes.clamp(0, length > 0 ? length : diskBytes));
-      } else if (downloaded > 0) {
-        result.add(downloaded.clamp(0, length > 0 ? length : downloaded));
-      } else {
-        result.add(0);
-      }
+    try {
+      final files = TorrentService.getFiles(torrentId);
+      return files.map((f) => f.downloadedBytes).toList();
+    } catch (_) {
+      return task.torrentFiles!
+          .map((f) => (f['downloadedBytes'] as int?) ?? 0)
+          .toList();
     }
-    return result;
   }
-
-  // ---------------------------------------------------------------------------
-  // Upload limit management
-  // ---------------------------------------------------------------------------
   void updateActualTorrentUploadLimit() {
     if (!TorrentService.isSupported || !TorrentService.isInitialized) return;
 
@@ -465,6 +250,28 @@ mixin DownloadTorrentMixin {
         }
         providerTasks[i] = task.copyWith(speed: speed);
         changed = true;
+
+        if (task.seedingEnabled && task.completedAt != null) {
+          final maxMinutes = TorrentService.maxSeedingTimeMinutes;
+          bool shouldStopSeeding = false;
+
+          if (maxMinutes > 0) {
+            final seedingDuration =
+                DateTime.now().difference(task.completedAt!);
+            if (seedingDuration.inMinutes >= maxMinutes) {
+              shouldStopSeeding = true;
+            }
+          }
+
+          if (shouldStopSeeding) {
+            if (torrentId != null) {
+              TorrentService.pauseTorrent(torrentId);
+              providerTorrentIds.remove(task.id);
+            }
+            providerTasks[i] = task.copyWith(seedingEnabled: false);
+            changed = true;
+          }
+        }
       } else if (task.speed > 0 &&
           task.status == DownloadStatus.completed) {
         providerTasks[i] = task.copyWith(speed: 0);

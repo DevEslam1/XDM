@@ -6,19 +6,27 @@ import '../../core/app_theme.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 /// Shared ambient animation state — one timer drives all background instances.
-class _AmbientProgress {
+class _AmbientProgress with WidgetsBindingObserver {
   static final _instance = _AmbientProgress._();
   factory _AmbientProgress() => _instance;
-  _AmbientProgress._();
+  _AmbientProgress._() {
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   final ValueNotifier<double> progress = ValueNotifier<double>(0);
   Timer? _timer;
   int _refCount = 0;
   final _startTime = DateTime.now();
+  bool _isBackgrounded = false;
 
   void addRef() {
     _refCount++;
-    _timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+    _startTimer();
+  }
+
+  void _startTimer() {
+    if (_isBackgrounded) return;
+    _timer ??= Timer.periodic(const Duration(milliseconds: 250), (_) {
       final elapsed =
           DateTime.now().difference(_startTime).inMilliseconds / 1000;
       progress.value = (elapsed / 20) % 1.0;
@@ -28,8 +36,25 @@ class _AmbientProgress {
   void removeRef() {
     _refCount--;
     if (_refCount <= 0) {
-      _timer?.cancel();
-      _timer = null;
+      _stopTimer();
+    }
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _isBackgrounded = true;
+      _stopTimer();
+    } else if (state == AppLifecycleState.resumed) {
+      _isBackgrounded = false;
+      if (_refCount > 0) {
+        _startTimer();
+      }
     }
   }
 }

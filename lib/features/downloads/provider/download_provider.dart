@@ -143,6 +143,8 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, int> _lastTorrentFileDiskSync = {};
   final Set<String> _pendingProgressUpdates = {};
   final Set<String> _tasksPausedDueToNetwork = {};
+  bool _checkingNetwork = false;
+  bool _networkRecheckPending = false;
   final Map<String, int> _torrentIds = {};
   final Map<String, int> _notificationIds = {};
   int _nextNotificationId = 1;
@@ -1270,10 +1272,6 @@ class DownloadProvider extends ChangeNotifier
     _startWidgetTimer();
     _updateTelemetryWidget();
 
-    // Proactive cleanup of stale cookie cache entries
-    final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
-    _cookieCache.removeWhere((_, entry) => entry.timestamp.isBefore(cutoff));
-
     // Extract cookies from native WebView for authentication (using a 5-minute TTL cache)
     String cookieString = '';
     try {
@@ -1291,13 +1289,7 @@ class DownloadProvider extends ChangeNotifier
           cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
           _cookieCache[origin] = (cookie: cookieString, timestamp: now);
           if (_cookieCache.length >= _cookieCacheMaxSize) {
-            final oldest = _cookieCache.entries
-                .reduce(
-                  (a, b) =>
-                      a.value.timestamp.isBefore(b.value.timestamp) ? a : b,
-                )
-                .key;
-            _cookieCache.remove(oldest);
+            scheduleMicrotask(_evictStaleCookies);
           }
         }
       }
@@ -1518,10 +1510,7 @@ class DownloadProvider extends ChangeNotifier
     // before the first progress callback fires.
     // For torrents: re-scan the target folder so we resume from whatever is
     // already on disk (handles data added while the task was paused/queued).
-    List<Map<String, dynamic>>? verifiedTorrentFiles =
-        task.isTorrent && task.torrentFiles != null
-        ? checkRealTorrentDiskProgress(task)
-        : task.torrentFiles;
+    List<Map<String, dynamic>>? verifiedTorrentFiles = task.torrentFiles;
     int realTotalDownloaded = task.downloadedBytes;
     if (task.isTorrent) {
       final scan = _scanExistingTorrentData(
@@ -2066,11 +2055,11 @@ class DownloadProvider extends ChangeNotifier
                               4000) {
                             _lastTorrentFileDiskSync[task.id] = nowMs;
                             try {
-                              diskVerifiedFiles = checkRealTorrentDiskProgress(
-                                current.copyWith(
-                                  torrentFiles: progress.torrentFiles,
-                                ),
+                              final scan = _scanExistingTorrentData(
+                                current.localFilePath,
+                                progress.torrentFiles,
                               );
+                              diskVerifiedFiles = scan.files;
                             } catch (e) {
                               debugPrint(
                                 '[DMX] Disk-verify torrent files failed: $e',
@@ -2592,10 +2581,20 @@ class DownloadProvider extends ChangeNotifier
       notifyListeners();
     } catch (e) {
       debugPrint('Error saving task to database: $e');
-      // Roll back in-memory state on DB failure to preserve sync with DB
-      final rollBackIndex = _tasks.indexWhere((task) => task.id == updated.id);
-      if (rollBackIndex != -1) {
-        _tasks[rollBackIndex] = prev;
+      final dbTask = await _databaseService.getTask(updated.id);
+      if (dbTask != null) {
+        final currentIdx = _tasks.indexWhere((task) => task.id == updated.id);
+        if (currentIdx != -1) {
+          final current = _tasks[currentIdx];
+          _tasks[currentIdx] = dbTask.copyWith(
+            downloadedBytes: current.downloadedBytes,
+            speed: current.speed,
+            eta: current.eta,
+            chunks: current.chunks,
+            status: current.status,
+            errorMessage: current.errorMessage,
+          );
+        }
       }
       notifyListeners();
     } finally {
@@ -2749,7 +2748,7 @@ class DownloadProvider extends ChangeNotifier
       downloadingTasksCount,
     );
     updateActualTorrentUploadLimit();
-    TorrentService.applyAdvancedSettings(_settingsProvider);
+    TorrentService.configureSession(_settingsProvider);
     if (_lastCleanupDays == null) {
       _lastCleanupDays = _settingsProvider.cleanupDays;
     } else if (_lastCleanupDays != _settingsProvider.cleanupDays) {
@@ -2790,30 +2789,43 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _checkNetworkConnectivity({bool skipPump = false}) async {
-    final hasNoNetwork =
-        _currentConnectivity.contains(ConnectivityResult.none) ||
-        _currentConnectivity.isEmpty;
-
-    if (hasNoNetwork) {
-      await _pauseForNetworkDisconnect();
-      return;
-    } else {
-      await _resumeFromNetworkDisconnect(skipPump: skipPump);
-    }
-
-    if (!_settingsProvider.wifiOnly) {
-      await _resumeWaitingForWifi(skipPump: skipPump);
+    if (_checkingNetwork) {
+      _networkRecheckPending = true;
       return;
     }
+    _checkingNetwork = true;
+    try {
+      final hasNoNetwork =
+          _currentConnectivity.contains(ConnectivityResult.none) ||
+          _currentConnectivity.isEmpty;
 
-    final hasWifi =
-        _currentConnectivity.contains(ConnectivityResult.wifi) ||
-        _currentConnectivity.contains(ConnectivityResult.ethernet);
+      if (hasNoNetwork) {
+        await _pauseForNetworkDisconnect();
+        return;
+      } else {
+        await _resumeFromNetworkDisconnect(skipPump: skipPump);
+      }
 
-    if (!hasWifi) {
-      await _pauseForWifiOnly();
-    } else {
-      await _resumeWaitingForWifi(skipPump: skipPump);
+      if (!_settingsProvider.wifiOnly) {
+        await _resumeWaitingForWifi(skipPump: skipPump);
+        return;
+      }
+
+      final hasWifi =
+          _currentConnectivity.contains(ConnectivityResult.wifi) ||
+          _currentConnectivity.contains(ConnectivityResult.ethernet);
+
+      if (!hasWifi) {
+        await _pauseForWifiOnly();
+      } else {
+        await _resumeWaitingForWifi(skipPump: skipPump);
+      }
+    } finally {
+      _checkingNetwork = false;
+      if (_networkRecheckPending) {
+        _networkRecheckPending = false;
+        _checkNetworkConnectivity(skipPump: skipPump);
+      }
     }
   }
 
@@ -3367,10 +3379,9 @@ class DownloadProvider extends ChangeNotifier
         isRefresh: true,
       );
       final updated = _findTask(id);
-      // Only resume if the task was NOT already downloading
       if (updated != null &&
-          updated.status != DownloadStatus.downloading &&
-          updated.status != DownloadStatus.queued) {
+          (updated.status == DownloadStatus.paused ||
+              updated.status == DownloadStatus.failed)) {
         await resumeTask(id);
       }
     }
@@ -3503,6 +3514,20 @@ class DownloadProvider extends ChangeNotifier
   // ---------------------------------------------------------------------------
   // Dispose
   // ---------------------------------------------------------------------------
+
+  void _evictStaleCookies() {
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
+    _cookieCache.removeWhere((_, entry) => entry.timestamp.isBefore(cutoff));
+    if (_cookieCache.length >= _cookieCacheMaxSize) {
+      final oldest = _cookieCache.entries
+          .reduce(
+            (a, b) =>
+                a.value.timestamp.isBefore(b.value.timestamp) ? a : b,
+          )
+          .key;
+      _cookieCache.remove(oldest);
+    }
+  }
 
   @override
   void dispose() {

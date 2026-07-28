@@ -29,6 +29,17 @@ class TorrentUpdateInfo {
   final String stateLabel;
   final int numSeeds;
   final int numPeers;
+  final int piecesHave;
+  final int piecesTotal;
+  final int downloadPayloadRate;
+  final int uploadPayloadRate;
+  final int totalPayloadDownload;
+  final int totalPayloadUpload;
+  final String currentTracker;
+  final int nextAnnounceSeconds;
+  final double distributedCopies;
+  final List<int> fileProgress;
+  final List<int> filePriorities;
 
   TorrentUpdateInfo({
     required this.id,
@@ -43,5 +54,16 @@ class TorrentUpdateInfo {
     required this.stateLabel,
     this.numSeeds = 0,
     this.numPeers = 0,
+    this.piecesHave = 0,
+    this.piecesTotal = 0,
+    this.downloadPayloadRate = 0,
+    this.uploadPayloadRate = 0,
+    this.totalPayloadDownload = 0,
+    this.totalPayloadUpload = 0,
+    this.currentTracker = '',
+    this.nextAnnounceSeconds = 0,
+    this.distributedCopies = 0.0,
+    this.fileProgress = const [],
+    this.filePriorities = const [],
   });
 }

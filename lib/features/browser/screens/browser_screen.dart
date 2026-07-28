@@ -59,6 +59,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {};
   final Map<String, int> _detectedPlaylistUrls = {};
   final Map<String, DateTime> _ytDetectionFailed = {};
+  final Map<String, bool> _mediaScanFailed = {};
   // Per-tab YouTube auth cooldown — prevents one tab's auth suppressing others.
   final Map<String, DateTime> _lastYoutubeAuthTimes = {};
   static const _youtubeAuthCooldown = Duration(seconds: 30);
@@ -247,31 +248,38 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   // ─────────────────────────────────────────────────────────────
   Future<void> _saveTabs() async {
     try {
+      // Only persist normal (non-incognito) tabs.
+      final normalTabs = _tabs.where((t) => !t.isIncognito).toList();
+
+      final tabsData = normalTabs.map((tab) => {
+        'url': tab.url,
+        'title': tab.title,
+        'isIncognito': false, // always false for persisted tabs
+      }).toList();
+
+      // Determine the active tab ID, but only if it's a normal tab.
+      final activeTab = _currentTabIndex >= 0 && _currentTabIndex < _tabs.length
+          ? _tabs[_currentTabIndex]
+          : null;
+      final String? activeTabId;
+      if (activeTab != null && !activeTab.isIncognito) {
+        activeTabId = activeTab.id;
+      } else if (normalTabs.isNotEmpty) {
+        activeTabId = normalTabs.last.id;
+      } else {
+        activeTabId = null;
+      }
+
+      final data = {
+        'tabs': tabsData,
+        'activeTabId': activeTabId,
+        'savedAt': DateTime.now().toIso8601String(),
+      };
+
       final prefs = await SharedPreferences.getInstance();
-      final List<Map<String, dynamic>> tabList = [];
-      int savedIndex = 0;
-      int normalTabCount = 0;
-      bool currentTabFound = false;
-      for (int i = 0; i < _tabs.length; i++) {
-        final tab = _tabs[i];
-        if (tab.isIncognito) continue;
-        if (i == _currentTabIndex) {
-          savedIndex = normalTabCount;
-          currentTabFound = true;
-        }
-        tabList.add({'url': tab.url, 'title': tab.title, 'isIncognito': false});
-        normalTabCount++;
-      }
-      if (!currentTabFound && normalTabCount > 0) {
-        savedIndex = normalTabCount - 1;
-      }
-      if (normalTabCount > 0) {
-        savedIndex = savedIndex.clamp(0, normalTabCount - 1);
-      }
-      await prefs.setString('persisted_browser_tabs', jsonEncode(tabList));
-      await prefs.setInt('persisted_browser_tab_index', savedIndex);
+      await prefs.setString('browser_tabs', jsonEncode(data));
     } catch (e) {
-      debugPrint('Error saving tabs: $e');
+      debugPrint('Failed to save tabs: $e');
     }
   }
 
@@ -293,29 +301,37 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     // Fall back to SharedPreferences (legacy persistence)
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? tabsJson = prefs.getString('persisted_browser_tabs');
-      final int savedTabIndex =
-          prefs.getInt('persisted_browser_tab_index') ?? 0;
+      final String? tabsJson = prefs.getString('browser_tabs');
       if (tabsJson != null && tabsJson.isNotEmpty && mounted) {
         final fallbackTitle = L10n.of(context, 'browser_new_tab');
-        final List<dynamic> decoded = jsonDecode(tabsJson);
+        final Map<String, dynamic> decodedData = jsonDecode(tabsJson);
+        final List<dynamic> decoded = decodedData['tabs'] as List<dynamic>? ?? [];
+        final String? activeTabId = decodedData['activeTabId'] as String?;
         final List<BrowserTab> loadedTabs = [];
         for (final item in decoded) {
           if (item is Map<String, dynamic>) {
             final url = item['url'] as String? ?? 'about:blank';
             final title = item['title'] as String? ?? fallbackTitle;
+            final id = item['id'] as String?;
+            final isIncognito = item['isIncognito'] as bool? ?? false;
+            if (isIncognito) continue; // Skip any incognito tabs (defensive)
             final uri = Uri.tryParse(url);
             if (uri != null && url != 'about:blank' && url.isNotEmpty &&
                 uri.scheme != 'http' && uri.scheme != 'https') {
               debugPrint('[Browser] Skipping unsafe restored URL: $url');
               continue;
             }
-            final tab = _createNewTab(initialUrl: url, isIncognito: false);
+            final tab = _createNewTab(initialUrl: url, isIncognito: false, id: id);
             tab.title = title;
             loadedTabs.add(tab);
           }
         }
         if (loadedTabs.isNotEmpty && mounted) {
+          int activeIdx = 0;
+          if (activeTabId != null) {
+            final idx = loadedTabs.indexWhere((t) => t.id == activeTabId);
+            if (idx != -1) activeIdx = idx;
+          }
           setState(() {
             for (final oldTab in _tabs) {
               _cleanupTabState(oldTab.id);
@@ -323,7 +339,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _tabs
               ..clear()
               ..addAll(loadedTabs);
-            _currentTabIndex = savedTabIndex.clamp(0, _tabs.length - 1);
+            _currentTabIndex = activeIdx;
             _urlController.text =
                 _tabs[_currentTabIndex].isHome ? '' : _tabs[_currentTabIndex].url;
           });
@@ -419,15 +435,16 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   BrowserTab _createNewTab({
     String initialUrl = 'about:blank',
     bool isIncognito = false,
+    String? id,
   }) {
     final cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank')
         ? 'about:blank'
         : initialUrl;
-    final id =
+    final tabId = id ??
         '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
     final controller = WebViewController();
     final tab = BrowserTab(
-      id: id,
+      id: tabId,
       controller: controller,
       url: cleanInitialUrl == 'about:blank' ? '' : cleanInitialUrl,
       title: cleanInitialUrl == 'about:blank'
@@ -767,6 +784,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _detectedMediaSources.remove(tabId);
     _detectedPlaylistUrls.remove(tabId);
     _lastYoutubeAuthTimes.remove(tabId);
+    _mediaScanFailed.remove(tabId);
     // Evict expired entries older than 10 minutes
     final now = DateTime.now();
     _ytDetectionFailed.removeWhere((url, timestamp) => now.difference(timestamp) > const Duration(minutes: 10));
@@ -893,7 +911,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   void _delayed(Duration duration, VoidCallback callback) {
-    final timer = Timer(duration, callback);
+    late Timer timer;
+    timer = Timer(duration, () {
+      _pendingTimers.remove(timer);
+      callback();
+    });
     _pendingTimers.add(timer);
   }
 
@@ -1597,6 +1619,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     if (!mounted || !_tabs.contains(tab) || tab.isHome || !_isSnifferEnabled) {
       return;
     }
+    _mediaScanFailed.remove(tab.id);
     if (_isYoutubeHost(tab.url)) return;
     final scannedUrl = tab.url;
     final activeIds = _tabs.map((t) => t.id).toSet();
@@ -1743,6 +1766,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       }
     } catch (e) {
       debugPrint('[DMX Browser] Failed to run media scan JavaScript: $e');
+      setState(() {
+        _mediaScanFailed[tab.id] = true;
+      });
     }
   }
 
@@ -3157,7 +3183,8 @@ $_customJs
         !activeTab.isHome &&
         (_detectedDownloadUrls[activeTab.id] != null ||
             (_detectedMediaSources[activeTab.id]?.isNotEmpty ?? false) ||
-            _detectedPlaylistUrls.containsKey(activeTab.id));
+            _detectedPlaylistUrls.containsKey(activeTab.id) ||
+            (_mediaScanFailed[activeTab.id] ?? false));
     if (settings.pinchToZoom != _lastZoomEnabled) {
       _lastZoomEnabled = settings.pinchToZoom;
       for (final tab in _tabs) {
@@ -3947,6 +3974,20 @@ $_customJs
     // Never show media detection on YouTube
     if (_isYoutubeHost(activeTab.url)) {
       return _buildDefaultDownloadFab(isDark, accent, settings, activeTab);
+    }
+
+    if (_mediaScanFailed[activeTab.id] == true) {
+      return _SignalFab(
+        color: Colors.orange,
+        icon: Icons.refresh_rounded,
+        label: 'Scan failed (retry)',
+        pulse: false,
+        isDark: isDark,
+        onPressed: () {
+          triggerHaptic(settings);
+          _scanPageMedia(activeTab);
+        },
+      );
     }
 
     final detectedSources = _detectedMediaSources[activeTab.id] ?? [];

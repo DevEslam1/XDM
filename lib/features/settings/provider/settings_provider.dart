@@ -60,6 +60,9 @@ class SettingsProvider extends ChangeNotifier {
   static const _enableUpnpKey = 'enableUpnp';
   static const _forceEncryptKey = 'forceEncrypt';
   static const _torrentConnectionsLimitKey = 'torrentConnectionsLimit';
+  static const _sequentialDownloadKey = 'sequentialDownload';
+  static const _shareRatioLimitKey = 'shareRatioLimit';
+  static const _maxSeedingTimeKey = 'maxSeedingTimeMinutes';
   static const _defaultThreadCountKey = 'defaultThreadCount';
   static const _customDownloadPathKey = 'customDownloadPath';
   static const _incognitoEnabledKey = 'incognitoEnabled';
@@ -111,7 +114,8 @@ class SettingsProvider extends ChangeNotifier {
   bool get isDarkMode {
     if (themeMode == 'system') {
       try {
-        return WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+        final binding = WidgetsBinding.instance;
+        return binding.platformDispatcher.platformBrightness == Brightness.dark;
       } catch (_) {
         return _isDarkMode;
       }
@@ -152,6 +156,10 @@ class SettingsProvider extends ChangeNotifier {
   bool enableUpnp = true;
   bool forceEncrypt = false;
   int torrentConnectionsLimit = 200;
+
+  bool sequentialDownload = false;
+  double shareRatioLimit = 2.0;
+  int maxSeedingTimeMinutes = 0;
 
   int get configuredMaxDownloads => _maxDownloads;
   bool get configuredClassicUi => _classicUi;
@@ -245,6 +253,9 @@ class SettingsProvider extends ChangeNotifier {
     enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
     forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
     torrentConnectionsLimit = (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit).clamp(10, 1000);
+    sequentialDownload = _prefs.getBool(_sequentialDownloadKey) ?? sequentialDownload;
+    shareRatioLimit = _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
+    maxSeedingTimeMinutes = _prefs.getInt(_maxSeedingTimeKey) ?? maxSeedingTimeMinutes;
     _defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
     if (![1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16].contains(_defaultThreadCount)) _defaultThreadCount = 16;
     customDownloadPath = _prefs.getString(_customDownloadPathKey);
@@ -471,6 +482,24 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setSequentialDownload(bool value) async {
+    sequentialDownload = value;
+    await _prefs.setBool(_sequentialDownloadKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setShareRatioLimit(double value) async {
+    shareRatioLimit = value;
+    await _prefs.setDouble(_shareRatioLimitKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setMaxSeedingTime(int value) async {
+    maxSeedingTimeMinutes = value;
+    await _prefs.setInt(_maxSeedingTimeKey, value);
+    notifyListeners();
+  }
+
   Future<void> setDefaultThreadCount(int value) async {
     _defaultThreadCount = value;
     await _prefs.setInt(_defaultThreadCountKey, value);
@@ -693,6 +722,9 @@ class SettingsProvider extends ChangeNotifier {
       _enableUpnpKey,
       _forceEncryptKey,
       _torrentConnectionsLimitKey,
+      _sequentialDownloadKey,
+      _shareRatioLimitKey,
+      _maxSeedingTimeKey,
       _defaultThreadCountKey,
       _customDownloadPathKey,
       _incognitoEnabledKey,
@@ -755,7 +787,10 @@ class SettingsProvider extends ChangeNotifier {
     enableDht = true;
     enableUpnp = true;
     forceEncrypt = false;
-    torrentConnectionsLimit = 200;
+torrentConnectionsLimit = 200;
+    sequentialDownload = false;
+    shareRatioLimit = 2.0;
+    maxSeedingTimeMinutes = 0;
     incognitoEnabled = false;
     desktopMode = false;
     pinchToZoom = true;

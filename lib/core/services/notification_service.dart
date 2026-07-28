@@ -224,10 +224,13 @@ class NotificationService {
       _initialized = true;
       completer.complete();
     } catch (e) {
-      _initFuture = null;
       completer.completeError(e);
       rethrow;
     }
+  }
+
+  void resetInit() {
+    _initFuture = null;
   }
 
   Future<void> showDownloadProgress({

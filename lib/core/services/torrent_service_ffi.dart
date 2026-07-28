@@ -3,40 +3,121 @@ import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes;
 import 'package:logging/logging.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'torrent_models.dart';
+import 'torrent_resume_store.dart';
+
+/// Safe accessors for plugin methods that may not exist in all versions.
+/// These replace all `as dynamic` casts with a single guarded boundary.
+extension _LibtorrentSafeAccess on LibtorrentFlutter {
+  List<dynamic>? tryGetFileProgress(int id) {
+    try {
+      // ignore: avoid_dynamic_calls
+      return (this as dynamic).getFileProgress(id) as List<dynamic>?;
+    } on NoSuchMethodError {
+      return null;
+    }
+  }
+
+  List<dynamic>? tryGetFilePriorities(int id) {
+    try {
+      // ignore: avoid_dynamic_calls
+      return (this as dynamic).getFilePriorities(id) as List<dynamic>?;
+    } on NoSuchMethodError {
+      return null;
+    }
+  }
+
+  void tryForceRecheck(int id) {
+    try {
+      // ignore: avoid_dynamic_calls
+      (this as dynamic).forceReCheck(id);
+    } on NoSuchMethodError {
+      // Plugin does not support forceReCheck; skip silently.
+    }
+  }
+}
+
+enum TorrentSessionState {
+  uninitialized,
+  initializing,
+  ready,
+  pausing,
+  disposing,
+  disposed,
+}
 
 class TorrentService {
   static final _log = Logger('TorrentService');
+  static TorrentSessionState _state = TorrentSessionState.uninitialized;
   static Set<int> _activeTorrentIds = {};
   static StreamSubscription? _updatesSub;
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
-  static bool _disposed = false;
   static bool fileProgressSupported = true;
   static bool filePrioritiesSupported = true;
-  static final Map<int, double> _latestTorrentProgress = {};
+  static final Map<int, double> _latestProgress = {};
 
   static bool get isSupported => true;
-  static bool get isInitialized => LibtorrentFlutter.isInitialized;
+  static bool get isInitialized => _state == TorrentSessionState.ready;
+  static Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
 
   static Future<void> init() async {
-    _disposed = false;
-    await _updatesSub?.cancel();
-    _updatesSub = null;
-    // Close the previous controller (if any) before dropping the reference —
-    // otherwise a re-init without an intervening dispose() leaks the old
-    // broadcast StreamController and any listeners still attached to it.
-    await _updateController?.close();
-    _updateController = null;
-    _isStartingTracking = false;
-    await LibtorrentFlutter.init();
-    _startTrackingUpdates();
+    if (_state != TorrentSessionState.uninitialized &&
+        _state != TorrentSessionState.disposed) {
+      return;
+    }
+
+    _state = TorrentSessionState.initializing;
+    try {
+      await TorrentResumeStore.init();
+      await LibtorrentFlutter.init();
+      fileProgressSupported = true;
+      filePrioritiesSupported = true;
+      _configureSessionFromSettings();
+      _startTrackingUpdates();
+      _state = TorrentSessionState.ready;
+    } catch (e) {
+      _state = TorrentSessionState.uninitialized;
+      rethrow;
+    }
   }
 
-  static bool _isStartingTracking = false;
+  static bool _sequentialDownload = false;
+static double _shareRatioLimit = 2.0;
+static int _maxSeedingTimeMinutes = 0;
+
+static bool get sequentialDownloadEnabled => _sequentialDownload;
+static double get shareRatioLimit => _shareRatioLimit;
+static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
+
+static void _configureSessionFromSettings() {
+    try {
+      final settings = SettingsProvider.instance;
+      final config = LibtorrentFlutter.instance.getDefaultConfig().copyWith(
+        disableDht: !settings.enableDht,
+        disableUpnp: !settings.enableUpnp,
+        forceEncrypt: settings.forceEncrypt,
+        connectionsLimit: settings.torrentConnectionsLimit,
+        downloadRateLimit: settings.speedLimitBytesPerSecond ~/ 1024,
+        uploadRateLimit: settings.globalTorrentSeedingLimited
+            ? settings.globalTorrentSeedingLimitKbps
+            : 0,
+      );
+      LibtorrentFlutter.instance.configureSession(config);
+
+      _sequentialDownload = settings.sequentialDownload;
+      _shareRatioLimit = settings.shareRatioLimit;
+      _maxSeedingTimeMinutes = settings.maxSeedingTimeMinutes;
+    } catch (e) {
+      _log.warning('Session configuration failed: $e');
+    }
+  }
+
+  static Completer<void>? _trackingCompleter;
 
   static void _startTrackingUpdates() {
-    if (_disposed || !isInitialized) return;
-    if (_updatesSub != null || _isStartingTracking) return;
-    _isStartingTracking = true;
+    if (_state == TorrentSessionState.disposed || !isInitialized) return;
+    if (_updatesSub != null) return;
+    if (_trackingCompleter != null) return; // already in progress
+    _trackingCompleter = Completer<void>();
     StreamController<Map<int, TorrentUpdateInfo>>? controller;
     StreamSubscription? sub;
     try {
@@ -45,8 +126,9 @@ class TorrentService {
         (torrents) {
           try {
             _activeTorrentIds = Set<int>.from(torrents.keys);
-            final mapped = torrents.map(
-              (key, value) => MapEntry(
+            final mapped = torrents.map((key, value) {
+              _latestProgress[value.id] = value.progress;
+              return MapEntry(
                 key,
                 TorrentUpdateInfo(
                   id: value.id,
@@ -61,12 +143,20 @@ class TorrentService {
                   stateLabel: value.state.label,
                   numSeeds: value.numSeeds,
                   numPeers: value.numPeers,
+                  piecesHave: (value.progress * 1000).round(),
+                  piecesTotal: 1000,
+                  downloadPayloadRate: value.downloadRate,
+                  uploadPayloadRate: value.uploadRate,
+                  totalPayloadDownload: value.totalDone,
+                  totalPayloadUpload: 0,
+                  currentTracker: '',
+                  nextAnnounceSeconds: 0,
+                  distributedCopies: 0.0,
+                  fileProgress: const [],
+                  filePriorities: const [],
                 ),
-              ),
-            );
-            _latestTorrentProgress.addAll(
-              mapped.map((key, value) => MapEntry(key, value.progress)),
-            );
+              );
+            });
             if (!controller!.isClosed) controller.add(mapped);
           } catch (e) {
             _log.warning('Error processing torrent update: $e');
@@ -81,19 +171,25 @@ class TorrentService {
         },
       );
 
-      if (_disposed) {
+      if (_state == TorrentSessionState.disposed) {
         sub.cancel();
         controller.close();
+        _trackingCompleter?.complete();
+        _trackingCompleter = null;
         return;
       }
       _updateController = controller;
       _updatesSub = sub;
+      _trackingCompleter?.complete();
+      _trackingCompleter = null;
     } catch (e) {
       _log.warning('Failed to start torrent tracking: $e');
       sub?.cancel();
       controller?.close();
-    } finally {
-      _isStartingTracking = false;
+      if (_trackingCompleter != null && !_trackingCompleter!.isCompleted) {
+        _trackingCompleter!.completeError(e);
+      }
+      _trackingCompleter = null;
     }
   }
 
@@ -106,24 +202,36 @@ class TorrentService {
     }
   }
 
+  static void setUploadLimit(int bps) {
+    if (!isInitialized) return;
+    try {
+      LibtorrentFlutter.instance.setUploadLimit(bps);
+    } catch (e) {
+      _log.warning('setUploadLimit failed: $e');
+    }
+  }
+
   static Future<void> dispose() async {
-    _disposed = true;
+    if (_state != TorrentSessionState.ready) return;
+    _state = TorrentSessionState.pausing;
+
+    _state = TorrentSessionState.disposing;
     await _updatesSub?.cancel();
     _updatesSub = null;
     await _updateController?.close();
     _updateController = null;
     _activeTorrentIds.clear();
-    if (isInitialized) {
-      try {
-        await LibtorrentFlutter.instance.dispose();
-      } catch (e) {
-        _log.warning('Error disposing libtorrent: $e');
-      }
+
+    try {
+      await LibtorrentFlutter.instance.dispose();
+    } catch (e) {
+      _log.warning('Error disposing libtorrent: $e');
     }
+    _state = TorrentSessionState.disposed;
   }
 
   static int addMagnet(String magnetUri, String savePath) {
-    if (_disposed || !isInitialized) return -1;
+    if (!isInitialized) return -1;
     _startTrackingUpdates();
     try {
       final id = LibtorrentFlutter.instance.addMagnet(magnetUri, savePath);
@@ -138,7 +246,7 @@ class TorrentService {
   }
 
   static int addTorrentFile(String filePath, String savePath) {
-    if (_disposed || !isInitialized) return -1;
+    if (!isInitialized) return -1;
     _startTrackingUpdates();
     try {
       final id = LibtorrentFlutter.instance.addTorrentFile(filePath, savePath);
@@ -153,21 +261,25 @@ class TorrentService {
   }
 
   static void removeTorrent(int id, {bool deleteFiles = false}) {
-    if (_disposed || !isInitialized) return;
+    if (!isInitialized) return;
     if (id >= 0) {
       try {
         LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
+        TorrentResumeStore.delete(id);
+        _latestProgress.remove(id);
+        _activeTorrentIds.remove(id);
       } catch (e) {
         _log.warning('removeTorrent failed for id $id: $e');
       }
-      _activeTorrentIds.remove(id);
     }
   }
 
   static void pauseTorrent(int id) {
-    if (_disposed || !isInitialized) return;
+    if (!isInitialized) return;
     if (id >= 0) {
       try {
+        final progress = _latestProgress[id] ?? 0.0;
+        TorrentResumeStore.save(id, progress: progress);
         LibtorrentFlutter.instance.pauseTorrent(id);
       } catch (e) {
         _log.warning('pauseTorrent failed for id $id: $e');
@@ -176,7 +288,7 @@ class TorrentService {
   }
 
   static void resumeTorrent(int id) {
-    if (_disposed || !isInitialized) return;
+    if (!isInitialized) return;
     if (id >= 0) {
       try {
         LibtorrentFlutter.instance.resumeTorrent(id);
@@ -186,31 +298,15 @@ class TorrentService {
     }
   }
 
-  static bool forceReCheckSupported = true;
-
-  static void forceReCheck(int id) {
-    if (_disposed || !isInitialized) return;
-    if (id < 0) return;
-    try {
-      final instance = LibtorrentFlutter.instance;
-      try {
-        // ignore: avoid_dynamic_calls
-        (instance as dynamic).forceReCheck(id);
-      } on NoSuchMethodError {
-        forceReCheckSupported = false;
-        _log.warning(
-          'forceReCheck not available in this plugin version. '
-          'Torrent $id will rely on default add-time check. '
-          'Update libtorrent_flutter plugin to enable forced re-check.',
-        );
-      }
-    } catch (e) {
-      _log.warning('forceReCheck failed for torrent $id: $e');
+  static void recheckTorrent(int id) {
+    if (!isInitialized) return;
+    if (id >= 0) {
+      LibtorrentFlutter.instance.tryForceRecheck(id);
     }
   }
 
   static void setFilePriorities(int id, List<int> priorities) {
-    if (_disposed || !isInitialized) return;
+    if (!isInitialized) return;
     if (id >= 0) {
       try {
         LibtorrentFlutter.instance.setFilePriorities(id, priorities);
@@ -221,7 +317,7 @@ class TorrentService {
   }
 
   static int getFileCount(int id) {
-    if (_disposed || !isInitialized || id < 0) return 0;
+    if (!isInitialized || id < 0) return 0;
     try {
       return LibtorrentFlutter.instance.getFiles(id).length;
     } catch (e) {
@@ -231,32 +327,23 @@ class TorrentService {
   }
 
   static List<TorrentFileItem> getFiles(int id) {
-    if (_disposed || !isInitialized) return [];
+    if (!isInitialized) return [];
     if (id >= 0) {
       try {
         final files = LibtorrentFlutter.instance.getFiles(id);
-        final progress = fileProgressSupported ? () {
-          try {
-            return (LibtorrentFlutter.instance as dynamic).getFileProgress(id)
-                as List<dynamic>?;
-          } on NoSuchMethodError {
-            fileProgressSupported = false;
-            return null;
-          } catch (_) {
-            return null;
-          }
-        }() : null;
-        final priorities = filePrioritiesSupported ? () {
-          try {
-            return (LibtorrentFlutter.instance as dynamic).getFilePriorities(id)
-                as List<dynamic>?;
-          } on NoSuchMethodError {
-            filePrioritiesSupported = false;
-            return null;
-          } catch (_) {
-            return null;
-          }
-        }() : null;
+        final progress = fileProgressSupported
+            ? LibtorrentFlutter.instance.tryGetFileProgress(id)
+            : null;
+        if (progress == null && fileProgressSupported) {
+          fileProgressSupported = false;
+        }
+
+        final priorities = filePrioritiesSupported
+            ? LibtorrentFlutter.instance.tryGetFilePriorities(id)
+            : null;
+        if (priorities == null && filePrioritiesSupported) {
+          filePrioritiesSupported = false;
+        }
 
         return List.generate(files.length, (i) {
           final f = files[i];
@@ -285,7 +372,7 @@ class TorrentService {
   }
 
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates {
-    if (_disposed || !isInitialized) return const Stream.empty();
+    if (!isInitialized) return const Stream.empty();
     _startTrackingUpdates();
     final existing = _updateController;
     if (existing != null) return existing.stream;
@@ -296,7 +383,7 @@ class TorrentService {
     bridging = StreamController<Map<int, TorrentUpdateInfo>>(
       onListen: () {
         poller = Timer.periodic(const Duration(milliseconds: 200), (_) {
-          if (_disposed) {
+          if (_state == TorrentSessionState.disposed) {
             bridging.close();
             return;
           }
@@ -319,33 +406,7 @@ class TorrentService {
     return bridging.stream;
   }
 
-  static void setUploadLimit(int bps) {
-    if (_disposed || !isInitialized) return;
-    try {
-      LibtorrentFlutter.instance.setUploadLimit(bps);
-    } catch (e) {
-      _log.warning('setUploadLimit failed: $e');
-    }
-  }
-
-  static void applyAdvancedSettings(SettingsProvider settings) {
-    if (_disposed || !isInitialized) return;
-    if (_activeTorrentIds.isNotEmpty) {
-      _log.warning(
-        'Applying settings while torrents are active may cause connection resets or instability.',
-      );
-    }
-    try {
-      final currentConfig = LibtorrentFlutter.instance.getDefaultConfig();
-      final newConfig = currentConfig.copyWith(
-        disableDht: !settings.enableDht,
-        disableUpnp: !settings.enableUpnp,
-        forceEncrypt: settings.forceEncrypt,
-        connectionsLimit: settings.torrentConnectionsLimit,
-      );
-      LibtorrentFlutter.instance.configureSession(newConfig);
-    } catch (e) {
-      _log.warning('applyAdvancedSettings failed: $e');
-    }
+  static void configureSession(SettingsProvider settings) {
+    _configureSessionFromSettings();
   }
 }

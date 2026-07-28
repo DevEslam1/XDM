@@ -298,7 +298,6 @@ class DownloadEngine {
   final List<SendPort> _activeIsolateCommandPorts = [];
   final List<Isolate> _activeIsolates = [];
   final Set<int> _activeTorrentIds = <int>{};
-  final Map<int, int> _completedConfirmations = <int, int>{};
   final Dio _sharedDio;
   final Set<Dio> _activeDioClients = {};
   final Set<Dio> _reservedDioClients = {};
@@ -1137,153 +1136,15 @@ class DownloadEngine {
 
     _activeTorrentIds.add(id);
 
-    final metadataCompleter = Completer<void>();
-    StreamSubscription? metadataSub;
-    metadataSub = TorrentService.torrentUpdates.listen((torrents) {
-      if (cancelToken.isCancelled) {
-        metadataSub?.cancel();
-        return;
-      }
-      final torrent = torrents[id];
-      if (torrent != null && torrent.hasMetadata) {
-        metadataSub?.cancel();
-        if (!metadataCompleter.isCompleted) {
-          metadataCompleter.complete();
-        }
-      }
-    });
-
-    Timer? metadataTimer;
-    final downloadCompleter = Completer<void>();
-
-    cancelToken.whenCancel
-        .then((_) async {
-          if (metadataCompleter.isCompleted) {
-            TorrentService.pauseTorrent(id);
-          } else {
-            try {
-              TorrentService.removeTorrent(id);
-            } catch (e) {
-              debugPrint(
-                '[DMX] Error removing torrent during cancellation: $e',
-              );
-            }
-          }
-          await metadataSub?.cancel();
-          metadataTimer?.cancel();
-          if (!metadataCompleter.isCompleted) {
-            metadataCompleter.completeError(
-              DioException(
-                requestOptions: RequestOptions(path: url),
-                type: DioExceptionType.cancel,
-                error: 'cancelled',
-              ),
-            );
-          } else if (!downloadCompleter.isCompleted) {
-            downloadCompleter.completeError(
-              DioException(
-                requestOptions: RequestOptions(path: url),
-                type: DioExceptionType.cancel,
-                error: 'cancelled',
-              ),
-            );
-          }
-        })
-        .catchError((e) {
-          debugPrint('Torrent download cancel handler error: $e');
-        });
-
-    int metadataElapsed = 0;
-    Timer? metadataProgressTimer;
-    metadataProgressTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (metadataCompleter.isCompleted) {
-        metadataProgressTimer?.cancel();
-        return;
-      }
-      metadataElapsed += 30;
-      onProgress(
-        DownloadProgress(
-          downloadedBytes: 0,
-          fileSize: 0,
-          speed: 0.0,
-          eta: null,
-          statusMessage: 'Fetching metadata… (${metadataElapsed}s elapsed)',
-        ),
-      );
-    });
-
-    metadataTimer = Timer(const Duration(seconds: 300), () {
-      metadataProgressTimer?.cancel();
-      if (metadataCompleter.isCompleted) return;
-      metadataSub?.cancel();
-      if (!cancelToken.isCancelled) {
-        try {
-          TorrentService.removeTorrent(id);
-        } catch (e) {
-          debugPrint(
-            '[DMX] Error removing torrent during metadata timeout: $e',
-          );
-        }
-      }
-      if (!metadataCompleter.isCompleted) {
-        metadataCompleter.completeError(
-          DioException(
-            requestOptions: RequestOptions(path: url),
-            type: DioExceptionType.receiveTimeout,
-            error: 'Timed out waiting for torrent metadata.',
-          ),
-        );
-      }
-    });
-
-    try {
-      await metadataCompleter.future;
-    } finally {
-      metadataTimer.cancel();
-      metadataProgressTimer.cancel();
-    }
+    await _waitForMetadata(id, url, cancelToken, onProgress);
 
     final currentTorrentFiles = getTorrentFiles?.call();
-    if (currentTorrentFiles != null && currentTorrentFiles.isNotEmpty) {
-      final engineFileCount = TorrentService.getFileCount(id);
-      if (engineFileCount == currentTorrentFiles.length) {
-        final priorities = currentTorrentFiles.map((f) {
-          final selected = f['selected'] as bool? ?? true;
-          if (!selected) return 0;
-          return f['priority'] as int? ?? 4;
-        }).toList();
-        TorrentService.setFilePriorities(id, priorities);
-      } else {
-        debugPrint('[DMX] Skipping file priorities: engine has $engineFileCount '
-            'files but task has ${currentTorrentFiles.length}');
-      }
-    }
+    _applyFilePriorities(id, currentTorrentFiles);
 
+    // Recheck existing data on disk so progress reflects what's already saved.
     final saveDir = File(currentLocalFilePath).parent.path;
-    bool alreadyOnDisk = false;
     if (Directory(saveDir).existsSync()) {
-      try {
-        final folderBytes = await Isolate.run(() => scanFolderBytesSync(saveDir));
-        alreadyOnDisk = folderBytes > 0;
-      } catch (e) {
-        debugPrint('[DMX] Folder scan isolate failed, falling back to sync: $e');
-        alreadyOnDisk = scanFolderBytesSync(saveDir) > 0;
-      }
-    }
-
-    if (alreadyOnDisk) {
-      TorrentService.forceReCheck(id);
-      if (!TorrentService.forceReCheckSupported) {
-        onProgress(
-          DownloadProgress(
-            downloadedBytes: 0,
-            fileSize: 0,
-            speed: 0.0,
-            eta: null,
-            statusMessage: 'Re-check unavailable; resume accuracy may be reduced.',
-          ),
-        );
-      }
+      TorrentService.recheckTorrent(id);
       await _waitForState(
         id,
         cancelToken,
@@ -1299,8 +1160,115 @@ class DownloadEngine {
       TorrentService.resumeTorrent(id);
     }
 
-    StreamSubscription? downloadSub;
-    downloadSub = TorrentService.torrentUpdates.listen((torrents) {
+    await _listenForCompletion(id, url, cancelToken, onProgress, getTorrentFiles, knownFileSize);
+
+    _activeCancelTokens.remove(cancelToken);
+  }
+
+  Future<void> _waitForMetadata(
+    int id,
+    String url,
+    CancelToken cancelToken,
+    ValueChangedProgress onProgress,
+  ) async {
+    final completer = Completer<void>();
+    StreamSubscription? sub;
+    Timer? timer;
+
+    sub = TorrentService.torrentUpdates.listen((torrents) {
+      if (cancelToken.isCancelled) {
+        sub?.cancel();
+        return;
+      }
+      final torrent = torrents[id];
+      if (torrent != null && torrent.hasMetadata) {
+        sub?.cancel();
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+
+    cancelToken.whenCancel.then((_) async {
+      await sub?.cancel();
+      timer?.cancel();
+      if (!completer.isCompleted) {
+        try { TorrentService.removeTorrent(id); } catch (_) {}
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+            error: 'cancelled',
+          ),
+        );
+      }
+    }).catchError((_) {});
+
+    int metadataElapsed = 0;
+    timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (completer.isCompleted) { timer?.cancel(); return; }
+      metadataElapsed += 30;
+      onProgress(
+        DownloadProgress(
+          downloadedBytes: 0, fileSize: 0, speed: 0.0, eta: null,
+          statusMessage: 'Fetching metadata… (${metadataElapsed}s elapsed)',
+        ),
+      );
+    });
+
+    final timeout = Timer(const Duration(seconds: 300), () {
+      timer?.cancel();
+      if (completer.isCompleted) return;
+      sub?.cancel();
+      if (!cancelToken.isCancelled) {
+        try { TorrentService.removeTorrent(id); } catch (_) {}
+      }
+      if (!completer.isCompleted) {
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.receiveTimeout,
+            error: 'Timed out waiting for torrent metadata.',
+          ),
+        );
+      }
+    });
+
+    try {
+      await completer.future;
+    } finally {
+      timer.cancel();
+      timeout.cancel();
+      await sub.cancel();
+    }
+  }
+
+  void _applyFilePriorities(int id, List<Map<String, dynamic>>? currentTorrentFiles) {
+    if (currentTorrentFiles == null || currentTorrentFiles.isEmpty) return;
+    final engineFileCount = TorrentService.getFileCount(id);
+    if (engineFileCount == currentTorrentFiles.length) {
+      final priorities = currentTorrentFiles.map((f) {
+        final selected = f['selected'] as bool? ?? true;
+        if (!selected) return 0;
+        return f['priority'] as int? ?? 4;
+      }).toList();
+      TorrentService.setFilePriorities(id, priorities);
+    } else {
+      debugPrint('[DMX] Skipping file priorities: engine has $engineFileCount '
+          'files but task has ${currentTorrentFiles.length}');
+    }
+  }
+
+  Future<void> _listenForCompletion(
+    int id,
+    String url,
+    CancelToken cancelToken,
+    ValueChangedProgress onProgress,
+    List<Map<String, dynamic>>? Function()? getTorrentFiles,
+    int knownFileSize,
+  ) async {
+    final completer = Completer<void>();
+    StreamSubscription? sub;
+
+    sub = TorrentService.torrentUpdates.listen((torrents) {
       final torrent = torrents[id];
       if (torrent == null) return;
 
@@ -1357,8 +1325,7 @@ class DownloadEngine {
           ? torrent.totalWantedDone
           : torrent.totalDone;
 
-      // Only distribute downloaded bytes by priority as a fallback when native
-      // per-file progress is NOT supported by libtorrent.
+      // Per-file progress fallback when native getFileProgress is unavailable.
       if (!TorrentService.fileProgressSupported &&
           resolvedFiles != null &&
           resolvedFiles.isNotEmpty) {
@@ -1418,101 +1385,16 @@ class DownloadEngine {
         ),
       );
 
-      if (isCompleted) {
-        _completedConfirmations[id] = (_completedConfirmations[id] ?? 0) + 1;
-        if (_completedConfirmations[id]! < 2) return;
-        if (!downloadCompleter.isCompleted) {
-          Future.delayed(const Duration(milliseconds: 800), () {
-            if (!downloadCompleter.isCompleted) {
-              downloadCompleter.complete();
-            }
-          });
-        }
-      } else {
-        _completedConfirmations.remove(id);
+      if (isCompleted && !completer.isCompleted) {
+        completer.complete();
       }
     });
 
     try {
-      await downloadCompleter.future;
+      await completer.future;
     } finally {
-      await downloadSub.cancel();
+      await sub.cancel();
       _activeTorrentIds.remove(id);
-      _completedConfirmations.remove(id);
-    }
-
-    _activeCancelTokens.remove(cancelToken);
-    _completedConfirmations.remove(id);
-    return;
-  }
-
-  /// Distributes total downloaded bytes across torrent files by priority order.
-  ///
-  /// libtorrent downloads high-priority files first, so this sequential model
-  /// is a much better approximation than the naïve proportional estimate.
-  /// Priority groups: 7 = high, 4 = normal (default), 1 = low, 0 = skip.
-  static void _distributeDownloadedBytesByPriority(
-    List<Map<String, dynamic>> files,
-    int totalDownloaded,
-  ) {
-    // Reset deselected files to 0.
-    for (final f in files) {
-      if (f['selected'] != true) {
-        f['downloadedBytes'] = 0;
-      }
-    }
-
-    final selected =
-        files.where((f) => f['selected'] == true).toList();
-    if (selected.isEmpty || totalDownloaded <= 0) return;
-
-    // Group selected files by descending priority (7 → 4 → 1).
-    final groups = <int, List<Map<String, dynamic>>>{};
-    for (final f in selected) {
-      final priority = (f['priority'] as int?) ?? 4;
-      (groups[priority] ??= []).add(f);
-    }
-    final sortedKeys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
-
-    int remaining = totalDownloaded;
-    for (final priority in sortedKeys) {
-      if (remaining <= 0) {
-        // No bytes left — later groups show 0.
-        for (final f in groups[priority]!) {
-          f['downloadedBytes'] = 0;
-        }
-        continue;
-      }
-      final group = groups[priority]!;
-      final groupSize = group.fold<int>(
-        0,
-        (s, f) => s + ((f['length'] as int?) ?? 0),
-      );
-      if (groupSize <= 0) continue;
-
-      if (remaining >= groupSize) {
-        // Entire group is complete.
-        for (final f in group) {
-          f['downloadedBytes'] = (f['length'] as int?) ?? 0;
-        }
-        remaining -= groupSize;
-      } else {
-        // Allocate remaining downloaded bytes sequentially across files in file order.
-        for (final f in group) {
-          final length = (f['length'] as int?) ?? 0;
-          if (length <= 0) {
-            f['downloadedBytes'] = 0;
-            continue;
-          }
-          if (remaining >= length) {
-            f['downloadedBytes'] = length;
-            remaining -= length;
-          } else {
-            f['downloadedBytes'] = remaining;
-            remaining = 0;
-          }
-        }
-      }
     }
   }
 
@@ -2370,7 +2252,7 @@ class DownloadEngine {
     var downloadedTotal = actualResumeFrom;
     final speedSamples = Queue<_SpeedSample>();
     int lastReportTime = 0;
-    var throttleBaseMs = 0;
+    int throttleBaseMs = -1;
     try {
       final stream = response.data?.stream;
       if (stream == null) {
@@ -2631,7 +2513,6 @@ class DownloadEngine {
   void close() {
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
-    _completedConfirmations.clear();
     for (final token in List<CancelToken>.from(_activeCancelTokens)) {
       try {
         token.cancel('Engine closing');
@@ -2668,6 +2549,64 @@ class DownloadEngine {
       } catch (_) {}
     }
     _activeTorrentIds.clear();
+  }
+
+  /// Distributes total downloaded bytes across torrent files by priority.
+  /// Used as a fallback when the plugin does not expose per-file progress.
+  static void _distributeDownloadedBytesByPriority(
+    List<Map<String, dynamic>> files,
+    int totalDownloaded,
+  ) {
+    for (final f in files) {
+      if (f['selected'] != true) {
+        f['downloadedBytes'] = 0;
+      }
+    }
+    final selected = files.where((f) => f['selected'] == true).toList();
+    if (selected.isEmpty || totalDownloaded <= 0) return;
+
+    final groups = <int, List<Map<String, dynamic>>>{};
+    for (final f in selected) {
+      final priority = (f['priority'] as int?) ?? 4;
+      (groups[priority] ??= []).add(f);
+    }
+    final sortedKeys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
+    int remaining = totalDownloaded;
+    for (final priority in sortedKeys) {
+      if (remaining <= 0) {
+        for (final f in groups[priority]!) {
+          f['downloadedBytes'] = 0;
+        }
+        continue;
+      }
+      final group = groups[priority]!;
+      final groupSize = group.fold<int>(
+        0,
+        (s, f) => s + ((f['length'] as int?) ?? 0),
+      );
+      if (groupSize <= 0) continue;
+      if (remaining >= groupSize) {
+        for (final f in group) {
+          f['downloadedBytes'] = (f['length'] as int?) ?? 0;
+        }
+        remaining -= groupSize;
+      } else {
+        for (final f in group) {
+          final length = (f['length'] as int?) ?? 0;
+          if (length <= 0) {
+            f['downloadedBytes'] = 0;
+            continue;
+          }
+          if (remaining >= length) {
+            f['downloadedBytes'] = length;
+            remaining -= length;
+          } else {
+            f['downloadedBytes'] = remaining;
+            remaining = 0;
+          }
+        }
+      }
+    }
   }
 }
 

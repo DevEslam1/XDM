@@ -1618,6 +1618,18 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
   }
 
   @override
+  void deactivate() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {

@@ -678,10 +678,30 @@ class YoutubeService {
         }
 
         if (streams.isNotEmpty) {
-          final first = streams.firstWhere(
-            (s) => s['src'] != null,
+          String oldType = 'combined';
+          if (oldStreamUrl.contains('mime=audio') || oldStreamUrl.contains('audio')) {
+            oldType = 'audio';
+          } else if (oldStreamUrl.contains('video')) {
+            oldType = 'video_only';
+          }
+
+          var first = streams.firstWhere(
+            (s) => s['src'] != null && s['type'] == oldType,
             orElse: () => <String, dynamic>{},
           );
+
+          if (first.isEmpty) {
+            first = streams.firstWhere(
+              (s) => s['src'] != null,
+              orElse: () => <String, dynamic>{},
+            );
+            if (first.isNotEmpty) {
+              debugPrint(
+                '[YouTubeService] refreshStreamUrl warning: Stream type changed from "$oldType" to "${first['type']}".',
+              );
+            }
+          }
+
           if (first.isNotEmpty) {
             return {
               'url': first['src'] as String?,

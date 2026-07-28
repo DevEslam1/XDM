@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -77,7 +76,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
         initialDirectory: initialDir,
       );
       if (result != null && mounted) {
-        final xdmPath = p.join(result, 'XDM');
+        final xdmPath = result;
         final xdmDir = Directory(xdmPath);
         if (!await xdmDir.exists()) {
           await xdmDir.create(recursive: true);

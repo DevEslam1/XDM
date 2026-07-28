@@ -779,9 +779,10 @@ packages:
   open_filex:
     dependency: "direct main"
     description:
-      path: "packages/open_filex"
-      relative: true
-    source: path
+      name: open_filex
+      sha256: "9976da61b6a72302cf3b1efbce259200cd40232643a467aac7370addf94d6900"
+      url: "https://pub.dev"
+    source: hosted
     version: "4.7.0"
   package_config:
     dependency: transitive
@@ -1375,9 +1376,10 @@ packages:
   webview_cookie_manager:
     dependency: "direct main"
     description:
-      path: "packages/webview_cookie_manager"
-      relative: true
-    source: path
+      name: webview_cookie_manager
+      sha256: "425a9feac5cd2cb62a71da3dda5ac2eaf9ece5481ee8d79f3868dc5ba8223ad3"
+      url: "https://pub.dev"
+    source: hosted
     version: "2.0.6"
   webview_flutter:
     dependency: "direct main"

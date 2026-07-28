@@ -287,6 +287,10 @@ class AppDatabase extends _$AppDatabase {
           'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
         );
 
+        // Recovery: fix negative epochs resulting from julianday timezone / pre-1970 dates
+        await customStatement('UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
+        await customStatement('UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
+
         // Post-migration: validate no dates are stuck at epoch
         final badDates = await customSelect(
           'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0'

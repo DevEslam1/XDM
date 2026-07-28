@@ -10,6 +10,9 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'core/utils/url_utils.dart';
 import 'core/utils/constants.dart';
 import 'core/services/torrent_service.dart';
+import 'core/services/torrent_resume_store.dart';
+import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 import 'core/app_theme.dart';
 import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
@@ -28,6 +31,12 @@ Future<void> main(List<String> args) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      Logger.root.level = kDebugMode ? Level.ALL : Level.WARNING;
+      Logger.root.onRecord.listen((record) {
+        debugPrint('[${record.level.name}] ${record.loggerName}: ${record.message}');
+        if (record.error != null) debugPrint('  Error: ${record.error}');
+      });
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -48,11 +57,17 @@ Future<void> main(List<String> args) async {
 
         await XdmBackendClient.loadApiKey();
 
-        // Torrent engine is only needed for torrent downloads — lazy-init on
-        // first use rather than blocking app startup.
         if (TorrentService.isSupported) {
-          // ignore: unawaited_futures
-          Future.microtask(() => TorrentService.init());
+          try {
+            await TorrentResumeStore.init();
+            await TorrentService.init();
+            debugPrint('Torrent service initialized successfully');
+          } catch (e, s) {
+            debugPrint('Torrent init failed, continuing without torrent support: $e');
+            Logger('main').severe('Torrent init failed', e, s);
+            // App continues without torrent support. All torrent-related
+            // features will gracefully degrade (isSupported checks elsewhere).
+          }
         }
 
         await Hive.initFlutter();

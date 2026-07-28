@@ -5,9 +5,12 @@ import '../../features/settings/provider/settings_provider.dart';
 class TorrentService {
   static bool get isSupported => false;
   static bool get isInitialized => false;
-  static bool forceReCheckSupported = true;
-  static bool fileProgressSupported = true;
-  static bool filePrioritiesSupported = true;
+  static Set<int> get activeTorrentIds => {};
+  static bool fileProgressSupported = false;
+  static bool filePrioritiesSupported = false;
+  static bool get sequentialDownloadEnabled => false;
+  static double get shareRatioLimit => 2.0;
+  static int get maxSeedingTimeMinutes => 0;
   static Future<void> init() async {}
   static Future<void> dispose() async {}
   static int addMagnet(String magnetUri, String savePath) => -1;
@@ -15,12 +18,12 @@ class TorrentService {
   static void removeTorrent(int id, {bool deleteFiles = false}) {}
   static void pauseTorrent(int id) {}
   static void resumeTorrent(int id) {}
-  static void forceReCheck(int id) {}
+  static void recheckTorrent(int id) {}
   static void setFilePriorities(int id, List<int> priorities) {}
   static int getFileCount(int id) => 0;
   static void setUploadLimit(int bps) {}
   static void setDownloadLimit(int bps) {}
   static List<TorrentFileItem> getFiles(int id) => [];
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => const Stream.empty();
-  static void applyAdvancedSettings(SettingsProvider settings) {}
+  static void configureSession(SettingsProvider settings) {}
 }

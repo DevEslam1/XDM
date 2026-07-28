@@ -195,7 +195,7 @@ class SingleInstanceService {
       debugPrint('Failed to forward url to primary instance: $e');
       return false;
     } finally {
-      client.close();
+      client.close(force: true);
     }
   }
 

@@ -12,6 +12,8 @@ import '../../core/services/share_service.dart';
 import '../../core/services/share_url_handler.dart';
 import '../../core/services/single_instance_service.dart';
 import '../../core/services/update_service.dart';
+import '../../core/services/torrent_service.dart';
+import '../../core/services/torrent_resume_store.dart';
 import '../../core/utils/responsive.dart';
 import '../../features/browser/screens/browser_screen.dart';
 import '../../features/home/screens/home_screen.dart';
@@ -109,6 +111,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _checkClipboard();
+    if (state == AppLifecycleState.paused) {
+      TorrentResumeStore.saveAll(TorrentService.activeTorrentIds);
+    }
   }
 
   void _onUrlReceived(String url, {bool isShareLaunch = false}) {

@@ -369,6 +369,12 @@ class DatabaseService {
     return rows.map(_rowToTask).toList();
   }
 
+  Future<DownloadTask?> getTask(String id) async {
+    final query = _db.select(_db.downloadTasks)..where((t) => t.id.equals(id));
+    final row = await query.getSingleOrNull();
+    return row != null ? _rowToTask(row) : null;
+  }
+
   Future<void> saveTask(DownloadTask task) {
     return _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
         mode: drift.InsertMode.insertOrReplace);

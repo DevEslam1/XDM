@@ -2,18 +2,51 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 class RemoteApiService {
   static HttpServer? _server;
   static const int _port = 37129;
   static String? _bearerToken;
+  static String? _cachedTokenFilePath;
 
   static const _tokenFileName = '.xdm_remote_token';
 
   /// Path to the token file (app support directory).
-  static String _tokenFilePath() {
-    final dir = Directory.systemTemp.path; // fallback; overridden per-platform
-    return '$dir$_tokenFileName';
+  static Future<String> _tokenFilePath() async {
+    if (_cachedTokenFilePath != null) return _cachedTokenFilePath!;
+    String dir;
+    if (Platform.isWindows) {
+      final appData = Platform.environment['APPDATA'];
+      if (appData != null) {
+        dir = '$appData/xdm';
+      } else {
+        dir = (await getApplicationSupportDirectory()).path;
+      }
+    } else if (Platform.isLinux || Platform.isMacOS) {
+      final home = Platform.environment['HOME'];
+      if (home != null) {
+        dir = '$home/.config/xdm';
+      } else {
+        dir = (await getApplicationSupportDirectory()).path;
+      }
+    } else {
+      dir = (await getApplicationSupportDirectory()).path;
+    }
+
+    final directory = Directory(dir);
+    if (!directory.existsSync()) {
+      directory.createSync(recursive: true);
+    }
+
+    if (!Platform.isWindows) {
+      try {
+        await Process.run('chmod', ['700', dir]);
+      } catch (_) {}
+    }
+
+    _cachedTokenFilePath = dir.endsWith('/') ? '$dir$_tokenFileName' : '$dir/$_tokenFileName';
+    return _cachedTokenFilePath!;
   }
 
   static bool _isValidTaskId(String id) {
@@ -60,7 +93,7 @@ class RemoteApiService {
       } catch (_) {
         // No response — delete stale token file and retry
         try {
-          await File(_tokenFilePath()).delete();
+          await File(await _tokenFilePath()).delete();
         } catch (_) {}
       }
       // Retry bind
@@ -147,7 +180,13 @@ class RemoteApiService {
 
   static Future<void> _writeTokenFile(String token) async {
     try {
-      await File(_tokenFilePath()).writeAsString(token);
+      final path = await _tokenFilePath();
+      await File(path).writeAsString(token);
+      if (!Platform.isWindows) {
+        try {
+          await Process.run('chmod', ['600', path]);
+        } catch (_) {}
+      }
     } catch (e) {
       debugPrint('Remote API: failed to write token file: $e');
     }
