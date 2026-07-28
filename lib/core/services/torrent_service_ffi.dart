@@ -53,7 +53,7 @@ class TorrentService {
                   uploadRate: value.uploadRate,
                   totalDone: value.totalDone,
                   totalWanted: value.totalWanted,
-                  totalWantedDone: value.totalDone,
+                  totalWantedDone: (value.progress * value.totalWanted).toInt(),
                   hasMetadata: value.hasMetadata,
                   stateLabel: value.state.label,
                   numSeeds: value.numSeeds,
