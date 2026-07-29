@@ -7,6 +7,7 @@ import 'database/app_database.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/browser/models/bookmark.dart';
 
+import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -107,6 +108,12 @@ class DatabaseService {
               '[DMX Migration] $downloadsBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${tasks.length} item(s) migrated successfully.',
             );
+            // Persist corrupt items before the box is deleted so the user can
+            // manually recover them instead of losing the data permanently.
+            await _exportFailedItems(
+              'migration_failed_downloads.json',
+              failedItems,
+            );
           }
           // Always delete the box after processing. Corrupt items are logged
           // above and skipped; keeping the box causes the migration to re-run
@@ -155,6 +162,10 @@ class DatabaseService {
             debugPrint(
               '[DMX Migration] $bookmarksBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${bms.length} item(s) migrated successfully.',
+            );
+            await _exportFailedItems(
+              'migration_failed_bookmarks.json',
+              failedItems,
             );
           }
           // Always delete the box after processing (see downloads box above).
@@ -208,6 +219,7 @@ class DatabaseService {
               '[DMX Migration] $browserTabsBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${tabs.length} item(s) migrated successfully.',
             );
+            await _exportFailedItems('migration_failed_tabs.json', failedItems);
           }
           // Always delete the box after processing (see downloads box above).
           await box.deleteFromDisk();
@@ -260,6 +272,10 @@ class DatabaseService {
               '[DMX Migration] $browserHistoryBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${hist.length} item(s) migrated successfully.',
             );
+            await _exportFailedItems(
+              'migration_failed_history.json',
+              failedItems,
+            );
           }
           // Always delete the box after processing (see downloads box above).
           await box.deleteFromDisk();
@@ -272,6 +288,53 @@ class DatabaseService {
       debugPrint('Hive to Drift migration error: $e\n$stackTrace');
       return false;
     }
+  }
+
+  /// Writes [failedItems] that could not be migrated to a JSON file named
+  /// [fileName] in the application documents directory, so the user can
+  /// manually recover data that would otherwise be lost when the Hive box is
+  /// deleted. Failures here are non-fatal — migration continues regardless.
+  Future<void> _exportFailedItems(
+    String fileName,
+    List<dynamic> failedItems,
+  ) async {
+    if (failedItems.isEmpty) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(p.join(dir.path, fileName));
+      final payload = <String, dynamic>{
+        'exportedAt': DateTime.now().toIso8601String(),
+        'count': failedItems.length,
+        'items': failedItems.map(_normalizeForJson).toList(),
+      };
+      await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(payload),
+      );
+      debugPrint(
+        '[DMX Migration] Exported ${failedItems.length} unmigrated item(s) to '
+        '${file.path}',
+      );
+    } catch (e) {
+      debugPrint(
+        '[DMX Migration] Failed to export unmigrated items to $fileName: $e',
+      );
+    }
+  }
+
+  /// Recursively converts [value] into a JSON-encodable structure. Hive maps
+  /// use dynamic keys and may contain non-encodable values, so keys are
+  /// stringified and unknown leaf types fall back to their `toString()`.
+  Object? _normalizeForJson(Object? value) {
+    if (value == null || value is num || value is bool || value is String) {
+      return value;
+    }
+    if (value is Map) {
+      return value.map((k, v) => MapEntry(k.toString(), _normalizeForJson(v)));
+    }
+    if (value is Iterable) {
+      return value.map(_normalizeForJson).toList();
+    }
+    return value.toString();
   }
 
   DownloadTasksCompanion _taskToCompanion(DownloadTask task) {

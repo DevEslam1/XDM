@@ -169,6 +169,32 @@ class PermissionService {
     return pth;
   }
 
+  // TODO(mediastore): On Android 11+ (API 30+) [defaultDownloadDirectory]
+  // resolves to app-specific external storage or the app documents directory.
+  // Both are INVISIBLE to the system Gallery / Files apps, so downloaded media
+  // never shows up for the user. To make media (video/audio/image) publicly
+  // visible, add a MethodChannel (e.g. 'dmx/mediastore') whose Android side
+  // inserts the file via the MediaStore.Downloads (or MediaStore.Video/Audio/
+  // Images) API using ContentResolver.insert(...) and returns the resulting
+  // content:// URI (or an openable file descriptor to stream bytes into).
+  // Wire that channel into [getMediaStorePath] below and have download save
+  // logic prefer it over [defaultDownloadDirectory] for media MIME types.
+  //
+  /// Returns a MediaStore-backed public path/URI for [fileName] with the given
+  /// [mimeType] (e.g. `video/mp4`), making the file visible in the system
+  /// Gallery. Returns `null` when unavailable — non-Android, SDK < 29, or the
+  /// native platform channel is not yet implemented. Callers MUST fall back to
+  /// [defaultDownloadDirectory] when this returns `null`.
+  Future<String?> getMediaStorePath(String fileName, String mimeType) async {
+    if (kIsWeb || !Platform.isAndroid) return null;
+    final sdk = await _androidSdkLevel();
+    if (sdk < 29) return null;
+    // TODO(mediastore): Invoke the native MediaStore.Downloads platform channel
+    // here and return the inserted content:// URI. Returning null for now so
+    // callers keep using the app-specific storage fallback.
+    return null;
+  }
+
   Future<bool> ensureStorageAccess() async {
     if (kIsWeb) return true;
     if (!Platform.isAndroid) return true;

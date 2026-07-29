@@ -260,6 +260,11 @@ class _WorkerJobState {
 void _downloadWorkerMain(SendPort mainSendPort) {
   final commandPort = ReceivePort();
   final jobs = <int, _WorkerJobState>{};
+  // A single engine per worker isolate, reused across every job routed here.
+  // Creating a DownloadEngine per job wasted a Dio setup and added GC churn;
+  // _doHttpDownload already cleans up its own per-job isolated client in a
+  // finally, so the shared engine holds no per-job state between jobs.
+  final engine = DownloadEngine(enableCleanupTimer: false);
 
   void safeSend(IsolateMessage message) {
     try {
@@ -289,6 +294,7 @@ void _downloadWorkerMain(SendPort mainSendPort) {
           command,
           state,
           safeSend,
+          engine,
         ).whenComplete(() => jobs.remove(jobId));
       } else if (type == 'cancel') {
         final state = jobs[message['jobId'] as int];
@@ -307,6 +313,7 @@ void _downloadWorkerMain(SendPort mainSendPort) {
         for (final state in jobs.values) {
           if (!state.cancelToken.isCancelled) state.cancelToken.cancel();
         }
+        engine.close();
         commandPort.close();
       }
     } catch (e) {
@@ -323,8 +330,8 @@ Future<void> _runWorkerJob(
   DownloadCommand command,
   _WorkerJobState state,
   void Function(IsolateMessage) safeSend,
+  DownloadEngine engine,
 ) async {
-  final engine = DownloadEngine(enableCleanupTimer: false);
   try {
     void onProgress(DownloadProgress p) {
       safeSend(
@@ -394,7 +401,5 @@ Future<void> _runWorkerJob(
         'errorStatus': errStatus,
       }),
     );
-  } finally {
-    engine.close();
   }
 }

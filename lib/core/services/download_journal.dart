@@ -18,34 +18,42 @@ class DownloadJournal {
 
   Future<void> writeInit(int threadCount, int totalSize) async {
     _ensureOpen();
-    _sink!.writeln(jsonEncode({
-      't': 'init',
-      'threads': threadCount,
-      'total': totalSize,
-      'ts': DateTime.now().millisecondsSinceEpoch,
-    }));
+    _sink!.writeln(
+      jsonEncode({
+        't': 'init',
+        'threads': threadCount,
+        'total': totalSize,
+        'ts': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
     await _sink!.flush();
   }
 
   Future<void> recordChunkProgress(int index, int bytes) async {
     _ensureOpen();
-    _sink!.writeln(jsonEncode({
-      't': 'chunk',
-      'i': index,
-      'b': bytes,
-      'ts': DateTime.now().millisecondsSinceEpoch,
-    }));
-    await _sink!.flush();
+    // Do NOT flush here. Flushing on every chunk causes severe disk thrashing
+    // and UI freezes on large files. Durability is provided by the periodic
+    // writeCheckpoint() below and the final flush in close().
+    _sink!.writeln(
+      jsonEncode({
+        't': 'chunk',
+        'i': index,
+        'b': bytes,
+        'ts': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
   }
 
   Future<void> writeCheckpoint(List<int> chunkProgress, int totalSize) async {
     _ensureOpen();
-    _sink!.writeln(jsonEncode({
-      't': 'checkpoint',
-      'chunks': chunkProgress,
-      'total': totalSize,
-      'ts': DateTime.now().millisecondsSinceEpoch,
-    }));
+    _sink!.writeln(
+      jsonEncode({
+        't': 'checkpoint',
+        'chunks': chunkProgress,
+        'total': totalSize,
+        'ts': DateTime.now().millisecondsSinceEpoch,
+      }),
+    );
     await _sink!.flush();
   }
 
@@ -57,8 +65,14 @@ class DownloadJournal {
     int? threadCount;
 
     try {
-      final lines = await file.readAsLines();
-      for (final line in lines) {
+      // Stream the journal line-by-line instead of readAsLines(), which loads
+      // the entire (potentially huge) journal into memory and can OOM on
+      // long-running downloads.
+      final lines = file
+          .openRead()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+      await for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty) continue;
         try {
@@ -78,14 +92,16 @@ class DownloadJournal {
               if (lastCheckpoint != null) {
                 final i = event['i'] as int?;
                 final b = event['b'] as int?;
-                if (i != null && b != null && i >= 0 && i < lastCheckpoint.length) {
+                if (i != null &&
+                    b != null &&
+                    i >= 0 &&
+                    i < lastCheckpoint.length) {
                   lastCheckpoint[i] = b;
                 }
               }
               break;
           }
-        } catch (_) {
-        }
+        } catch (_) {}
       }
     } catch (e) {
       _log.warning('Journal recovery failed for $journalPath: $e');

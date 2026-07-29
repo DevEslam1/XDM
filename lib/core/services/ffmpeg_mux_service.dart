@@ -5,11 +5,36 @@ import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 
 class FFmpegMuxService {
   static final _log = Logger('FFmpegMuxService');
 
+  /// Serializes muxing across the whole app. FFmpegKit's timeout path can only
+  /// fall back to the global `FFmpegKit.cancel()` because the per-session id is
+  /// not available until the execute future resolves. Running merges one at a
+  /// time guarantees that global cancel only ever kills the single active
+  /// session, so a timeout in one download cannot abort another download's
+  /// native mux.
+  static final Lock _muxLock = Lock();
+
   static Future<bool> mergeVideoAudio(
+    String videoPath,
+    String audioPath,
+    String outputPath, {
+    bool deleteInputsIfTemp = true,
+  }) {
+    return _muxLock.synchronized(
+      () => _mergeLocked(
+        videoPath,
+        audioPath,
+        outputPath,
+        deleteInputsIfTemp: deleteInputsIfTemp,
+      ),
+    );
+  }
+
+  static Future<bool> _mergeLocked(
     String videoPath,
     String audioPath,
     String outputPath, {
