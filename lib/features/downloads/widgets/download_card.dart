@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/file_utils.dart';
@@ -233,15 +234,9 @@ class _TelemetryStrip extends StatelessWidget {
         children: [
           Row(
             children: [
-              _TelemetryTile(
-                icon: Icons.speed,
-                label: speedText,
-              ),
+              _TelemetryTile(icon: Icons.speed, label: speedText),
               const SizedBox(width: 16),
-              _TelemetryTile(
-                icon: Icons.access_time,
-                label: etaText,
-              ),
+              _TelemetryTile(icon: Icons.access_time, label: etaText),
             ],
           ),
           const SizedBox(height: 6),
@@ -316,7 +311,10 @@ class _ChunkedProgressBar extends StatelessWidget {
                 children: [
                   Container(
                     height: 8,
-                    decoration: AppTheme.progressTrack(isDark: isDark, radius: 3),
+                    decoration: AppTheme.progressTrack(
+                      isDark: isDark,
+                      radius: 3,
+                    ),
                   ),
                   FractionallySizedBox(
                     widthFactor: p,
@@ -1756,6 +1754,19 @@ void _showAdvancedControls(
                   _confirmDelete(context, task, provider);
                 },
               ),
+              if (task.isTorrent) ...[
+                ListTile(
+                  leading: const Icon(
+                    Icons.info_outline_rounded,
+                    color: AppTheme.neonAmber,
+                  ),
+                  title: Text('Properties', style: TextStyle(color: textClr)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showTorrentProperties(context, task, settings);
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
             ],
           ),
@@ -1793,6 +1804,291 @@ void _showUpdateLinkDialog(
             );
           },
           child: const Text('Update'),
+        ),
+      ],
+    ),
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Torrent Properties Sheet
+// ────────────────────────────────────────────────────────────────────────────
+
+void _showTorrentProperties(
+  BuildContext context,
+  DownloadTask task,
+  SettingsProvider settings,
+) {
+  final isDark = settings.isDarkMode;
+  final provider = context.read<DownloadProvider>();
+  final isRtl = L10n.isRtl(context);
+  final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+  final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+  final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+  final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+  final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+  final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+  final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+
+  // Resolve live torrent stats.
+  final torrentId = provider.providerTorrentIds[task.id];
+  final TorrentUpdateInfo? stats = torrentId != null
+      ? provider.providerLatestTorrentStats[torrentId]
+      : null;
+
+  final dlSpeed = task.speed;
+  final ulSpeed = task.isTorrent
+      ? provider.getTorrentUploadSpeed(task.id)
+      : 0.0;
+  final seeds = provider.getTorrentSeeds(task.id);
+  final peers = provider.getTorrentPeers(task.id);
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (context) {
+      return Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(
+            color: AppTheme.accent(isDark).withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: secClr.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Title
+                Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: amberClr, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isRtl ? 'خصائص التورنت' : 'Torrent Properties',
+                        style: TextStyle(
+                          color: textClr,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                // ── Basic Info ──────────────────────────────────────────────
+                _sectionHeader(
+                  isRtl ? 'المعلومات الأساسية' : 'BASIC INFO',
+                  blueClr,
+                  isDark,
+                ),
+                const SizedBox(height: 10),
+                _propRow(
+                  isRtl ? 'الاسم' : 'Name',
+                  task.fileName,
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                _propRow(
+                  isRtl ? 'المسار' : 'Save Path',
+                  task.savePath,
+                  textClr,
+                  secClr,
+                  isRtl,
+                  mono: true,
+                ),
+                _propRow(
+                  isRtl ? 'الحجم الكلي' : 'Total Size',
+                  formatBytes(task.resolvedFileSize),
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                _propRow(
+                  isRtl ? 'تم تحميل' : 'Downloaded',
+                  formatBytes(task.downloadedBytes),
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                _propRow(
+                  isRtl ? 'الفئة' : 'Category',
+                  task.category.isNotEmpty ? task.category : '—',
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                const SizedBox(height: 20),
+                // ── Transfer Info ───────────────────────────────────────────
+                _sectionHeader(
+                  isRtl ? 'معلومات النقل' : 'TRANSFER INFO',
+                  greenClr,
+                  isDark,
+                ),
+                const SizedBox(height: 10),
+                _propRow(
+                  isRtl ? 'سرعة التحميل' : 'Download Speed',
+                  '${formatBytes(dlSpeed)}/s',
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                _propRow(
+                  isRtl ? 'سرعة الرفع' : 'Upload Speed',
+                  '${formatBytes(ulSpeed)}/s',
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                _propRow(
+                  isRtl ? 'المزرعون' : 'Seeds',
+                  stats != null ? '${stats.numSeeds}' : '$seeds',
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                _propRow(
+                  isRtl ? 'الأقران' : 'Peers',
+                  stats != null ? '${stats.numPeers}' : '$peers',
+                  textClr,
+                  secClr,
+                  isRtl,
+                ),
+                const SizedBox(height: 20),
+                // ── Technical Info ──────────────────────────────────────────
+                _sectionHeader(
+                  isRtl ? 'المعلومات التقنية' : 'TECHNICAL INFO',
+                  violetClr,
+                  isDark,
+                ),
+                const SizedBox(height: 10),
+                if (stats != null) ...[
+                  _propRow(
+                    isRtl ? 'القطع المكتملة' : 'Pieces',
+                    '${stats.piecesHave} / ${stats.piecesTotal}',
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                  _propRow(
+                    isRtl ? 'المُتتبع' : 'Current Tracker',
+                    stats.currentTracker.isNotEmpty
+                        ? stats.currentTracker
+                        : '—',
+                    textClr,
+                    secClr,
+                    isRtl,
+                    mono: true,
+                  ),
+                  _propRow(
+                    isRtl ? 'النسخ الموزعة' : 'Distributed Copies',
+                    stats.distributedCopies.toStringAsFixed(2),
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                  _propRow(
+                    isRtl ? 'الإعلان التالي' : 'Next Announce',
+                    stats.nextAnnounceSeconds > 0
+                        ? '${stats.nextAnnounceSeconds}s'
+                        : '—',
+                    textClr,
+                    secClr,
+                    isRtl,
+                  ),
+                ] else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      isRtl
+                          ? 'لا توجد بيانات مباشرة (التورنت غير نشط)'
+                          : 'No live data available (torrent is not active)',
+                      style: TextStyle(color: mutedClr, fontSize: 12),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Widget _sectionHeader(String label, Color accentColor, bool isDark) {
+  return Row(
+    children: [
+      Container(
+        width: 3,
+        height: 14,
+        decoration: BoxDecoration(
+          color: accentColor,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Text(
+        label,
+        style: AppTheme.microLabel(
+          isDark: isDark,
+          size: 10,
+        ).copyWith(color: accentColor, letterSpacing: 1.2),
+      ),
+    ],
+  );
+}
+
+Widget _propRow(
+  String label,
+  String value,
+  Color textClr,
+  Color secClr,
+  bool isRtl, {
+  bool mono = false,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(label, style: TextStyle(color: secClr, fontSize: 12)),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: textClr,
+              fontSize: 12,
+              fontFamily: mono ? 'monospace' : null,
+            ),
+            textAlign: isRtl ? TextAlign.right : TextAlign.left,
+          ),
         ),
       ],
     ),
@@ -1951,10 +2247,7 @@ class _TelemetryTile extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _TelemetryTile({
-    required this.icon,
-    required this.label,
-  });
+  const _TelemetryTile({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {

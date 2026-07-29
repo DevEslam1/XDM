@@ -408,7 +408,9 @@ class DownloadOrchestrator {
     if (current.expectedSha256 != null && current.expectedSha256!.isNotEmpty) {
       try {
         final file = File(current.localFilePath);
-        if (await file.exists()) {
+        // Skip SHA-256 for multi-file torrents where localFilePath is a directory.
+        if (!Directory(current.localFilePath).existsSync() &&
+            await file.exists()) {
           final digest = await _computeSha256Streaming(file);
           if (digest.toLowerCase() != current.expectedSha256!.toLowerCase()) {
             await _host.setTaskState(
@@ -457,20 +459,52 @@ class DownloadOrchestrator {
 
     final finalPath = p.join(current.savePath, current.fileName);
     if (Platform.isAndroid && finalPath.isNotEmpty) {
-      final mimeType = _mimeTypeFromExtension(p.extension(current.fileName));
-      final mediaResult = await PermissionService().insertIntoMediaStore(
-        current.fileName,
-        mimeType,
-        finalPath,
-      );
-      if (mediaResult == null) {
-        // MediaStore insertion failed — fall back to scanMedia.
-        try {
-          unawaited(
-            _mediaChannel.invokeMethod('scanMedia', {'path': finalPath}),
-          );
-        } catch (e) {
-          debugPrint('Failed to scan media: $e');
+      final isMultiFileTorrent =
+          current.isTorrent && Directory(finalPath).existsSync();
+      if (isMultiFileTorrent) {
+        // Multi-file torrent: finalPath is a directory — insert each file.
+        final torrentDir = Directory(finalPath);
+        if (await torrentDir.exists()) {
+          await for (final entity in torrentDir.list(recursive: true)) {
+            if (entity is! File) continue;
+            final ext = p.extension(entity.path);
+            // Skip non-downloadable metadata files (e.g. .txt).
+            if (ext == '.txt') continue;
+            final mimeType = _mimeTypeFromExtension(ext);
+            final mediaResult = await PermissionService().insertIntoMediaStore(
+              p.basename(entity.path),
+              mimeType,
+              entity.path,
+            );
+            if (mediaResult == null) {
+              try {
+                unawaited(
+                  _mediaChannel.invokeMethod('scanMedia', {
+                    'path': entity.path,
+                  }),
+                );
+              } catch (e) {
+                debugPrint('Failed to scan media: $e');
+              }
+            }
+          }
+        }
+      } else {
+        // Single-file torrent or HTTP download: existing behavior.
+        final mimeType = _mimeTypeFromExtension(p.extension(current.fileName));
+        final mediaResult = await PermissionService().insertIntoMediaStore(
+          current.fileName,
+          mimeType,
+          finalPath,
+        );
+        if (mediaResult == null) {
+          try {
+            unawaited(
+              _mediaChannel.invokeMethod('scanMedia', {'path': finalPath}),
+            );
+          } catch (e) {
+            debugPrint('Failed to scan media: $e');
+          }
         }
       }
     }
@@ -861,7 +895,19 @@ class DownloadOrchestrator {
                   : base.category;
 
               List<Map<String, dynamic>>? diskVerifiedFiles;
+              // Only use disk scan as initial seed data BEFORE the engine has
+              // reported actual per-file progress. Once the engine reports real
+              // per-file bytes, disk scans would overwrite accurate piece-level
+              // accounting with imprecise file sizes (libtorrent writes pieces
+              // that span multiple files).
+              final engineHasActualPerFileProgress =
+                  progress.torrentFiles != null &&
+                  progress.torrentFiles!.isNotEmpty &&
+                  progress.torrentFiles!.any(
+                    (f) => f['progressEstimated'] != true,
+                  );
               if (task.isTorrent &&
+                  !engineHasActualPerFileProgress &&
                   progress.torrentFiles != null &&
                   progress.torrentFiles!.isNotEmpty) {
                 final nowMs = DateTime.now().millisecondsSinceEpoch;

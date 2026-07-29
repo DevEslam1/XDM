@@ -6,6 +6,7 @@ class TorrentService {
   static bool get isSupported => false;
   static bool get isInitialized => false;
   static Set<int> get activeTorrentIds => {};
+  static double progressFor(int id) => 0.0;
   static bool fileProgressSupported = false;
   static bool filePrioritiesSupported = false;
   static bool get sequentialDownloadEnabled => false;
@@ -24,6 +25,7 @@ class TorrentService {
   static void setUploadLimit(int bps) {}
   static void setDownloadLimit(int bps) {}
   static List<TorrentFileItem> getFiles(int id) => [];
-  static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates => const Stream.empty();
+  static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
+      const Stream.empty();
   static void configureSession(SettingsProvider settings) {}
 }

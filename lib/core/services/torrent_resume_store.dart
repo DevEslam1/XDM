@@ -65,7 +65,12 @@ class TorrentResumeStore {
     } catch (_) {}
   }
 
-  static Future<void> saveAll(Set<int> activeIds) async {
-    await Future.wait(activeIds.map((id) => save(id)));
+  static Future<void> saveAll(
+    Set<int> activeIds,
+    double Function(int id) progressForId,
+  ) async {
+    await Future.wait(
+      activeIds.map((id) => save(id, progress: progressForId(id))),
+    );
   }
 }

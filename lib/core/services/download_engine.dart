@@ -1031,12 +1031,19 @@ class DownloadEngine {
                 );
             final liveBytes = f.downloadedBytes;
             final staleBytes = (existing?['downloadedBytes'] as int?) ?? 0;
+            // During recheck/check states, libtorrent may report 0 for files
+            // that were previously partially downloaded. Use 0 instead of stale
+            // data to avoid showing incorrect progress during rechecks.
+            final isRechecking = stateLabel.contains('checking');
+            final resolvedBytes = liveBytes > 0
+                ? liveBytes
+                : (isRechecking ? 0 : staleBytes);
             return <String, dynamic>{
               'name': f.name,
               'length': f.size,
               'selected': existing?['selected'] as bool? ?? f.selected,
               'priority': existing?['priority'] as int? ?? f.priority,
-              'downloadedBytes': liveBytes > 0 ? liveBytes : staleBytes,
+              'downloadedBytes': resolvedBytes,
               'speed': 0.0,
             };
           }).toList();
@@ -1066,10 +1073,17 @@ class DownloadEngine {
           : torrent.totalDone;
 
       // Per-file progress fallback when native getFileProgress is unavailable.
+      // NOTE: This is a rough estimation that distributes bytes proportionally
+      // by file size within priority groups. It does NOT reflect actual per-file
+      // completion data. The UI should treat these values as estimates.
       if (!TorrentService.fileProgressSupported &&
           resolvedFiles != null &&
           resolvedFiles.isNotEmpty) {
         _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
+        // Mark files as estimated so UI can distinguish from actual data.
+        for (final f in resolvedFiles) {
+          f['progressEstimated'] = true;
+        }
       }
 
       final isCheckingOrMetadata =

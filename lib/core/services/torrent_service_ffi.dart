@@ -59,6 +59,9 @@ class TorrentService {
   static bool get isInitialized => _state == TorrentSessionState.ready;
   static Set<int> get activeTorrentIds => Set.unmodifiable(_activeTorrentIds);
 
+  /// Returns the latest known progress for a torrent, or 0.0 if unknown.
+  static double progressFor(int id) => _latestProgress[id] ?? 0.0;
+
   static Future<void> init() async {
     if (_state != TorrentSessionState.uninitialized &&
         _state != TorrentSessionState.disposed) {
@@ -81,14 +84,14 @@ class TorrentService {
   }
 
   static bool _sequentialDownload = false;
-static double _shareRatioLimit = 2.0;
-static int _maxSeedingTimeMinutes = 0;
+  static double _shareRatioLimit = 2.0;
+  static int _maxSeedingTimeMinutes = 0;
 
-static bool get sequentialDownloadEnabled => _sequentialDownload;
-static double get shareRatioLimit => _shareRatioLimit;
-static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
+  static bool get sequentialDownloadEnabled => _sequentialDownload;
+  static double get shareRatioLimit => _shareRatioLimit;
+  static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
 
-static void _configureSessionFromSettings() {
+  static void _configureSessionFromSettings() {
     try {
       final settings = SettingsProvider.instance;
       final config = LibtorrentFlutter.instance.getDefaultConfig().copyWith(
@@ -353,8 +356,8 @@ static void _configureSessionFromSettings() {
             size: f.size,
             downloadedBytes: fileProgressSupported
                 ? ((progress != null && i < progress.length)
-                    ? (progress[i] as num).toInt().clamp(0, f.size)
-                    : 0)
+                      ? (progress[i] as num).toInt().clamp(0, f.size)
+                      : 0)
                 : 0,
             priority: (priorities != null && i < priorities.length)
                 ? (priorities[i] as num).toInt()

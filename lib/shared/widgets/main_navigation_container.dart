@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dmx/core/utils/localization.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
@@ -38,7 +39,10 @@ class MainNavigationContainer extends StatefulWidget {
 class _MainNavigationContainerState extends State<MainNavigationContainer>
     with WidgetsBindingObserver {
   String? _lastClipboardUrl;
-  DateTime _lastClipboardCheckTime = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  DateTime _lastClipboardCheckTime = DateTime.fromMillisecondsSinceEpoch(
+    0,
+    isUtc: true,
+  );
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -60,7 +64,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     if (widget.initialUrl != null && widget.initialUrl!.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _onUrlReceived(widget.initialUrl!, isShareLaunch: widget.isShareLaunch);
+          _onUrlReceived(
+            widget.initialUrl!,
+            isShareLaunch: widget.isShareLaunch,
+          );
         }
       });
     }
@@ -112,7 +119,12 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _checkClipboard();
     if (state == AppLifecycleState.paused) {
-      TorrentResumeStore.saveAll(TorrentService.activeTorrentIds);
+      unawaited(
+        TorrentResumeStore.saveAll(
+          TorrentService.activeTorrentIds,
+          TorrentService.progressFor,
+        ),
+      );
     }
   }
 
@@ -223,10 +235,8 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: AppTheme.motionBase,
-    )..forward();
+    _c = AnimationController(vsync: this, duration: AppTheme.motionBase)
+      ..forward();
   }
 
   @override
@@ -252,7 +262,6 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
     );
   }
 }
-
 
 class _PhoneBottomNavBar extends StatelessWidget {
   final SettingsProvider settings;
