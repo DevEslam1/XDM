@@ -35,16 +35,17 @@ subprojects {
 
 // Align JVM target across ALL plugin subprojects to avoid
 // "Inconsistent JVM Target Compatibility" errors (e.g. disk_space).
+// NOTE: Only align the Kotlin jvmTarget here. Do NOT force
+// sourceCompatibility/targetCompatibility on the Android plugins'
+// JavaCompile tasks: doing so makes Gradle drop AGP's android.jar
+// bootclasspath, causing "package android does not exist" errors
+// for Java-based plugins (open_filex, flutter_background_service_android).
 gradle.projectsEvaluated {
     subprojects {
         tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
             compilerOptions {
                 jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
             }
-        }
-        tasks.withType<JavaCompile>().configureEach {
-            sourceCompatibility = JavaVersion.VERSION_17.toString()
-            targetCompatibility = JavaVersion.VERSION_17.toString()
         }
     }
 }

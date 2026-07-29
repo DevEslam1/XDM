@@ -61,6 +61,13 @@ dependencies:
   cached_network_image: ^3.4.1
 
 
+dependency_overrides:
+  # webview_cookie_manager 2.0.6 on pub.dev still uses the removed v1
+  # embedding API (PluginRegistry.Registrar) and fails to compile on
+  # current Flutter. Use the local patched copy (v2 FlutterPlugin embedding).
+  webview_cookie_manager:
+    path: packages/webview_cookie_manager
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
