@@ -854,41 +854,44 @@ class DownloadEngine {
     }
 
     _activeTorrentIds.add(id);
+    try {
+      await _waitForMetadata(id, url, cancelToken, onProgress);
 
-    await _waitForMetadata(id, url, cancelToken, onProgress);
+      final currentTorrentFiles = getTorrentFiles?.call();
+      _applyFilePriorities(id, currentTorrentFiles);
 
-    final currentTorrentFiles = getTorrentFiles?.call();
-    _applyFilePriorities(id, currentTorrentFiles);
+      // Recheck existing data on disk so progress reflects what's already saved.
+      final saveDir = File(currentLocalFilePath).parent.path;
+      if (Directory(saveDir).existsSync()) {
+        TorrentService.recheckTorrent(id);
+        await _waitForState(
+          id,
+          cancelToken,
+          predicate: (label) =>
+              !label.contains('checking') &&
+              !label.contains('metadata') &&
+              !label.contains('allocating'),
+          timeout: const Duration(minutes: 5),
+        );
+      }
 
-    // Recheck existing data on disk so progress reflects what's already saved.
-    final saveDir = File(currentLocalFilePath).parent.path;
-    if (Directory(saveDir).existsSync()) {
-      TorrentService.recheckTorrent(id);
-      await _waitForState(
+      if (!cancelToken.isCancelled) {
+        TorrentService.resumeTorrent(id);
+      }
+
+      await _listenForCompletion(
         id,
+        url,
         cancelToken,
-        predicate: (label) =>
-            !label.contains('checking') &&
-            !label.contains('metadata') &&
-            !label.contains('allocating'),
-        timeout: const Duration(minutes: 5),
+        onProgress,
+        getTorrentFiles,
+        knownFileSize,
       );
+
+      _activeCancelTokens.remove(cancelToken);
+    } finally {
+      _activeTorrentIds.remove(id);
     }
-
-    if (!cancelToken.isCancelled) {
-      TorrentService.resumeTorrent(id);
-    }
-
-    await _listenForCompletion(
-      id,
-      url,
-      cancelToken,
-      onProgress,
-      getTorrentFiles,
-      knownFileSize,
-    );
-
-    _activeCancelTokens.remove(cancelToken);
   }
 
   Future<void> _waitForMetadata(
@@ -1167,7 +1170,6 @@ class DownloadEngine {
       await completer.future;
     } finally {
       await sub.cancel();
-      _activeTorrentIds.remove(id);
     }
   }
 
@@ -1196,6 +1198,7 @@ class DownloadEngine {
         debugPrint(
           '[DownloadEngine] Server does not support Range requests. Using 1 thread.',
         );
+        await response.data?.stream.listen((_) {}).cancel();
         return 1;
       }
 
@@ -1203,6 +1206,7 @@ class DownloadEngine {
         debugPrint(
           '[DownloadEngine] Server returned 416 for probe. Using 1 thread.',
         );
+        await response.data?.stream.listen((_) {}).cancel();
         return 1;
       }
 

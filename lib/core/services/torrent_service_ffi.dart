@@ -349,7 +349,7 @@ class TorrentService {
             name: f.name,
             size: f.size,
             downloadedBytes: (progress != null && i < progress.length)
-                ? (progress[i] as num).toInt().clamp(0, f.size)
+                ? (progress[i] as num).toInt().clamp(0, f.size).toInt()
                 : 0,
             priority: (priorities != null && i < priorities.length)
                 ? (priorities[i] as num).toInt()

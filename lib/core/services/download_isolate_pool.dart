@@ -137,6 +137,9 @@ class _Worker {
   _Worker(this.id);
 
   Future<void> spawn() async {
+    _receivePort?.close();
+    _errorPort?.close();
+
     final receivePort = ReceivePort();
     final errorPort = ReceivePort();
     _receivePort = receivePort;

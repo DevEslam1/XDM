@@ -90,7 +90,7 @@ class RemoteApiService {
         );
         pingRequest.headers.set('Authorization', 'Bearer ping');
         final pingResponse = await pingRequest.close();
-        if (pingResponse.statusCode == 401) {
+        if (pingResponse.statusCode == 200) {
           // Server is alive — do nothing, piggyback on existing instance
           debugPrint('Remote API: existing server on port $_port is alive');
           return;
