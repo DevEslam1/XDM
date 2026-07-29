@@ -169,11 +169,13 @@ Future<void> deleteDownloadParts(String tempFilePath) async {
     await for (final entity in dir.list()) {
       if (entity is File) {
         final fileName = entity.uri.pathSegments.last;
+        final isMainTemp = fileName == name;
         final isPart = RegExp(
           '^${RegExp.escape(name)}\\.part\\d+\$',
         ).hasMatch(fileName);
         final isState = fileName == '$name.dmxstate';
-        if (isPart || isState) {
+        final isJournal = fileName == '$name.journal';
+        if (isMainTemp || isPart || isState || isJournal) {
           try {
             await entity.delete();
           } catch (_) {}

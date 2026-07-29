@@ -68,6 +68,9 @@ class NotificationService {
 
   void _addAction(Map<String, String> event) {
     _pendingActions.add(event);
+    if (_pendingActions.length > 100) {
+      _pendingActions.removeRange(0, _pendingActions.length - 100);
+    }
     if (!_actionStreamController.isClosed &&
         _actionStreamController.hasListener) {
       while (_pendingActions.isNotEmpty) {

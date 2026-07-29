@@ -44,6 +44,7 @@ class FakeDownloadEngine extends DownloadEngine {
     bool bypassSSL = false,
     String? cookies,
     String? oauthToken,
+    CancelToken? cancelToken,
   }) async {
     return DownloadMetadata(
       fileName: requestedFileName ?? 'file.zip',
@@ -690,6 +691,7 @@ class FakeDownloadEngine403 extends DownloadEngine {
     bool bypassSSL = false,
     String? cookies,
     String? oauthToken,
+    CancelToken? cancelToken,
   }) async {
     return const DownloadMetadata(
       fileName: '403.zip',

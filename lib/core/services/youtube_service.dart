@@ -193,6 +193,21 @@ class YoutubeService {
       if (path.endsWith(ext)) return false;
     }
 
+    final host = uri.host.toLowerCase();
+    final isKnownMediaHost = _isYouTubeHost(host) ||
+        _isYouTubeShortHost(host) ||
+        host.contains('vimeo.com') ||
+        host.contains('dailymotion.com') ||
+        host.contains('tiktok.com') ||
+        host.contains('facebook.com') ||
+        host.contains('instagram.com') ||
+        host.contains('twitter.com') ||
+        host.contains('x.com');
+
+    if (!isKnownMediaHost && extractVideoId(url) == null) {
+      return false;
+    }
+
     return true;
   }
 
@@ -408,6 +423,9 @@ class YoutubeService {
 
     try {
       final settings = SettingsProvider.instance;
+      if (!settings.useRemoteBackend) {
+        return null;
+      }
       final backendRes = await XdmBackendClient().getStreams(
         targetUrl,
         cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend

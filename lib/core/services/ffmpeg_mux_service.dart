@@ -294,7 +294,14 @@ class FFmpegMuxService {
       await cancelAndRethrow(e, stack, activeSession?.getSessionId());
     } catch (e, stackTrace) {
       _log.severe('Exception during FFmpeg merge: $e\n$stackTrace');
-      // Clean up temp inputs even if an exception (like timeout) occurs
+      try {
+        final sid = activeSession?.getSessionId();
+        if (sid != null) {
+          await FFmpegKit.cancel(sid);
+        } else {
+          await FFmpegKit.cancel();
+        }
+      } catch (_) {}
       await cleanUpInputs();
       rethrow;
     }

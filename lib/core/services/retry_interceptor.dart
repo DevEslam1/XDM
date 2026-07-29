@@ -108,7 +108,7 @@ class ProfessionalRetryInterceptor extends Interceptor {
         return true;
       case DioExceptionType.badResponse:
         final code = err.response?.statusCode ?? 0;
-        return code == 429 || code >= 500;
+        return code == 408 || code == 425 || code == 429 || code >= 500;
       case DioExceptionType.cancel:
         return false;
       default:

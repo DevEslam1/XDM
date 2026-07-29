@@ -1,18 +1,13 @@
 // REFACTOR C: isolate pool for HTTP downloads.
 //
-// Instead of spawning one isolate per download, a small pool of long-lived
-// worker isolates receives download commands over `SendPort`/`ReceivePort`
-// and streams progress/completion messages back, tagged with a job id.
-//
-// This file is a `part` of download_engine.dart so the worker loop can call
-// the engine's private `_doHttpDownload` exactly as the old per-download
-// isolate entry point did (and reuse its imports for dart:isolate, Dio, etc).
+// Hardened version:
+// - worker respawn with backoff
+// - safer shutdown
+// - better error classification
+// - robust job routing
 part of 'download_engine.dart';
 
 /// A download job description sent to a worker isolate.
-///
-/// Mirrors the fields of the old `_DownloadIsolateArgs` minus the send port
-/// (workers already hold the main isolate's port).
 class DownloadCommand {
   final String url;
   final String punyUrl;
@@ -65,9 +60,7 @@ class DownloadCommand {
   });
 }
 
-/// A message sent from a worker isolate back to the main isolate, tagged with
-/// the originating job id. `type` is one of: 'ack', 'progress', 'done',
-/// 'error'. `data` carries the type-specific payload.
+/// A message sent from a worker isolate back to the main isolate.
 class IsolateMessage {
   final int jobId;
   final String type;
@@ -77,7 +70,7 @@ class IsolateMessage {
     : data = data ?? const {};
 }
 
-/// Pool of N long-lived worker isolates. Jobs are assigned round-robin.
+/// Pool of long-lived worker isolates.
 class DownloadIsolatePool {
   final int size;
   final List<_Worker> _workers = [];
@@ -93,22 +86,21 @@ class DownloadIsolatePool {
     }
   }
 
-  /// Submit a download job to the next available worker.
-  /// The returned handle exposes a stream of progress/completion messages.
   DownloadJob submit(DownloadCommand command) {
     final aliveWorkers = _workers.where((w) => w._isAlive).toList();
+
     if (aliveWorkers.isEmpty) {
       throw const IsolateSpawnTimeoutException(
         'No available download workers.',
       );
     }
+
     final worker = aliveWorkers[_nextWorker % aliveWorkers.length];
     _nextWorker++;
+
     return worker.submit(command);
   }
 
-  /// Broadcast a new speed limit / active count to every running job.
-  /// The bandwidth limit is a global value, so all workers get it.
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
     for (final w in _workers) {
       w.broadcastSpeedLimit(bytesPerSecond, activeCount);
@@ -126,26 +118,61 @@ class DownloadIsolatePool {
 /// One long-lived worker isolate plus main-side routing of its messages.
 class _Worker {
   final int id;
+
   Isolate? _isolate;
   SendPort? _commandPort;
   ReceivePort? _receivePort;
   ReceivePort? _errorPort;
+
   final Map<int, DownloadJob> _jobs = {};
   int _nextJobId = 0;
-  bool _isAlive = true;
+
+  bool _isAlive = false;
+  bool _shuttingDown = false;
+
+  int _respawnAttempts = 0;
+  Timer? _respawnTimer;
 
   _Worker(this.id);
 
-  Future<void> spawn() async {
+  Future<void> spawn({bool isRespawn = false}) async {
+    if (_shuttingDown) return;
+
+    if (isRespawn) {
+      _respawnAttempts++;
+
+      if (_respawnAttempts > 5) {
+        _isAlive = false;
+        debugPrint(
+          '[DMX Pool] Worker $id exceeded max respawn attempts. '
+          'Leaving worker dead.',
+        );
+        return;
+      }
+
+      final attempt = _respawnAttempts.clamp(1, 5);
+      final delayMs = 500 * (1 << attempt);
+
+      debugPrint(
+        '[DMX Pool] Respawning worker $id in ${delayMs}ms '
+        '(attempt $_respawnAttempts)',
+      );
+
+      await Future.delayed(Duration(milliseconds: delayMs));
+      if (_shuttingDown) return;
+    }
+
     _receivePort?.close();
     _errorPort?.close();
 
     final receivePort = ReceivePort();
     final errorPort = ReceivePort();
+
     _receivePort = receivePort;
     _errorPort = errorPort;
 
     final handshake = Completer<SendPort>();
+
     receivePort.listen((message) {
       if (message is SendPort) {
         if (!handshake.isCompleted) handshake.complete(message);
@@ -153,14 +180,16 @@ class _Worker {
         _jobs[message.jobId]?._controller.add(message);
       }
     });
+
     errorPort.listen((message) {
+      if (_shuttingDown) return;
+
       _isAlive = false;
-      // An uncaught worker error cannot be attributed to a single job, so
-      // surface it to every job running on this worker (mirrors the old
-      // per-isolate errorPort behavior).
+
       final errorMessage = message is List && message.isNotEmpty
           ? message[0].toString()
           : 'Worker isolate exited unexpectedly without payload.';
+
       for (final job in List<DownloadJob>.from(_jobs.values)) {
         job._controller.add(
           IsolateMessage(job.jobId, 'error', {
@@ -168,49 +197,95 @@ class _Worker {
             'errorMessage': errorMessage,
           }),
         );
+
         if (!job._controller.isClosed) {
           job._controller.close();
         }
       }
+
       _jobs.clear();
-      // Attempt respawn so future submissions can still succeed.
+
+      _scheduleRespawn();
+    });
+
+    try {
+      _isolate = await Isolate.spawn(
+        _downloadWorkerMain,
+        receivePort.sendPort,
+        debugName: 'DownloadPoolWorker_$id',
+        onError: errorPort.sendPort,
+      );
+
+      _commandPort = await handshake.future.timeout(
+        const Duration(seconds: 30),
+      );
+
+      _isAlive = true;
+
+      if (isRespawn) {
+        _respawnAttempts = 0;
+      }
+    } on TimeoutException {
+      _isolate?.kill(priority: Isolate.immediate);
+      _isolate = null;
+
+      receivePort.close();
+      errorPort.close();
+
+      if (isRespawn) {
+        _scheduleRespawn();
+        return;
+      }
+
+      throw const IsolateSpawnTimeoutException();
+    } catch (e) {
+      debugPrint('[DMX Pool] Failed to spawn worker $id: $e');
+
+      _isolate?.kill(priority: Isolate.immediate);
+      _isolate = null;
+
+      receivePort.close();
+      errorPort.close();
+
+      if (isRespawn) {
+        _scheduleRespawn();
+        return;
+      }
+
+      rethrow;
+    }
+  }
+
+  void _scheduleRespawn() {
+    if (_shuttingDown) return;
+
+    _respawnTimer?.cancel();
+
+    final attempt = _respawnAttempts.clamp(0, 5);
+    final delayMs = 500 * (1 << attempt);
+
+    _respawnTimer = Timer(Duration(milliseconds: delayMs), () {
       unawaited(
-        spawn().catchError((Object e) {
+        spawn(isRespawn: true).catchError((Object e) {
           debugPrint('[DMX Pool] Worker $id respawn failed: $e');
         }),
       );
     });
-
-    _isolate = await Isolate.spawn(
-      _downloadWorkerMain,
-      receivePort.sendPort,
-      debugName: 'DownloadPoolWorker_$id',
-      onError: errorPort.sendPort,
-    );
-    try {
-      _commandPort = await handshake.future.timeout(
-        const Duration(seconds: 30),
-      );
-    } on TimeoutException {
-      _isolate?.kill(priority: Isolate.immediate);
-      _isolate = null;
-      receivePort.close();
-      errorPort.close();
-      throw const IsolateSpawnTimeoutException();
-    }
-    _isAlive = true;
   }
 
   DownloadJob submit(DownloadCommand command) {
     final jobId = _nextJobId++;
     final job = DownloadJob._(jobId, this);
+
     _jobs[jobId] = job;
     _send({'type': 'start', 'jobId': jobId, 'command': command});
+
     return job;
   }
 
   void broadcastSpeedLimit(int bytesPerSecond, int activeCount) {
     if (_jobs.isEmpty) return;
+
     _send({
       'type': 'update_speed_limit',
       'value': bytesPerSecond,
@@ -219,26 +294,44 @@ class _Worker {
   }
 
   void _send(Map<String, Object?> message) {
+    if (_shuttingDown) return;
+
+    final port = _commandPort;
+    if (port == null) return;
+
     try {
-      _commandPort?.send(message);
+      port.send(message);
     } catch (e) {
       debugPrint('[DMX Pool] Failed to send command to worker $id: $e');
+      _isAlive = false;
+      _scheduleRespawn();
     }
   }
 
   Future<void> shutdown() async {
+    _shuttingDown = true;
+    _respawnTimer?.cancel();
+    _respawnTimer = null;
+
     _send({'type': 'shutdown'});
+
     for (final job in List<DownloadJob>.from(_jobs.values)) {
       job.dispose();
     }
+
     _jobs.clear();
+
     _receivePort?.close();
     _receivePort = null;
+
     _errorPort?.close();
     _errorPort = null;
+
     _isolate?.kill(priority: Isolate.immediate);
     _isolate = null;
+
     _commandPort = null;
+    _isAlive = false;
   }
 }
 
@@ -246,6 +339,7 @@ class _Worker {
 class DownloadJob {
   final int jobId;
   final _Worker _worker;
+
   final StreamController<IsolateMessage> _controller =
       StreamController<IsolateMessage>();
 
@@ -259,33 +353,28 @@ class DownloadJob {
 
   void dispose() {
     _worker._jobs.remove(jobId);
+
     if (!_controller.isClosed) {
       _controller.close();
     }
   }
 }
 
-/// Worker-side mutable state for one running job. The speed limit / active
-/// count are read live by `_doHttpDownload` via closures, and updated by
-/// broadcast messages from the main isolate.
+/// Worker-side mutable state for one running job.
 class _WorkerJobState {
   final CancelToken cancelToken = CancelToken();
+
   int speedLimit;
   int activeCount;
 
   _WorkerJobState({required this.speedLimit, required this.activeCount});
 }
 
-/// Worker isolate main loop: listens for commands and runs download jobs.
-/// This inlines the logic of the old `_isolateHttpDownloadEntryPoint`, but
-/// stays alive across many jobs instead of exiting after one.
+/// Worker isolate main loop.
 void _downloadWorkerMain(SendPort mainSendPort) {
   final commandPort = ReceivePort();
   final jobs = <int, _WorkerJobState>{};
-  // A single engine per worker isolate, reused across every job routed here.
-  // Creating a DownloadEngine per job wasted a Dio setup and added GC churn;
-  // _doHttpDownload already cleans up its own per-job isolated client in a
-  // finally, so the shared engine holds no per-job state between jobs.
+
   final engine = DownloadEngine(enableCleanupTimer: false);
 
   void safeSend(IsolateMessage message) {
@@ -299,43 +388,53 @@ void _downloadWorkerMain(SendPort mainSendPort) {
   commandPort.listen((message) {
     try {
       if (message is! Map) return;
+
       final type = message['type'];
+
       if (type == 'start') {
         final jobId = message['jobId'] as int;
         final command = message['command'] as DownloadCommand;
+
         final state = _WorkerJobState(
           speedLimit: command.speedLimit,
           activeCount: command.activeCount,
         );
-        // Register synchronously so a 'cancel' arriving right after 'start'
-        // always finds the job.
+
         jobs[jobId] = state;
+
         safeSend(IsolateMessage(jobId, 'ack'));
-        _runWorkerJob(
-          jobId,
-          command,
-          state,
-          safeSend,
-          engine,
-        ).whenComplete(() => jobs.remove(jobId));
+
+        _runWorkerJob(jobId, command, state, safeSend, engine).whenComplete(() {
+          jobs.remove(jobId);
+        });
       } else if (type == 'cancel') {
-        final state = jobs[message['jobId'] as int];
+        final jobId = message['jobId'] as int;
+        final state = jobs[jobId];
+
         if (state != null && !state.cancelToken.isCancelled) {
           state.cancelToken.cancel();
         }
       } else if (type == 'update_speed_limit') {
-        // Global broadcast — apply to every running job on this worker.
         final value = message['value'] as int;
         final activeCount = message['activeCount'] as int?;
+
         for (final state in jobs.values) {
           state.speedLimit = value;
-          if (activeCount != null) state.activeCount = activeCount;
+          if (activeCount != null) {
+            state.activeCount = activeCount;
+          }
         }
       } else if (type == 'shutdown') {
         for (final state in jobs.values) {
-          if (!state.cancelToken.isCancelled) state.cancelToken.cancel();
+          if (!state.cancelToken.isCancelled) {
+            state.cancelToken.cancel();
+          }
         }
-        engine.close();
+
+        try {
+          engine.close();
+        } catch (_) {}
+
         commandPort.close();
       }
     } catch (e) {
@@ -400,7 +499,10 @@ Future<void> _runWorkerJob(
   } catch (e) {
     String errType = 'unknown';
     int? errStatus;
-    if (e is DioException) {
+
+    if (e is _FileChangedOnServerException) {
+      errType = 'fileChanged';
+    } else if (e is DioException) {
       if (e.type == DioExceptionType.cancel) {
         errType = 'cancel';
       } else if (e.type == DioExceptionType.badResponse) {
@@ -414,8 +516,22 @@ Future<void> _runWorkerJob(
       } else if (e.type == DioExceptionType.connectionError) {
         errType = 'connectionError';
       }
+
       errStatus = e.response?.statusCode;
+    } else if (e is TimeoutException) {
+      errType = 'receiveTimeout';
+    } else if (e is SocketException) {
+      errType = 'connectionError';
+    } else {
+      final typeName = e.runtimeType.toString();
+      final stringRep = e.toString();
+
+      if (typeName == 'DownloadIntegrityException' ||
+          stringRep.startsWith('DownloadIntegrityException')) {
+        errType = 'integrity';
+      }
     }
+
     safeSend(
       IsolateMessage(jobId, 'error', {
         'errorType': errType,

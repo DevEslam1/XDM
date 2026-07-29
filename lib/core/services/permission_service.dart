@@ -182,7 +182,7 @@ class PermissionService {
     final sdk = await _androidSdkLevel();
     if (sdk < 29) return null;
     try {
-      const channel = MethodChannel('com.example.dmx/media');
+      const channel = MethodChannel('com.dmx.app/media');
       final result = await channel.invokeMethod<String>('insertDownload', {
         'fileName': fileName,
         'mimeType': mimeType,

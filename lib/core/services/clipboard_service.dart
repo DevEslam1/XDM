@@ -14,23 +14,33 @@ class ClipboardService {
   bool _initialized = false;
   Future<void>? _initFuture;
 
-  Future<void> _initIfNeeded() {
-    return _initFuture ??= _doInit();
+  Future<void> _initIfNeeded() async {
+    if (_initFuture != null) {
+      try {
+        await _initFuture;
+      } catch (_) {
+        _initFuture = null;
+      }
+    }
+    if (_initFuture == null) {
+      _initFuture = _doInit();
+      try {
+        await _initFuture;
+      } catch (e) {
+        _initFuture = null;
+      }
+    }
   }
 
   Future<void> _doInit() async {
     if (_initialized) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _lastCheckedUrl = prefs.getString('clipboard_last_url');
-      final timeMs = prefs.getInt('clipboard_last_time');
-      if (timeMs != null) {
-        _lastCheckedTime = DateTime.fromMillisecondsSinceEpoch(timeMs);
-      }
-      _initialized = true;
-    } catch (e) {
-      debugPrint('ClipboardService error loading prefs: $e');
+    final prefs = await SharedPreferences.getInstance();
+    _lastCheckedUrl = prefs.getString('clipboard_last_url');
+    final timeMs = prefs.getInt('clipboard_last_time');
+    if (timeMs != null) {
+      _lastCheckedTime = DateTime.fromMillisecondsSinceEpoch(timeMs);
     }
+    _initialized = true;
   }
 
   /// Checks if there is a new valid HTTP/HTTPS URL on the clipboard.
@@ -39,6 +49,10 @@ class ClipboardService {
   Future<String?> checkClipboardForUrl() async {
     await _initIfNeeded();
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final enabled = prefs.getBool('clipboard_monitoring_enabled') ?? false;
+      if (!enabled) return null;
+
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
       if (text != null &&

@@ -196,16 +196,9 @@ class AppDatabase extends _$AppDatabase {
 
         // Pre-migration: normalize date strings that julianday can't handle
         await customStatement('''
-          UPDATE download_tasks SET
-            created_at = REPLACE(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', ''),
-              SUBSTR(created_at, INSTR(created_at, '.'),
-                CASE WHEN INSTR(created_at, '+') > 0
-                  THEN INSTR(created_at, '+') - INSTR(created_at, '.')
-                  WHEN INSTR(created_at, '-') > 0 AND INSTR(created_at, '-') > INSTR(created_at, ' ')
-                  THEN INSTR(created_at, '-') - INSTR(created_at, '.')
-                  ELSE LENGTH(created_at) - INSTR(created_at, '.') + 1
-                END), '')
-          WHERE created_at LIKE '%.%'
+          UPDATE download_tasks SET created_at =
+            SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
+          WHERE created_at LIKE '%.%';
         ''');
 
         // Step 1: Create a temporary table with the new schema

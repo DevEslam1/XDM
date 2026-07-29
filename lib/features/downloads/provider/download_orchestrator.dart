@@ -189,7 +189,10 @@ class DownloadOrchestrator {
               task.savePath,
               resolvedFileName,
             );
-            final resolvedTempPath = resolvedLocalPath;
+            final resolvedTempPath = _host.downloadEngine.buildTempFilePath(
+              p.dirname(resolvedLocalPath),
+              resolvedFileName,
+            );
 
             if (type == 'combined') {
               final videoSize = streamInfo['videoSize'] as int? ?? 0;
@@ -910,7 +913,10 @@ class DownloadOrchestrator {
                     )
                   : base.localFilePath;
               final newTempPath = newFileName != base.fileName
-                  ? newLocalPath
+                  ? _host.downloadEngine.buildTempFilePath(
+                      p.dirname(base.localFilePath),
+                      newFileName,
+                    )
                   : base.tempFilePath;
               final newCategory =
                   newFileName != base.fileName && base.category == 'Other'
@@ -1515,6 +1521,9 @@ class DownloadOrchestrator {
   }
 
   String _errorMessage(Object error) {
+    if (error is DownloadIntegrityException) {
+      return 'Download integrity check failed: ${error.message}';
+    }
     if (error is IsolateSpawnTimeoutException) {
       return error.message;
     }
@@ -1545,6 +1554,9 @@ class DownloadOrchestrator {
 
   bool _isRetryableError(Object error) {
     final msg = error.toString().toLowerCase();
+    if (error is DownloadIntegrityException) {
+      return false;
+    }
     if (msg.contains('merge') ||
         msg.contains('ffmpeg') ||
         msg.contains('missing') ||

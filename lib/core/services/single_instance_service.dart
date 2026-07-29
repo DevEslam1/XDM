@@ -108,12 +108,17 @@ class SingleInstanceService {
         return false;
       }
 
-      // If forwarding failed, the existing instance is dead. Clean up stale token and retry.
+      // If forwarding failed, check if the token file is stale (>10 seconds old) before deleting.
       debugPrint(
-        '[SingleInstanceService] Primary instance unresponsive. Cleaning up stale token.',
+        '[SingleInstanceService] Primary instance unresponsive. Checking token file age.',
       );
       try {
-        await _tokenFile.delete();
+        if (await _tokenFile.exists()) {
+          final stat = await _tokenFile.stat();
+          if (DateTime.now().difference(stat.modified) > const Duration(seconds: 10)) {
+            await _tokenFile.delete();
+          }
+        }
       } catch (_) {}
 
       try {

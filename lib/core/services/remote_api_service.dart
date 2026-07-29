@@ -111,82 +111,93 @@ class RemoteApiService {
     }
 
     _server!.listen((request) async {
-      final path = request.uri.path;
-      final method = request.method;
-
-      request.response.headers.contentType = ContentType.json;
-
-      // Health check — always allowed without auth
-      if (path == '/api/health' && method == 'GET') {
-        request.response.write(jsonEncode({'ok': true}));
-        await request.response.close();
-        return;
-      }
-
-      // Require bearer token for all other endpoints
-      final authHeader = request.headers.value('authorization');
-      if (authHeader == null || !authHeader.startsWith('Bearer ')) {
-        request.response.statusCode = 401;
-        request.response.write(
-          jsonEncode({'error': 'Missing or invalid authorization header'}),
-        );
-        await request.response.close();
-        return;
-      }
-      final token = authHeader.substring(7).trim();
-      if (!_timingSafeEqual(token, _bearerToken!)) {
-        request.response.statusCode = 401;
-        request.response.write(jsonEncode({'error': 'Invalid token'}));
-        await request.response.close();
-        return;
-      }
-
       try {
-        if (path == '/api/tasks' && method == 'GET') {
-          final tasks = await getTasks();
-          request.response.write(jsonEncode(tasks));
-        } else if (path.startsWith('/api/tasks/') &&
-            path.endsWith('/pause') &&
-            method == 'POST') {
-          final id = path.split('/')[3];
-          if (!_isValidTaskId(id)) {
-            request.response.statusCode = 400;
-            request.response.write(jsonEncode({'error': 'Invalid task ID'}));
-          } else {
-            await pauseTask(id);
-            request.response.write(jsonEncode({'ok': true}));
-          }
-        } else if (path.startsWith('/api/tasks/') &&
-            path.endsWith('/resume') &&
-            method == 'POST') {
-          final id = path.split('/')[3];
-          if (!_isValidTaskId(id)) {
-            request.response.statusCode = 400;
-            request.response.write(jsonEncode({'error': 'Invalid task ID'}));
-          } else {
-            await resumeTask(id);
-            request.response.write(jsonEncode({'ok': true}));
-          }
-        } else if (path.startsWith('/api/tasks/') &&
-            path.endsWith('/delete') &&
-            method == 'DELETE') {
-          final id = path.split('/')[3];
-          if (!_isValidTaskId(id)) {
-            request.response.statusCode = 400;
-            request.response.write(jsonEncode({'error': 'Invalid task ID'}));
-          } else {
-            await deleteTask(id);
-            request.response.write(jsonEncode({'ok': true}));
-          }
-        } else {
-          request.response.statusCode = 404;
-          request.response.write(jsonEncode({'error': 'Not found'}));
+        final path = request.uri.path;
+        final method = request.method;
+
+        request.response.headers.contentType = ContentType.json;
+
+        // Health check — always allowed without auth
+        if (path == '/api/health' && method == 'GET') {
+          request.response.write(jsonEncode({'ok': true}));
+          await request.response.close();
+          return;
         }
-      } catch (e) {
-        request.response.statusCode = 500;
-        request.response.write(jsonEncode({'error': e.toString()}));
+
+        // Require bearer token for all other endpoints
+        final authHeader = request.headers.value('authorization');
+        if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+          request.response.statusCode = 401;
+          request.response.write(
+            jsonEncode({'error': 'Missing or invalid authorization header'}),
+          );
+          await request.response.close();
+          return;
+        }
+        final token = authHeader.substring(7).trim();
+        if (!_timingSafeEqual(token, _bearerToken!)) {
+          request.response.statusCode = 401;
+          request.response.write(jsonEncode({'error': 'Invalid token'}));
+          await request.response.close();
+          return;
+        }
+
+        try {
+          if (path == '/api/tasks' && method == 'GET') {
+            final tasks = await getTasks();
+            request.response.write(jsonEncode(tasks));
+          } else if (path.startsWith('/api/tasks/') &&
+              path.endsWith('/pause') &&
+              method == 'POST') {
+            final id = path.split('/')[3];
+            if (!_isValidTaskId(id)) {
+              request.response.statusCode = 400;
+              request.response.write(jsonEncode({'error': 'Invalid task ID'}));
+            } else {
+              await pauseTask(id);
+              request.response.write(jsonEncode({'ok': true}));
+            }
+          } else if (path.startsWith('/api/tasks/') &&
+              path.endsWith('/resume') &&
+              method == 'POST') {
+            final id = path.split('/')[3];
+            if (!_isValidTaskId(id)) {
+              request.response.statusCode = 400;
+              request.response.write(jsonEncode({'error': 'Invalid task ID'}));
+            } else {
+              await resumeTask(id);
+              request.response.write(jsonEncode({'ok': true}));
+            }
+          } else if (path.startsWith('/api/tasks/') &&
+              path.endsWith('/delete') &&
+              method == 'DELETE') {
+            final id = path.split('/')[3];
+            if (!_isValidTaskId(id)) {
+              request.response.statusCode = 400;
+              request.response.write(jsonEncode({'error': 'Invalid task ID'}));
+            } else {
+              await deleteTask(id);
+              request.response.write(jsonEncode({'ok': true}));
+            }
+          } else {
+            request.response.statusCode = 404;
+            request.response.write(jsonEncode({'error': 'Not found'}));
+          }
+        } catch (e) {
+          request.response.statusCode = 500;
+          request.response.write(jsonEncode({'error': e.toString()}));
+        }
+        try {
+          await request.response.close();
+        } catch (_) {}
+      } catch (outerError) {
+        debugPrint('Remote API request listener error: $outerError');
+        try {
+          await request.response.close();
+        } catch (_) {}
       }
-      await request.response.close();
+    }, onError: (Object err) {
+      debugPrint('Remote API server stream error: $err');
     });
   }
 

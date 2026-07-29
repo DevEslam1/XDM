@@ -34,6 +34,7 @@ class ConnectionManager {
 
   static Future<void> prewarm(String url) async {
     Socket? rawSocket;
+    SecureSocket? secureSocket;
     try {
       final uri = Uri.parse(url);
       final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
@@ -46,20 +47,21 @@ class ConnectionManager {
       );
 
       if (uri.scheme == 'https') {
-        final secure = await SecureSocket.secure(rawSocket, host: uri.host);
-        // SecureSocket now owns rawSocket; clear so finally won't close it.
+        secureSocket = await SecureSocket.secure(rawSocket, host: uri.host);
+        // SecureSocket now owns rawSocket; clear so rawSocket won't double close.
         rawSocket = null;
-        secure.write(
+        secureSocket.write(
           'HEAD ${uri.path.isEmpty ? '/' : uri.path} HTTP/1.1\r\n'
           'Host: ${uri.host}\r\n'
           'Connection: keep-alive\r\n\r\n',
         );
-        await secure.flush();
-        await secure.first.timeout(
+        await secureSocket.flush();
+        await secureSocket.first.timeout(
           const Duration(seconds: 3),
           onTimeout: () => Uint8List(0),
         );
-        await secure.close();
+        await secureSocket.close();
+        secureSocket = null;
       } else {
         rawSocket.write(
           'HEAD ${uri.path.isEmpty ? '/' : uri.path} HTTP/1.1\r\n'
@@ -80,13 +82,14 @@ class ConnectionManager {
     } catch (e) {
       _log.fine('Pre-warm failed (non-fatal) for $url: $e');
     } finally {
-      // Only closes if SecureSocket.secure() never took ownership.
+      secureSocket?.destroy();
       rawSocket?.destroy();
     }
   }
 
   static Future<bool> detectHttp2(String url) async {
     Socket? rawSocket;
+    SecureSocket? secureSocket;
     try {
       final uri = Uri.parse(url);
       if (uri.scheme != 'https') return false;
@@ -96,14 +99,16 @@ class ConnectionManager {
         port,
         timeout: const Duration(seconds: 5),
       );
-      final secure = await SecureSocket.secure(rawSocket, host: uri.host);
+      secureSocket = await SecureSocket.secure(rawSocket, host: uri.host);
       rawSocket = null; // SecureSocket now owns rawSocket.
-      final proto = secure.selectedProtocol;
-      await secure.close();
+      final proto = secureSocket.selectedProtocol;
+      await secureSocket.close();
+      secureSocket = null;
       return proto == 'h2';
     } catch (_) {
       return false;
     } finally {
+      secureSocket?.destroy();
       rawSocket?.destroy();
     }
   }
