@@ -1450,7 +1450,7 @@ class DownloadProvider extends ChangeNotifier
           return;
         }
         _updateTelemetryWidget();
-        BackgroundService.sendHeartbeat();
+        unawaited(BackgroundService.sendHeartbeat());
 
         final tasksToSave = <DownloadTask>[];
         for (var i = 0; i < _tasks.length; i++) {

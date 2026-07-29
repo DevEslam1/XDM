@@ -34,7 +34,9 @@ Future<void> main(List<String> args) async {
 
       Logger.root.level = kDebugMode ? Level.ALL : Level.WARNING;
       Logger.root.onRecord.listen((record) {
-        debugPrint('[${record.level.name}] ${record.loggerName}: ${record.message}');
+        debugPrint(
+          '[${record.level.name}] ${record.loggerName}: ${record.message}',
+        );
         if (record.error != null) debugPrint('  Error: ${record.error}');
       });
 
@@ -63,7 +65,9 @@ Future<void> main(List<String> args) async {
             await TorrentService.init();
             debugPrint('Torrent service initialized successfully');
           } catch (e, s) {
-            debugPrint('Torrent init failed, continuing without torrent support: $e');
+            debugPrint(
+              'Torrent init failed, continuing without torrent support: $e',
+            );
             Logger('main').severe('Torrent init failed', e, s);
             // App continues without torrent support. All torrent-related
             // features will gracefully degrade (isSupported checks elsewhere).
@@ -97,11 +101,14 @@ Future<void> main(List<String> args) async {
         );
         await downloadProvider.load();
 
-        RemoteApiService.start(
-          getTasks: () async => downloadProvider.tasks.map((t) => t.toMap()).toList(),
-          pauseTask: (id) => downloadProvider.pauseTask(id),
-          resumeTask: (id) => downloadProvider.resumeTask(id),
-          deleteTask: (id) => downloadProvider.deleteTask(id),
+        unawaited(
+          RemoteApiService.start(
+            getTasks: () async =>
+                downloadProvider.tasks.map((t) => t.toMap()).toList(),
+            pauseTask: (id) => downloadProvider.pauseTask(id),
+            resumeTask: (id) => downloadProvider.resumeTask(id),
+            deleteTask: (id) => downloadProvider.deleteTask(id),
+          ),
         );
 
         String? initialUrl = SingleInstanceService().initialUrl;
@@ -217,8 +224,8 @@ class DmxApp extends StatelessWidget {
             home: settings.showOnboarding
                 ? const OnboardingScreen()
                 : (initialUrl != null && initialUrl!.trim().isNotEmpty)
-                    ? ShareLaunchScreen(url: initialUrl!)
-                    : const MainNavigationContainer(),
+                ? ShareLaunchScreen(url: initialUrl!)
+                : const MainNavigationContainer(),
             builder: (context, child) {
               return AnnotatedRegion<SystemUiOverlayStyle>(
                 value: SystemUiOverlayStyle(

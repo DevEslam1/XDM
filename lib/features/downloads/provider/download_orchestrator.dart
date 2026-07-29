@@ -584,7 +584,7 @@ class DownloadOrchestrator {
           eta: updated.etaFormatted,
           payload: task.id,
         );
-        BackgroundService.sendHeartbeat();
+        unawaited(BackgroundService.sendHeartbeat());
       } else {
         _host.providerTasks[index] = updated;
         _host.pendingProgressUpdates.add(task.id);
@@ -915,8 +915,7 @@ class DownloadOrchestrator {
 
         final isYoutubeDownload =
             (task.downloadPageUrl != null &&
-                YoutubeService.extractVideoId(task.downloadPageUrl!) !=
-                    null) ||
+                YoutubeService.extractVideoId(task.downloadPageUrl!) != null) ||
             task.url.contains('.googlevideo.com/') ||
             task.youtubeQualityPreset != null;
         bool shouldRefreshYoutube = false;

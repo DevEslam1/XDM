@@ -8,6 +8,12 @@ import '../../features/downloads/models/download_task.dart';
 // Consider using .arb files with flutter_localizations for standard i18n.
 
 class L10n {
+  // TODO(i18n-perf): This inline map is ~1200 lines and loads ALL locales
+  // into memory at startup. Refactor to:
+  //   1. Split into per-locale files: lib/l10n/app_en.arb, lib/l10n/app_ar.arb
+  //   2. Use `flutter gen-l10n` with `flutter_localizations` for standard i18n.
+  //   3. Lazy-load only the active locale via `LocalizationsDelegate`.
+  //   4. Remove this static map entirely once migration is complete.
   static const Map<String, Map<String, String>> _translations = {
     'en': {
       'app_title': 'Xdm',

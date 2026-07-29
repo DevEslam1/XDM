@@ -103,7 +103,9 @@ class PermissionService {
     if (!kIsWeb && Platform.isAndroid) {
       final sdk = await _androidSdkLevel();
 
-      // Always try the public Downloads folder first
+      // TODO(scoped-storage): For true public Downloads visibility on Android 11+,
+      // implement a platform channel using MediaStore.Downloads API.
+      // For now, use app-specific external storage to prevent EACCES crashes.
       if (sdk >= 30) {
         try {
           final extDirs = await getExternalStorageDirectories(
@@ -122,14 +124,14 @@ class PermissionService {
             '[PermissionService] Failed to get external storage directories: $e',
           );
         }
+        // App-specific external storage unavailable — fall through to the
+        // always-writable app documents directory to prevent EACCES crashes.
+        return _fallbackDirectory();
       }
 
-      // Fallback to public Download path — never use Android/data paths
-      if (sdk < 30) {
-        // On older devices ensure storage permission is granted first
-        if (!await _isStorageGranted()) {
-          return _fallbackDirectory();
-        }
+      // SDK < 30: the public Download path is writable with storage permission.
+      if (!await _isStorageGranted()) {
+        return _fallbackDirectory();
       }
 
       const publicDownloadPath = '/storage/emulated/0/Download/XDM';
@@ -219,19 +221,7 @@ class PermissionService {
       debugPrint(
         'ensureStorageAccess: failed to create download directory: $e',
       );
-      // Avoid Android/data fallbacks — always use public Downloads/XDM
-      const fallbackPath = '/storage/emulated/0/Download/XDM';
-      try {
-        final xdmDir = Directory(fallbackPath);
-        if (!await xdmDir.exists()) {
-          await xdmDir.create(recursive: true);
-        }
-        return true;
-      } catch (err) {
-        debugPrint(
-          '[PermissionService] ensureStorageAccess public path fallback failed: $err',
-        );
-      }
+      // Fall back to app-private documents directory to guarantee writability.
       return false;
     }
   }

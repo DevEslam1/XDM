@@ -160,7 +160,7 @@ class DownloadEngine {
     String? oauthToken,
   }) {
     final client = Dio();
-    client.interceptors.add(ProfessionalRetryInterceptor());
+    client.interceptors.add(ProfessionalRetryInterceptor(client));
     client.options.connectTimeout = const Duration(seconds: 30);
     client.options.sendTimeout = const Duration(seconds: 60);
     client.options.receiveTimeout = const Duration(seconds: 60);
@@ -2166,16 +2166,34 @@ class DownloadEngine {
     });
 
     if (totalSize > 0 && actualFileSize != totalSize) {
-      final difference = (actualFileSize - totalSize).abs();
-      final ratio = totalSize > 0 ? difference / totalSize : 1.0;
-      if (difference > 1024 && ratio > 0.001) {
-        throw Exception(
-          'Download integrity check failed: expected $totalSize bytes, got $actualFileSize bytes.',
+      if (actualFileSize > totalSize) {
+        // Server sent more bytes than Content-Length promised (e.g. trailing
+        // metadata or chunked-encoding artefacts). Truncate to the expected size.
+        debugPrint(
+          '[DownloadEngine] File is ${actualFileSize - totalSize} bytes larger '
+          'than expected ($totalSize). Truncating.',
+        );
+        final raf = await tempFile.open(mode: FileMode.writeOnly);
+        await raf.truncate(totalSize);
+        await raf.close();
+      } else {
+        // File is smaller than expected. Only fail if the shortfall is
+        // significant: more than 1% AND more than 1 MB.
+        final deficit = totalSize - actualFileSize;
+        final ratio = deficit / totalSize;
+        if (deficit > 1024 * 1024 && ratio > 0.01) {
+          throw Exception(
+            'Download integrity check failed: expected $totalSize bytes, '
+            'got $actualFileSize bytes (deficit: $deficit bytes, '
+            '${(ratio * 100).toStringAsFixed(1)}%).',
+          );
+        }
+        debugPrint(
+          '[DownloadEngine] Download size mismatch tolerated: expected $totalSize '
+          'bytes, got $actualFileSize bytes (deficit: $deficit bytes, '
+          '${(ratio * 100).toStringAsFixed(2)}%).',
         );
       }
-      debugPrint(
-        '[DownloadEngine] Download size mismatch ignored: expected $totalSize bytes, got $actualFileSize bytes.',
-      );
     }
 
     await File(localFilePath).parent.create(recursive: true);

@@ -54,7 +54,7 @@ class ScheduleManager {
       checkScheduledDownloads();
       _checkPeriodicAppUpdate();
       if (_downloadingTasksCount() > 0) {
-        BackgroundService.sendHeartbeat();
+        unawaited(BackgroundService.sendHeartbeat());
       }
     });
   }

@@ -3,6 +3,12 @@ import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
 class ProfessionalRetryInterceptor extends Interceptor {
+  final Dio _dio;
+
+  /// Retries reuse [_dio] so proxy, SSL, and header configuration are
+  /// preserved across attempts (a bare `Dio()` would bypass user settings).
+  ProfessionalRetryInterceptor(this._dio);
+
   static final _log = Logger('RetryInterceptor');
   static const int maxRetries = 5;
   static const int baseDelayMs = 1000;
@@ -17,12 +23,27 @@ class ProfessionalRetryInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final key = identityHashCode(err.requestOptions);
 
+    // Break infinite retry loops: if the request already carries a retry
+    // count at the max, stop retrying regardless of the in-memory map state.
+    final existingRetryCount =
+        int.tryParse(
+          err.requestOptions.headers['X-Retry-Count']?.toString() ?? '0',
+        ) ??
+        0;
+    if (existingRetryCount >= maxRetries) {
+      _removeEntry(key);
+      handler.next(err);
+      return;
+    }
+
     _cleanupStaleEntries();
 
     if (!_isTransient(err)) {
-      _log.fine('Permanent error (${err.type}, '
-          '${err.response?.statusCode}), not retrying: '
-          '${err.requestOptions.uri}');
+      _log.fine(
+        'Permanent error (${err.type}, '
+        '${err.response?.statusCode}), not retrying: '
+        '${err.requestOptions.uri}',
+      );
       _removeEntry(key);
       handler.next(err);
       return;
@@ -30,8 +51,10 @@ class ProfessionalRetryInterceptor extends Interceptor {
 
     final count = _retryCounts[key] ?? 0;
     if (count >= maxRetries) {
-      _log.warning('Max retries ($maxRetries) exhausted for '
-          '${err.requestOptions.uri}');
+      _log.warning(
+        'Max retries ($maxRetries) exhausted for '
+        '${err.requestOptions.uri}',
+      );
       _removeEntry(key);
       handler.next(err);
       return;
@@ -42,15 +65,20 @@ class ProfessionalRetryInterceptor extends Interceptor {
 
     final delayMs = _computeDelay(err, count);
 
-    _log.info('Retry ${count + 1}/$maxRetries for '
-        '${err.requestOptions.uri} in ${delayMs}ms '
-        '(error: ${err.type}, status: ${err.response?.statusCode})');
+    _log.info(
+      'Retry ${count + 1}/$maxRetries for '
+      '${err.requestOptions.uri} in ${delayMs}ms '
+      '(error: ${err.type}, status: ${err.response?.statusCode})',
+    );
 
     await Future.delayed(Duration(milliseconds: delayMs));
 
     try {
-      final retryDio = Dio();
-      final response = await retryDio.fetch(err.requestOptions);
+      // Retry using the SAME Dio instance to preserve proxy, SSL, and header config.
+      // Add a retry-count header to allow servers / downstream interceptors to
+      // detect and break infinite retry loops.
+      err.requestOptions.headers['X-Retry-Count'] = (count + 1).toString();
+      final response = await _dio.fetch(err.requestOptions);
       _removeEntry(key);
       handler.resolve(response);
     } catch (retryErr) {

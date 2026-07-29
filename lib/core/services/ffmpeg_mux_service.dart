@@ -48,10 +48,16 @@ class FFmpegMuxService {
     FFmpegSession? activeSession;
 
     /// Cancels the specific active FFmpeg session and re-throws [error].
-    Future<Never> cancelAndRethrow(Object error, StackTrace stack, int? sessionId) async {
+    Future<Never> cancelAndRethrow(
+      Object error,
+      StackTrace stack,
+      int? sessionId,
+    ) async {
       try {
         if (sessionId != null) {
           await FFmpegKit.cancel(sessionId);
+        } else {
+          await FFmpegKit.cancel(); // global cancel as safety net
         }
       } catch (cancelErr) {
         _log.warning('FFmpeg cancel on timeout failed: $cancelErr');
@@ -121,23 +127,31 @@ class FFmpegMuxService {
       try {
         final future = FFmpegKit.executeWithArguments(arguments);
         future.then((s) => activeSession = s).catchError((Object e) => throw e);
-        session = await future.timeout(timeoutDuration, onTimeout: () {
-          throw TimeoutException(
-            'FFmpeg primary merge timed out after ${timeoutDuration.inMinutes} min',
-          );
-        });
+        session = await future.timeout(
+          timeoutDuration,
+          onTimeout: () {
+            throw TimeoutException(
+              'FFmpeg primary merge timed out after ${timeoutDuration.inMinutes} min',
+            );
+          },
+        );
         activeSession = session;
       } on TimeoutException {
-        // Cancel the native FFmpeg session to prevent an orphan process.
-        if (session != null) {
-          await FFmpegKit.cancel(session.getSessionId());
+        // Session was never assigned (timeout threw before assignment completed).
+        // Use global cancel to kill ALL native FFmpeg sessions.
+        try {
+          await FFmpegKit.cancel();
+        } catch (cancelErr) {
+          _log.warning(
+            'FFmpeg global cancel on primary timeout failed: $cancelErr',
+          );
         }
         await cleanUpInputs();
         rethrow;
       }
-      final returnCode = await session
-          .getReturnCode()
-          .timeout(const Duration(seconds: 30));
+      final returnCode = await session.getReturnCode().timeout(
+        const Duration(seconds: 30),
+      );
 
       if (ReturnCode.isSuccess(returnCode)) {
         final outputFile = File(outputPath);
@@ -181,23 +195,32 @@ class FFmpegMuxService {
         // Re-encode is ~10× slower than stream copy.
         final reencodeMinutes =
             (totalInputBytes / (5 * 1024 * 1024)).ceil() + 30;
-        final reencodeTimeout =
-            Duration(minutes: reencodeMinutes.clamp(30, 600));
+        final reencodeTimeout = Duration(
+          minutes: reencodeMinutes.clamp(30, 600),
+        );
 
         FFmpegSession? fallbackSession;
         try {
           final future = FFmpegKit.executeWithArguments(fallbackArguments);
-          future.then((s) => activeSession = s).catchError((Object e) => throw e);
-          fallbackSession =
-              await future.timeout(reencodeTimeout, onTimeout: () {
-            throw TimeoutException(
-              'FFmpeg fallback merge timed out after ${reencodeTimeout.inMinutes} min',
-            );
-          });
+          future
+              .then((s) => activeSession = s)
+              .catchError((Object e) => throw e);
+          fallbackSession = await future.timeout(
+            reencodeTimeout,
+            onTimeout: () {
+              throw TimeoutException(
+                'FFmpeg fallback merge timed out after ${reencodeTimeout.inMinutes} min',
+              );
+            },
+          );
           activeSession = fallbackSession;
         } on TimeoutException {
-          if (fallbackSession != null) {
-            await FFmpegKit.cancel(fallbackSession.getSessionId());
+          try {
+            await FFmpegKit.cancel();
+          } catch (cancelErr) {
+            _log.warning(
+              'FFmpeg global cancel on fallback timeout failed: $cancelErr',
+            );
           }
           await cleanUpInputs();
           rethrow;

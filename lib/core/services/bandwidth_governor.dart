@@ -59,7 +59,10 @@ class BandwidthGovernor {
         final waitMs = (deficit / share * 1000).round();
         _availableTokens = 0;
 
-        completer.complete(waitMs.clamp(0, 200));
+        // Allow up to 5 s sleep to avoid busy-looping at low speed limits.
+        // At 10 KB/s a 64 KB chunk needs ~6.4 s; sleeping the full deficit
+        // (capped at 5 s) keeps CPU near-zero between chunks.
+        completer.complete(waitMs.clamp(0, 5000));
       } catch (e, s) {
         completer.completeError(e, s);
       }

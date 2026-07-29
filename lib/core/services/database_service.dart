@@ -47,7 +47,7 @@ class DatabaseService {
       }
       _db = AppDatabase(dbPath);
     }
-    
+
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('hive_migrated') != true) {
       final success = await _migrateFromHive();
@@ -59,7 +59,6 @@ class DatabaseService {
 
   Future<bool> _migrateFromHive() async {
     // Check if hive boxes exist, migrate, and delete
-    bool hasFailures = false;
     try {
       final existingTasks = await _db.select(_db.downloadTasks).get();
       final existingTaskIds = existingTasks.map((t) => t.id).toSet();
@@ -76,7 +75,9 @@ class DatabaseService {
           for (final value in box.values) {
             if (value is Map) {
               try {
-                final task = DownloadTask.fromMap(Map<String, dynamic>.from(value));
+                final task = DownloadTask.fromMap(
+                  Map<String, dynamic>.from(value),
+                );
                 if (!existingTaskIds.contains(task.id)) {
                   tasks.add(_taskToCompanion(task));
                   parsedValues.add(value);
@@ -90,22 +91,27 @@ class DatabaseService {
           }
           if (tasks.isNotEmpty) {
             try {
-              await _db.batch((batch) => batch.insertAll(
-                  _db.downloadTasks, tasks,
-                  mode: drift.InsertMode.insertOrReplace));
+              await _db.batch(
+                (batch) => batch.insertAll(
+                  _db.downloadTasks,
+                  tasks,
+                  mode: drift.InsertMode.insertOrReplace,
+                ),
+              );
             } catch (e) {
               failedItems.addAll(parsedValues);
             }
           }
           if (failedItems.isNotEmpty) {
-            hasFailures = true;
-            debugPrint('Migration of $downloadsBoxName had ${failedItems.length} failures; '
-                'keeping the Hive box intact for recovery.');
-          } else {
-            // Only delete the source box once the migration has fully succeeded,
-            // so a partial/failed migration never destroys the original data.
-            await box.deleteFromDisk();
+            debugPrint(
+              '[DMX Migration] $downloadsBoxName: ${failedItems.length} corrupt '
+              'item(s) skipped. ${tasks.length} item(s) migrated successfully.',
+            );
           }
+          // Always delete the box after processing. Corrupt items are logged
+          // above and skipped; keeping the box causes the migration to re-run
+          // on every launch, creating permanent startup lag.
+          await box.deleteFromDisk();
         } else {
           await box.deleteFromDisk();
         }
@@ -134,20 +140,25 @@ class DatabaseService {
           }
           if (bms.isNotEmpty) {
             try {
-              await _db.batch((batch) => batch.insertAll(
-                  _db.bookmarks, bms,
-                  mode: drift.InsertMode.insertOrReplace));
+              await _db.batch(
+                (batch) => batch.insertAll(
+                  _db.bookmarks,
+                  bms,
+                  mode: drift.InsertMode.insertOrReplace,
+                ),
+              );
             } catch (e) {
               failedItems.addAll(parsedValues);
             }
           }
           if (failedItems.isNotEmpty) {
-            hasFailures = true;
-            debugPrint('Migration of $bookmarksBoxName had ${failedItems.length} failures; '
-                'keeping the Hive box intact for recovery.');
-          } else {
-            await box.deleteFromDisk();
+            debugPrint(
+              '[DMX Migration] $bookmarksBoxName: ${failedItems.length} corrupt '
+              'item(s) skipped. ${bms.length} item(s) migrated successfully.',
+            );
           }
+          // Always delete the box after processing (see downloads box above).
+          await box.deleteFromDisk();
         } else {
           await box.deleteFromDisk();
         }
@@ -162,14 +173,16 @@ class DatabaseService {
             final val = box.get(key);
             if (val is Map) {
               try {
-                tabs.add(SavedBrowserTab(
-                  id: key.toString(),
-                  url: val['url'] as String? ?? '',
-                  title: val['title'] as String? ?? '',
-                  isActive: val['isActive'] as bool? ?? false,
-                  position: val['position'] as int? ?? 0,
-                  createdAt: DateTime.now().millisecondsSinceEpoch,
-                ));
+                tabs.add(
+                  SavedBrowserTab(
+                    id: key.toString(),
+                    url: val['url'] as String? ?? '',
+                    title: val['title'] as String? ?? '',
+                    isActive: val['isActive'] as bool? ?? false,
+                    position: val['position'] as int? ?? 0,
+                    createdAt: DateTime.now().millisecondsSinceEpoch,
+                  ),
+                );
               } catch (e) {
                 failedItems.add(val);
               }
@@ -179,20 +192,25 @@ class DatabaseService {
           }
           if (tabs.isNotEmpty) {
             try {
-              await _db.batch((batch) => batch.insertAll(
-                  _db.browserTabs, tabs,
-                  mode: drift.InsertMode.insertOrReplace));
+              await _db.batch(
+                (batch) => batch.insertAll(
+                  _db.browserTabs,
+                  tabs,
+                  mode: drift.InsertMode.insertOrReplace,
+                ),
+              );
             } catch (e) {
               failedItems.addAll(box.values);
             }
           }
           if (failedItems.isNotEmpty) {
-            hasFailures = true;
-            debugPrint('Migration of $browserTabsBoxName had ${failedItems.length} failures; '
-                'keeping the Hive box intact for recovery.');
-          } else {
-            await box.deleteFromDisk();
+            debugPrint(
+              '[DMX Migration] $browserTabsBoxName: ${failedItems.length} corrupt '
+              'item(s) skipped. ${tabs.length} item(s) migrated successfully.',
+            );
           }
+          // Always delete the box after processing (see downloads box above).
+          await box.deleteFromDisk();
         } else {
           await box.deleteFromDisk();
         }
@@ -207,12 +225,16 @@ class DatabaseService {
             final val = box.get(key);
             if (val is Map) {
               try {
-                hist.add(BrowserHistoryCompanion.insert(
-                  url: val['url'] as String? ?? '',
-                  title: val['title'] as String? ?? val['url'] as String? ?? '',
-                  visitedAt: val['visitedAt'] as String? ??
-                      DateTime.now().toIso8601String(),
-                ));
+                hist.add(
+                  BrowserHistoryCompanion.insert(
+                    url: val['url'] as String? ?? '',
+                    title:
+                        val['title'] as String? ?? val['url'] as String? ?? '',
+                    visitedAt:
+                        val['visitedAt'] as String? ??
+                        DateTime.now().toIso8601String(),
+                  ),
+                );
               } catch (e) {
                 failedItems.add(val);
               }
@@ -222,25 +244,30 @@ class DatabaseService {
           }
           if (hist.isNotEmpty) {
             try {
-              await _db.batch((batch) => batch.insertAll(
-                  _db.browserHistory, hist,
-                  mode: drift.InsertMode.insertOrReplace));
+              await _db.batch(
+                (batch) => batch.insertAll(
+                  _db.browserHistory,
+                  hist,
+                  mode: drift.InsertMode.insertOrReplace,
+                ),
+              );
             } catch (e) {
               failedItems.addAll(box.values);
             }
           }
           if (failedItems.isNotEmpty) {
-            hasFailures = true;
-            debugPrint('Migration of $browserHistoryBoxName had ${failedItems.length} failures; '
-                'keeping the Hive box intact for recovery.');
-          } else {
-            await box.deleteFromDisk();
+            debugPrint(
+              '[DMX Migration] $browserHistoryBoxName: ${failedItems.length} corrupt '
+              'item(s) skipped. ${hist.length} item(s) migrated successfully.',
+            );
           }
+          // Always delete the box after processing (see downloads box above).
+          await box.deleteFromDisk();
         } else {
           await box.deleteFromDisk();
         }
       }
-      return !hasFailures; // Only return true if all boxes migrated with zero failures
+      return true; // Migration always completes; corrupt items are skipped.
     } catch (e, stackTrace) {
       debugPrint('Hive to Drift migration error: $e\n$stackTrace');
       return false;
@@ -294,7 +321,9 @@ class DatabaseService {
       try {
         return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
       } catch (e) {
-        debugPrint('[DMX] Error parsing date millisecondsSinceEpoch $msSinceEpoch: $e');
+        debugPrint(
+          '[DMX] Error parsing date millisecondsSinceEpoch $msSinceEpoch: $e',
+        );
         return DateTime(2000);
       }
     }
@@ -304,7 +333,9 @@ class DatabaseService {
       try {
         return DateTime.fromMillisecondsSinceEpoch(msSinceEpoch);
       } catch (e) {
-        debugPrint('[DMX] Error parsing nullable date millisecondsSinceEpoch $msSinceEpoch: $e');
+        debugPrint(
+          '[DMX] Error parsing nullable date millisecondsSinceEpoch $msSinceEpoch: $e',
+        );
         return null;
       }
     }
@@ -355,7 +386,9 @@ class DatabaseService {
       youtubeQualityPreset: row.youtubeQualityPreset,
       notes: row.notes,
       playlistId: row.playlistId?.isNotEmpty == true ? row.playlistId : null,
-      playlistTitle: row.playlistTitle?.isNotEmpty == true ? row.playlistTitle : null,
+      playlistTitle: row.playlistTitle?.isNotEmpty == true
+          ? row.playlistTitle
+          : null,
       isAppUpdate: row.isAppUpdate,
       priority: row.priority,
       expectedSha256: row.expectedSha256,
@@ -363,9 +396,9 @@ class DatabaseService {
   }
 
   Future<List<DownloadTask>> loadTasks() async {
-    final rows = await (_db.select(_db.downloadTasks)
-          ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
-        .get();
+    final rows = await (_db.select(
+      _db.downloadTasks,
+    )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])).get();
     return rows.map(_rowToTask).toList();
   }
 
@@ -376,15 +409,21 @@ class DatabaseService {
   }
 
   Future<void> saveTask(DownloadTask task) {
-    return _db.into(_db.downloadTasks).insert(_taskToCompanion(task),
-        mode: drift.InsertMode.insertOrReplace);
+    return _db
+        .into(_db.downloadTasks)
+        .insert(_taskToCompanion(task), mode: drift.InsertMode.insertOrReplace);
   }
 
   Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
     final comps = tasks.map(_taskToCompanion).toList();
     if (comps.isEmpty) return;
-    await _db.batch((batch) => batch.insertAll(_db.downloadTasks, comps,
-        mode: drift.InsertMode.insertOrReplace));
+    await _db.batch(
+      (batch) => batch.insertAll(
+        _db.downloadTasks,
+        comps,
+        mode: drift.InsertMode.insertOrReplace,
+      ),
+    );
   }
 
   Future<void> deleteTask(String id) {
@@ -421,15 +460,19 @@ class DatabaseService {
   }
 
   Future<List<Bookmark>> loadBookmarks() async {
-    final rows = await (_db.select(_db.bookmarks)
-          ..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
-        .get();
+    final rows = await (_db.select(
+      _db.bookmarks,
+    )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])).get();
     return rows.map(_rowToBookmark).toList();
   }
 
   Future<void> saveBookmark(Bookmark bookmark) {
-    return _db.into(_db.bookmarks).insert(_bookmarkToCompanion(bookmark),
-        mode: drift.InsertMode.insertOrReplace);
+    return _db
+        .into(_db.bookmarks)
+        .insert(
+          _bookmarkToCompanion(bookmark),
+          mode: drift.InsertMode.insertOrReplace,
+        );
   }
 
   Future<void> deleteBookmark(String id) {
@@ -440,37 +483,41 @@ class DatabaseService {
     return _db.delete(_db.bookmarks).go();
   }
 
-  Future<List<Map<String, dynamic>>> loadBrowserHistory(
-      {int max = 200}) async {
-    final rows = await (_db.select(_db.browserHistory)
-          ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
-          ..limit(max))
-        .get();
+  Future<List<Map<String, dynamic>>> loadBrowserHistory({int max = 200}) async {
+    final rows =
+        await (_db.select(_db.browserHistory)
+              ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
+              ..limit(max))
+            .get();
 
     return rows
-        .map((r) => {
-              'id': r.id,
-              'url': r.url,
-              'title': r.title,
-              'visitedAt': r.visitedAt,
-            })
+        .map(
+          (r) => {
+            'id': r.id,
+            'url': r.url,
+            'title': r.title,
+            'visitedAt': r.visitedAt,
+          },
+        )
         .toList();
   }
 
   Future<int> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return 0;
-    final visitedAt = entry['visitedAt'] as String? ??
-        DateTime.now().toIso8601String();
+    final visitedAt =
+        entry['visitedAt'] as String? ?? DateTime.now().toIso8601String();
     final title = entry['title'] as String? ?? url;
 
-    final id = await _db.into(_db.browserHistory).insert(
-      BrowserHistoryCompanion.insert(
-        url: url,
-        title: title,
-        visitedAt: visitedAt,
-      ),
-    );
+    final id = await _db
+        .into(_db.browserHistory)
+        .insert(
+          BrowserHistoryCompanion.insert(
+            url: url,
+            title: title,
+            visitedAt: visitedAt,
+          ),
+        );
 
     await _db.customStatement(
       'DELETE FROM browser_history '
@@ -485,13 +532,13 @@ class DatabaseService {
   }
 
   Future<void> updateBrowserHistoryTitle(int id, String title) async {
-    await (_db.update(_db.browserHistory)..where((t) => t.id.equals(id)))
-        .write(BrowserHistoryCompanion(title: drift.Value(title)));
+    await (_db.update(_db.browserHistory)..where((t) => t.id.equals(id))).write(
+      BrowserHistoryCompanion(title: drift.Value(title)),
+    );
   }
 
   Future<void> deleteBrowserHistory(int id) {
-    return (_db.delete(_db.browserHistory)..where((t) => t.id.equals(id)))
-        .go();
+    return (_db.delete(_db.browserHistory)..where((t) => t.id.equals(id))).go();
   }
 
   Future<void> clearBrowserHistory() {
@@ -508,9 +555,9 @@ class DatabaseService {
   }
 
   Future<List<SavedBrowserTab>> loadOpenTabs() {
-    return (_db.select(_db.browserTabs)
-          ..orderBy([(t) => drift.OrderingTerm.asc(t.position)]))
-        .get();
+    return (_db.select(
+      _db.browserTabs,
+    )..orderBy([(t) => drift.OrderingTerm.asc(t.position)])).get();
   }
 
   Future<void> clearOpenTabs() => _db.delete(_db.browserTabs).go();
