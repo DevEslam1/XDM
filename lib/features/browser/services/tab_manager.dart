@@ -58,11 +58,13 @@ class TabManager {
   final List<BrowserTab> tabs = [];
   int currentIndex = 0;
 
+  /// In-flight page load timers registered by the screen.
+  final List<Timer> pendingTimers = [];
+  final Set<String> _disposedTabIds = {};
+
   BrowserTab? get activeTab => (currentIndex >= 0 && currentIndex < tabs.length)
       ? tabs[currentIndex]
       : null;
-
-  final List<Timer> pendingTimers = [];
 
   void delayed(Duration duration, VoidCallback callback) {
     late Timer timer;
@@ -78,6 +80,7 @@ class TabManager {
       timer.cancel();
     }
     pendingTimers.clear();
+    _disposedTabIds.clear();
   }
 
   Future<void> saveTabs() async {
@@ -176,6 +179,8 @@ class TabManager {
           }
           setHostState(() {
             for (final oldTab in tabs) {
+              if (_disposedTabIds.contains(oldTab.id)) continue;
+              _disposedTabIds.add(oldTab.id);
               cleanupTabState(oldTab.id);
             }
             tabs
@@ -206,6 +211,8 @@ class TabManager {
 
   Future<void> applyRestoredTabs(List<SavedBrowserTab> saved) async {
     for (final tab in tabs) {
+      if (_disposedTabIds.contains(tab.id)) continue;
+      _disposedTabIds.add(tab.id);
       try {
         tab.progressNotifier.dispose();
       } catch (_) {}

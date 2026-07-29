@@ -18,6 +18,7 @@ import 'download_journal.dart';
 import 'positional_file_writer.dart';
 import 'retry_interceptor.dart';
 import 'torrent_service.dart';
+import '../../features/settings/provider/settings_provider.dart';
 import '../utils/bencode_decoder.dart';
 import '../utils/file_utils.dart';
 import '../utils/url_utils.dart';
@@ -1157,13 +1158,16 @@ class DownloadEngine {
                   orElse: () => null,
                 );
 
-            final liveBytes = f.downloadedBytes;
-            final staleBytes = (existing?['downloadedBytes'] as int?) ?? 0;
-
-            final isRechecking = stateLabel.contains('checking');
-            final resolvedBytes = liveBytes > 0
-                ? liveBytes
-                : (isRechecking ? 0 : staleBytes);
+            int resolvedBytes;
+            if (f.downloadedBytes >= 0) {
+              // True per-file progress from libtorrent
+              resolvedBytes = f.downloadedBytes;
+            } else {
+              // No true progress available, use stale bytes as fallback
+              final staleBytes = (existing?['downloadedBytes'] as int?) ?? 0;
+              final isRechecking = stateLabel.contains('checking');
+              resolvedBytes = isRechecking ? 0 : staleBytes;
+            }
 
             return <String, dynamic>{
               'name': f.name,
@@ -1172,6 +1176,7 @@ class DownloadEngine {
               'priority': existing?['priority'] as int? ?? f.priority,
               'downloadedBytes': resolvedBytes,
               'speed': 0.0,
+              'progressEstimated': f.downloadedBytes < 0,
             };
           }).toList();
         } catch (e) {
@@ -1199,22 +1204,30 @@ class DownloadEngine {
           ? torrent.totalWantedDone
           : torrent.totalDone;
 
-        // FIX(2): Per-file bytes can be unavailable (getFileProgress missing or all
-        // zero) even when the total is accurate. Whenever we have a real total
-        // but no per-file breakdown, distribute it across selected files by
-        // priority so the UI shows a faithful estimate instead of a flat 0 B.
-        final bool hasLivePerFileBytes = resolvedFiles != null &&
+        // FIX(2): Only estimate when we don't have true per-file progress.
+        // When progressEstimated is false from the file mapping, we have real data.
+        final bool hasTruePerFileProgress = resolvedFiles != null &&
+            resolvedFiles.isNotEmpty &&
             resolvedFiles.any(
-              (f) => ((f['downloadedBytes'] as int?) ?? 0) > 0,
+              (f) => (f['progressEstimated'] as bool? ?? true) == false,
             );
         final bool needsEstimation = resolvedFiles != null &&
             resolvedFiles.isNotEmpty &&
-            (!TorrentService.fileProgressSupported ||
-                (!hasLivePerFileBytes && downloadedBytes > 0));
+            !hasTruePerFileProgress &&
+            (!TorrentService.fileProgressSupported || downloadedBytes > 0);
         if (needsEstimation) {
           _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
           for (final f in resolvedFiles) {
             f['progressEstimated'] = true;
+          }
+        }
+
+        // FIX(4): Apply max concurrent files limit
+        if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
+          final maxConcurrentFiles =
+              SettingsProvider.instance.maxConcurrentFilesPerTorrent;
+          if (maxConcurrentFiles > 0) {
+            _applyMaxConcurrentFilesLimit(id, resolvedFiles, maxConcurrentFiles);
           }
         }
 
@@ -1278,6 +1291,23 @@ class DownloadEngine {
             torrentFiles: resolvedFiles,
           ),
         );
+      }
+
+      // FIX(5): Dynamic priority updates as files complete — promote next files
+      if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
+        final maxConcurrentFiles =
+            SettingsProvider.instance.maxConcurrentFilesPerTorrent;
+        if (maxConcurrentFiles > 0) {
+          final anyFileJustCompleted = resolvedFiles.any((f) {
+            final length = (f['length'] as num?)?.toInt() ?? 0;
+            final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+            return length > 0 && downloaded >= length;
+          });
+          if (anyFileJustCompleted) {
+            _applyMaxConcurrentFilesLimit(
+                id, resolvedFiles, maxConcurrentFiles);
+          }
+        }
       }
 
       if (isCompleted && !completer.isCompleted) {
@@ -2727,6 +2757,50 @@ class DownloadEngine {
     }
 
     _activeTorrentIds.clear();
+  }
+
+  /// FIX(4): Dynamically updates file priorities to enforce max concurrent files limit.
+  /// Only the top N incomplete selected files get priority > 0 (actively download).
+  static void _applyMaxConcurrentFilesLimit(
+    int torrentId,
+    List<Map<String, dynamic>> files,
+    int maxConcurrentFiles,
+  ) {
+    if (maxConcurrentFiles <= 0) return; // 0 = unlimited
+
+    // Sort files by priority (descending), then by index
+    final sortedIndices = List.generate(files.length, (i) => i)
+      ..sort((a, b) {
+        final prioA = (files[a]['priority'] as int?) ?? 4;
+        final prioB = (files[b]['priority'] as int?) ?? 4;
+        if (prioA != prioB) return prioB.compareTo(prioA);
+        return a.compareTo(b);
+      });
+
+    // Collect indices of incomplete selected files
+    final incompleteSelected = <int>[];
+    for (final idx in sortedIndices) {
+      final f = files[idx];
+      final selected = f['selected'] as bool? ?? true;
+      final length = (f['length'] as num?)?.toInt() ?? 0;
+      final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+      if (selected && downloaded < length) {
+        incompleteSelected.add(idx);
+      }
+    }
+
+    // Build priority list: top N incomplete files get their priority, others get 0
+    final priorities = List.filled(files.length, 0);
+    for (var i = 0; i < incompleteSelected.length; i++) {
+      final idx = incompleteSelected[i];
+      if (i < maxConcurrentFiles) {
+        priorities[idx] = (files[idx]['priority'] as int?) ?? 4;
+      } else {
+        priorities[idx] = 0; // Don't download yet
+      }
+    }
+
+    TorrentService.setFilePriorities(torrentId, priorities);
   }
 
   static void _distributeDownloadedBytesByPriority(

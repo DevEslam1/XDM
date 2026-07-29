@@ -10,19 +10,10 @@ import '../utils/constants.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'xdm_backend_exceptions.dart';
 
-// TODO: Add per-device anonymous JWTs issued by Firebase Auth if further backend auth hardening is needed.
-// TODO: Inject settings via constructor instead of direct SettingsProvider.instance dependency for testability.
-
 class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  /// SECURITY NOTE: This default API key is embedded in the client binary and
-  /// is extractable from the APK. It provides basic identification only — NOT
-  /// authentication. The backend MUST enforce per-IP rate limiting and should
-  /// issue per-device anonymous JWTs (see TODO below) for any privileged
-  /// operations. This key exists solely to identify legitimate app traffic
-  /// vs. random internet noise.
   static String? _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
 
   late Dio _dio;

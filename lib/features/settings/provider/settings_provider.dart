@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/services/xdm_backend_client.dart';
 
 class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
+  // FIX(R5): Logger instance
+  static final _log = Logger('SettingsProvider');
   /// The global singleton instance, set once during app startup.
   /// Used by services like [YoutubeService] that need access to settings
   /// without receiving the instance via dependency injection.
@@ -61,6 +64,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _forceEncryptKey = 'forceEncrypt';
   static const _torrentConnectionsLimitKey = 'torrentConnectionsLimit';
   static const _sequentialDownloadKey = 'sequentialDownload';
+  static const _maxConcurrentFilesPerTorrentKey = 'maxConcurrentFilesPerTorrent';
   static const _shareRatioLimitKey = 'shareRatioLimit';
   static const _maxSeedingTimeKey = 'maxSeedingTimeMinutes';
   static const _defaultThreadCountKey = 'defaultThreadCount';
@@ -160,8 +164,18 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int torrentConnectionsLimit = 200;
 
   bool sequentialDownload = false;
+  int _maxConcurrentFilesPerTorrent = 0; // 0 = unlimited
   double shareRatioLimit = 2.0;
   int maxSeedingTimeMinutes = 0;
+
+  // FIX(3): Max concurrent files per torrent setting
+  int get maxConcurrentFilesPerTorrent => _maxConcurrentFilesPerTorrent;
+
+  Future<void> setMaxConcurrentFilesPerTorrent(int value) async {
+    _maxConcurrentFilesPerTorrent = value;
+    await _prefs.setInt(_maxConcurrentFilesPerTorrentKey, value);
+    notifyListeners();
+  }
 
   int get configuredMaxDownloads => _maxDownloads;
   bool get configuredClassicUi => _classicUi;
@@ -257,6 +271,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
     torrentConnectionsLimit = (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit).clamp(10, 1000);
     sequentialDownload = _prefs.getBool(_sequentialDownloadKey) ?? sequentialDownload;
+    _maxConcurrentFilesPerTorrent =
+        _prefs.getInt(_maxConcurrentFilesPerTorrentKey) ?? 0;
     shareRatioLimit = _prefs.getDouble(_shareRatioLimitKey) ?? shareRatioLimit;
     maxSeedingTimeMinutes = _prefs.getInt(_maxSeedingTimeKey) ?? maxSeedingTimeMinutes;
     _defaultThreadCount = _prefs.getInt(_defaultThreadCountKey) ?? _defaultThreadCount;
@@ -698,7 +714,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       final response = await request.close();
       return response.statusCode == 200;
     } catch (e) {
-      debugPrint('Proxy connection test failed: $e');
+      _log.warning('Proxy connection test failed: $e');
       return false;
     } finally {
       client.close();
@@ -735,6 +751,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _forceEncryptKey,
       _torrentConnectionsLimitKey,
       _sequentialDownloadKey,
+      _maxConcurrentFilesPerTorrentKey,
       _shareRatioLimitKey,
       _maxSeedingTimeKey,
       _defaultThreadCountKey,
@@ -801,6 +818,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     forceEncrypt = false;
 torrentConnectionsLimit = 200;
     sequentialDownload = false;
+    _maxConcurrentFilesPerTorrent = 0;
     shareRatioLimit = 2.0;
     maxSeedingTimeMinutes = 0;
     incognitoEnabled = false;

@@ -950,9 +950,6 @@ class _TorrentCard extends StatefulWidget {
 }
 
 class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
-  bool _showAllFiles = false;
-  static const int _collapsedFileCount = 4;
-
   @override
   Widget build(BuildContext context) {
     final settings = context.read<SettingsProvider>();
@@ -1093,10 +1090,14 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                   isDark: isDark,
                   color: statusColor,
                 ),
-                // Per-file percentages
+                // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
                 if (fileCount > 0) ...[
                   const SizedBox(height: 12),
-                  _buildFilesSection(isDark, statusColor),
+                  _TorrentFileListSection(
+                    task: widget.task,
+                    isDark: isDark,
+                    accent: statusColor,
+                  ),
                 ],
                 // Seeding toggle once completed
                 if (widget.task.status == DownloadStatus.completed) ...[
@@ -1154,19 +1155,41 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
       },
     );
   }
+}
 
-  Widget _buildFilesSection(bool isDark, Color accent) {
+// FIX(R4): Isolated rebuild section for torrent file list
+class _TorrentFileListSection extends StatefulWidget {
+  final DownloadTask task;
+  final bool isDark;
+  final Color accent;
+
+  const _TorrentFileListSection({
+    required this.task,
+    required this.isDark,
+    required this.accent,
+  });
+
+  @override
+  State<_TorrentFileListSection> createState() =>
+      _TorrentFileListSectionState();
+}
+
+class _TorrentFileListSectionState extends State<_TorrentFileListSection>
+    with HapticHelper {
+  bool _showAllFiles = false;
+  static const int _collapsedFileCount = 4;
+
+  @override
+  Widget build(BuildContext context) {
     final files = widget.task.torrentFiles ?? [];
     final displayFiles = files.map((f) {
       final selected = f['selected'] == true;
       final length = (f['length'] as num?)?.toInt() ?? 0;
       final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      // Trust the engine's priority-aware per-file byte distribution.
-      // Completed tasks always snap to 100% for selected files.
       final effectiveDownloaded =
           widget.task.status == DownloadStatus.completed && selected
-          ? length
-          : downloaded;
+              ? length
+              : downloaded;
       return {...f, 'downloadedBytes': effectiveDownloaded};
     }).toList();
 
@@ -1174,7 +1197,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
         ? displayFiles
         : displayFiles.take(_collapsedFileCount).toList();
     final hiddenCount = displayFiles.length - visible.length;
-    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final mutedClr =
+        widget.isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1183,11 +1207,15 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(
             'FILES • ${files.where((f) => f['selected'] == true).length}/${files.length}',
-            style: AppTheme.microLabel(isDark: isDark, size: 8),
+            style: AppTheme.microLabel(isDark: widget.isDark, size: 8),
           ),
         ),
         ...visible.map(
-          (f) => _TorrentFileRow(file: f, isDark: isDark, accent: accent),
+          (f) => _TorrentFileRow(
+            file: f,
+            isDark: widget.isDark,
+            accent: widget.accent,
+          ),
         ),
         if (hiddenCount > 0 || _showAllFiles)
           GestureDetector(
@@ -1213,7 +1241,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         ? 'SHOW LESS'
                         : '+$hiddenCount MORE FILE${hiddenCount == 1 ? '' : 'S'}',
                     style: AppTheme.microLabel(
-                      isDark: isDark,
+                      isDark: widget.isDark,
                       color: mutedClr,
                       size: 8.5,
                     ),

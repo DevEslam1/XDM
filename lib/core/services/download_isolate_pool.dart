@@ -130,6 +130,10 @@ class _Worker {
   bool _isAlive = false;
   bool _shuttingDown = false;
 
+  // FIX(N1): circuit breaker for worker respawns
+  static const int _maxConsecutiveRespawnFailures = 5;
+  int _consecutiveSpawnFailures = 0;
+
   int _respawnAttempts = 0;
   Timer? _respawnTimer;
 
@@ -140,6 +144,17 @@ class _Worker {
 
     if (isRespawn) {
       _respawnAttempts++;
+      _consecutiveSpawnFailures++;
+
+      if (_consecutiveSpawnFailures > _maxConsecutiveRespawnFailures) {
+        _isAlive = false;
+        debugPrint(
+          '[DMX Pool] Worker $id circuit breaker tripped after '
+          '$_consecutiveSpawnFailures consecutive spawn failures. '
+          'Leaving worker dead.',
+        );
+        return;
+      }
 
       if (_respawnAttempts > 5) {
         _isAlive = false;
@@ -155,7 +170,7 @@ class _Worker {
 
       debugPrint(
         '[DMX Pool] Respawning worker $id in ${delayMs}ms '
-        '(attempt $_respawnAttempts)',
+        '(attempt $_respawnAttempts/$_maxConsecutiveRespawnFailures)',
       );
 
       await Future.delayed(Duration(milliseconds: delayMs));
@@ -222,6 +237,8 @@ class _Worker {
 
       _isAlive = true;
 
+      // FIX(N1): Healthy spawn — reset circuit breaker counter
+      _consecutiveSpawnFailures = 0;
       if (isRespawn) {
         _respawnAttempts = 0;
       }

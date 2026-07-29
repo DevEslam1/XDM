@@ -359,9 +359,11 @@ class TorrentService {
             index: f.index,
             name: f.name,
             size: f.size,
+            // FIX(1): Return -1 when native progress is unavailable to signal
+            // "unknown" — caller should use estimation fallback instead of 0.
             downloadedBytes: (progress != null && i < progress.length)
                 ? (progress[i] as num).toInt().clamp(0, f.size).toInt()
-                : 0,
+                : -1,
             priority: (priorities != null && i < priorities.length)
                 ? (priorities[i] as num).toInt()
                 : 4,

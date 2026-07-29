@@ -137,6 +137,10 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Future<void>> _dbSaveQueues = {};
 
+  /// FIX(R2): Surfaces the most recent DB-save failure without crashing the zone.
+  /// Callers (e.g. UI snackbars) can listen to this to warn the user.
+  final ValueNotifier<String?> lastSaveError = ValueNotifier<String?>(null);
+
   final Map<String, int> _ytLowSpeedCounts = {};
   final Map<String, bool> _ytThrottlingRefreshing = {};
 
@@ -1489,6 +1493,9 @@ class DownloadProvider extends ChangeNotifier
       completer.complete();
     } catch (e) {
       debugPrint('Error saving task to database: $e');
+      // FIX(R2): Surface the error via a notifier so callers can react, but do NOT
+      // propagate via completeError (which caused unhandled-async crashes).
+      lastSaveError.value = 'DB save failed for ${updated.id}: $e';
       completer.complete();
 
       final dbTask = await _databaseService.getTask(updated.id);

@@ -81,36 +81,43 @@ class PositionalFileWriter {
 
   /// Writes [data] at [filePosition] for [threadIndex].
   Future<void> write(int threadIndex, int filePosition, Uint8List data) async {
-    await _closeLock.synchronized(() async {
+    // FIX(R1): Brief closed-state check under _closeLock, then release immediately
+    // so per-thread I/O proceeds in parallel under _threadLocks.
+    await _closeLock.synchronized(() {
+      if (_closed) {
+        throw StateError('PositionalFileWriter is closed.');
+      }
+    });
+
+    if (data.isEmpty) return;
+
+    await _threadLocks[threadIndex].synchronized(() async {
+      // Re-check under thread lock in case close() raced.
       if (_closed) {
         throw StateError('PositionalFileWriter is closed.');
       }
 
-      if (data.isEmpty) return;
+      final buffer = _buffers[threadIndex];
 
-      await _threadLocks[threadIndex].synchronized(() async {
-        final buffer = _buffers[threadIndex];
+      if (buffer.isEmpty) {
+        _bufferFilePositions[threadIndex] = filePosition;
+      } else {
+        final expectedNextPosition =
+            _bufferFilePositions[threadIndex] + buffer.length;
 
-        if (buffer.isEmpty) {
-          _bufferFilePositions[threadIndex] = filePosition;
-        } else {
-          final expectedNextPosition =
-              _bufferFilePositions[threadIndex] + buffer.length;
-
-          // If the incoming write is not contiguous, flush the current buffer
-          // first so we never merge non-adjacent ranges into one write.
-          if (filePosition != expectedNextPosition) {
-            await _flushLocked(threadIndex);
-            _bufferFilePositions[threadIndex] = filePosition;
-          }
-        }
-
-        buffer.add(data);
-
-        if (buffer.length >= _bufferSize) {
+        // If the incoming write is not contiguous, flush the current buffer
+        // first so we never merge non-adjacent ranges into one write.
+        if (filePosition != expectedNextPosition) {
           await _flushLocked(threadIndex);
+          _bufferFilePositions[threadIndex] = filePosition;
         }
-      });
+      }
+
+      buffer.add(data);
+
+      if (buffer.length >= _bufferSize) {
+        await _flushLocked(threadIndex);
+      }
     });
   }
 
@@ -132,17 +139,18 @@ class PositionalFileWriter {
   Future<void> close() async {
     await _closeLock.synchronized(() async {
       if (_closed) return;
-
       _closed = true;
-
-      await flushAll();
-
-      try {
-        await _file.close();
-      } catch (_) {
-        // Ignore close errors.
-      }
     });
+
+    // FIX(R1): Flush and close OUTSIDE _closeLock so we don't deadlock with
+    // in-flight writes that are waiting on _closeLock.
+    await flushAll();
+
+    try {
+      await _file.close();
+    } catch (_) {
+      // Ignore close errors.
+    }
   }
 
   /// Returns the current file length.

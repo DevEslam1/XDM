@@ -415,6 +415,35 @@ class _SettingsScreenState extends State<SettingsScreen>
                             triggerHaptic(settings);
                           },
                         ),
+                        // FIX(6): Max concurrent files per torrent dropdown
+                        _Divider(isDark: isDark),
+                        _DropdownTile<int>(
+                          accentColor: isDark
+                              ? AppTheme.neonGreen
+                              : AppTheme.lightNeonGreen,
+                          title: L10n.isRtl(context)
+                              ? 'أقصى عدد ملفات متزامنة لكل تورنت'
+                              : 'Max Concurrent Files Per Torrent',
+                          subtitle: L10n.isRtl(context)
+                              ? 'حد عدد الملفات التي يتم تحميلها بالتوازي في التورنت الواحد (0 = الكل)'
+                              : 'Limit files downloading simultaneously per torrent (0 = all)',
+                          value: settings.maxConcurrentFilesPerTorrent,
+                          items: const [0, 1, 2, 3, 5, 10],
+                          itemLabels: {
+                            0: L10n.isRtl(context) ? 'الكل (غير محدود)' : 'All (Unlimited)',
+                            1: '1',
+                            2: '2',
+                            3: '3',
+                            5: '5',
+                            10: '10',
+                          },
+                          onChanged: (val) {
+                            if (val != null) {
+                              settings.setMaxConcurrentFilesPerTorrent(val);
+                              triggerHaptic(settings);
+                            }
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -568,14 +597,43 @@ class _SettingsScreenState extends State<SettingsScreen>
                         _Divider(isDark: isDark),
                         _SwitchTile(
                           accentColor: isDark
-                              ? AppTheme.neonAmber
-                              : AppTheme.lightNeonAmber,
-                          title: L10n.of(context, 'settings_haptic'),
-                          subtitle: L10n.of(context, 'settings_haptic_sub'),
-                          value: settings.vibration,
+                              ? AppTheme.neonGreen
+                              : AppTheme.lightNeonGreen,
+                          title: L10n.of(context, 'settings_auto_retry'),
+                          subtitle: L10n.of(context, 'settings_auto_retry_sub'),
+                          value: settings.autoRetryEnabled,
                           onChanged: (val) {
-                            settings.setVibration(val);
-                            if (val) HapticFeedback.lightImpact();
+                            settings.setAutoRetryEnabled(val);
+                            triggerHaptic(settings);
+                          },
+                        ),
+                        // FIX(6): Max concurrent files per torrent setting
+                        _Divider(isDark: isDark),
+                        _DropdownTile<int>(
+                          accentColor: isDark
+                              ? AppTheme.neonGreen
+                              : AppTheme.lightNeonGreen,
+                          title: L10n.isRtl(context)
+                              ? 'أقصى عدد ملفات متزامنة لكل تورنت'
+                              : 'Max Concurrent Files Per Torrent',
+                          subtitle: L10n.isRtl(context)
+                              ? 'حد عدد الملفات التي تتم تحميلها بالتازي في التورنت الواحد (0 = الكل)'
+                              : 'Limit files downloading simultaneously per torrent (0 = all)',
+                          value: settings.maxConcurrentFilesPerTorrent,
+                          items: const [0, 1, 2, 3, 5, 10],
+                          itemLabels: {
+                            0: L10n.isRtl(context) ? 'الكل (غير محدود)' : 'All (Unlimited)',
+                            1: '1',
+                            2: '2',
+                            3: '3',
+                            5: '5',
+                            10: '10',
+                          },
+                          onChanged: (val) {
+                            if (val != null) {
+                              settings.setMaxConcurrentFilesPerTorrent(val);
+                              triggerHaptic(settings);
+                            }
                           },
                         ),
                       ],

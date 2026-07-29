@@ -146,6 +146,8 @@ mixin DownloadTorrentMixin {
   // ---------------------------------------------------------------------------
   // Torrent file progress — native getFileProgress provides exact per-file bytes
   // ---------------------------------------------------------------------------
+  // FIX(8): Mark completed files with true progress (not estimated)
+  // FIX(8): Mark completed files with true progress (not estimated)
   List<Map<String, dynamic>> markTorrentFilesCompleted(
     List<Map<String, dynamic>> files,
   ) {
@@ -153,6 +155,7 @@ mixin DownloadTorrentMixin {
       final copy = Map<String, dynamic>.from(f);
       if (copy['selected'] == true) {
         copy['downloadedBytes'] = (copy['length'] as num?)?.toInt() ?? 0;
+        copy['progressEstimated'] = false;
       } else {
         copy['downloadedBytes'] = 0;
       }
