@@ -78,7 +78,9 @@ mixin DownloadBackupMixin {
       }
 
       if (isLegacy) {
-        debugPrint('[XDM Security Warning] Decrypting legacy insecure XDMCRYPT v1 backup format using XOR cipher. Please re-export your backup to update to AES-GCM format.');
+        debugPrint(
+          '[XDM Security Warning] Decrypting legacy insecure XDMCRYPT v1 backup format using XOR cipher. Please re-export your backup to update to AES-GCM format.',
+        );
         final cipherBytes = bytes.sublist(legacyMagic.length);
         final keyBytes = sha256.convert(utf8.encode(password)).bytes;
         final dataBytes = _xorCipher(cipherBytes, keyBytes);
@@ -234,7 +236,10 @@ mixin DownloadBackupMixin {
         final trimmed = line.trim();
         if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
         final uri = Uri.tryParse(trimmed);
-        if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https' || uri.scheme == 'magnet')) {
+        if (uri != null &&
+            (uri.scheme == 'http' ||
+                uri.scheme == 'https' ||
+                uri.scheme == 'magnet')) {
           final id = const Uuid().v4();
           final fileName = fileNameFromUrl(trimmed);
           final task = DownloadTask(
@@ -320,7 +325,10 @@ mixin DownloadBackupMixin {
       await for (final entity in dir.list()) {
         if (entity is File && entity.path.endsWith('.crawljob')) {
           final content = await entity.readAsString();
-          final urlMatch = RegExp(r'url\s*=\s*(\S+)', caseSensitive: false).firstMatch(content);
+          final urlMatch = RegExp(
+            r'url\s*=\s*(\S+)',
+            caseSensitive: false,
+          ).firstMatch(content);
           if (urlMatch != null) {
             final url = urlMatch.group(1)!;
             final id = const Uuid().v4();
@@ -358,9 +366,3 @@ mixin DownloadBackupMixin {
     return count;
   }
 }
-
-// TODO: Add unit tests for DownloadBackupMixin
-//   - encryptBackup/decryptBackup: round-trip, wrong password, tampered data
-//   - exportBackupJson/importBackupJson: with/without password, replace mode
-//   - Legacy XDMCRYPT v1 format decryption
-//   - Constant-time comparison correctness

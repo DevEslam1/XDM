@@ -44,8 +44,9 @@ class BencodeDecoder {
     _offset++; // skip 'e'
 
     if (numStr.isEmpty) throw const FormatException('Empty bencode integer');
-    if (numStr == '-0')
+    if (numStr == '-0') {
       throw const FormatException('Negative zero is invalid bencode');
+    }
     if (numStr.length > 1 && numStr.startsWith('0')) {
       throw const FormatException('Leading zero in bencode integer');
     }
