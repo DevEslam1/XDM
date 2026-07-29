@@ -170,29 +170,29 @@ class PermissionService {
   /// Inserts a completed download into the system MediaStore.Downloads
   /// collection so it becomes visible in the system Files / Downloads apps.
   ///
-  /// Fire-and-forget: the Kotlin side copies the file internally and returns
-  /// immediately. No result is surfaced back to Dart.
-  /// Silently no-ops on non-Android, web, or SDK < 29.
-  void insertIntoMediaStore(
+  /// Returns the content:// URI (SDK 30+) or file path (SDK 29) on success,
+  /// or `null` on failure / unsupported platform.
+  /// Silently returns null on non-Android, web, or SDK < 29.
+  Future<String?> insertIntoMediaStore(
     String fileName,
     String mimeType,
     String sourcePath,
-  ) {
-    if (kIsWeb || !Platform.isAndroid) return;
-    () async {
-      final sdk = await _androidSdkLevel();
-      if (sdk < 29) return;
-      try {
-        const channel = MethodChannel('com.example.dmx/media');
-        await channel.invokeMethod<void>('insertDownload', {
-          'fileName': fileName,
-          'mimeType': mimeType,
-          'sourcePath': sourcePath,
-        });
-      } catch (e) {
-        debugPrint('[PermissionService] MediaStore insertion failed: $e');
-      }
-    }();
+  ) async {
+    if (kIsWeb || !Platform.isAndroid) return null;
+    final sdk = await _androidSdkLevel();
+    if (sdk < 29) return null;
+    try {
+      const channel = MethodChannel('com.example.dmx/media');
+      final result = await channel.invokeMethod<String>('insertDownload', {
+        'fileName': fileName,
+        'mimeType': mimeType,
+        'sourcePath': sourcePath,
+      });
+      return result;
+    } catch (e) {
+      debugPrint('[PermissionService] MediaStore insertion failed: $e');
+      return null;
+    }
   }
 
   Future<bool> ensureStorageAccess() async {

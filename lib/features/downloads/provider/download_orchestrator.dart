@@ -458,15 +458,20 @@ class DownloadOrchestrator {
     final finalPath = p.join(current.savePath, current.fileName);
     if (Platform.isAndroid && finalPath.isNotEmpty) {
       final mimeType = _mimeTypeFromExtension(p.extension(current.fileName));
-      PermissionService().insertIntoMediaStore(
+      final mediaResult = await PermissionService().insertIntoMediaStore(
         current.fileName,
         mimeType,
         finalPath,
       );
-      try {
-        _mediaChannel.invokeMethod('scanMedia', {'path': finalPath});
-      } catch (e) {
-        debugPrint('Failed to scan media: $e');
+      if (mediaResult == null) {
+        // MediaStore insertion failed — fall back to scanMedia.
+        try {
+          unawaited(
+            _mediaChannel.invokeMethod('scanMedia', {'path': finalPath}),
+          );
+        } catch (e) {
+          debugPrint('Failed to scan media: $e');
+        }
       }
     }
 

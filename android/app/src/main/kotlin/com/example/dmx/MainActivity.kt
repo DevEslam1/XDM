@@ -84,7 +84,23 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    result.success(null)
+                    // SDK 29: copy to public Downloads directly
+                    backgroundExecutor.execute {
+                        try {
+                            val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                            val xdmDir = File(publicDir, "XDM")
+                            if (!xdmDir.exists()) xdmDir.mkdirs()
+                            val destFile = File(xdmDir, fileName)
+                            File(sourcePath).copyTo(destFile, overwrite = true)
+                            File(sourcePath).delete()
+                            // Trigger media scan
+                            MediaScannerConnection.scanFile(context, arrayOf(destFile.path), arrayOf(mimeType), null)
+                            runOnUiThread { result.success(destFile.path) }
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "SDK29 fallback failed", e)
+                            runOnUiThread { result.success(null) }
+                        }
+                    }
                     return@setMethodCallHandler
                 }
                 backgroundExecutor.execute {
@@ -110,6 +126,12 @@ class MainActivity : FlutterActivity() {
                         values.clear()
                         values.put(MediaStore.Downloads.IS_PENDING, 0)
                         resolver.update(uri, values, null, null)
+                        // After successful copy, delete the original from app-specific storage
+                        try {
+                            File(sourcePath).delete()
+                        } catch (e: Exception) {
+                            Log.w("MainActivity", "Failed to delete source after MediaStore copy: ${e.message}")
+                        }
                         runOnUiThread { result.success(uri.toString()) }
                     } catch (e: Exception) {
                         Log.e("MainActivity", "insertDownload failed", e)
