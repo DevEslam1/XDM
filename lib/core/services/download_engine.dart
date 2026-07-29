@@ -1442,9 +1442,7 @@ class DownloadEngine {
         await journal.writeInit(threadCount, totalSize);
 
         // ── Phase 2C: BandwidthGovernor ──
-        final governor = BandwidthGovernor(
-          globalBytesPerSecond: speedLimitBytesPerSecond(),
-        );
+        final governor = BandwidthGovernor(speedLimitBytesPerSecond());
         governor.registerConsumer();
 
         final lock = Lock();

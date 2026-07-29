@@ -9,13 +9,14 @@ class BandwidthGovernor {
   DateTime _lastRefill = DateTime.now();
   Future<void> _lock = Future.value();
 
-  BandwidthGovernor({int globalBytesPerSecond = 0})
-      : _globalBytesPerSecond = globalBytesPerSecond;
+  BandwidthGovernor([this._globalBytesPerSecond = 0]);
 
   void setGlobalLimit(int bytesPerSecond) {
     _globalBytesPerSecond = bytesPerSecond;
-    _log.info('Global bandwidth limit set to '
-        '${bytesPerSecond > 0 ? '${(bytesPerSecond / 1024 / 1024).toStringAsFixed(1)} MB/s' : 'unlimited'}');
+    _log.info(
+      'Global bandwidth limit set to '
+      '${bytesPerSecond > 0 ? '${(bytesPerSecond / 1024 / 1024).toStringAsFixed(1)} MB/s' : 'unlimited'}',
+    );
   }
 
   void registerConsumer() {

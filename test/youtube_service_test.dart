@@ -3,18 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('YoutubeService Quality & Height Parsing Tests', () {
-    test('parseQualityHeight extracts numeric resolution heights accurately', () {
-      expect(YoutubeService.parseQualityHeight('2160p'), 2160);
-      expect(YoutubeService.parseQualityHeight('1440p'), 1440);
-      expect(YoutubeService.parseQualityHeight('1080p'), 1080);
-      expect(YoutubeService.parseQualityHeight('720p'), 720);
-      expect(YoutubeService.parseQualityHeight('480p'), 480);
-      expect(YoutubeService.parseQualityHeight('360p'), 360);
-      expect(YoutubeService.parseQualityHeight('240p'), 240);
-      expect(YoutubeService.parseQualityHeight('144p'), 144);
-      expect(YoutubeService.parseQualityHeight('Video: 1080p (Muxed)'), 1080);
-      expect(YoutubeService.parseQualityHeight('best_combined'), 0);
-    });
+    test(
+      'parseQualityHeight extracts numeric resolution heights accurately',
+      () {
+        expect(YoutubeService.parseQualityHeight('2160p'), 2160);
+        expect(YoutubeService.parseQualityHeight('1440p'), 1440);
+        expect(YoutubeService.parseQualityHeight('1080p'), 1080);
+        expect(YoutubeService.parseQualityHeight('720p'), 720);
+        expect(YoutubeService.parseQualityHeight('480p'), 480);
+        expect(YoutubeService.parseQualityHeight('360p'), 360);
+        expect(YoutubeService.parseQualityHeight('240p'), 240);
+        expect(YoutubeService.parseQualityHeight('144p'), 144);
+        expect(YoutubeService.parseQualityHeight('Video: 1080p (Muxed)'), 1080);
+        expect(YoutubeService.parseQualityHeight('best_combined'), 0);
+      },
+    );
 
     test('formatDuration formats seconds accurately', () {
       expect(YoutubeService.formatDuration(0), '0:00');
@@ -26,32 +29,96 @@ void main() {
 
   group('YoutubeService URL Detection & ID Extraction Tests', () {
     test('isYoutubeVideoUrl detects single videos and Shorts', () {
-      expect(YoutubeService.isYoutubeVideoUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), isTrue);
-      expect(YoutubeService.isYoutubeVideoUrl('https://youtu.be/dQw4w9WgXcQ'), isTrue);
-      expect(YoutubeService.isYoutubeVideoUrl('https://www.youtube.com/shorts/abcdefghijk'), isTrue);
-      expect(YoutubeService.isYoutubeVideoUrl('https://example.com/video.mp4'), isFalse);
+      expect(
+        YoutubeService.isYoutubeVideoUrl(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        ),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isYoutubeVideoUrl('https://youtu.be/dQw4w9WgXcQ'),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isYoutubeVideoUrl(
+          'https://www.youtube.com/shorts/abcdefghijk',
+        ),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isYoutubeVideoUrl('https://example.com/video.mp4'),
+        isFalse,
+      );
     });
 
     test('isPlaylistUrl detects YouTube playlist links', () {
-      expect(YoutubeService.isPlaylistUrl('https://www.youtube.com/playlist?list=PL123456789'), isTrue);
-      expect(YoutubeService.isPlaylistUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123456789'), isTrue);
-      expect(YoutubeService.isPlaylistUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), isFalse);
+      expect(
+        YoutubeService.isPlaylistUrl(
+          'https://www.youtube.com/playlist?list=PL123456789',
+        ),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isPlaylistUrl(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123456789',
+        ),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isPlaylistUrl(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        ),
+        isFalse,
+      );
     });
 
     test('isPurePlaylistUrl distinguishes pure playlists from mixed links', () {
-      expect(YoutubeService.isPurePlaylistUrl('https://www.youtube.com/playlist?list=PL123456789'), isTrue);
-      expect(YoutubeService.isPurePlaylistUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123456789'), isFalse);
+      expect(
+        YoutubeService.isPurePlaylistUrl(
+          'https://www.youtube.com/playlist?list=PL123456789',
+        ),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isPurePlaylistUrl(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123456789',
+        ),
+        isFalse,
+      );
     });
 
     test('extractVideoId extracts correct video IDs', () {
-      expect(YoutubeService.extractVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
-      expect(YoutubeService.extractVideoId('https://youtu.be/dQw4w9WgXcQ'), 'dQw4w9WgXcQ');
-      expect(YoutubeService.extractVideoId('https://www.youtube.com/shorts/12345678901'), '12345678901');
+      expect(
+        YoutubeService.extractVideoId(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        ),
+        'dQw4w9WgXcQ',
+      );
+      expect(
+        YoutubeService.extractVideoId('https://youtu.be/dQw4w9WgXcQ'),
+        'dQw4w9WgXcQ',
+      );
+      expect(
+        YoutubeService.extractVideoId(
+          'https://www.youtube.com/shorts/12345678901',
+        ),
+        '12345678901',
+      );
     });
 
     test('extractPlaylistId extracts correct playlist IDs', () {
-      expect(YoutubeService.extractPlaylistId('https://www.youtube.com/playlist?list=PL123456789'), 'PL123456789');
-      expect(YoutubeService.extractPlaylistId('https://www.youtube.com/watch?v=abc&list=PL987654321'), 'PL987654321');
+      expect(
+        YoutubeService.extractPlaylistId(
+          'https://www.youtube.com/playlist?list=PL123456789',
+        ),
+        'PL123456789',
+      );
+      expect(
+        YoutubeService.extractPlaylistId(
+          'https://www.youtube.com/watch?v=abc&list=PL987654321',
+        ),
+        'PL987654321',
+      );
     });
   });
 
@@ -106,7 +173,11 @@ void main() {
       expect(mockCombined1080.containsKey('audioSrc'), isTrue);
       expect(mockCombined1080.containsKey('videoSize'), isTrue);
       expect(mockCombined1080.containsKey('audioSize'), isTrue);
-      expect(mockCombined1080['size'], (mockCombined1080['videoSize'] as int) + (mockCombined1080['audioSize'] as int));
+      expect(
+        mockCombined1080['size'],
+        (mockCombined1080['videoSize'] as int) +
+            (mockCombined1080['audioSize'] as int),
+      );
       expect(mockCombined1080['ext'], 'mp4');
       expect(mockCombined1080['title'], 'Test Video Title');
     });
@@ -182,7 +253,8 @@ void main() {
       };
 
       final info = playlistDetails['info'] as Map<String, dynamic>;
-      final videos = playlistDetails['videos'] as List;
+      final videos = (playlistDetails['videos'] as List)
+          .cast<Map<String, dynamic>>();
 
       expect(info['title'], 'Test Playlist');
       expect(info['videoCount'], 2);
@@ -191,27 +263,31 @@ void main() {
       expect(videos.first['selected'], isTrue);
     });
 
-    test('Duplicate detection matches same downloadPageUrl and qualityPreset', () {
-      const pageUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-      const preset = '1080p';
+    test(
+      'Duplicate detection matches same downloadPageUrl and qualityPreset',
+      () {
+        const pageUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+        const preset = '1080p';
 
-      final existingTasks = [
-        {
-          'downloadPageUrl': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-          'youtubeQualityPreset': '1080p',
-          'status': 'downloading',
-        },
-      ];
+        final existingTasks = [
+          {
+            'downloadPageUrl': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            'youtubeQualityPreset': '1080p',
+            'status': 'downloading',
+          },
+        ];
 
-      final isDuplicate = existingTasks.any((t) =>
-          t['status'] != 'failed' &&
-          t['status'] != 'completed' &&
-          t['status'] != 'paused' &&
-          t['downloadPageUrl'] == pageUrl &&
-          t['youtubeQualityPreset'] == preset);
+        final isDuplicate = existingTasks.any(
+          (t) =>
+              t['status'] != 'failed' &&
+              t['status'] != 'completed' &&
+              t['status'] != 'paused' &&
+              t['downloadPageUrl'] == pageUrl &&
+              t['youtubeQualityPreset'] == preset,
+        );
 
-      expect(isDuplicate, isTrue);
-    });
+        expect(isDuplicate, isTrue);
+      },
+    );
   });
 }
-
