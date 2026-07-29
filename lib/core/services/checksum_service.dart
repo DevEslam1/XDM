@@ -20,12 +20,28 @@ class ChecksumService {
   }
 
   static Future<String> sha1File(String path) async {
-    final digest = sha1.convert(await File(path).readAsBytes());
+    Digest? digest;
+    final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
+      digest = results.single;
+    });
+    final sink = sha1.startChunkedConversion(innerSink);
+    await for (final chunk in File(path).openRead()) {
+      sink.add(chunk);
+    }
+    sink.close();
     return digest.toString();
   }
 
   static Future<String> md5File(String path) async {
-    final digest = md5.convert(await File(path).readAsBytes());
+    Digest? digest;
+    final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
+      digest = results.single;
+    });
+    final sink = md5.startChunkedConversion(innerSink);
+    await for (final chunk in File(path).openRead()) {
+      sink.add(chunk);
+    }
+    sink.close();
     return digest.toString();
   }
 

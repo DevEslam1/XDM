@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 
 class BandwidthGovernor {
   static final _log = Logger('BandwidthGovernor');
@@ -7,7 +8,7 @@ class BandwidthGovernor {
   int _activeConsumers = 0;
   double _availableTokens = 0;
   DateTime _lastRefill = DateTime.now();
-  Future<void> _lock = Future.value();
+  final Lock _lock = Lock();
 
   BandwidthGovernor([this._globalBytesPerSecond = 0]);
 
@@ -20,17 +21,21 @@ class BandwidthGovernor {
   }
 
   void registerConsumer() {
-    _lock = _lock.then((_) {
-      _activeConsumers++;
-      _log.fine('Consumer registered. Active: $_activeConsumers');
-    });
+    unawaited(
+      _lock.synchronized(() async {
+        _activeConsumers++;
+        _log.fine('Consumer registered. Active: $_activeConsumers');
+      }),
+    );
   }
 
   void unregisterConsumer() {
-    _lock = _lock.then((_) {
-      _activeConsumers = (_activeConsumers - 1).clamp(0, 999);
-      _log.fine('Consumer unregistered. Active: $_activeConsumers');
-    });
+    unawaited(
+      _lock.synchronized(() async {
+        _activeConsumers = (_activeConsumers - 1).clamp(0, 999);
+        _log.fine('Consumer unregistered. Active: $_activeConsumers');
+      }),
+    );
   }
 
   int get perConsumerBytesPerSecond {
@@ -43,35 +48,25 @@ class BandwidthGovernor {
   Future<int> acquire(int bytes) async {
     if (_globalBytesPerSecond <= 0) return 0;
 
-    final completer = Completer<int>();
-    _lock = _lock.then((_) {
-      try {
-        _refill();
-        final share = perConsumerBytesPerSecond;
-        if (share <= 0) {
-          completer.complete(0);
-          return;
-        }
+    return _lock.synchronized(() {
+      _refill();
+      final share = perConsumerBytesPerSecond;
+      if (share <= 0) return 0;
 
-        if (_availableTokens >= bytes) {
-          _availableTokens -= bytes;
-          completer.complete(0);
-          return;
-        }
-
-        final deficit = bytes - _availableTokens;
-        final waitMs = (deficit / share * 1000).round();
-        _availableTokens = 0;
-
-        // Allow up to 5 s sleep to avoid busy-looping at low speed limits.
-        // At 10 KB/s a 64 KB chunk needs ~6.4 s; sleeping the full deficit
-        // (capped at 5 s) keeps CPU near-zero between chunks.
-        completer.complete(waitMs.clamp(0, 5000));
-      } catch (e, s) {
-        completer.completeError(e, s);
+      if (_availableTokens >= bytes) {
+        _availableTokens -= bytes;
+        return 0;
       }
+
+      final deficit = bytes - _availableTokens;
+      final waitMs = (deficit / share * 1000).round();
+      _availableTokens = 0;
+
+      // Allow up to 5 s sleep to avoid busy-looping at low speed limits.
+      // At 10 KB/s a 64 KB chunk needs ~6.4 s; sleeping the full deficit
+      // (capped at 5 s) keeps CPU near-zero between chunks.
+      return waitMs.clamp(0, 5000);
     });
-    return completer.future;
   }
 
   void _refill() {

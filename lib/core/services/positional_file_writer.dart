@@ -13,10 +13,12 @@ class PositionalFileWriter {
   final List<BytesBuilder> _buffers;
   final List<int> _bufferFilePositions;
   final Lock _flushLock = Lock();
+  final List<Lock> _threadLocks;
 
   PositionalFileWriter._(this._file, this.threadCount, this._bufferSize)
     : _buffers = List.generate(threadCount, (_) => BytesBuilder(copy: false)),
-      _bufferFilePositions = List.filled(threadCount, 0);
+      _bufferFilePositions = List.filled(threadCount, 0),
+      _threadLocks = List.generate(threadCount, (_) => Lock());
 
   static Future<PositionalFileWriter> open(
     String path, {
@@ -55,14 +57,16 @@ class PositionalFileWriter {
   }
 
   Future<void> write(int threadIndex, int filePosition, Uint8List data) async {
-    if (_buffers[threadIndex].isEmpty) {
-      _bufferFilePositions[threadIndex] = filePosition;
-    }
-    _buffers[threadIndex].add(data);
+    await _threadLocks[threadIndex].synchronized(() async {
+      if (_buffers[threadIndex].isEmpty) {
+        _bufferFilePositions[threadIndex] = filePosition;
+      }
+      _buffers[threadIndex].add(data);
 
-    if (_buffers[threadIndex].length >= _bufferSize) {
-      await flush(threadIndex);
-    }
+      if (_buffers[threadIndex].length >= _bufferSize) {
+        await flush(threadIndex);
+      }
+    });
   }
 
   Future<void> flush(int threadIndex) async {
