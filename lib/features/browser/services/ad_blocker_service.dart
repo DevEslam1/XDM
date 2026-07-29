@@ -56,8 +56,19 @@ class AdBlockerService {
       return false;
     }
 
+    // Extract host from URL for exact domain matching
+    final uri = Uri.tryParse(lower);
+    final host = uri?.host ?? '';
+    if (host.isEmpty) {
+      // Fallback to substring match if URL can't be parsed
+      for (final domain in _blockedDomains) {
+        if (lower.contains(domain)) return true;
+      }
+      return false;
+    }
+
     for (final domain in _blockedDomains) {
-      if (lower.contains(domain)) return true;
+      if (host == domain || host.endsWith('.$domain')) return true;
     }
     return false;
   }

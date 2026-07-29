@@ -15,6 +15,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseService {
   late final AppDatabase _db;
+  int _historyInsertCount = 0;
+  static const int _historyTrimInterval = 100;
 
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
@@ -387,7 +389,7 @@ class DatabaseService {
         debugPrint(
           '[DMX] Error parsing date millisecondsSinceEpoch $msSinceEpoch: $e',
         );
-        return DateTime(2000);
+        return DateTime.fromMillisecondsSinceEpoch(0);
       }
     }
 
@@ -582,14 +584,18 @@ class DatabaseService {
           ),
         );
 
-    await _db.customStatement(
-      'DELETE FROM browser_history '
-      'WHERE id NOT IN ('
-      '  SELECT id FROM browser_history '
-      '  ORDER BY visited_at DESC '
-      '  LIMIT 500'
-      ')',
-    );
+    _historyInsertCount++;
+    if (_historyInsertCount >= _historyTrimInterval) {
+      _historyInsertCount = 0;
+      await _db.customStatement(
+        'DELETE FROM browser_history '
+        'WHERE id NOT IN ('
+        '  SELECT id FROM browser_history '
+        '  ORDER BY visited_at DESC '
+        '  LIMIT 500'
+        ')',
+      );
+    }
 
     return id;
   }

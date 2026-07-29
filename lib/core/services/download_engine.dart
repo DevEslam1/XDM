@@ -305,6 +305,7 @@ class DownloadEngine {
 
         final completer = Completer<DownloadMetadata>();
         StreamSubscription? sub;
+        Timer? metadataTimer;
 
         sub = TorrentService.torrentUpdates.listen((torrents) {
           final torrent = torrents[torrentId];
@@ -331,6 +332,7 @@ class DownloadEngine {
             );
 
             if (!completer.isCompleted) {
+              metadataTimer?.cancel();
               try {
                 TorrentService.pauseTorrent(torrentId);
                 TorrentService.removeTorrent(torrentId);
@@ -353,7 +355,7 @@ class DownloadEngine {
           }
         });
 
-        Future.delayed(const Duration(seconds: 300), () {
+        metadataTimer = Timer(const Duration(seconds: 300), () {
           if (!completer.isCompleted) {
             sub?.cancel();
             try {
@@ -1253,6 +1255,8 @@ class DownloadEngine {
       oauthToken: oauthToken,
     );
 
+    _activeDownloadsPerClient[isolatedDio]?.add(tempFilePath);
+
     try {
       if (resolvedFileSize < threadCount * 1024) {
         threadCount = 1;
@@ -1621,20 +1625,6 @@ class DownloadEngine {
                     debugPrint(
                       '[DownloadEngine] File changed on server (ETag/Last-Modified mismatch). Restarting download from scratch.',
                     );
-                    await writer.close();
-                    await journal.close();
-                    if (await File(currentTempFilePath).exists()) {
-                      await File(currentTempFilePath).delete();
-                    }
-                    if (await stateFile.exists()) {
-                      await stateFile.delete();
-                    }
-                    if (await File(journalPath).exists()) {
-                      await File(journalPath).delete();
-                    }
-                    for (int j = 0; j < threadCount; j++) {
-                      chunkProgress[j] = 0;
-                    }
                     throw _FileChangedOnServerException();
                   }
 
@@ -1758,7 +1748,28 @@ class DownloadEngine {
             }());
           }
 
-          await Future.wait(futures);
+          try {
+            await Future.wait(futures);
+          } on _FileChangedOnServerException {
+            // Cancel all chunk tokens and wait for chunks to finish.
+            for (final ct in chunkCancelTokens) {
+              if (!ct.isCancelled) ct.cancel();
+            }
+            await Future.wait(futures.map((f) => f.catchError((_) {})));
+            // Now safe to clean up — no chunks are writing.
+            await writer.close();
+            await journal.close();
+            if (await File(currentTempFilePath).exists()) {
+              await File(currentTempFilePath).delete();
+            }
+            if (await stateFile.exists()) {
+              await stateFile.delete();
+            }
+            if (await File(journalPath).exists()) {
+              await File(journalPath).delete();
+            }
+            rethrow;
+          }
           await writer.flushAll();
 
           // ── Phase 2B: Checksum verification ──
@@ -1880,6 +1891,7 @@ class DownloadEngine {
         debugPrint('[DownloadEngine] Final verification failed: $e');
       }
     } finally {
+      _activeDownloadsPerClient[isolatedDio]?.remove(tempFilePath);
       _reservedDioClients.remove(isolatedDio);
       _activeDioClients.remove(isolatedDio);
       _dioClientCreationTimes.remove(isolatedDio);

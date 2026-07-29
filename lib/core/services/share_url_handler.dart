@@ -19,10 +19,7 @@ class ShareUrlHandler {
     if (YoutubeService.isPlaylistUrl(url)) {
       await YoutubePlaylistSheet.show(context, url);
     } else if (YoutubeService.isExtractableMediaUrl(url)) {
-      final selected = await MediaQualitySheet.show(
-        context,
-        url,
-      );
+      final selected = await MediaQualitySheet.show(context, url);
       if (selected == null || !context.mounted) return;
 
       final title = selected['title'] as String? ?? 'Media Download';
@@ -43,18 +40,33 @@ class ShareUrlHandler {
       final threadCount = settings.defaultThreadCount;
       final savePath = settings.customDownloadPath ?? '';
 
-      await provider.addDownload(
-        name: fileName,
-        url: streamUrl,
-        size: streamSize,
-        category: category,
-        savePath: savePath,
-        threadCount: threadCount,
-        downloadPageUrl: url,
-        youtubeQualityPreset: qualityPreset,
-        mergedAudioUrl: audioUrl,
-        audioSize: audioSize ?? 0,
-      );
+      try {
+        await provider.addDownload(
+          name: fileName,
+          url: streamUrl,
+          size: streamSize,
+          category: category,
+          savePath: savePath,
+          threadCount: threadCount,
+          downloadPageUrl: url,
+          youtubeQualityPreset: qualityPreset,
+          mergedAudioUrl: audioUrl,
+          audioSize: audioSize ?? 0,
+        );
+      } catch (e) {
+        debugPrint('ShareUrlHandler addDownload error: $e');
+        if (context.mounted) {
+          final isDark = settings.isDarkMode;
+          ThemedSnackbar.show(
+            context,
+            message: 'Download failed: $e',
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.error_outline,
+            isDarkMode: isDark,
+          );
+        }
+        return;
+      }
 
       if (context.mounted) {
         final isDark = settings.isDarkMode;

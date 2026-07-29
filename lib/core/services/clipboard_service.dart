@@ -37,9 +37,7 @@ class ClipboardService {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       final text = data?.text?.trim();
       if (text != null &&
-          (isHttpUrl(text) ||
-              isMagnetUrl(text) ||
-              isTorrentFileUrl(text))) {
+          (isHttpUrl(text) || isMagnetUrl(text) || isTorrentFileUrl(text))) {
         // Basic safety: reject URLs with suspicious patterns
         final lower = text.toLowerCase();
         if (lower.startsWith('javascript:') ||
@@ -53,7 +51,10 @@ class ClipboardService {
           try {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString('clipboard_last_url', text);
-            await prefs.setInt('clipboard_last_time', _lastCheckedTime!.millisecondsSinceEpoch);
+            await prefs.setInt(
+              'clipboard_last_time',
+              _lastCheckedTime!.millisecondsSinceEpoch,
+            );
           } catch (_) {}
           return text;
         }
@@ -63,7 +64,10 @@ class ClipboardService {
           _lastCheckedTime = now;
           try {
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setInt('clipboard_last_time', now.millisecondsSinceEpoch);
+            await prefs.setInt(
+              'clipboard_last_time',
+              now.millisecondsSinceEpoch,
+            );
           } catch (_) {}
           return text;
         }
@@ -75,13 +79,16 @@ class ClipboardService {
   }
 
   /// Sets the last checked URL so we don't prompt for it again.
-  void markAsChecked(String url) async {
+  Future<void> markAsChecked(String url) async {
     _lastCheckedUrl = url;
     _lastCheckedTime = DateTime.now();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('clipboard_last_url', url);
-      await prefs.setInt('clipboard_last_time', _lastCheckedTime!.millisecondsSinceEpoch);
+      await prefs.setInt(
+        'clipboard_last_time',
+        _lastCheckedTime!.millisecondsSinceEpoch,
+      );
     } catch (e) {
       debugPrint('ClipboardService error saving prefs: $e');
     }

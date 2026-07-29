@@ -13,10 +13,7 @@ void _onBackgroundNotificationResponse(NotificationResponse response) {
   if (actionId != null) {
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
-      port.send({
-        'action': actionId,
-        'taskId': payload,
-      });
+      port.send({'action': actionId, 'taskId': payload});
     }
   }
 }
@@ -102,7 +99,8 @@ class NotificationService {
     try {
       final androidPlugin = _plugin
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       if (androidPlugin != null) {
         final granted = await androidPlugin.requestNotificationsPermission();
         return granted ?? false;
@@ -145,19 +143,29 @@ class NotificationService {
       _receivePort = null;
 
       if (_actionStreamController.isClosed) {
-        _actionStreamController = _createActionStreamController(_pendingActions);
+        _actionStreamController = _createActionStreamController(
+          _pendingActions,
+        );
       }
 
-      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidSettings = AndroidInitializationSettings(
+        '@mipmap/ic_launcher',
+      );
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
-      const settings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+      const settings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
       _receivePort = ReceivePort();
-      IsolateNameServer.registerPortWithName(_receivePort!.sendPort, 'dmx_notification_port');
+      IsolateNameServer.registerPortWithName(
+        _receivePort!.sendPort,
+        'dmx_notification_port',
+      );
 
       _receivePortSub = _receivePort!.listen((message) {
         if (message is Map) {
@@ -184,11 +192,14 @@ class NotificationService {
             _addAction({'action': actionId, 'taskId': payload});
           }
         },
-        onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
+        onDidReceiveBackgroundNotificationResponse:
+            _onBackgroundNotificationResponse,
       );
 
-      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+      final androidPlugin = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       if (androidPlugin != null) {
         if (requestPermission) {
           await androidPlugin.requestNotificationsPermission();
@@ -206,7 +217,8 @@ class NotificationService {
           const AndroidNotificationChannel(
             'dmx_download_alerts_sound',
             'Download Alerts (Sound)',
-            description: 'Notifications for completed or failed downloads with sound',
+            description:
+                'Notifications for completed or failed downloads with sound',
             importance: Importance.defaultImportance,
             playSound: true,
           ),
@@ -302,7 +314,7 @@ class NotificationService {
       id: notificationId,
       title: title,
       body: isPaused
-          ? (languageCode == 'ar' ? 'متوقف مؤقتاً' : 'Paused')
+          ? L10n.translate(languageCode, 'notification_paused')
           : (eta.isNotEmpty ? '$speed | $eta' : speed),
       notificationDetails: details,
       payload: payload,
@@ -318,8 +330,12 @@ class NotificationService {
     List<AndroidNotificationAction>? actions,
   }) async {
     if (!_initialized) return;
-    final channelId = playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
-    final channelName = playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
+    final channelId = playSound
+        ? 'dmx_download_alerts_sound'
+        : _downloadChannelId;
+    final channelName = playSound
+        ? 'Download Alerts (Sound)'
+        : _downloadChannelName;
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
@@ -355,8 +371,12 @@ class NotificationService {
     bool playSound = true,
   }) async {
     if (!_initialized) return;
-    final channelId = playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
-    final channelName = playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
+    final channelId = playSound
+        ? 'dmx_download_alerts_sound'
+        : _downloadChannelId;
+    final channelName = playSound
+        ? 'Download Alerts (Sound)'
+        : _downloadChannelName;
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,

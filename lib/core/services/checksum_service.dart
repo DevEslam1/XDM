@@ -7,20 +7,25 @@ class ChecksumService {
   static final _log = Logger('ChecksumService');
 
   static Future<String> sha256File(String path) async {
-    final stream = File(path).openRead();
-    final digest = await sha256.bind(stream).first;
+    Digest? digest;
+    final innerSink = ChunkedConversionSink<Digest>.withCallback((results) {
+      digest = results.single;
+    });
+    final sink = sha256.startChunkedConversion(innerSink);
+    await for (final chunk in File(path).openRead()) {
+      sink.add(chunk);
+    }
+    sink.close();
     return digest.toString();
   }
 
   static Future<String> sha1File(String path) async {
-    final stream = File(path).openRead();
-    final digest = await sha1.bind(stream).first;
+    final digest = sha1.convert(await File(path).readAsBytes());
     return digest.toString();
   }
 
   static Future<String> md5File(String path) async {
-    final stream = File(path).openRead();
-    final digest = await md5.bind(stream).first;
+    final digest = md5.convert(await File(path).readAsBytes());
     return digest.toString();
   }
 
@@ -48,8 +53,10 @@ class ChecksumService {
     }
     final match = actual.toLowerCase() == expectedHash.toLowerCase().trim();
     if (!match) {
-      _log.warning('Checksum mismatch for $path: '
-          'expected=$expectedHash actual=$actual');
+      _log.warning(
+        'Checksum mismatch for $path: '
+        'expected=$expectedHash actual=$actual',
+      );
     }
     return match;
   }
@@ -70,9 +77,10 @@ class ChecksumService {
           if (!_isHex(partValue)) {
             try {
               final bytes = base64Decode(partValue);
-              hexValue = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-            } catch (_) {
-            }
+              hexValue = bytes
+                  .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                  .join();
+            } catch (_) {}
           }
           final normalizedAlgo = algo.replaceFirst('-', '');
           return MapEntry(normalizedAlgo, hexValue);

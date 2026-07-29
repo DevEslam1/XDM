@@ -45,7 +45,9 @@ class RemoteApiService {
       } catch (_) {}
     }
 
-    _cachedTokenFilePath = dir.endsWith('/') ? '$dir$_tokenFileName' : '$dir/$_tokenFileName';
+    _cachedTokenFilePath = dir.endsWith('/')
+        ? '$dir$_tokenFileName'
+        : '$dir/$_tokenFileName';
     return _cachedTokenFilePath!;
   }
 
@@ -68,7 +70,10 @@ class RemoteApiService {
     required Future<void> Function(String id) resumeTask,
     required Future<void> Function(String id) deleteTask,
   }) async {
-    if (kIsWeb || (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)) return;
+    if (kIsWeb ||
+        (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS)) {
+      return;
+    }
 
     _bearerToken = _generateToken();
     await _writeTokenFile(_bearerToken!);
@@ -108,7 +113,7 @@ class RemoteApiService {
 
       // Health check — always allowed without auth
       if (path == '/api/health' && method == 'GET') {
-        request.response.write(jsonEncode({'ok': true, 'token': _bearerToken}));
+        request.response.write(jsonEncode({'ok': true}));
         await request.response.close();
         return;
       }
@@ -117,12 +122,14 @@ class RemoteApiService {
       final authHeader = request.headers.value('authorization');
       if (authHeader == null || !authHeader.startsWith('Bearer ')) {
         request.response.statusCode = 401;
-        request.response.write(jsonEncode({'error': 'Missing or invalid authorization header'}));
+        request.response.write(
+          jsonEncode({'error': 'Missing or invalid authorization header'}),
+        );
         await request.response.close();
         return;
       }
       final token = authHeader.substring(7).trim();
-      if (token != _bearerToken) {
+      if (!_timingSafeEqual(token, _bearerToken!)) {
         request.response.statusCode = 401;
         request.response.write(jsonEncode({'error': 'Invalid token'}));
         await request.response.close();
@@ -133,7 +140,9 @@ class RemoteApiService {
         if (path == '/api/tasks' && method == 'GET') {
           final tasks = await getTasks();
           request.response.write(jsonEncode(tasks));
-        } else if (path.startsWith('/api/tasks/') && path.endsWith('/pause') && method == 'POST') {
+        } else if (path.startsWith('/api/tasks/') &&
+            path.endsWith('/pause') &&
+            method == 'POST') {
           final id = path.split('/')[3];
           if (!_isValidTaskId(id)) {
             request.response.statusCode = 400;
@@ -142,7 +151,9 @@ class RemoteApiService {
             await pauseTask(id);
             request.response.write(jsonEncode({'ok': true}));
           }
-        } else if (path.startsWith('/api/tasks/') && path.endsWith('/resume') && method == 'POST') {
+        } else if (path.startsWith('/api/tasks/') &&
+            path.endsWith('/resume') &&
+            method == 'POST') {
           final id = path.split('/')[3];
           if (!_isValidTaskId(id)) {
             request.response.statusCode = 400;
@@ -151,7 +162,9 @@ class RemoteApiService {
             await resumeTask(id);
             request.response.write(jsonEncode({'ok': true}));
           }
-        } else if (path.startsWith('/api/tasks/') && path.endsWith('/delete') && method == 'DELETE') {
+        } else if (path.startsWith('/api/tasks/') &&
+            path.endsWith('/delete') &&
+            method == 'DELETE') {
           final id = path.split('/')[3];
           if (!_isValidTaskId(id)) {
             request.response.statusCode = 400;
@@ -190,6 +203,16 @@ class RemoteApiService {
     } catch (e) {
       debugPrint('Remote API: failed to write token file: $e');
     }
+  }
+
+  /// Timing-safe string comparison to prevent timing side-channel attacks.
+  static bool _timingSafeEqual(String a, String b) {
+    if (a.length != b.length) return false;
+    int result = 0;
+    for (int i = 0; i < a.length; i++) {
+      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return result == 0;
   }
 
   static void stop() {

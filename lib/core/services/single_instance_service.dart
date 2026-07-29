@@ -69,6 +69,16 @@ class SingleInstanceService {
     return File('${targetDir.path}/xdm_instance_$_port.token');
   }
 
+  /// Timing-safe string comparison to prevent timing side-channel attacks.
+  static bool _timingSafeEqual(String a, String b) {
+    if (a.length != b.length) return false;
+    int result = 0;
+    for (int i = 0; i < a.length; i++) {
+      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return result == 0;
+  }
+
   String _generateSecurityToken() {
     final random = Random.secure();
     final bytes = List<int>.generate(32, (_) => random.nextInt(256));
@@ -148,7 +158,8 @@ class SingleInstanceService {
     _serverSubscription = _server?.listen((HttpRequest request) async {
       try {
         final tokenParam = request.uri.queryParameters['token'];
-        if (tokenParam == null || tokenParam != _securityToken) {
+        if (tokenParam == null ||
+            !_timingSafeEqual(tokenParam, _securityToken!)) {
           request.response.statusCode = HttpStatus.forbidden;
           await request.response.close();
           return;

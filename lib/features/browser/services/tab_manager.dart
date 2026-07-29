@@ -73,6 +73,13 @@ class TabManager {
     pendingTimers.add(timer);
   }
 
+  void dispose() {
+    for (final timer in pendingTimers) {
+      timer.cancel();
+    }
+    pendingTimers.clear();
+  }
+
   Future<void> saveTabs() async {
     try {
       // Only persist normal (non-incognito) tabs.

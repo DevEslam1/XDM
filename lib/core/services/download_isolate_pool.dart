@@ -157,7 +157,11 @@ class _Worker {
             'errorMessage': errorMessage,
           }),
         );
+        if (!job._controller.isClosed) {
+          job._controller.close();
+        }
       }
+      _jobs.clear();
     });
 
     _isolate = await Isolate.spawn(

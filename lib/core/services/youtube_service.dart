@@ -200,7 +200,7 @@ class YoutubeService {
     try {
       final uri = Uri.parse(url);
       final host = uri.host.toLowerCase();
-      if (!host.contains('youtube.com') && !host.contains('youtu.be')) {
+      if (!_isYouTubeHost(host) && !_isYouTubeShortHost(host)) {
         return false;
       }
       return extractPlaylistId(url) != null;
@@ -220,10 +220,7 @@ class YoutubeService {
     try {
       final uri = Uri.parse(url);
       final host = uri.host.toLowerCase();
-      final isYoutubeHost =
-          host.contains('youtube.com') ||
-          host == 'youtu.be' ||
-          host.endsWith('.youtu.be');
+      final isYoutubeHost = _isYouTubeHost(host) || _isYouTubeShortHost(host);
       // Without this check, ANY url with a `v=` query parameter or a
       // `/watch` path segment (e.g. https://example.com/watch?v=xyz) was
       // treated as a YouTube video id, since the checks below never looked
@@ -268,6 +265,17 @@ class YoutubeService {
     }
     return null;
   }
+
+  /// Exact host matching for youtube.com and its subdomains.
+  static bool _isYouTubeHost(String host) =>
+      host == 'youtube.com' ||
+      host == 'm.youtube.com' ||
+      host == 'www.youtube.com' ||
+      host.endsWith('.youtube.com');
+
+  /// Exact host matching for youtu.be and its subdomains.
+  static bool _isYouTubeShortHost(String host) =>
+      host == 'youtu.be' || host.endsWith('.youtu.be');
 
   static String videoUrl(String videoId) =>
       'https://www.youtube.com/watch?v=$videoId';
@@ -391,8 +399,7 @@ class YoutubeService {
   ) async {
     final uri = Uri.tryParse(url);
     final host = uri?.host.toLowerCase() ?? '';
-    final isYouTubeHost =
-        host.contains('youtube.com') || host.contains('youtu.be');
+    final isYouTubeHost = _isYouTubeHost(host) || _isYouTubeShortHost(host);
 
     final videoId = extractVideoId(url);
     final targetUrl = videoId != null
@@ -679,7 +686,8 @@ class YoutubeService {
 
         if (streams.isNotEmpty) {
           String oldType = 'combined';
-          if (oldStreamUrl.contains('mime=audio') || oldStreamUrl.contains('audio')) {
+          if (oldStreamUrl.contains('mime=audio') ||
+              oldStreamUrl.contains('audio')) {
             oldType = 'audio';
           } else if (oldStreamUrl.contains('video')) {
             oldType = 'video_only';

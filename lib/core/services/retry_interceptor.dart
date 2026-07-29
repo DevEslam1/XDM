@@ -13,25 +13,24 @@ class ProfessionalRetryInterceptor extends Interceptor {
   static const int maxRetries = 5;
   static const int baseDelayMs = 1000;
   static const int maxDelayMs = 30000;
-  static const int staleEntryTtlMs = 120000;
   static final _rng = math.Random();
 
-  final Map<int, int> _retryCounts = {};
-  final Map<int, int> _retryTimestamps = {};
+  final Expando<int> _retryCounts = Expando<int>();
+  final Expando<int> _retryTimestamps = Expando<int>();
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    final key = identityHashCode(err.requestOptions);
+    final requestOptions = err.requestOptions;
 
     // Break infinite retry loops: if the request already carries a retry
     // count at the max, stop retrying regardless of the in-memory map state.
     final existingRetryCount =
         int.tryParse(
-          err.requestOptions.headers['X-Retry-Count']?.toString() ?? '0',
+          requestOptions.headers['X-Retry-Count']?.toString() ?? '0',
         ) ??
         0;
     if (existingRetryCount >= maxRetries) {
-      _removeEntry(key);
+      _removeEntry(requestOptions);
       handler.next(err);
       return;
     }
@@ -42,26 +41,26 @@ class ProfessionalRetryInterceptor extends Interceptor {
       _log.fine(
         'Permanent error (${err.type}, '
         '${err.response?.statusCode}), not retrying: '
-        '${err.requestOptions.uri}',
+        '${requestOptions.uri}',
       );
-      _removeEntry(key);
+      _removeEntry(requestOptions);
       handler.next(err);
       return;
     }
 
-    final count = _retryCounts[key] ?? 0;
+    final count = _retryCounts[requestOptions] ?? 0;
     if (count >= maxRetries) {
       _log.warning(
         'Max retries ($maxRetries) exhausted for '
-        '${err.requestOptions.uri}',
+        '${requestOptions.uri}',
       );
-      _removeEntry(key);
+      _removeEntry(requestOptions);
       handler.next(err);
       return;
     }
 
-    _retryCounts[key] = count + 1;
-    _retryTimestamps[key] = DateTime.now().millisecondsSinceEpoch;
+    _retryCounts[requestOptions] = count + 1;
+    _retryTimestamps[requestOptions] = DateTime.now().millisecondsSinceEpoch;
 
     final delayMs = _computeDelay(err, count);
 
@@ -77,9 +76,9 @@ class ProfessionalRetryInterceptor extends Interceptor {
       // Retry using the SAME Dio instance to preserve proxy, SSL, and header config.
       // Add a retry-count header to allow servers / downstream interceptors to
       // detect and break infinite retry loops.
-      err.requestOptions.headers['X-Retry-Count'] = (count + 1).toString();
-      final response = await _dio.fetch(err.requestOptions);
-      _removeEntry(key);
+      requestOptions.headers['X-Retry-Count'] = (count + 1).toString();
+      final response = await _dio.fetch(requestOptions);
+      _removeEntry(requestOptions);
       handler.resolve(response);
     } catch (retryErr) {
       _log.fine('Retry attempt failed: $retryErr');
@@ -120,20 +119,14 @@ class ProfessionalRetryInterceptor extends Interceptor {
   }
 
   void _cleanupStaleEntries() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final staleKeys = <int>[];
-    for (final entry in _retryTimestamps.entries) {
-      if (now - entry.value > staleEntryTtlMs) {
-        staleKeys.add(entry.key);
-      }
-    }
-    for (final key in staleKeys) {
-      _removeEntry(key);
-    }
+    // Expando doesn't support iteration; stale entries are naturally cleaned
+    // up when their keys are GC'd. The maxRetries check and X-Retry-Count
+    // header provide additional safety against unbounded retries.
+    // We keep this method as a hook for future cleanup if needed.
   }
 
-  void _removeEntry(int key) {
-    _retryCounts.remove(key);
-    _retryTimestamps.remove(key);
+  void _removeEntry(RequestOptions requestOptions) {
+    _retryCounts[requestOptions] = null;
+    _retryTimestamps[requestOptions] = null;
   }
 }

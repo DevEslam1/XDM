@@ -41,7 +41,8 @@ class NetworkMonitor {
   bool _hasResolvedInitialConnectivity = false;
   bool _checkingNetwork = false;
   bool _networkRecheckPending = false;
-  final Set<String> _tasksPausedDueToNetwork = {};
+  final Set<String> _tasksPausedDueToDisconnect = {};
+  final Set<String> _tasksPausedDueToWifiOnly = {};
 
   /// The most recent connectivity results reported by the platform.
   List<ConnectivityResult> get currentConnectivity => _currentConnectivity;
@@ -125,7 +126,7 @@ class NetworkMonitor {
           task.status == DownloadStatus.queued,
     );
     for (final task in active.toList()) {
-      _tasksPausedDueToNetwork.add(task.id);
+      _tasksPausedDueToDisconnect.add(task.id);
       if (task.status == DownloadStatus.downloading) {
         final torrentId = _torrentIds()[task.id];
         if (torrentId != null) {
@@ -147,11 +148,11 @@ class NetworkMonitor {
   }
 
   Future<void> _resumeFromNetworkDisconnect({bool skipPump = false}) async {
-    if (_tasksPausedDueToNetwork.isEmpty) return;
+    if (_tasksPausedDueToDisconnect.isEmpty) return;
 
     final waiting = _tasks().where(
       (task) =>
-          _tasksPausedDueToNetwork.contains(task.id) &&
+          _tasksPausedDueToDisconnect.contains(task.id) &&
           task.status == DownloadStatus.paused,
     );
     for (final task in waiting.toList()) {
@@ -163,7 +164,7 @@ class NetworkMonitor {
         ),
       );
     }
-    _tasksPausedDueToNetwork.clear();
+    _tasksPausedDueToDisconnect.clear();
     if (!skipPump) _pumpQueue();
   }
 
@@ -174,7 +175,7 @@ class NetworkMonitor {
           task.status == DownloadStatus.queued,
     );
     for (final task in active.toList()) {
-      _tasksPausedDueToNetwork.add(task.id); // Track for proper resume
+      _tasksPausedDueToWifiOnly.add(task.id);
       if (task.status == DownloadStatus.downloading) {
         final torrentId = _torrentIds()[task.id];
         if (torrentId != null) {
@@ -210,11 +211,13 @@ class NetworkMonitor {
         ),
       );
     }
+    _tasksPausedDueToWifiOnly.clear();
     if (!skipPump) _pumpQueue();
   }
 
   void dispose() {
     _connectivitySubscription?.cancel();
-    _tasksPausedDueToNetwork.clear();
+    _tasksPausedDueToDisconnect.clear();
+    _tasksPausedDueToWifiOnly.clear();
   }
 }

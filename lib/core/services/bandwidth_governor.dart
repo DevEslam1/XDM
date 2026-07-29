@@ -20,13 +20,17 @@ class BandwidthGovernor {
   }
 
   void registerConsumer() {
-    _activeConsumers++;
-    _log.fine('Consumer registered. Active: $_activeConsumers');
+    _lock = _lock.then((_) {
+      _activeConsumers++;
+      _log.fine('Consumer registered. Active: $_activeConsumers');
+    });
   }
 
   void unregisterConsumer() {
-    _activeConsumers = (_activeConsumers - 1).clamp(0, 999);
-    _log.fine('Consumer unregistered. Active: $_activeConsumers');
+    _lock = _lock.then((_) {
+      _activeConsumers = (_activeConsumers - 1).clamp(0, 999);
+      _log.fine('Consumer unregistered. Active: $_activeConsumers');
+    });
   }
 
   int get perConsumerBytesPerSecond {

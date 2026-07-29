@@ -34,7 +34,8 @@ class UpdateInfo {
       apkUrl: json['apkUrl'] as String? ?? '',
       changelog: json['changelog'] as String? ?? '',
       mandatory: json['mandatory'] as bool? ?? false,
-      minSupportedVersionCode: (json['minSupportedVersionCode'] as num?)?.toInt() ?? 0,
+      minSupportedVersionCode:
+          (json['minSupportedVersionCode'] as num?)?.toInt() ?? 0,
       sha256: json['sha256'] as String?,
     );
   }
@@ -48,29 +49,18 @@ class UpdateService {
   static const String kDefaultUpdateManifestUrl =
       'https://raw.githubusercontent.com/DevEslam1/XDM/main/version_manifest.json';
 
-  Dio? _dio;
-
-  Dio _getDio() {
-    _dio ??= Dio(
+  /// Checks for an app update by downloading the update manifest JSON.
+  /// Returns [UpdateInfo] if a newer version or mandatory update is available, null otherwise.
+  Future<UpdateInfo?> checkForUpdate({String? manifestUrl}) async {
+    final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 15),
       ),
     );
-    return _dio!;
-  }
-
-  void dispose() {
-    _dio?.close(force: true);
-    _dio = null;
-  }
-
-  /// Checks for an app update by downloading the update manifest JSON.
-  /// Returns [UpdateInfo] if a newer version or mandatory update is available, null otherwise.
-  Future<UpdateInfo?> checkForUpdate({String? manifestUrl}) async {
     try {
       final url = manifestUrl ?? kDefaultUpdateManifestUrl;
-      final response = await _getDio().get<dynamic>(url);
+      final response = await dio.get<dynamic>(url);
       if (response.statusCode == 200 && response.data != null) {
         final Map<String, dynamic> json;
         if (response.data is String) {
@@ -98,6 +88,8 @@ class UpdateService {
       }
     } catch (e) {
       debugPrint('[UpdateService] Failed to check for update: $e');
+    } finally {
+      dio.close(force: true);
     }
     return null;
   }
@@ -128,13 +120,19 @@ class UpdateService {
   }
 
   /// Basic file integrity verification (file size and optional SHA-256 hash).
-  Future<bool> verifyApkIntegrity(File apkFile, {int? expectedSize, String? expectedSha256}) async {
+  Future<bool> verifyApkIntegrity(
+    File apkFile, {
+    int? expectedSize,
+    String? expectedSha256,
+  }) async {
     try {
       if (!await apkFile.exists()) return false;
       if (expectedSize != null && expectedSize > 0) {
         final size = await apkFile.length();
         if (size != expectedSize) {
-          debugPrint('[UpdateService] File size mismatch: expected $expectedSize, got $size');
+          debugPrint(
+            '[UpdateService] File size mismatch: expected $expectedSize, got $size',
+          );
           return false;
         }
       }

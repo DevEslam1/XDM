@@ -7,13 +7,14 @@ class MirrorManager {
   final List<MirrorStats> _mirrors;
 
   MirrorManager(List<String> urls)
-      : _mirrors = urls.map((u) => MirrorStats(u)).toList();
+    : _mirrors = urls.map((u) => MirrorStats(u)).toList();
 
-  String get primaryUrl => _mirrors.first.url;
+  String? get primaryUrl => _mirrors.isNotEmpty ? _mirrors.first.url : null;
 
   List<String> get allUrls => _mirrors.map((m) => m.url).toList();
 
-  String getBestMirror() {
+  String? getBestMirror() {
+    if (_mirrors.isEmpty) return null;
     final healthy = _mirrors
         .where((m) => m.failures < maxFailuresBeforeDeprioritize)
         .toList();
@@ -24,8 +25,10 @@ class MirrorManager {
 
   String? getNextMirror(String excludeUrl) {
     final candidates = _mirrors
-        .where((m) => m.url != excludeUrl &&
-            m.failures < maxFailuresBeforeDeprioritize)
+        .where(
+          (m) =>
+              m.url != excludeUrl && m.failures < maxFailuresBeforeDeprioritize,
+        )
         .toList();
     if (candidates.isEmpty) return null;
     candidates.sort((a, b) => b.avgSpeedBps.compareTo(a.avgSpeedBps));
@@ -51,8 +54,7 @@ class MirrorManager {
 
   bool isHealthy(String url) {
     final mirror = _find(url);
-    return mirror != null &&
-        mirror.failures < maxFailuresBeforeDeprioritize;
+    return mirror != null && mirror.failures < maxFailuresBeforeDeprioritize;
   }
 
   MirrorStats? _find(String url) {
@@ -73,6 +75,5 @@ class MirrorStats {
 
   MirrorStats(this.url);
 
-  double get avgSpeedBps =>
-      totalMs > 0 ? totalBytes / totalMs * 1000 : 0;
+  double get avgSpeedBps => totalMs > 0 ? totalBytes / totalMs * 1000 : 0;
 }

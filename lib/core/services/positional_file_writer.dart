@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:logging/logging.dart';
+import 'package:synchronized/synchronized.dart';
 
 class PositionalFileWriter {
   static final _log = Logger('PositionalFileWriter');
@@ -11,13 +12,11 @@ class PositionalFileWriter {
   final int _bufferSize;
   final List<BytesBuilder> _buffers;
   final List<int> _bufferFilePositions;
+  final Lock _flushLock = Lock();
 
-  PositionalFileWriter._(
-    this._file,
-    this.threadCount,
-    this._bufferSize,
-  )   : _buffers = List.generate(threadCount, (_) => BytesBuilder(copy: false)),
-        _bufferFilePositions = List.filled(threadCount, 0);
+  PositionalFileWriter._(this._file, this.threadCount, this._bufferSize)
+    : _buffers = List.generate(threadCount, (_) => BytesBuilder(copy: false)),
+      _bufferFilePositions = List.filled(threadCount, 0);
 
   static Future<PositionalFileWriter> open(
     String path, {
@@ -71,8 +70,10 @@ class PositionalFileWriter {
     if (buffer.isEmpty) return;
 
     final bytes = buffer.takeBytes();
-    await _file.setPosition(_bufferFilePositions[threadIndex]);
-    await _file.writeFrom(bytes);
+    await _flushLock.synchronized(() async {
+      await _file.setPosition(_bufferFilePositions[threadIndex]);
+      await _file.writeFrom(bytes);
+    });
 
     _bufferFilePositions[threadIndex] += bytes.length;
   }
