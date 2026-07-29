@@ -171,8 +171,11 @@ void main() {
       );
 
       final map = task.toMap();
-      expect(map.containsKey('statusMessage'), isTrue,
-          reason: 'statusMessage is in toMap for widget use');
+      expect(
+        map.containsKey('statusMessage'),
+        isTrue,
+        reason: 'statusMessage is in toMap for widget use',
+      );
     });
 
     test('errorMessage is cleared and statusMessage is independent', () {
@@ -365,9 +368,11 @@ void main() {
   });
 
   group('Magnet URL Tests', () {
-    const validHex40 = 'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3&dn=Ubuntu';
+    const validHex40 =
+        'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3&dn=Ubuntu';
     const validBase32 = 'magnet:?xt=urn:btih:MR6EKEINW5KJPRFD6GPQPTHKMQEH3P5T';
-    const validHex64 = 'magnet:?xt=urn:btih:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const validHex64 =
+        'magnet:?xt=urn:btih:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
     const invalidNoXt = 'magnet:?dn=Ubuntu';
     const invalidShortHash = 'magnet:?xt=urn:btih:5dee65101db75097';
@@ -376,7 +381,11 @@ void main() {
       expect(isMagnetUrl(validHex40), isTrue);
       expect(isMagnetUrl(validHex64), isTrue);
 
-      expect(isMagnetUrl(validBase32), isTrue, reason: 'Base32 hash should be converted to hex and validated');
+      expect(
+        isMagnetUrl(validBase32),
+        isTrue,
+        reason: 'Base32 hash should be converted to hex and validated',
+      );
       expect(isMagnetUrl(invalidNoXt), isFalse);
       expect(isMagnetUrl(invalidShortHash), isFalse);
       expect(isMagnetUrl('https://example.com'), isFalse);
@@ -448,7 +457,9 @@ void main() {
         seedingEnabled: true,
         seedingLimited: true,
         seedingLimitKbps: 200,
-        torrentFiles: const [{'name': 't.txt', 'length': 10}],
+        torrentFiles: const [
+          {'name': 't.txt', 'length': 10},
+        ],
         downloadPageUrl: 'https://example.com/page',
         mergedAudioUrl: 'https://example.com/audio',
         audioSize: 50,
@@ -677,14 +688,15 @@ void main() {
       expect(task1.chunks.length, 4);
       expect(task1.chunks, [0.1, 0.2, 0.0, 0.0]);
 
-      // More chunks than threadCount -> trim
+      // More chunks than threadCount -> redistribute total progress
       final map2 = Map<String, dynamic>.from(baseMap)
         ..['threadCount'] = 2
         ..['chunks'] = [0.1, 0.2, 0.3, 0.4];
       final task2 = DownloadTask.fromMap(map2);
       expect(task2.threadCount, 2);
       expect(task2.chunks.length, 2);
-      expect(task2.chunks, [0.1, 0.2]);
+      // Total progress 1.0 is preserved by spreading it evenly.
+      expect(task2.chunks, [0.5, 0.5]);
     });
   });
 }

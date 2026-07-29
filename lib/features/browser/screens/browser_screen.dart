@@ -14,10 +14,8 @@ import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/youtube_service.dart';
-import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
-import '../../../core/utils/url_utils.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -31,7 +29,11 @@ import '../../settings/provider/settings_provider.dart';
 import '../models/bookmark.dart';
 import '../models/browser_tab.dart';
 import '../services/browser_detector.dart';
-import '../services/ad_blocker_service.dart';
+import '../services/ad_blocker_delegate.dart';
+import '../services/download_interceptor.dart';
+import '../services/history_manager.dart';
+import '../services/media_sniffer.dart';
+import '../services/tab_manager.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
 import '../widgets/browser_history_sheet.dart';
@@ -44,8 +46,25 @@ class BrowserScreen extends StatefulWidget {
 }
 
 class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
-  final List<BrowserTab> _tabs = [];
-  int _currentTabIndex = 0;
+  late final TabManager _tabManager = TabManager(
+    isActive: () => mounted,
+    setHostState: setState,
+    createTab: _createNewTab,
+    resolveDatabase: () => context.read<DatabaseService>(),
+    fallbackTitle: () => L10n.of(context, 'browser_new_tab'),
+    cleanupTabState: _cleanupTabState,
+    syncUrlController: () {
+      if (_tabs.isNotEmpty) {
+        _urlController.text = _tabs[_currentTabIndex].isHome
+            ? ''
+            : _tabs[_currentTabIndex].url;
+      }
+    },
+    updateNavState: _updateNavState,
+  );
+  List<BrowserTab> get _tabs => _tabManager.tabs;
+  int get _currentTabIndex => _tabManager.currentIndex;
+  set _currentTabIndex(int value) => _tabManager.currentIndex = value;
   final TextEditingController _urlController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isFocused = false;
@@ -55,46 +74,70 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   String _customJs = '';
   String _customCss = '';
 
-  final Map<String, String> _detectedDownloadUrls = {};
-  final Map<String, List<Map<String, dynamic>>> _detectedMediaSources = {};
-  final Map<String, int> _detectedPlaylistUrls = {};
-  final Map<String, DateTime> _ytDetectionFailed = {};
-  final Map<String, bool> _mediaScanFailed = {};
+  late final MediaSniffer _sniffer = MediaSniffer(
+    isActive: () => mounted,
+    containsTab: (tab) => _tabs.contains(tab),
+    isSnifferEnabled: () => _isSnifferEnabled,
+    onStateChanged: () {
+      if (mounted) setState(() {});
+    },
+  );
+  Map<String, String> get _detectedDownloadUrls =>
+      _sniffer.detectedDownloadUrls;
+  Map<String, List<Map<String, dynamic>>> get _detectedMediaSources =>
+      _sniffer.detectedMediaSources;
+  Map<String, int> get _detectedPlaylistUrls => _sniffer.detectedPlaylistUrls;
+  Map<String, DateTime> get _ytDetectionFailed => _sniffer.ytDetectionFailed;
+  Map<String, bool> get _mediaScanFailed => _sniffer.mediaScanFailed;
   // Per-tab YouTube auth cooldown — prevents one tab's auth suppressing others.
-  final Map<String, DateTime> _lastYoutubeAuthTimes = {};
+  Map<String, DateTime> get _lastYoutubeAuthTimes =>
+      _sniffer.lastYoutubeAuthTimes;
   static const _youtubeAuthCooldown = Duration(seconds: 30);
-  final Map<String, Timer> _mediaScanTimers = {};
+  Map<String, Timer> get _mediaScanTimers => _sniffer.mediaScanTimers;
   bool _quitPersisted = false;
   bool _isRestoring = false;
-  final AdBlockerService _adBlocker = AdBlockerService.instance;
+  final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
 
   void _ensureTabsExist() {
     if (_tabs.isEmpty && !_isRestoring) {
       _isRestoring = true;
-      _restoreTabs().then((_) {
-        if (mounted) {
-          setState(() {
-            _isRestoring = false;
+      _restoreTabs()
+          .then((_) {
+            if (mounted) {
+              setState(() {
+                _isRestoring = false;
+              });
+            }
+          })
+          .catchError((e) {
+            debugPrint('[Browser] _ensureTabsExist restore error: $e');
+            if (mounted) {
+              setState(() {
+                _isRestoring = false;
+              });
+            }
           });
-        }
-      }).catchError((e) {
-        debugPrint('[Browser] _ensureTabsExist restore error: $e');
-        if (mounted) {
-          setState(() {
-            _isRestoring = false;
-          });
-        }
-      });
     }
   }
 
   DownloadProvider? _downloadProvider;
-  String? _lastHistoryEntryUrl;
-  int? _lastHistoryEntryId;
-  String? _pendingTitleUpdate;
-  final Set<String> _bypassedSniffUrls = {};
+  late final BrowserHistoryManager _historyManager = BrowserHistoryManager(
+    resolveDatabase: () => Provider.of<DatabaseService>(context, listen: false),
+    isIncognito: () =>
+        Provider.of<SettingsProvider>(context, listen: false).incognitoEnabled,
+    cleanUrl: _cleanUrl,
+    isActive: () => mounted,
+  );
+  late final DownloadInterceptor _interceptor = DownloadInterceptor(
+    resolveDownloadProvider: () =>
+        Provider.of<DownloadProvider>(context, listen: false),
+    resolveActiveTab: () =>
+        (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length)
+        ? _tabs[_currentTabIndex]
+        : null,
+  );
   final ScrollController _dashboardScrollController = ScrollController();
-  final List<Timer> _pendingTimers = [];
+  List<Timer> get _pendingTimers => _tabManager.pendingTimers;
   Timer? _navDebounce;
 
   static const String _snifferPrefKey = 'browserSnifferEnabled';
@@ -242,170 +285,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 })();
 ''';
 
-
   // ─────────────────────────────────────────────────────────────
   // Tab persistence
   // ─────────────────────────────────────────────────────────────
-  Future<void> _saveTabs() async {
-    try {
-      // Only persist normal (non-incognito) tabs.
-      final normalTabs = _tabs.where((t) => !t.isIncognito).toList();
+  Future<void> _saveTabs() => _tabManager.saveTabs();
 
-      final tabsData = normalTabs.map((tab) => {
-        'url': tab.url,
-        'title': tab.title,
-        'isIncognito': false, // always false for persisted tabs
-      }).toList();
-
-      // Determine the active tab ID, but only if it's a normal tab.
-      final activeTab = _currentTabIndex >= 0 && _currentTabIndex < _tabs.length
-          ? _tabs[_currentTabIndex]
-          : null;
-      final String? activeTabId;
-      if (activeTab != null && !activeTab.isIncognito) {
-        activeTabId = activeTab.id;
-      } else if (normalTabs.isNotEmpty) {
-        activeTabId = normalTabs.last.id;
-      } else {
-        activeTabId = null;
-      }
-
-      final data = {
-        'tabs': tabsData,
-        'activeTabId': activeTabId,
-        'savedAt': DateTime.now().toIso8601String(),
-      };
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('browser_tabs', jsonEncode(data));
-    } catch (e) {
-      debugPrint('Failed to save tabs: $e');
-    }
-  }
-
-  Future<void> _restoreTabs() async {
-    if (!mounted) return;
-    // Try Drift first (new persistence path from _quitBrowser)
-    try {
-      final db = context.read<DatabaseService>();
-      final saved = await db.loadOpenTabs();
-      if (saved.isNotEmpty && mounted) {
-        await db.clearOpenTabs();
-        if (!mounted) return;
-        await _applyRestoredTabs(saved);
-        return;
-      }
-    } catch (e) {
-      debugPrint('[Browser] Drift restore failed, trying SharedPreferences: $e');
-    }
-    // Fall back to SharedPreferences (legacy persistence)
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? tabsJson = prefs.getString('browser_tabs');
-      if (tabsJson != null && tabsJson.isNotEmpty && mounted) {
-        final fallbackTitle = L10n.of(context, 'browser_new_tab');
-        final Map<String, dynamic> decodedData = jsonDecode(tabsJson);
-        final List<dynamic> decoded = decodedData['tabs'] as List<dynamic>? ?? [];
-        final String? activeTabId = decodedData['activeTabId'] as String?;
-        final List<BrowserTab> loadedTabs = [];
-        for (final item in decoded) {
-          if (item is Map<String, dynamic>) {
-            final url = item['url'] as String? ?? 'about:blank';
-            final title = item['title'] as String? ?? fallbackTitle;
-            final id = item['id'] as String?;
-            final isIncognito = item['isIncognito'] as bool? ?? false;
-            if (isIncognito) continue; // Skip any incognito tabs (defensive)
-            final uri = Uri.tryParse(url);
-            if (uri != null && url != 'about:blank' && url.isNotEmpty &&
-                uri.scheme != 'http' && uri.scheme != 'https') {
-              debugPrint('[Browser] Skipping unsafe restored URL: $url');
-              continue;
-            }
-            final tab = _createNewTab(initialUrl: url, isIncognito: false, id: id);
-            tab.title = title;
-            loadedTabs.add(tab);
-          }
-        }
-        if (loadedTabs.isNotEmpty && mounted) {
-          int activeIdx = 0;
-          if (activeTabId != null) {
-            final idx = loadedTabs.indexWhere((t) => t.id == activeTabId);
-            if (idx != -1) activeIdx = idx;
-          }
-          setState(() {
-            for (final oldTab in _tabs) {
-              _cleanupTabState(oldTab.id);
-            }
-            _tabs
-              ..clear()
-              ..addAll(loadedTabs);
-            _currentTabIndex = activeIdx;
-            _urlController.text =
-                _tabs[_currentTabIndex].isHome ? '' : _tabs[_currentTabIndex].url;
-          });
-          _updateNavState();
-          // Load saved URLs after platform views initialize
-          _loadRestoredTabs();
-          return;
-        }
-      }
-    } catch (e) {
-      debugPrint('[Browser] SharedPreferences restore failed: $e');
-    }
-    // Nothing to restore — create a single blank tab
-    if (!mounted) return;
-    final fallback = _createNewTab();
-    setState(() {
-      _tabs
-        ..clear()
-        ..add(fallback);
-      _currentTabIndex = 0;
-    });
-  }
-
-  Future<void> _applyRestoredTabs(List<SavedBrowserTab> saved) async {
-    for (final tab in _tabs) {
-      try { tab.progressNotifier.dispose(); } catch (_) {}
-    }
-    var activeIdx = 0;
-    final newTabs = <BrowserTab>[];
-    for (var i = 0; i < saved.length; i++) {
-      final row = saved[i];
-      final isBlank = row.url.isEmpty || row.url == 'about:blank';
-      final tab = _createNewTab(initialUrl: isBlank ? 'about:blank' : row.url);
-      if (row.title.isNotEmpty) tab.title = row.title;
-      newTabs.add(tab);
-      if (row.isActive) activeIdx = i;
-    }
-    if (!mounted) return;
-    setState(() {
-      _tabs
-        ..clear()
-        ..addAll(newTabs);
-      _currentTabIndex = activeIdx.clamp(0, _tabs.length - 1);
-      if (_tabs.isNotEmpty) {
-        _urlController.text = _tabs[_currentTabIndex].isHome ? '' : _tabs[_currentTabIndex].url;
-      }
-    });
-    _loadRestoredTabs();
-  }
-
-  void _loadRestoredTabs() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (!mounted) return;
-        for (final tab in _tabs) {
-          if (tab.url.isNotEmpty && !tab.isHome) {
-            try {
-              tab.controller.loadRequest(Uri.parse(tab.url));
-            } catch (e) {
-              debugPrint('[Browser] Restored tab load error: $e');
-            }
-          }
-        }
-      });
-    });
-  }
+  Future<void> _restoreTabs() => _tabManager.restoreTabs();
 
   @override
   void initState() {
@@ -440,7 +325,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     final cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank')
         ? 'about:blank'
         : initialUrl;
-    final tabId = id ??
+    final tabId =
+        id ??
         '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
     final controller = WebViewController();
     final tab = BrowserTab(
@@ -461,7 +347,9 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         _longPressChannel,
         onMessageReceived: (msg) => _handleLongPressMessageForTab(tab, msg),
       )
-      ..setUserAgent(_resolveUserAgent(isIncognito: tab.isIncognito, settings: settings))
+      ..setUserAgent(
+        _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
+      )
       ..enableZoom(settings.desktopMode || settings.pinchToZoom)
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -501,9 +389,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
               downloadProvider.setNavbarVisible(true);
             }
             _injectTimerSpeedScript(tab);
-            if (_adBlocker.isEnabled) {
-              tab.controller.runJavaScript(_adBlocker.earlyJs).catchError((_) {});
-            }
+            _adBlocker.injectEarly(tab);
             _injectLongPressScriptToTab(tab);
             _injectCustomJsCss(tab);
             _injectDesktopModeScript(tab, settings);
@@ -512,9 +398,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
           },
           onPageFinished: (url) {
             _injectDesktopModeScript(tab, settings);
-            if (_adBlocker.isEnabled) {
-              _injectAdBlocker(tab);
-            }
+            _adBlocker.injectInto(tab);
             if (mounted) {
               setState(() {
                 tab.isLoading = false;
@@ -582,9 +466,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _delayed(const Duration(milliseconds: 1200), _updateNavState);
             _mediaScanTimers[tab.id]?.cancel();
             if (!_isYoutubeHost(tab.url)) {
-              _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
-                _scanPageMedia(tab);
-              });
+              _mediaScanTimers[tab.id] = Timer(
+                const Duration(milliseconds: 1500),
+                () {
+                  _scanPageMedia(tab);
+                },
+              );
             }
           },
           onProgress: (progress) {
@@ -611,9 +498,12 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                 _ytDetectionFailed.remove(tab.url);
                 _mediaScanTimers[tab.id]?.cancel();
                 if (!_isYoutubeHost(tab.url)) {
-                  _mediaScanTimers[tab.id] = Timer(const Duration(milliseconds: 1500), () {
-                    _scanPageMedia(tab);
-                  });
+                  _mediaScanTimers[tab.id] = Timer(
+                    const Duration(milliseconds: 1500),
+                    () {
+                      _scanPageMedia(tab);
+                    },
+                  );
                 }
                 _delayed(const Duration(milliseconds: 1000), () {
                   if (mounted) {
@@ -633,16 +523,17 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             }
           },
           onNavigationRequest: (NavigationRequest request) {
-            if (_adBlocker.isEnabled && _adBlocker.shouldBlockUrl(request.url)) {
+            if (_adBlocker.shouldBlock(request.url)) {
               debugPrint('[AdBlocker] Blocked: ${request.url}');
               return NavigationDecision.prevent;
             }
-            if (_bypassedSniffUrls.contains(request.url)) {
-              _bypassedSniffUrls.remove(request.url);
+            if (_interceptor.consumeBypass(request.url)) {
               return NavigationDecision.navigate;
             }
-            if (!_isYoutubeHost(tab.url) &&
-                BrowserDetector.isAutoDownloadable(request.url)) {
+            if (_interceptor.shouldIntercept(
+              tabUrl: tab.url,
+              requestUrl: request.url,
+            )) {
               setState(() {
                 _detectedDownloadUrls[tab.id] = request.url;
               });
@@ -665,55 +556,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     return tab;
   }
 
-  void _recordHistory(String url, {String? title}) {
-    if (url.isEmpty || url == 'about:blank') return;
-    final clean = _cleanUrl(url);
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    if (settings.incognitoEnabled) return;
-    final now = DateTime.now();
-    if (clean == _lastHistoryEntryUrl) {
-      if (title != null && title.isNotEmpty && title != clean) {
-        if (_lastHistoryEntryId != null) {
-          try {
-            final db = Provider.of<DatabaseService>(context, listen: false);
-            db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
-          } catch (e) {
-            debugPrint(
-              '[DMX Browser] Failed to update browser history title: $e',
-            );
-          }
-        } else {
-          _pendingTitleUpdate = title;
-        }
-      }
-      return;
-    }
-    _lastHistoryEntryUrl = clean;
-    _lastHistoryEntryId = null;
-    _pendingTitleUpdate = title;
-    try {
-      final db = Provider.of<DatabaseService>(context, listen: false);
-      db
-          .addBrowserHistory({
-            'url': clean,
-            'title': (title != null && title.isNotEmpty) ? title : clean,
-            'visitedAt': now.toIso8601String(),
-          })
-          .then((id) {
-            if (!mounted) return;
-            if (clean == _lastHistoryEntryUrl && id > 0) {
-              _lastHistoryEntryId = id;
-              if (_pendingTitleUpdate != null &&
-                  _pendingTitleUpdate!.isNotEmpty &&
-                  _pendingTitleUpdate != clean) {
-                db.updateBrowserHistoryTitle(id, _pendingTitleUpdate!);
-              }
-            }
-          });
-    } catch (e) {
-      debugPrint('[DMX Browser] Failed to add browser history: $e');
-    }
-  }
+  void _recordHistory(String url, {String? title}) =>
+      _historyManager.recordHistory(url, title: title);
 
   // Domains where injecting the timer-speed and long-press scripts is safe.
   // Restricting to media-heavy sites prevents breaking banking, auth, and
@@ -742,14 +586,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     return _kMediaDomains.any((d) => host.contains(d));
   }
 
-  static bool _isYoutubeHost(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return false;
-    final host = uri.host.toLowerCase();
-    return host == 'youtube.com' ||
-        host.endsWith('.youtube.com') ||
-        host == 'youtu.be';
-  }
+  static bool _isYoutubeHost(String url) => MediaSniffer.isYoutubeHost(url);
 
   Future<void> _injectTimerSpeedScript(BrowserTab tab) async {
     if (!mounted) return;
@@ -777,18 +614,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   /// Removes all per-tab state when a tab is closed or navigated away.
   /// Call this from every tab-close path to prevent unbounded map growth.
-  void _cleanupTabState(String tabId) {
-    _mediaScanTimers[tabId]?.cancel();
-    _mediaScanTimers.remove(tabId);
-    _detectedDownloadUrls.remove(tabId);
-    _detectedMediaSources.remove(tabId);
-    _detectedPlaylistUrls.remove(tabId);
-    _lastYoutubeAuthTimes.remove(tabId);
-    _mediaScanFailed.remove(tabId);
-    // Evict expired entries older than 10 minutes
-    final now = DateTime.now();
-    _ytDetectionFailed.removeWhere((url, timestamp) => now.difference(timestamp) > const Duration(minutes: 10));
-  }
+  void _cleanupTabState(String tabId) => _sniffer.cleanupTab(tabId);
 
   static const _desktopUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -811,7 +637,10 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     return _mobileUserAgent;
   }
 
-  Future<void> _applyUserAgent(BrowserTab tab, SettingsProvider settings) async {
+  Future<void> _applyUserAgent(
+    BrowserTab tab,
+    SettingsProvider settings,
+  ) async {
     try {
       await tab.controller.setUserAgent(
         _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
@@ -827,29 +656,6 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       tab.controller.runJavaScript(_kDesktopModeScript);
     } catch (e) {
       debugPrint('[DMX Browser] Error injecting desktop script: $e');
-    }
-  }
-
-  void _injectAdBlocker(BrowserTab tab) {
-    final url = tab.url;
-
-    final cssJson = jsonEncode(_adBlocker.cssRules);
-    tab.controller.runJavaScript('''
-      (function() {
-        var s = document.getElementById('xdm-adblock-css');
-        if (!s) {
-          s = document.createElement('style');
-          s.id = 'xdm-adblock-css';
-          document.head.appendChild(s);
-        }
-        s.textContent = $cssJson;
-      })();
-    ''').catchError((_) {});
-
-    tab.controller.runJavaScript(_adBlocker.lateJs).catchError((_) {});
-
-    if (AdBlockerService.isYoutubePage(url)) {
-      tab.controller.runJavaScript(_adBlocker.youtubeJs).catchError((_) {});
     }
   }
 
@@ -910,14 +716,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     }
   }
 
-  void _delayed(Duration duration, VoidCallback callback) {
-    late Timer timer;
-    timer = Timer(duration, () {
-      _pendingTimers.remove(timer);
-      callback();
-    });
-    _pendingTimers.add(timer);
-  }
+  void _delayed(Duration duration, VoidCallback callback) =>
+      _tabManager.delayed(duration, callback);
 
   @override
   void dispose() {
@@ -1267,16 +1067,24 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             message: settings.desktopMode
                 ? L10n.of(context, 'browser_desktop_mode_reload')
                 : L10n.of(context, 'browser_mobile_mode_reload'),
-            color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-            icon: settings.desktopMode ? Icons.desktop_windows : Icons.phone_android,
+            color: settings.isDarkMode
+                ? AppTheme.neonBlue
+                : AppTheme.lightNeonBlue,
+            icon: settings.desktopMode
+                ? Icons.desktop_windows
+                : Icons.phone_android,
             isDarkMode: settings.isDarkMode,
           );
-          await Future.wait(_tabs.map((t) async {
-            await _applyUserAgent(t, settings);
-            try {
-              await t.controller.enableZoom(settings.desktopMode || settings.pinchToZoom);
-            } catch (_) {}
-          }));
+          await Future.wait(
+            _tabs.map((t) async {
+              await _applyUserAgent(t, settings);
+              try {
+                await t.controller.enableZoom(
+                  settings.desktopMode || settings.pinchToZoom,
+                );
+              } catch (_) {}
+            }),
+          );
           for (final t in _tabs) {
             if (!t.isHome) {
               try {
@@ -1305,7 +1113,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
         }
         break;
       case 'adblocker':
-        await _adBlocker.setEnabled(!_adBlocker.isEnabled);
+        await _adBlocker.toggle();
         if (mounted) {
           ThemedSnackbar.show(
             context,
@@ -1572,7 +1380,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                                   if (_currentTabIndex >= 0 &&
                                       _currentTabIndex < _tabs.length) {
                                     final activeTab = _tabs[_currentTabIndex];
-                                    _bypassedSniffUrls.add(downloadUrl);
+                                    _interceptor.addBypass(downloadUrl);
                                     activeTab.controller.loadRequest(
                                       Uri.parse(downloadUrl),
                                     );
@@ -1615,162 +1423,8 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   }
 
   // DOM Page Media Scanner
-  Future<void> _scanPageMedia(BrowserTab tab) async {
-    if (!mounted || !_tabs.contains(tab) || tab.isHome || !_isSnifferEnabled) {
-      return;
-    }
-    _mediaScanFailed.remove(tab.id);
-    if (_isYoutubeHost(tab.url)) return;
-    final scannedUrl = tab.url;
-    final activeIds = _tabs.map((t) => t.id).toSet();
-    final staleKeys = _detectedMediaSources.keys
-        .where((key) => !activeIds.contains(key))
-        .toList();
-    for (final key in staleKeys) {
-      _detectedMediaSources.remove(key);
-    }
-    if (YoutubeService.isPlaylistUrl(scannedUrl)) {
-      try {
-        final info = await YoutubeService.getPlaylistInfo(scannedUrl);
-        if (info != null && mounted && tab.url == scannedUrl) {
-          final count = info['videoCount'] as int? ?? 0;
-          setState(() {
-            _detectedPlaylistUrls[tab.id] = count;
-            _detectedDownloadUrls[tab.id] = scannedUrl;
-          });
-        }
-      } catch (e) {
-        debugPrint('YouTube playlist scan error: $e');
-      }
-      if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
-        try {
-          final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
-          if (youtubeStreams.isNotEmpty && mounted && tab.url == scannedUrl) {
-            setState(() {
-              _detectedMediaSources[tab.id] = youtubeStreams;
-            });
-          }
-        } catch (e) {
-          debugPrint('YouTube single stream scan error after playlist: $e');
-        }
-      }
-      return;
-    }
-    if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
-      try {
-        final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
-        if (youtubeStreams.isNotEmpty && mounted && tab.url == scannedUrl) {
-          setState(() {
-            _detectedMediaSources[tab.id] = youtubeStreams;
-            _ytDetectionFailed.remove(scannedUrl);
-            if (_detectedDownloadUrls[tab.id] == null) {
-              _detectedDownloadUrls[tab.id] = youtubeStreams.first['src'];
-            }
-          });
-          return;
-        }
-      } catch (e) {
-        debugPrint('YouTube stream detection error: $e');
-      }
-      if (mounted && tab.url == scannedUrl) {
-        setState(() {
-          _ytDetectionFailed.remove(scannedUrl);
-          if (_ytDetectionFailed.length >= 200) {
-            final oldestKey = _ytDetectionFailed.entries
-                .reduce((a, b) => a.value.isBefore(b.value) ? a : b)
-                .key;
-            _ytDetectionFailed.remove(oldestKey);
-          }
-          _ytDetectionFailed[scannedUrl] = DateTime.now();
-        });
-      }
-    }
-    try {
-      final result = await tab.controller.runJavaScriptReturningResult('''
-(function() {
-  var sources = [];
-  var videos = document.getElementsByTagName('video');
-  for (var i = 0; i < videos.length; i++) {
-    var v = videos[i];
-    if (v.src && v.src.trim() !== '' && !v.src.startsWith('blob:')) {
-      sources.push({ src: v.src, label: 'Video Stream (Default)' });
-    }
-    var childSources = v.getElementsByTagName('source');
-    for (var j = 0; j < childSources.length; j++) {
-      var s = childSources[j];
-      if (s.src && s.src.trim() !== '' && !s.src.startsWith('blob:')) {
-        var label = s.getAttribute('label') || s.getAttribute('res') || s.getAttribute('type') || ('Resolution ' + (j + 1));
-        sources.push({ src: s.src, label: label });
-      }
-    }
-    var poster = v.getAttribute('poster');
-    if (poster && poster.trim() !== '') {
-      sources.push({ src: poster, label: 'Video Poster Image' });
-    }
-  }
-  var audios = document.getElementsByTagName('audio');
-  for (var i = 0; i < audios.length; i++) {
-    var a = audios[i];
-    if (a.src && a.src.trim() !== '' && !a.src.startsWith('blob:')) {
-      sources.push({ src: a.src, label: 'Audio Stream' });
-    }
-  }
-  var lazyVideos = document.querySelectorAll('[data-src],[data-video-src]');
-  for (var i = 0; i < lazyVideos.length; i++) {
-    var src = lazyVideos[i].getAttribute('data-src') || lazyVideos[i].getAttribute('data-video-src');
-    if (src && src.trim() !== '' && !src.startsWith('blob:') && (src.includes('.mp4') || src.includes('.webm') || src.includes('.m3u8'))) {
-      sources.push({ src: src, label: 'Lazy-Loaded Video' });
-    }
-  }
-  var iframes = document.getElementsByTagName('iframe');
-  for (var i = 0; i < iframes.length; i++) {
-    var src = iframes[i].src;
-    if (src && src.trim() !== '') {
-      if (src.includes('youtube.com/embed/') || src.includes('player.vimeo.com/video/') || src.includes('.mp4') || src.includes('.m3u8')) {
-        sources.push({ src: src, label: 'Embedded Video' });
-      }
-    }
-  }
-  return JSON.stringify(sources);
-})();
-''');
-      if (result is String && result.isNotEmpty && result != 'null') {
-        var cleanResult = result;
-        if (cleanResult.startsWith('"') && cleanResult.endsWith('"')) {
-          try {
-            cleanResult = jsonDecode(cleanResult);
-          } catch (_) {
-            if (cleanResult.length > 2) {
-              cleanResult = cleanResult.substring(1, cleanResult.length - 1);
-            }
-          }
-        }
-        final List<dynamic> parsed = jsonDecode(cleanResult);
-        final safeSources = parsed.where((e) {
-          final src = (e as Map)['src'] as String? ?? '';
-          final uri = Uri.tryParse(src);
-          return uri != null &&
-              (uri.scheme == 'http' || uri.scheme == 'https') &&
-              uri.host.isNotEmpty;
-        }).map((e) => e as Map).toList();
-        if (safeSources.isNotEmpty) {
-          setState(() {
-            _detectedMediaSources[tab.id] = safeSources
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList();
-            if (_detectedDownloadUrls[tab.id] == null) {
-              _detectedDownloadUrls[tab.id] = safeSources.first['src'] as String;
-            }
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('[DMX Browser] Failed to run media scan JavaScript: $e');
-      setState(() {
-        _mediaScanFailed[tab.id] = true;
-      });
-    }
-  }
+  Future<void> _scanPageMedia(BrowserTab tab) =>
+      _sniffer.scanPageMedia(tab, tabs: _tabs);
 
   void _showQualityPicker(String tabId, {String? fallbackUrl}) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
@@ -3678,7 +3332,9 @@ $_customJs
                                 ),
                                 _menuItem(
                                   Icons.exit_to_app_rounded,
-                                  L10n.isRtl(context) ? 'إنهاء المتصفح' : 'Quit browser',
+                                  L10n.isRtl(context)
+                                      ? 'إنهاء المتصفح'
+                                      : 'Quit browser',
                                   'quit',
                                   textClr,
                                 ),
@@ -4147,22 +3803,24 @@ $_customJs
     int? videoSize,
     int? audioSize,
   }) async {
-    final downloadProvider = Provider.of<DownloadProvider>(
-      context,
-      listen: false,
-    );
     final settingsProvider = Provider.of<SettingsProvider>(
       context,
       listen: false,
     );
     final isRtl = L10n.isRtl(context);
     final isDark = settingsProvider.isDarkMode;
-    final existingTasks = downloadProvider.tasks
-        .where((t) => t.url == url)
-        .toList();
-    if (existingTasks.isNotEmpty) {
-      final existingTask = existingTasks.first;
-      if (existingTask.status == DownloadStatus.completed) {
+    final result = await _interceptor.startDirectDownload(
+      url,
+      suggestedName: suggestedName,
+      type: type,
+      downloadPageUrl: downloadPageUrl,
+      audioUrl: audioUrl,
+      videoSize: videoSize,
+      audioSize: audioSize,
+    );
+    if (!mounted) return;
+    switch (result.status) {
+      case InterceptDownloadStatus.alreadyCompleted:
         ThemedSnackbar.show(
           context,
           message: isRtl
@@ -4172,8 +3830,7 @@ $_customJs
           icon: Icons.check_circle_outline,
           isDarkMode: isDark,
         );
-      } else if (existingTask.status == DownloadStatus.downloading ||
-          existingTask.status == DownloadStatus.queued) {
+      case InterceptDownloadStatus.alreadyInProgress:
         ThemedSnackbar.show(
           context,
           message: isRtl
@@ -4183,8 +3840,7 @@ $_customJs
           icon: Icons.info_outline,
           isDarkMode: isDark,
         );
-      } else {
-        downloadProvider.resumeTask(existingTask.id);
+      case InterceptDownloadStatus.resumed:
         ThemedSnackbar.show(
           context,
           message: isRtl ? 'تم استئناف التنزيل' : 'Download resumed.',
@@ -4192,85 +3848,26 @@ $_customJs
           icon: Icons.play_arrow,
           isDarkMode: isDark,
         );
-      }
-      return;
-    }
-    String finalFileName = suggestedName ?? '';
-    if (finalFileName.isEmpty) {
-      if (url.startsWith('magnet:')) {
-        final parsed = parseMagnetUrl(url);
-        finalFileName = parsed['name'] ?? 'Torrent download';
-      } else {
-        finalFileName = fileNameFromUrl(url);
-      }
-    }
-    String numberedName = finalFileName;
-    final ext = p.extension(finalFileName);
-    final base = p.basenameWithoutExtension(finalFileName);
-    var counter = 1;
-    while (downloadProvider.tasks.any(
-      (t) => t.fileName.toLowerCase() == numberedName.toLowerCase(),
-    )) {
-      numberedName = '${base}_$counter$ext';
-      counter++;
-    }
-    finalFileName = numberedName;
-    String resolvedCategory = '';
-    if (type == 'video') {
-      resolvedCategory = 'Video';
-    } else if (type == 'audio') {
-      resolvedCategory = 'Audio';
-    } else if (type == 'image') {
-      resolvedCategory = 'Image';
-    } else {
-      resolvedCategory = categoryFromFileName(finalFileName);
-    }
-    try {
-      if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
-      final activeTab = _tabs[_currentTabIndex];
-      final resolvedOriginUrl =
-          downloadPageUrl ?? (activeTab.isHome ? null : activeTab.url);
-      await downloadProvider.addDownload(
-        name: finalFileName,
-        url: url,
-        size: videoSize ?? 0,
-        category: resolvedCategory,
-        savePath: '',
-        downloadPageUrl: resolvedOriginUrl,
-        mergedAudioUrl: audioUrl,
-        audioSize: audioSize ?? 0,
-      );
-      if (mounted) {
-        if (downloadProvider.lastError != null) {
-          ThemedSnackbar.show(
-            context,
-            message: downloadProvider.lastError!,
-            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-            icon: Icons.error_outline,
-            isDarkMode: isDark,
-          );
-        } else {
-          ThemedSnackbar.show(
-            context,
-            message: isRtl
-                ? 'تم إنشاء الاتصال. القنوات متصلة.'
-                : 'Download queued successfully.',
-            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-            icon: Icons.rocket_launch_outlined,
-            isDarkMode: isDark,
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
+      case InterceptDownloadStatus.queued:
         ThemedSnackbar.show(
           context,
-          message: e.toString(),
+          message: isRtl
+              ? 'تم إنشاء الاتصال. القنوات متصلة.'
+              : 'Download queued successfully.',
+          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          icon: Icons.rocket_launch_outlined,
+          isDarkMode: isDark,
+        );
+      case InterceptDownloadStatus.failed:
+        ThemedSnackbar.show(
+          context,
+          message: result.errorMessage ?? 'Download failed.',
           color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
           icon: Icons.error_outline,
           isDarkMode: isDark,
         );
-      }
+      case InterceptDownloadStatus.skipped:
+        break;
     }
   }
 
@@ -4284,14 +3881,16 @@ $_customJs
       for (var i = 0; i < _tabs.length; i++) {
         final t = _tabs[i];
         if (t.isIncognito) continue;
-        persistable.add(SavedBrowserTab(
-          id: t.id,
-          url: t.url.isNotEmpty ? t.url : 'about:blank',
-          title: t.title,
-          isActive: i == _currentTabIndex,
-          position: position++,
-          createdAt: DateTime.now().millisecondsSinceEpoch,
-        ));
+        persistable.add(
+          SavedBrowserTab(
+            id: t.id,
+            url: t.url.isNotEmpty ? t.url : 'about:blank',
+            title: t.title,
+            isActive: i == _currentTabIndex,
+            position: position++,
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
       }
       await context.read<DatabaseService>().saveOpenTabs(persistable);
       _quitPersisted = true;
@@ -4310,9 +3909,13 @@ $_customJs
   }
 
   void _teardownBrowserServices() {
-    for (final timer in _pendingTimers) { timer.cancel(); }
+    for (final timer in _pendingTimers) {
+      timer.cancel();
+    }
     _pendingTimers.clear();
-    for (final timer in _mediaScanTimers.values) { timer.cancel(); }
+    for (final timer in _mediaScanTimers.values) {
+      timer.cancel();
+    }
     _mediaScanTimers.clear();
     _detectedDownloadUrls.clear();
     _detectedPlaylistUrls.clear();
@@ -4320,7 +3923,9 @@ $_customJs
     _ytDetectionFailed.clear();
     _lastYoutubeAuthTimes.clear();
     for (final tab in _tabs) {
-      try { tab.progressNotifier.dispose(); } catch (_) {}
+      try {
+        tab.progressNotifier.dispose();
+      } catch (_) {}
     }
     _tabs.clear();
     _currentTabIndex = 0;

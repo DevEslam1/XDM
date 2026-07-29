@@ -88,7 +88,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _sendBrowserCookiesToBackendKey = 'send_browser_cookies_to_backend';
 
 
-  late final SharedPreferences _prefs;
+  // Not `final`: [load] may run more than once on the singleton (e.g. in
+  // tests where each case re-loads settings with fresh mock values).
+  late SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();
 
   bool autoStart = true;
