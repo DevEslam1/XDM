@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -103,9 +104,6 @@ class PermissionService {
     if (!kIsWeb && Platform.isAndroid) {
       final sdk = await _androidSdkLevel();
 
-      // TODO(scoped-storage): For true public Downloads visibility on Android 11+,
-      // implement a platform channel using MediaStore.Downloads API.
-      // For now, use app-specific external storage to prevent EACCES crashes.
       if (sdk >= 30) {
         try {
           final extDirs = await getExternalStorageDirectories(
@@ -169,30 +167,32 @@ class PermissionService {
     return pth;
   }
 
-  // TODO(mediastore): On Android 11+ (API 30+) [defaultDownloadDirectory]
-  // resolves to app-specific external storage or the app documents directory.
-  // Both are INVISIBLE to the system Gallery / Files apps, so downloaded media
-  // never shows up for the user. To make media (video/audio/image) publicly
-  // visible, add a MethodChannel (e.g. 'dmx/mediastore') whose Android side
-  // inserts the file via the MediaStore.Downloads (or MediaStore.Video/Audio/
-  // Images) API using ContentResolver.insert(...) and returns the resulting
-  // content:// URI (or an openable file descriptor to stream bytes into).
-  // Wire that channel into [getMediaStorePath] below and have download save
-  // logic prefer it over [defaultDownloadDirectory] for media MIME types.
-  //
-  /// Returns a MediaStore-backed public path/URI for [fileName] with the given
-  /// [mimeType] (e.g. `video/mp4`), making the file visible in the system
-  /// Gallery. Returns `null` when unavailable — non-Android, SDK < 29, or the
-  /// native platform channel is not yet implemented. Callers MUST fall back to
-  /// [defaultDownloadDirectory] when this returns `null`.
-  Future<String?> getMediaStorePath(String fileName, String mimeType) async {
-    if (kIsWeb || !Platform.isAndroid) return null;
-    final sdk = await _androidSdkLevel();
-    if (sdk < 29) return null;
-    // TODO(mediastore): Invoke the native MediaStore.Downloads platform channel
-    // here and return the inserted content:// URI. Returning null for now so
-    // callers keep using the app-specific storage fallback.
-    return null;
+  /// Inserts a completed download into the system MediaStore.Downloads
+  /// collection so it becomes visible in the system Files / Downloads apps.
+  ///
+  /// Fire-and-forget: the Kotlin side copies the file internally and returns
+  /// immediately. No result is surfaced back to Dart.
+  /// Silently no-ops on non-Android, web, or SDK < 29.
+  void insertIntoMediaStore(
+    String fileName,
+    String mimeType,
+    String sourcePath,
+  ) {
+    if (kIsWeb || !Platform.isAndroid) return;
+    () async {
+      final sdk = await _androidSdkLevel();
+      if (sdk < 29) return;
+      try {
+        const channel = MethodChannel('com.example.dmx/media');
+        await channel.invokeMethod<void>('insertDownload', {
+          'fileName': fileName,
+          'mimeType': mimeType,
+          'sourcePath': sourcePath,
+        });
+      } catch (e) {
+        debugPrint('[PermissionService] MediaStore insertion failed: $e');
+      }
+    }();
   }
 
   Future<bool> ensureStorageAccess() async {

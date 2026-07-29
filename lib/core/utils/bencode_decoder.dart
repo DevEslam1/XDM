@@ -33,7 +33,8 @@ class BencodeDecoder {
   int _decodeInt() {
     _offset++; // skip 'i'
     final start = _offset;
-    while (_offset < _data.length && _data[_offset] != 101) { // 'e'
+    while (_offset < _data.length && _data[_offset] != 101) {
+      // 'e'
       _offset++;
     }
     if (_offset >= _data.length) {
@@ -43,12 +44,15 @@ class BencodeDecoder {
     _offset++; // skip 'e'
 
     if (numStr.isEmpty) throw const FormatException('Empty bencode integer');
-    if (numStr == '-0') throw const FormatException('Negative zero is invalid bencode');
+    if (numStr == '-0')
+      throw const FormatException('Negative zero is invalid bencode');
     if (numStr.length > 1 && numStr.startsWith('0')) {
       throw const FormatException('Leading zero in bencode integer');
     }
     if (numStr.length > 1 && numStr.startsWith('-0')) {
-      throw const FormatException('Leading zero after minus in bencode integer');
+      throw const FormatException(
+        'Leading zero after minus in bencode integer',
+      );
     }
 
     final big = BigInt.tryParse(numStr);
@@ -64,7 +68,8 @@ class BencodeDecoder {
 
   Uint8List _decodeBytes() {
     final start = _offset;
-    while (_offset < _data.length && _data[_offset] != 58) { // ':'
+    while (_offset < _data.length && _data[_offset] != 58) {
+      // ':'
       _offset++;
     }
     if (_offset >= _data.length) {
@@ -76,7 +81,7 @@ class BencodeDecoder {
       throw const FormatException('Negative bencode string length');
     }
     _offset++; // skip ':'
-    
+
     if (_offset + len > _data.length) {
       throw const FormatException('Bencode string length exceeds data size');
     }
@@ -88,7 +93,8 @@ class BencodeDecoder {
   List<dynamic> _decodeList(int depth) {
     _offset++; // skip 'l'
     final list = <dynamic>[];
-    while (_offset < _data.length && _data[_offset] != 101) { // 'e'
+    while (_offset < _data.length && _data[_offset] != 101) {
+      // 'e'
       list.add(_decodeWithDepth(depth));
     }
     if (_offset >= _data.length) {
@@ -101,10 +107,11 @@ class BencodeDecoder {
   Map<String, dynamic> _decodeDict(int depth) {
     _offset++; // skip 'd'
     final map = <String, dynamic>{};
-    while (_offset < _data.length && _data[_offset] != 101) { // 'e'
+    while (_offset < _data.length && _data[_offset] != 101) {
+      // 'e'
       final keyBytes = _decodeBytes();
       final key = utf8.decode(keyBytes, allowMalformed: true);
-      
+
       // If the key is 'info', we want to capture the raw bytes of the info dictionary for info hash computation
       if (key == 'info') {
         final infoStart = _offset;
@@ -140,7 +147,9 @@ class BencodeDecoder {
       return obj.map((e) => toNormalTypes(e, null)).toList();
     } else if (obj is Map) {
       return obj.map((k, v) {
-        final keyStr = k is Uint8List ? utf8.decode(k, allowMalformed: true) : k.toString();
+        final keyStr = k is Uint8List
+            ? utf8.decode(k, allowMalformed: true)
+            : k.toString();
         return MapEntry(keyStr, toNormalTypes(v, keyStr));
       });
     }
@@ -178,21 +187,17 @@ class BencodeDecoder {
               totalLength += length;
               final rawPath = f['path.utf-8'] ?? f['path'];
               final pathSegments = (rawPath is List ? rawPath : <dynamic>[]);
-              final pathList = pathSegments.map((s) => s is Uint8List ? utf8.decode(s) : s.toString()).toList();
-              filesList.add({
-                'name': pathList.join('/'),
-                'length': length,
-              });
+              final pathList = pathSegments
+                  .map((s) => s is Uint8List ? utf8.decode(s) : s.toString())
+                  .toList();
+              filesList.add({'name': pathList.join('/'), 'length': length});
             }
           }
         }
       } else {
         // Single file torrent
         totalLength = info['length'] as int? ?? 0;
-        filesList.add({
-          'name': name,
-          'length': totalLength,
-        });
+        filesList.add({'name': name, 'length': totalLength});
       }
 
       // Compute info hash
@@ -214,10 +219,3 @@ class BencodeDecoder {
     }
   }
 }
-
-// TODO (tests): Add unit tests for BencodeDecoder (tracked as GitHub issue)
-//   - decodeInt: valid, negative zero, leading zero, out of range
-//   - decodeBytes: zero-length, exceed data
-//   - decodeList/decodeDict: nesting depth limit, unterminated
-//   - parseTorrentBytes: single-file, multi-file, corrupt data
-//   - toNormalTypes: binary keys preserved, utf8 conversion

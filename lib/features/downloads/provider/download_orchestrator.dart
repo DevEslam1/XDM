@@ -457,6 +457,12 @@ class DownloadOrchestrator {
 
     final finalPath = p.join(current.savePath, current.fileName);
     if (Platform.isAndroid && finalPath.isNotEmpty) {
+      final mimeType = _mimeTypeFromExtension(p.extension(current.fileName));
+      PermissionService().insertIntoMediaStore(
+        current.fileName,
+        mimeType,
+        finalPath,
+      );
       try {
         _mediaChannel.invokeMethod('scanMedia', {'path': finalPath});
       } catch (e) {
@@ -1506,6 +1512,54 @@ class DownloadOrchestrator {
           )
           .key;
       _cookieCache.remove(oldest);
+    }
+  }
+
+  /// Maps common file extensions to MIME types for MediaStore insertion.
+  static String _mimeTypeFromExtension(String ext) {
+    switch (ext.toLowerCase()) {
+      case '.mp4':
+        return 'video/mp4';
+      case '.mkv':
+        return 'video/x-matroska';
+      case '.webm':
+        return 'video/webm';
+      case '.avi':
+        return 'video/x-msvideo';
+      case '.mov':
+        return 'video/quicktime';
+      case '.mp3':
+        return 'audio/mpeg';
+      case '.m4a':
+        return 'audio/mp4';
+      case '.ogg':
+      case '.opus':
+        return 'audio/ogg';
+      case '.wav':
+        return 'audio/wav';
+      case '.flac':
+        return 'audio/flac';
+      case '.pdf':
+        return 'application/pdf';
+      case '.zip':
+        return 'application/zip';
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.gif':
+        return 'image/gif';
+      case '.webp':
+        return 'image/webp';
+      case '.doc':
+        return 'application/msword';
+      case '.docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case '.apk':
+        return 'application/vnd.android.package-archive';
+      default:
+        return 'application/octet-stream';
     }
   }
 

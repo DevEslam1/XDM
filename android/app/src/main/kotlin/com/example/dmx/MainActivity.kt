@@ -4,11 +4,15 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ContentValues
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
+import android.util.Log
 import android.view.WindowManager
+import java.io.File
 import java.util.concurrent.Executors
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
@@ -70,6 +74,47 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 } else {
                     result.error("INVALID_PATH", "Path cannot be null", null)
+                }
+            } else if (call.method == "insertDownload") {
+                val fileName = call.argument<String>("fileName")
+                val mimeType = call.argument<String>("mimeType")
+                val sourcePath = call.argument<String>("sourcePath")
+                if (fileName.isNullOrBlank() || mimeType.isNullOrBlank() || sourcePath.isNullOrBlank()) {
+                    result.error("INVALID_ARGS", "fileName, mimeType, and sourcePath are required", null)
+                    return@setMethodCallHandler
+                }
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    result.success(null)
+                    return@setMethodCallHandler
+                }
+                backgroundExecutor.execute {
+                    try {
+                        val resolver = contentResolver
+                        val values = ContentValues().apply {
+                            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                            put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                            put(MediaStore.Downloads.IS_PENDING, 1)
+                        }
+                        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                        val uri = resolver.insert(collection, values)
+                        if (uri == null) {
+                            runOnUiThread { result.success(null) }
+                            return@execute
+                        }
+                        val sourceFile = File(sourcePath)
+                        resolver.openOutputStream(uri)?.use { output ->
+                            sourceFile.inputStream().use { input ->
+                                input.copyTo(output)
+                            }
+                        }
+                        values.clear()
+                        values.put(MediaStore.Downloads.IS_PENDING, 0)
+                        resolver.update(uri, values, null, null)
+                        runOnUiThread { result.success(uri.toString()) }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "insertDownload failed", e)
+                        runOnUiThread { result.success(null) }
+                    }
                 }
             } else {
                 result.notImplemented()
