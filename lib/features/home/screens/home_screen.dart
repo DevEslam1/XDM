@@ -318,6 +318,7 @@ class _HomeScreenState extends State<HomeScreen>
     return Selector<DownloadProvider, List<DownloadTask>>(
       selector: (_, p) => p.filteredTasks,
       builder: (context, allTasks, _) {
+        // FIX: per-segment count
         final activeCount = allTasks.where((t) {
           final isSeeding =
               t.status == DownloadStatus.completed &&

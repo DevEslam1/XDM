@@ -57,9 +57,9 @@ dependencies:
 
 
 dependency_overrides:
-  # ⚠️ REQUIRED: The `packages/webview_cookie_manager/` directory must exist.
-  # If missing, run: git submodule update --init
-  # or copy the patched plugin from the team shared drive.
+  # webview_cookie_manager 2.0.6 on pub.dev still uses the removed v1
+  # embedding API (PluginRegistry.Registrar) and fails to compile on
+  # current Flutter. Use the local patched copy (v2 FlutterPlugin embedding).
   webview_cookie_manager:
     path: packages/webview_cookie_manager
 
