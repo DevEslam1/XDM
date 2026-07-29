@@ -459,38 +459,61 @@ class DownloadOrchestrator {
 
     final finalPath = p.join(current.savePath, current.fileName);
     if (Platform.isAndroid && finalPath.isNotEmpty) {
-      final isMultiFileTorrent =
-          current.isTorrent && Directory(finalPath).existsSync();
-      if (isMultiFileTorrent) {
+      if (current.isTorrent && Directory(finalPath).existsSync()) {
         // Multi-file torrent: finalPath is a directory — insert each file.
         final torrentDir = Directory(finalPath);
-        if (await torrentDir.exists()) {
-          await for (final entity in torrentDir.list(recursive: true)) {
-            if (entity is! File) continue;
-            final ext = p.extension(entity.path);
-            // Skip non-downloadable metadata files (e.g. .txt).
-            if (ext == '.txt') continue;
-            final mimeType = _mimeTypeFromExtension(ext);
-            final mediaResult = await PermissionService().insertIntoMediaStore(
-              p.basename(entity.path),
-              mimeType,
-              entity.path,
-            );
-            if (mediaResult == null) {
-              try {
-                unawaited(
-                  _mediaChannel.invokeMethod('scanMedia', {
-                    'path': entity.path,
-                  }),
-                );
-              } catch (e) {
-                debugPrint('Failed to scan media: $e');
-              }
+        await for (final entity in torrentDir.list(recursive: true)) {
+          if (entity is! File) continue;
+          final ext = p.extension(entity.path);
+          if (ext == '.txt') continue;
+          final mimeType = _mimeTypeFromExtension(ext);
+          final mediaResult = await PermissionService().insertIntoMediaStore(
+            p.basename(entity.path),
+            mimeType,
+            entity.path,
+          );
+          if (mediaResult == null) {
+            try {
+              unawaited(
+                _mediaChannel.invokeMethod('scanMedia', {'path': entity.path}),
+              );
+            } catch (e) {
+              debugPrint('Failed to scan media: $e');
             }
           }
         }
+      } else if (current.isTorrent && !File(finalPath).existsSync()) {
+        // Single-file torrent: guessed name differs from actual metadata name.
+        // Scan savePath for the file libtorrent actually created.
+        String actualFilePath = finalPath;
+        String actualFileName = current.fileName;
+        final saveDir = Directory(current.savePath);
+        if (saveDir.existsSync()) {
+          await for (final entity in saveDir.list(recursive: false)) {
+            if (entity is File) {
+              actualFilePath = entity.path;
+              actualFileName = p.basename(entity.path);
+              break;
+            }
+          }
+        }
+        final mimeType = _mimeTypeFromExtension(p.extension(actualFileName));
+        final mediaResult = await PermissionService().insertIntoMediaStore(
+          actualFileName,
+          mimeType,
+          actualFilePath,
+        );
+        if (mediaResult == null) {
+          try {
+            unawaited(
+              _mediaChannel.invokeMethod('scanMedia', {'path': actualFilePath}),
+            );
+          } catch (e) {
+            debugPrint('Failed to scan media: $e');
+          }
+        }
       } else {
-        // Single-file torrent or HTTP download: existing behavior.
+        // HTTP download: original behavior.
         final mimeType = _mimeTypeFromExtension(p.extension(current.fileName));
         final mediaResult = await PermissionService().insertIntoMediaStore(
           current.fileName,
@@ -799,7 +822,7 @@ class DownloadOrchestrator {
                   current.status != DownloadStatus.downloading) {
                 return;
               }
-              videoBytesSoFar = progress.downloadedBytes;
+              videoBytesSoFar = max(videoBytesSoFar, progress.downloadedBytes);
               videoSpeedNow = progress.speed;
               if (progress.fileSize > 0) {
                 videoSizeSoFar = progress.fileSize;
@@ -943,6 +966,17 @@ class DownloadOrchestrator {
                 categoryOverride: newCategory,
                 statusMessageOverride: progress.statusMessage,
               );
+
+              // When the torrent metadata name update changes localFilePath,
+              // persist it to the database immediately so _finalizeDownload
+              // can locate the file without relying on throttled saves.
+              if (newLocalPath != base.localFilePath) {
+                unawaited(
+                  _host.providerDatabaseService.saveTask(
+                    _host.providerTasks[index],
+                  ),
+                );
+              }
             },
             speedLimitBytesPerSecond: () {
               final current = _host.findTaskById(task.id);
@@ -1153,18 +1187,16 @@ class DownloadOrchestrator {
 
     // Fire-and-await so the queued→downloading transition is committed
     // before the first progress callback fires.
-    // For torrents: re-scan the target folder so we resume from whatever is
-    // already on disk (handles data added while the task was paused/queued).
+    // For torrents: update the file metadata list, but do NOT use the disk
+    // scan to set downloadedBytes — libtorrent pre-allocates files to their
+    // full size, so file.lengthSync() would falsely report 100% completion.
     List<Map<String, dynamic>>? verifiedTorrentFiles = task.torrentFiles;
-    int realTotalDownloaded = task.downloadedBytes;
+    final int realTotalDownloaded = task.downloadedBytes;
     if (task.isTorrent) {
       final scan = _host.scanExistingTorrentData(
         task.localFilePath,
         task.torrentFiles,
       );
-      if (scan.total > realTotalDownloaded) {
-        realTotalDownloaded = scan.total;
-      }
       if (scan.files != null) {
         verifiedTorrentFiles = scan.files;
       }

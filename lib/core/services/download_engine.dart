@@ -1079,9 +1079,9 @@ class DownloadEngine {
                 ? calculatedTotalSize
                 : (knownFileSize > 0 ? knownFileSize : 0));
 
-      final downloadedBytes = torrent.totalWantedDone > 0
-          ? torrent.totalWantedDone
-          : torrent.totalDone;
+final downloadedBytes = torrent.totalDone > 0
+    ? torrent.totalDone
+    : torrent.totalWantedDone;
 
       // Per-file progress fallback when native getFileProgress is unavailable.
       // NOTE: This is a rough estimation that distributes bytes proportionally
@@ -1104,7 +1104,7 @@ class DownloadEngine {
 
       final isUserPaused = stateLabel == 'paused' || stateLabel == 'stopped';
 
-      if (isUserPaused && !cancelToken.isCancelled) {
+      if (isUserPaused && !cancelToken.isCancelled && !isCheckingOrMetadata) {
         onProgress(
           DownloadProgress(
             downloadedBytes: downloadedBytes,
@@ -1138,17 +1138,23 @@ class DownloadEngine {
           ? (remaining / speed).round().clamp(0, 86400 * 365)
           : null;
 
-      onProgress(
-        DownloadProgress(
-          downloadedBytes: downloadedBytes,
-          fileSize: totalSize,
-          speed: speed,
-          eta: eta,
-          chunks: null,
-          fileName: resolvedName,
-          torrentFiles: resolvedFiles,
-        ),
-      );
+      // Skip progress updates while the torrent is rechecking (force-recheck
+      // on resume). During this phase totalWantedDone reports unverified bytes
+      // which inflates the percentage. The orchestrator's disk-scan value is
+      // authoritative until the recheck completes.
+      if (!isCheckingOrMetadata) {
+        onProgress(
+          DownloadProgress(
+            downloadedBytes: downloadedBytes,
+            fileSize: totalSize,
+            speed: speed,
+            eta: eta,
+            chunks: null,
+            fileName: resolvedName,
+            torrentFiles: resolvedFiles,
+          ),
+        );
+      }
 
       if (isCompleted && !completer.isCompleted) {
         completer.complete();
@@ -2248,8 +2254,12 @@ class DownloadEngine {
           if (copiedLen == origLen) {
             await tempFile.delete();
           } else {
-            try { await File(localFilePath).delete(); } catch (_) {}
-            throw Exception('File copy verification failed on fallback rename.');
+            try {
+              await File(localFilePath).delete();
+            } catch (_) {}
+            throw Exception(
+              'File copy verification failed on fallback rename.',
+            );
           }
         }
       }
@@ -2322,7 +2332,9 @@ class DownloadEngine {
     required int expectedTotal,
   }) {
     if (value == null || value.trim().isEmpty) {
-      debugPrint('[DownloadEngine] No Content-Range header; skipping validation.');
+      debugPrint(
+        '[DownloadEngine] No Content-Range header; skipping validation.',
+      );
       return;
     }
     final match = RegExp(

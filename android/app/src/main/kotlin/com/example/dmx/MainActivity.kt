@@ -91,8 +91,6 @@ class MainActivity : FlutterActivity() {
                             val xdmDir = File(publicDir, "XDM")
                             if (!xdmDir.exists()) xdmDir.mkdirs()
                             val destFile = File(xdmDir, fileName)
-                            File(sourcePath).copyTo(destFile, overwrite = true)
-                            File(sourcePath).delete()
                             // Trigger media scan
                             MediaScannerConnection.scanFile(context, arrayOf(destFile.path), arrayOf(mimeType), null)
                             runOnUiThread { result.success(destFile.path) }
@@ -126,12 +124,7 @@ class MainActivity : FlutterActivity() {
                         values.clear()
                         values.put(MediaStore.Downloads.IS_PENDING, 0)
                         resolver.update(uri, values, null, null)
-                        // After successful copy, delete the original from app-specific storage
-                        try {
-                            File(sourcePath).delete()
-                        } catch (e: Exception) {
-                            Log.w("MainActivity", "Failed to delete source after MediaStore copy: ${e.message}")
-                        }
+                        // After successful copy to MediaStore, do NOT delete source file if it resides in app save path.
                         runOnUiThread { result.success(uri.toString()) }
                     } catch (e: Exception) {
                         Log.e("MainActivity", "insertDownload failed", e)
