@@ -140,7 +140,7 @@ class DownloadOrchestrator {
           cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
           _cookieCache[origin] = (cookie: cookieString, timestamp: now);
           if (_cookieCache.length >= _cookieCacheMaxSize) {
-            scheduleMicrotask(_evictStaleCookies);
+            _evictStaleCookies();
           }
         }
       }
@@ -390,6 +390,7 @@ class DownloadOrchestrator {
     final current = _host.findTaskById(taskId);
     _host.ytLowSpeedCounts.remove(taskId);
     _host.ytThrottlingRefreshing.remove(taskId);
+    _ytRefreshAttempts.remove(taskId);
     _host.lastTorrentFileDiskSync.remove(taskId);
     if (current == null) return;
     if (current.status != DownloadStatus.downloading) return;
@@ -662,15 +663,29 @@ class DownloadOrchestrator {
       }
     }
 
-    while (true) {
-      attempt++;
+    StreamSubscription? cancelSub;
+    CancelToken? activeVideoCancelToken;
+    CancelToken? activeAudioCancelToken;
 
-      final videoCancelToken = CancelToken();
-      final audioCancelToken = CancelToken();
-      cancelToken.whenCancel.then((_) {
-        if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
-        if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
-      });
+    cancelSub = cancelToken.whenCancel.then((_) {
+      final v = activeVideoCancelToken;
+      final a = activeAudioCancelToken;
+      if (v != null && !v.isCancelled) {
+        v.cancel();
+      }
+      if (a != null && !a.isCancelled) {
+        a.cancel();
+      }
+    }).asStream().listen(null);
+
+    try {
+      while (true) {
+        attempt++;
+
+        final videoCancelToken = CancelToken();
+        final audioCancelToken = CancelToken();
+        activeVideoCancelToken = videoCancelToken;
+        activeAudioCancelToken = audioCancelToken;
 
       try {
         Future<void> runAudio() async {
@@ -1082,8 +1097,12 @@ class DownloadOrchestrator {
             // ignore
           }
         }
+        _ytRefreshAttempts.remove(task.id);
         rethrow;
       }
+    }
+    } finally {
+      await cancelSub.cancel();
     }
   }
 

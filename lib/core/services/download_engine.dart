@@ -104,17 +104,38 @@ class DownloadEngine {
         final now = DateTime.now();
 
         _activeDioClients.removeWhere((client) {
-          if (_reservedDioClients.contains(client)) return false;
-
+          final isReserved = _reservedDioClients.contains(client);
           final activeDownloads = _activeDownloadsPerClient[client];
-          if (activeDownloads != null && activeDownloads.isNotEmpty) {
-            return false;
-          }
+          final hasActiveDownloads =
+              activeDownloads != null && activeDownloads.isNotEmpty;
 
           final createdAt = _dioClientCreationTimes[client];
           final age = createdAt != null
               ? now.difference(createdAt)
               : Duration.zero;
+
+          if (isReserved) {
+            if (!hasActiveDownloads && age > const Duration(minutes: 10)) {
+              debugPrint(
+                '[DMX] Cleanup timer WARNING: force-closing reserved Dio client '
+                'idle for over 10 minutes (${age.inMinutes}m old)',
+              );
+              try {
+                client.close(force: true);
+              } catch (e) {
+                debugPrint('[DMX] Failed to close reserved client during cleanup: $e');
+              }
+              _reservedDioClients.remove(client);
+              _dioClientCreationTimes.remove(client);
+              _activeDownloadsPerClient.remove(client);
+              return true;
+            }
+            return false;
+          }
+
+          if (hasActiveDownloads) {
+            return false;
+          }
 
           if (age > const Duration(minutes: 5)) {
             debugPrint(

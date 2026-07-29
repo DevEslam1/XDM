@@ -18,7 +18,7 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final PageController _pageController = PageController(viewportFraction: 1.0);
   int _currentPage = 0;
   static const int _pageCount = 4;
@@ -30,6 +30,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pageController.addListener(() {
       setState(() {
         _pageOffset = _pageController.page ?? 0.0;
@@ -39,12 +40,23 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _particleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 6),
-    )..repeat();
+    )..repeat(reverse: true);
 
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 3500),
     )..repeat(reverse: true);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _particleController.stop();
+      _pulseController.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      _particleController.repeat(reverse: true);
+      _pulseController.repeat(reverse: true);
+    }
   }
 
   void _triggerHaptic(SettingsProvider settings) {
@@ -55,6 +67,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     _particleController.dispose();
     _pulseController.dispose();

@@ -332,6 +332,9 @@ class DownloadTask {
     );
   }
 
+  /// ⚠️ These methods are used for backup export/import and inter-isolate messaging.
+  /// The Drift companion in `app_database.dart` is the source of truth for persistence.
+  /// Any new field MUST be added to BOTH paths.
   Map<String, dynamic> toMap() {
     return {
       'id': id,

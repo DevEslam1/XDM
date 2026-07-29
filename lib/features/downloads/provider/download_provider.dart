@@ -1487,7 +1487,7 @@ class DownloadProvider extends ChangeNotifier
       completer.complete();
     } catch (e) {
       debugPrint('Error saving task to database: $e');
-      completer.completeError(e);
+      completer.complete();
 
       final dbTask = await _databaseService.getTask(updated.id);
       if (dbTask != null) {

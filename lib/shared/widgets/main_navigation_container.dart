@@ -135,7 +135,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   Future<void> _checkClipboard() async {
     final now = DateTime.now();
-    if (now.difference(_lastClipboardCheckTime).inSeconds < 5) return;
+    if (now.difference(_lastClipboardCheckTime).inSeconds < 2) return;
     _lastClipboardCheckTime = now;
     final url = await ClipboardService().checkClipboardForUrl();
     if (url != null && mounted && url != _lastClipboardUrl) {

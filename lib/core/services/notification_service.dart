@@ -119,11 +119,12 @@ class NotificationService {
           IsolateNameServer.lookupPortByName('dmx_notification_port') != null) {
         return _initFuture!;
       }
-      // Port is missing — need to re-init, but wait for any in-flight init first
+      // Port is missing — need to re-init, but wait for any in-flight init first (with timeout)
       try {
-        await _initFuture;
-      } catch (_) {
-        // Previous init failed, proceed with fresh init
+        await _initFuture!.timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('[NotificationService] In-flight init timed out or failed ($e). Proceeding with fresh init.');
+        _initFuture = null;
       }
     }
 

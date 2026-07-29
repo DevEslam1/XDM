@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 import 'package:path/path.dart' as p;
@@ -54,13 +56,22 @@ class DownloadInterceptor {
   final BrowserTab? Function() resolveActiveTab;
 
   /// URLs the user chose to keep browsing instead of downloading.
-  final Set<String> _bypassedSniffUrls = {};
+  final LinkedHashSet<String> _bypassedSniffUrls = LinkedHashSet<String>();
 
   /// Marks [url] so its next navigation is allowed through untouched.
-  void addBypass(String url) => _bypassedSniffUrls.add(url);
+  void addBypass(String url) {
+    _bypassedSniffUrls.add(url);
+    if (_bypassedSniffUrls.length > 200) {
+      _bypassedSniffUrls.remove(_bypassedSniffUrls.first);
+    }
+  }
 
   /// One-shot check: returns true (and clears the mark) if [url] was bypassed.
   bool consumeBypass(String url) => _bypassedSniffUrls.remove(url);
+
+  void dispose() {
+    _bypassedSniffUrls.clear();
+  }
 
   /// Whether a navigation from a page at [tabUrl] to [requestUrl] should be
   /// intercepted as a download.

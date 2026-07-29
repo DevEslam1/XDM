@@ -667,7 +667,13 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<bool> testProxyConnection(String host, int port, String username, String password) async {
+  Future<bool> testProxyConnection(
+    String host,
+    int port,
+    String username,
+    String password, {
+    bool bypassSSL = false,
+  }) async {
     final client = HttpClient();
     try {
       client.connectionTimeout = const Duration(seconds: 4);
@@ -684,6 +690,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
           );
           return true;
         };
+      }
+      if (bypassSSL) {
+        client.badCertificateCallback = (cert, host, port) => true;
       }
       final request = await client.getUrl(Uri.parse("https://www.google.com"));
       final response = await request.close();

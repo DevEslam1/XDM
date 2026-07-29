@@ -156,6 +156,10 @@ class NetworkMonitor {
           task.status == DownloadStatus.paused,
     );
     for (final task in waiting.toList()) {
+      if (task.pausedByUser) {
+        _tasksPausedDueToDisconnect.remove(task.id);
+        continue;
+      }
       await _setTask(
         task.copyWith(
           status: DownloadStatus.queued,
@@ -199,10 +203,15 @@ class NetworkMonitor {
   Future<void> _resumeWaitingForWifi({bool skipPump = false}) async {
     final waiting = _tasks().where(
       (task) =>
-          task.status == DownloadStatus.paused &&
-          task.errorMessage == DownloadStatusMessages.waitingWifi,
+          (_tasksPausedDueToWifiOnly.contains(task.id) ||
+              task.errorMessage == DownloadStatusMessages.waitingWifi) &&
+          task.status == DownloadStatus.paused,
     );
     for (final task in waiting.toList()) {
+      if (task.pausedByUser) {
+        _tasksPausedDueToWifiOnly.remove(task.id);
+        continue;
+      }
       await _setTask(
         task.copyWith(
           status: DownloadStatus.queued,

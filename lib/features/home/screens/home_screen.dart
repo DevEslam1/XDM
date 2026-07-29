@@ -1249,7 +1249,7 @@ class _DownloadTaskList extends StatelessWidget {
               oldTask.fileSize != newTask.fileSize ||
               oldTask.threadCount != newTask.threadCount ||
               !listEquals(oldTask.chunks, newTask.chunks) ||
-              (oldTask.speed ~/ 1024) != (newTask.speed ~/ 1024) ||
+              (oldTask.speed - newTask.speed).abs() > 50 ||
               oldTask.eta != newTask.eta) {
             return true;
           }

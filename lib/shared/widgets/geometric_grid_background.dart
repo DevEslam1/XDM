@@ -26,7 +26,7 @@ class _AmbientProgress with WidgetsBindingObserver {
 
   void _startTimer() {
     if (_isBackgrounded) return;
-    _timer ??= Timer.periodic(const Duration(milliseconds: 250), (_) {
+    _timer ??= Timer.periodic(const Duration(milliseconds: 1000), (_) {
       final elapsed =
           DateTime.now().difference(_startTime).inMilliseconds / 1000;
       progress.value = (elapsed / 20) % 1.0;
@@ -239,7 +239,7 @@ class _AmbientBlobPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AmbientBlobPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
+    return (oldDelegate.progress - progress).abs() > 0.01 ||
         oldDelegate.intensity != intensity ||
         oldDelegate.isDark != isDark;
   }

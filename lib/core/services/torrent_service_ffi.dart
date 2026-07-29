@@ -48,6 +48,7 @@ enum TorrentSessionState {
 class TorrentService {
   static final _log = Logger('TorrentService');
   static TorrentSessionState _state = TorrentSessionState.uninitialized;
+  static Completer<void>? _initCompleter;
   static Set<int> _activeTorrentIds = {};
   static StreamSubscription? _updatesSub;
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
@@ -63,12 +64,13 @@ class TorrentService {
   static double progressFor(int id) => _latestProgress[id] ?? 0.0;
 
   static Future<void> init() async {
-    if (_state != TorrentSessionState.uninitialized &&
-        _state != TorrentSessionState.disposed) {
-      return;
+    if (_state == TorrentSessionState.ready) return;
+    if (_state == TorrentSessionState.initializing && _initCompleter != null) {
+      return _initCompleter!.future;
     }
 
     _state = TorrentSessionState.initializing;
+    _initCompleter = Completer<void>();
     try {
       await TorrentResumeStore.init();
       await LibtorrentFlutter.init();
@@ -77,9 +79,13 @@ class TorrentService {
       _configureSessionFromSettings();
       _startTrackingUpdates();
       _state = TorrentSessionState.ready;
+      _initCompleter?.complete();
     } catch (e) {
       _state = TorrentSessionState.uninitialized;
+      _initCompleter?.completeError(e);
       rethrow;
+    } finally {
+      _initCompleter = null;
     }
   }
 

@@ -10,6 +10,9 @@ part 'app_database.g.dart';
 // Type Converters
 class DoubleListConverter extends TypeConverter<List<double>, String> {
   const DoubleListConverter();
+
+  static final lastConversionError = ValueNotifier<String?>(null);
+
   @override
   List<double> fromSql(String fromDb) {
     if (fromDb.trim().isEmpty) return [];
@@ -18,14 +21,16 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
       if (decoded is List) {
         return decoded.map((e) => (e as num).toDouble()).toList();
       }
-      debugPrint(
-        '[DMX] DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
-      );
+      final msg =
+          '[DMX] DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      debugPrint(msg);
+      lastConversionError.value = msg;
       return [];
     } catch (e) {
-      debugPrint(
-        '[DMX] Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
-      );
+      final msg =
+          '[DMX] Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      debugPrint(msg);
+      lastConversionError.value = msg;
       return [];
     }
   }
@@ -37,6 +42,9 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
 class TorrentFilesConverter
     extends TypeConverter<List<Map<String, dynamic>>, String> {
   const TorrentFilesConverter();
+
+  static final lastConversionError = ValueNotifier<String?>(null);
+
   @override
   List<Map<String, dynamic>> fromSql(String fromDb) {
     if (fromDb.trim().isEmpty) return [];
@@ -45,14 +53,16 @@ class TorrentFilesConverter
       if (decoded is List) {
         return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
-      debugPrint(
-        '[DMX] TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
-      );
+      final msg =
+          '[DMX] TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      debugPrint(msg);
+      lastConversionError.value = msg;
       return [];
     } catch (e) {
-      debugPrint(
-        '[DMX] Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
-      );
+      final msg =
+          '[DMX] Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      debugPrint(msg);
+      lastConversionError.value = msg;
       return [];
     }
   }
