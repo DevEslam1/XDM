@@ -96,7 +96,13 @@ class DownloadIsolatePool {
   /// Submit a download job to the next available worker.
   /// The returned handle exposes a stream of progress/completion messages.
   DownloadJob submit(DownloadCommand command) {
-    final worker = _workers[_nextWorker % _workers.length];
+    final aliveWorkers = _workers.where((w) => w._isAlive).toList();
+    if (aliveWorkers.isEmpty) {
+      throw const IsolateSpawnTimeoutException(
+        'No available download workers.',
+      );
+    }
+    final worker = aliveWorkers[_nextWorker % aliveWorkers.length];
     _nextWorker++;
     return worker.submit(command);
   }
@@ -126,6 +132,7 @@ class _Worker {
   ReceivePort? _errorPort;
   final Map<int, DownloadJob> _jobs = {};
   int _nextJobId = 0;
+  bool _isAlive = true;
 
   _Worker(this.id);
 
@@ -144,6 +151,7 @@ class _Worker {
       }
     });
     errorPort.listen((message) {
+      _isAlive = false;
       // An uncaught worker error cannot be attributed to a single job, so
       // surface it to every job running on this worker (mirrors the old
       // per-isolate errorPort behavior).
@@ -162,6 +170,12 @@ class _Worker {
         }
       }
       _jobs.clear();
+      // Attempt respawn so future submissions can still succeed.
+      unawaited(
+        spawn().catchError((Object e) {
+          debugPrint('[DMX Pool] Worker $id respawn failed: $e');
+        }),
+      );
     });
 
     _isolate = await Isolate.spawn(
@@ -181,6 +195,7 @@ class _Worker {
       errorPort.close();
       throw const IsolateSpawnTimeoutException();
     }
+    _isAlive = true;
   }
 
   DownloadJob submit(DownloadCommand command) {

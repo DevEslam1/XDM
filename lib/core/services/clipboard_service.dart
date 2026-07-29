@@ -12,8 +12,13 @@ class ClipboardService {
   DateTime? _lastCheckedTime;
   static const Duration _urlTtl = Duration(minutes: 30);
   bool _initialized = false;
+  Future<void>? _initFuture;
 
-  Future<void> _initIfNeeded() async {
+  Future<void> _initIfNeeded() {
+    return _initFuture ??= _doInit();
+  }
+
+  Future<void> _doInit() async {
     if (_initialized) return;
     try {
       final prefs = await SharedPreferences.getInstance();

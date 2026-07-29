@@ -248,7 +248,7 @@ class _DetailsScreenState extends State<DetailsScreen>
                         0.4,
                         _SpeedGraphPanel(task: task, provider: provider),
                       ),
-                      const SizedBox(height: 14),
+                      if (task.isTorrent) const SizedBox(height: 14),
                       _stagger(
                         0.5,
                         _TorrentFilesPanel(
@@ -257,7 +257,7 @@ class _DetailsScreenState extends State<DetailsScreen>
                           settings: settings,
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      if (task.isTorrent) const SizedBox(height: 14),
                       _stagger(
                         0.6,
                         _MetadataPanel(task: task, provider: provider),
@@ -371,7 +371,9 @@ class _TelemetryHero extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${task.threadCount} CH',
+                                task.isTorrent
+                                    ? '${task.torrentFiles?.length ?? 0} FILES'
+                                    : '${task.threadCount} CH',
                                 style: AppTheme.microLabel(
                                   isDark: isDark,
                                   color: statusColor,
@@ -1043,9 +1045,18 @@ class _SpeedGraphPanel extends StatelessWidget {
       listen: false,
     ).isDarkMode;
     final primaryClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final speedHistory = provider.getSpeedHistory(task.id);
     final isDownloading = task.status == DownloadStatus.downloading;
+    final isSeeding =
+        task.status == DownloadStatus.completed &&
+        task.isTorrent &&
+        task.seedingEnabled;
+    final showUploadSpeed = task.isTorrent && (isDownloading || isSeeding);
+    final uploadSpeed = showUploadSpeed
+        ? provider.getTorrentUploadSpeed(task.id)
+        : 0.0;
 
     final List<FlSpot> spots = List.generate(speedHistory.length, (i) {
       return FlSpot(i.toDouble(), speedHistory[i]);
@@ -1064,6 +1075,25 @@ class _SpeedGraphPanel extends StatelessWidget {
             L10n.isRtl(context) ? 'مخطط سرعة التنزيل' : 'DOWNLOAD SPEED CHART',
             style: AppTheme.microLabel(isDark: isDark, size: 10),
           ),
+          if (showUploadSpeed) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Icon(Icons.upload_rounded, size: 11, color: violetClr),
+                const SizedBox(width: 4),
+                Text(
+                  '${L10n.isRtl(context) ? 'رفع' : 'UL'}: ${formatBytes(uploadSpeed)}/s',
+                  style: AppTheme.dataStyle(
+                    isDark: isDark,
+                    size: 10,
+                    weight: FontWeight.w600,
+                    color: violetClr,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           if (!isDownloading || spots.isEmpty)
             Container(
@@ -1154,10 +1184,36 @@ class _SpeedGraphPanel extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────
 // Bandwidth Panel (speed limit + seeding)
 // ─────────────────────────────────────────────────────────────
-class _BandwidthPanel extends StatelessWidget with HapticHelper {
+class _BandwidthPanel extends StatefulWidget with HapticHelper {
   final DownloadTask task;
   final DownloadProvider provider;
   const _BandwidthPanel({required this.task, required this.provider});
+
+  @override
+  State<_BandwidthPanel> createState() => _BandwidthPanelState();
+}
+
+class _BandwidthPanelState extends State<_BandwidthPanel> with HapticHelper {
+  int _lastSpeedLimitKbps = 500;
+
+  DownloadTask get task => widget.task;
+  DownloadProvider get provider => widget.provider;
+
+  @override
+  void initState() {
+    super.initState();
+    if (task.speedLimitKbps > 0) {
+      _lastSpeedLimitKbps = task.speedLimitKbps;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _BandwidthPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.task.speedLimitKbps > 0) {
+      _lastSpeedLimitKbps = widget.task.speedLimitKbps;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1214,7 +1270,11 @@ class _BandwidthPanel extends StatelessWidget with HapticHelper {
                 activeThumbColor: blueClr,
                 onChanged: (val) {
                   triggerHaptic(settings);
-                  provider.updateTaskSpeedLimit(task.id, val ? 500 : 0);
+                  if (val) {
+                    provider.updateTaskSpeedLimit(task.id, _lastSpeedLimitKbps);
+                  } else {
+                    provider.updateTaskSpeedLimit(task.id, 0);
+                  }
                 },
               ),
             ],
@@ -1231,10 +1291,9 @@ class _BandwidthPanel extends StatelessWidget with HapticHelper {
                       ? null
                       : () {
                           triggerHaptic(settings);
-                          provider.updateTaskSpeedLimit(
-                            task.id,
-                            task.speedLimitKbps - 100,
-                          );
+                          final newVal = task.speedLimitKbps - 100;
+                          _lastSpeedLimitKbps = newVal;
+                          provider.updateTaskSpeedLimit(task.id, newVal);
                         },
                 ),
                 const SizedBox(width: 16),
@@ -1243,10 +1302,9 @@ class _BandwidthPanel extends StatelessWidget with HapticHelper {
                   isDark: isDark,
                   onPressed: () {
                     triggerHaptic(settings);
-                    provider.updateTaskSpeedLimit(
-                      task.id,
-                      task.speedLimitKbps + 100,
-                    );
+                    final newVal = task.speedLimitKbps + 100;
+                    _lastSpeedLimitKbps = newVal;
+                    provider.updateTaskSpeedLimit(task.id, newVal);
                   },
                 ),
               ],
@@ -1535,6 +1593,17 @@ class _TorrentStatsPanel extends StatelessWidget {
               ),
             ],
           ),
+          if (isActive || isSeeding) ...[
+            const SizedBox(height: 10),
+            _StatCell(
+              icon: Icons.swap_vert_rounded,
+              color: violetClr,
+              label: isRtl ? 'نسبة الرفع/التحميل' : 'UL/DL RATIO',
+              value:
+                  '${formatBytes(ulSpeed)}/s • ${task.downloadedSizeFormatted} ${isRtl ? 'تم تحميلها' : 'downloaded'}',
+              isDark: isDark,
+            ),
+          ],
         ],
       ),
     );
@@ -1828,6 +1897,53 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
             ],
           ),
           const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _TorrentFileActionButton(
+                label: isRtl ? 'تحديد الكل' : 'SELECT ALL',
+                icon: Icons.select_all_rounded,
+                color: blueClr,
+                isDark: isDark,
+                onPressed: () {
+                  triggerHaptic(settings);
+                  final updatedFiles = List<Map<String, dynamic>>.from(files);
+                  for (var i = 0; i < updatedFiles.length; i++) {
+                    updatedFiles[i] = {
+                      ...updatedFiles[i],
+                      'selected': true,
+                      'priority': 4,
+                    };
+                  }
+                  unawaited(
+                    provider.updateTorrentTaskFiles(task.id, updatedFiles),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _TorrentFileActionButton(
+                label: isRtl ? 'إلغاء تحديد الكل' : 'DESELECT ALL',
+                icon: Icons.deselect_rounded,
+                color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                isDark: isDark,
+                onPressed: () {
+                  triggerHaptic(settings);
+                  final updatedFiles = List<Map<String, dynamic>>.from(files);
+                  for (var i = 0; i < updatedFiles.length; i++) {
+                    updatedFiles[i] = {
+                      ...updatedFiles[i],
+                      'selected': false,
+                      'priority': 0,
+                    };
+                  }
+                  unawaited(
+                    provider.updateTorrentTaskFiles(task.id, updatedFiles),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           if (_loading)
             Center(
               child: SizedBox(
@@ -1859,8 +1975,9 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                 final estimatedBytes = (f['downloadedBytes'] as int?) ?? 0;
                 final speed = (f['speed'] as num?)?.toDouble() ?? 0.0;
                 final rawResolvedBytes = _resolvedBytes(index, estimatedBytes);
-                final resolvedBytes =
-                    isCompleted && selected ? length : rawResolvedBytes;
+                final resolvedBytes = isCompleted && selected
+                    ? length
+                    : rawResolvedBytes;
                 final diskVerified =
                     _diskBytes.length > index && _diskBytes[index] > 0;
                 final fileProgress = length > 0
@@ -2207,6 +2324,53 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
   }
 }
 
+class _TorrentFileActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool isDark;
+  final VoidCallback onPressed;
+
+  const _TorrentFileActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.isDark,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Metadata Spec Sheet
 // ─────────────────────────────────────────────────────────────
@@ -2317,6 +2481,18 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
               label: L10n.of(context, 'details_error'),
               value: _translateErrorMessage(context, task.errorMessage!),
               isDark: isDark,
+              onCopy: () {
+                Clipboard.setData(ClipboardData(text: task.errorMessage!));
+                ThemedSnackbar.show(
+                  context,
+                  message: L10n.isRtl(context)
+                      ? 'تم نسخ رسالة الخطأ'
+                      : 'Error message copied to clipboard',
+                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  icon: Icons.check_circle_outline,
+                  isDarkMode: isDark,
+                );
+              },
             ),
           if (task.mergedAudioUrl != null &&
               task.mergedAudioUrl!.isNotEmpty) ...[
@@ -2345,6 +2521,39 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                 isDark: isDark,
               ),
           ],
+          if (task.status == DownloadStatus.completed &&
+              task.completedAt != null)
+            _MetaRow(
+              label: L10n.isRtl(context) ? 'وقت الاكتمال' : 'COMPLETION TIME',
+              value: task.completedAt!.toLocal().toString().split('.')[0],
+              isDark: isDark,
+            ),
+          _MetaRow(
+            label: L10n.isRtl(context) ? 'الوقت المنقضي' : 'ELAPSED TIME',
+            value: task.elapsedFormatted,
+            isDark: isDark,
+          ),
+          if (task.expectedSha256 != null && task.expectedSha256!.isNotEmpty)
+            _MetaRow(
+              label: L10n.isRtl(context)
+                  ? 'المجموع الاختباري'
+                  : 'CHECKSUM (SHA-256)',
+              value:
+                  '${task.expectedSha256!.substring(0, task.expectedSha256!.length > 16 ? 16 : task.expectedSha256!.length)}...',
+              isDark: isDark,
+              onCopy: () {
+                Clipboard.setData(ClipboardData(text: task.expectedSha256!));
+                ThemedSnackbar.show(
+                  context,
+                  message: L10n.isRtl(context)
+                      ? 'تم نسخ المجموع الاختباري'
+                      : 'Checksum copied to clipboard',
+                  color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                  icon: Icons.check_circle_outline,
+                  isDarkMode: isDark,
+                );
+              },
+            ),
           _MetaRow(
             label: L10n.of(context, 'details_established'),
             value: task.createdAt.toLocal().toString().split('.')[0],

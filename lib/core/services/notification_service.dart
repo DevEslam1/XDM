@@ -67,29 +67,20 @@ class NotificationService {
       _actionStreamController.stream;
 
   void _addAction(Map<String, String> event) {
+    _pendingActions.add(event);
     if (!_actionStreamController.isClosed &&
         _actionStreamController.hasListener) {
-      _actionStreamController.add(event);
-    } else {
-      _pendingActions.add(event);
+      while (_pendingActions.isNotEmpty) {
+        _actionStreamController.add(_pendingActions.removeAt(0));
+      }
     }
   }
 
-  /// Validates that a task ID has a plausible UUID or native format.
+  /// Validates that a task ID has a plausible format.
   /// Provides basic injection protection for notification payloads.
   static bool _isValidTaskId(String id) {
     if (id.isEmpty || id.length > 128) return false;
-    // Matches standard UUID format (e.g. 550e8400-e29b-41d4-a716-446655440000)
-    if (RegExp(
-      r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$',
-    ).hasMatch(id)) {
-      return true;
-    }
-    // Native format: <microseconds>_<random>
-    if (RegExp(r'^\d{10,20}_\d{1,10}$').hasMatch(id)) {
-      return true;
-    }
-    return false;
+    return RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id);
   }
 
   /// Request notification runtime permission (Android 13+).

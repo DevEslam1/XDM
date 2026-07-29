@@ -337,16 +337,10 @@ class TorrentService {
         final progress = fileProgressSupported
             ? LibtorrentFlutter.instance.tryGetFileProgress(id)
             : null;
-        if (progress == null && fileProgressSupported) {
-          fileProgressSupported = false;
-        }
 
         final priorities = filePrioritiesSupported
             ? LibtorrentFlutter.instance.tryGetFilePriorities(id)
             : null;
-        if (priorities == null && filePrioritiesSupported) {
-          filePrioritiesSupported = false;
-        }
 
         return List.generate(files.length, (i) {
           final f = files[i];
@@ -354,10 +348,8 @@ class TorrentService {
             index: f.index,
             name: f.name,
             size: f.size,
-            downloadedBytes: fileProgressSupported
-                ? ((progress != null && i < progress.length)
-                      ? (progress[i] as num).toInt().clamp(0, f.size)
-                      : 0)
+            downloadedBytes: (progress != null && i < progress.length)
+                ? (progress[i] as num).toInt().clamp(0, f.size)
                 : 0,
             priority: (priorities != null && i < priorities.length)
                 ? (priorities[i] as num).toInt()
@@ -386,7 +378,8 @@ class TorrentService {
     bridging = StreamController<Map<int, TorrentUpdateInfo>>(
       onListen: () {
         poller = Timer.periodic(const Duration(milliseconds: 200), (_) {
-          if (_state == TorrentSessionState.disposed) {
+          if (_state == TorrentSessionState.disposed ||
+              _state == TorrentSessionState.uninitialized) {
             bridging.close();
             return;
           }

@@ -18,10 +18,14 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
       if (decoded is List) {
         return decoded.map((e) => (e as num).toDouble()).toList();
       }
-      debugPrint('[DMX] DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
+      debugPrint(
+        '[DMX] DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
+      );
       return [];
     } catch (e) {
-      debugPrint('[DMX] Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
+      debugPrint(
+        '[DMX] Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
+      );
       return [];
     }
   }
@@ -41,10 +45,14 @@ class TorrentFilesConverter
       if (decoded is List) {
         return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
-      debugPrint('[DMX] TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
+      debugPrint(
+        '[DMX] TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
+      );
       return [];
     } catch (e) {
-      debugPrint('[DMX] Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}');
+      debugPrint(
+        '[DMX] Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}',
+      );
       return [];
     }
   }
@@ -100,8 +108,7 @@ class DownloadTasks extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get playlistId => text().nullable()();
   TextColumn get playlistTitle => text().nullable()();
-  BoolColumn get isAppUpdate =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get isAppUpdate => boolean().withDefault(const Constant(false))();
   IntColumn get priority => integer().withDefault(const Constant(0))();
   TextColumn get expectedSha256 => text().nullable()();
 
@@ -194,7 +201,7 @@ class AppDatabase extends _$AppDatabase {
               SUBSTR(created_at, INSTR(created_at, '.'),
                 CASE WHEN INSTR(created_at, '+') > 0
                   THEN INSTR(created_at, '+') - INSTR(created_at, '.')
-                  WHEN INSTR(created_at, '-') > INSTR(created_at, ' ')
+                  WHEN INSTR(created_at, '-') > 0 AND INSTR(created_at, '-') > INSTR(created_at, ' ')
                   THEN INSTR(created_at, '-') - INSTR(created_at, '.')
                   ELSE LENGTH(created_at) - INSTR(created_at, '.') + 1
                 END), '')
@@ -288,40 +295,52 @@ class AppDatabase extends _$AppDatabase {
         );
 
         // Recovery: fix negative epochs resulting from julianday timezone / pre-1970 dates
-        await customStatement('UPDATE download_tasks SET created_at = 0 WHERE created_at < 0');
-        await customStatement('UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0');
+        await customStatement(
+          'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0',
+        );
+        await customStatement(
+          'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0',
+        );
 
         // Post-migration: validate no dates are stuck at epoch
         final badDates = await customSelect(
-          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0'
+          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0',
         ).get();
         final badCount = badDates.first.read<int>('cnt');
         if (badCount > 0) {
-          debugPrint('WARNING: $badCount tasks have epoch (0) created_at after migration');
+          debugPrint(
+            'WARNING: $badCount tasks have epoch (0) created_at after migration',
+          );
         }
 
         // Recovery: fix rows where created_at = 0 but updated_at > 0
         final recoveredFromUpdated = await customSelect(
-          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0'
+          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
         ).get();
-        final recoverFromUpdatedCount = recoveredFromUpdated.first.read<int>('cnt');
+        final recoverFromUpdatedCount = recoveredFromUpdated.first.read<int>(
+          'cnt',
+        );
         if (recoverFromUpdatedCount > 0) {
           await customStatement(
-            'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0'
+            'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0',
           );
-          debugPrint('[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)');
+          debugPrint(
+            '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)',
+          );
         }
 
         // Recovery: fix rows where BOTH created_at and updated_at are 0
         final recoveredFromNow = await customSelect(
-          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0'
+          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
         ).get();
         final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
         if (recoverFromNowCount > 0) {
           await customStatement(
-            "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0"
+            "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
           );
-          debugPrint('[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)');
+          debugPrint(
+            '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)',
+          );
         }
       }
       if (from < 4) {

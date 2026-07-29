@@ -102,7 +102,12 @@ class RemoteApiService {
         } catch (_) {}
       }
       // Retry bind
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+      try {
+        _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+      } catch (retryError) {
+        debugPrint('Remote API: retry bind also failed: $retryError');
+        return;
+      }
     }
 
     _server!.listen((request) async {

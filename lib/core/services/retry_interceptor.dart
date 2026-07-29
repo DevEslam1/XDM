@@ -35,8 +35,6 @@ class ProfessionalRetryInterceptor extends Interceptor {
       return;
     }
 
-    _cleanupStaleEntries();
-
     if (!_isTransient(err)) {
       _log.fine(
         'Permanent error (${err.type}, '
@@ -116,13 +114,6 @@ class ProfessionalRetryInterceptor extends Interceptor {
       default:
         return false;
     }
-  }
-
-  void _cleanupStaleEntries() {
-    // Expando doesn't support iteration; stale entries are naturally cleaned
-    // up when their keys are GC'd. The maxRetries check and X-Retry-Count
-    // header provide additional safety against unbounded retries.
-    // We keep this method as a hook for future cleanup if needed.
   }
 
   void _removeEntry(RequestOptions requestOptions) {

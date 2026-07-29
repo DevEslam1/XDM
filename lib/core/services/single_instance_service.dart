@@ -200,8 +200,8 @@ class SingleInstanceService {
       }
       final uri = Uri.http('127.0.0.1:$_port', '/', queryParams);
       final req = await client.getUrl(uri);
-      await req.close();
-      return true;
+      final response = await req.close();
+      return response.statusCode == HttpStatus.ok;
     } catch (e) {
       debugPrint('Failed to forward url to primary instance: $e');
       return false;

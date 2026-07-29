@@ -108,6 +108,13 @@ class DownloadJournal {
       return null;
     }
 
+    if (lastCheckpoint != null && lastCheckpoint.isEmpty) {
+      _log.warning(
+        'Journal recovery for $journalPath yielded empty checkpoint '
+        '(threadCount was null in init event). Treating as no journal.',
+      );
+      return null;
+    }
     return lastCheckpoint;
   }
 

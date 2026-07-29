@@ -17,6 +17,12 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
+  /// SECURITY NOTE: This default API key is embedded in the client binary and
+  /// is extractable from the APK. It provides basic identification only — NOT
+  /// authentication. The backend MUST enforce per-IP rate limiting and should
+  /// issue per-device anonymous JWTs (see TODO below) for any privileged
+  /// operations. This key exists solely to identify legitimate app traffic
+  /// vs. random internet noise.
   static String? _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
 
   late Dio _dio;
@@ -97,7 +103,9 @@ class XdmBackendClient {
           : kDefaultBackendBaseUrl;
     } catch (e) {
       baseUrl = kDefaultBackendBaseUrl;
-      debugPrint('[XdmBackendClient] Settings not available yet, using default base URL: $e');
+      debugPrint(
+        '[XdmBackendClient] Settings not available yet, using default base URL: $e',
+      );
     }
     // Do NOT force-close the old _dio instance — that would cancel any
     // in-flight API requests. Simply replace the reference and let the old
@@ -112,9 +120,7 @@ class XdmBackendClient {
         connectTimeout: const Duration(seconds: 15),
         // Backend extraction can take up to 45 s; give a comfortable margin.
         receiveTimeout: const Duration(seconds: 60),
-        headers: const {
-          'Accept': 'application/json',
-        },
+        headers: const {'Accept': 'application/json'},
       ),
     );
 
@@ -167,10 +173,7 @@ class XdmBackendClient {
   /// [cookies] — Netscape-format or key=value cookie string forwarded as
   ///   `X-YouTube-Cookies`. The backend may also pick from its own cookie pool
   ///   if none are supplied.
-  Future<Map<String, dynamic>> getStreams(
-    String url, {
-    String? cookies,
-  }) async {
+  Future<Map<String, dynamic>> getStreams(String url, {String? cookies}) async {
     final cached = _streamsCache[url];
     if (cached != null) {
       if (!cached.isExpired) {
@@ -295,7 +298,8 @@ class XdmBackendClient {
         );
       } else if (statusCode == 451) {
         return BackendBadRequestException(
-          backendMsg ?? 'Video is geo-restricted and not available from this server.',
+          backendMsg ??
+              'Video is geo-restricted and not available from this server.',
         );
       } else if (error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.receiveTimeout ||
@@ -349,7 +353,10 @@ class _ApiRateLimiter {
     _endpoints[key]!.removeWhere((t) => now.difference(t).inSeconds >= 60);
 
     if (_endpoints[key]!.length >= limit) {
-      final retryAfter = max(1, 60 - now.difference(_endpoints[key]!.first).inSeconds);
+      final retryAfter = max(
+        1,
+        60 - now.difference(_endpoints[key]!.first).inSeconds,
+      );
       throw BackendRateLimitException(
         retryAfterSeconds: retryAfter,
         message: 'Rate limit exceeded for endpoint: $endpoint',

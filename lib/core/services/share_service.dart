@@ -10,6 +10,7 @@ class ShareService {
 
   StreamSubscription? _intentSub;
   bool _initialized = false;
+  int _generation = 0;
   bool _initialMediaConsumed = false;
   String? _lastReceivedUrl;
 
@@ -38,19 +39,22 @@ class ShareService {
       }
     }
 
-    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
-      for (final file in value) {
-        handleUrl(file.path, isInitial: false);
-      }
-    }, onError: (err) {
-      debugPrint('[ShareService] getMediaStream error: $err');
-    });
+    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen(
+      (value) {
+        for (final file in value) {
+          handleUrl(file.path, isInitial: false);
+        }
+      },
+      onError: (err) {
+        debugPrint('[ShareService] getMediaStream error: $err');
+      },
+    );
+
+    final gen = ++_generation;
 
     if (!_initialMediaConsumed) {
       ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-        if (!_initialized) {
-          return; // If disposed before future resolves, skip processing
-        }
+        if (gen != _generation) return;
         for (final file in value) {
           handleUrl(file.path, isInitial: true);
         }

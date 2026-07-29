@@ -38,11 +38,13 @@ class BackgroundService {
     bool isStopped = false;
     StreamSubscription<Map<String, dynamic>?>? stopSub;
     StreamSubscription<Map<String, dynamic>?>? updateSub;
+    StreamSubscription<dynamic>? heartbeatSub;
 
     void cancelAll() {
       isStopped = true;
       stopSub?.cancel();
       updateSub?.cancel();
+      heartbeatSub?.cancel();
     }
 
     stopSub = service
@@ -91,7 +93,7 @@ class BackgroundService {
     // The service lives until explicitly stopped via stopService — minimizing
     // the app used to pause the Flutter engine, stop heartbeats, and let the
     // service self-terminate mid-download.
-    service
+    heartbeatSub = service
         .on('heartbeat')
         .listen(
           (_) {

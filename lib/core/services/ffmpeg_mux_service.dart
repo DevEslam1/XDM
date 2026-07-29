@@ -171,7 +171,6 @@ class FFmpegMuxService {
             'FFmpeg global cancel on primary timeout failed: $cancelErr',
           );
         }
-        await cleanUpInputs();
         rethrow;
       }
       final returnCode = await session.getReturnCode().timeout(
@@ -247,7 +246,6 @@ class FFmpegMuxService {
               'FFmpeg global cancel on fallback timeout failed: $cancelErr',
             );
           }
-          await cleanUpInputs();
           rethrow;
         }
         final fallbackReturnCode = await fallbackSession

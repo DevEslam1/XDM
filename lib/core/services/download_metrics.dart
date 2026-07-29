@@ -21,19 +21,17 @@ class DownloadMetrics {
   int mirrorSwitches = 0;
 
   DownloadMetrics({required this.taskId, required this.url})
-      : startedAt = DateTime.now();
+    : startedAt = DateTime.now();
 
   void markCompleted() {
     completedAt = DateTime.now();
   }
 
-  Duration get elapsed =>
-      (completedAt ?? DateTime.now()).difference(startedAt);
+  Duration get elapsed => (completedAt ?? DateTime.now()).difference(startedAt);
 
-  double get avgSpeedBps =>
-      elapsed.inMilliseconds > 0
-          ? totalBytesDownloaded / elapsed.inMilliseconds * 1000
-          : 0;
+  double get avgSpeedBps => elapsed.inMilliseconds > 0
+      ? totalBytesDownloaded / elapsed.inMilliseconds * 1000
+      : 0;
 
   double get threadEfficiency {
     if (effectiveThreads <= 1 || peakSpeedBps <= 0) return 1.0;
@@ -42,30 +40,29 @@ class DownloadMetrics {
   }
 
   Map<String, dynamic> toJson() => {
-        'taskId': taskId,
-        'url': url,
-        'startedAt': startedAt.toIso8601String(),
-        'completedAt': completedAt?.toIso8601String(),
-        'elapsedMs': elapsed.inMilliseconds,
-        'ttfbMs': timeToFirstByteMs,
-        'http2': usedHttp2,
-        'requestedThreads': requestedThreads,
-        'effectiveThreads': effectiveThreads,
-        'bytesDownloaded': totalBytesDownloaded,
-        'peakSpeedBps': peakSpeedBps,
-        'avgSpeedBps': avgSpeedBps.round(),
-        'threadEfficiency':
-            double.parse(threadEfficiency.toStringAsFixed(3)),
-        'totalRetries': totalRetries,
-        'resumed': resumed,
-        'resumeBytesSaved': resumeBytesSaved,
-        'checksumAlgorithm': checksumAlgorithm,
-        'checksumVerified': checksumVerified,
-        'checksumPassed': checksumPassed,
-        'errorCount': errorCount,
-        'lastError': lastError,
-        'mirrorSwitches': mirrorSwitches,
-      };
+    'taskId': taskId,
+    'url': url,
+    'startedAt': startedAt.toIso8601String(),
+    'completedAt': completedAt?.toIso8601String(),
+    'elapsedMs': elapsed.inMilliseconds,
+    'ttfbMs': timeToFirstByteMs,
+    'http2': usedHttp2,
+    'requestedThreads': requestedThreads,
+    'effectiveThreads': effectiveThreads,
+    'bytesDownloaded': totalBytesDownloaded,
+    'peakSpeedBps': peakSpeedBps,
+    'avgSpeedBps': avgSpeedBps.round(),
+    'threadEfficiency': (threadEfficiency * 1000).round() / 1000,
+    'totalRetries': totalRetries,
+    'resumed': resumed,
+    'resumeBytesSaved': resumeBytesSaved,
+    'checksumAlgorithm': checksumAlgorithm,
+    'checksumVerified': checksumVerified,
+    'checksumPassed': checksumPassed,
+    'errorCount': errorCount,
+    'lastError': lastError,
+    'mirrorSwitches': mirrorSwitches,
+  };
 
   factory DownloadMetrics.fromJson(Map<String, dynamic> json) {
     final m = DownloadMetrics(
@@ -98,15 +95,23 @@ class DownloadMetrics {
     buf.writeln('Download: $url');
     buf.writeln('Duration: ${elapsed.inSeconds}s');
     buf.writeln('TTFB: ${timeToFirstByteMs}ms');
-    buf.writeln('Speed: avg ${(avgSpeedBps / 1024 / 1024).toStringAsFixed(1)} MB/s, '
-        'peak ${(peakSpeedBps / 1024 / 1024).toStringAsFixed(1)} MB/s');
-    buf.writeln('Threads: $effectiveThreads/$requestedThreads '
-        '(efficiency: ${(threadEfficiency * 100).toStringAsFixed(0)}%)');
+    buf.writeln(
+      'Speed: avg ${(avgSpeedBps / 1024 / 1024).toStringAsFixed(1)} MB/s, '
+      'peak ${(peakSpeedBps / 1024 / 1024).toStringAsFixed(1)} MB/s',
+    );
+    buf.writeln(
+      'Threads: $effectiveThreads/$requestedThreads '
+      '(efficiency: ${(threadEfficiency * 100).toStringAsFixed(0)}%)',
+    );
     buf.writeln('HTTP/2: $usedHttp2');
-    buf.writeln('Resumed: $resumed (saved ${(resumeBytesSaved / 1024 / 1024).toStringAsFixed(1)} MB)');
+    buf.writeln(
+      'Resumed: $resumed (saved ${(resumeBytesSaved / 1024 / 1024).toStringAsFixed(1)} MB)',
+    );
     buf.writeln('Retries: $totalRetries');
     if (checksumVerified) {
-      buf.writeln('Checksum ($checksumAlgorithm): ${checksumPassed ? "PASS" : "FAIL"}');
+      buf.writeln(
+        'Checksum ($checksumAlgorithm): ${checksumPassed ? "PASS" : "FAIL"}',
+      );
     }
     if (errorCount > 0) {
       buf.writeln('Errors: $errorCount (last: $lastError)');
