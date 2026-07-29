@@ -21,21 +21,17 @@ class BandwidthGovernor {
   }
 
   void registerConsumer() {
-    unawaited(
-      _lock.synchronized(() async {
-        _activeConsumers++;
-        _log.fine('Consumer registered. Active: $_activeConsumers');
-      }),
-    );
+    _lock.synchronized(() {
+      _activeConsumers++;
+      _log.fine('Consumer registered. Active: $_activeConsumers');
+    });
   }
 
   void unregisterConsumer() {
-    unawaited(
-      _lock.synchronized(() async {
-        _activeConsumers = (_activeConsumers - 1).clamp(0, 999);
-        _log.fine('Consumer unregistered. Active: $_activeConsumers');
-      }),
-    );
+    _lock.synchronized(() {
+      _activeConsumers = (_activeConsumers - 1).clamp(0, 999);
+      _log.fine('Consumer unregistered. Active: $_activeConsumers');
+    });
   }
 
   int get perConsumerBytesPerSecond {

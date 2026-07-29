@@ -58,11 +58,10 @@ class MirrorManager {
   }
 
   MirrorStats? _find(String url) {
-    try {
-      return _mirrors.firstWhere((m) => m.url == url);
-    } catch (_) {
-      return null;
+    for (final m in _mirrors) {
+      if (m.url == url) return m;
     }
+    return null;
   }
 }
 

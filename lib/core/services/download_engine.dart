@@ -875,20 +875,25 @@ class DownloadEngine {
         );
       }
 
-      if (!cancelToken.isCancelled) {
-        TorrentService.resumeTorrent(id);
+      if (cancelToken.isCancelled) {
+        _activeCancelTokens.remove(cancelToken);
+        return;
       }
-
-      await _listenForCompletion(
-        id,
-        url,
-        cancelToken,
-        onProgress,
-        getTorrentFiles,
-        knownFileSize,
-      );
-
-      _activeCancelTokens.remove(cancelToken);
+      try {
+        if (!cancelToken.isCancelled) {
+          TorrentService.resumeTorrent(id);
+        }
+        await _listenForCompletion(
+          id,
+          url,
+          cancelToken,
+          onProgress,
+          getTorrentFiles,
+          knownFileSize,
+        );
+      } finally {
+        _activeCancelTokens.remove(cancelToken);
+      }
     } finally {
       _activeTorrentIds.remove(id);
     }
@@ -1215,6 +1220,10 @@ class DownloadEngine {
         received += chunk.length;
         if (received >= probeSize) break;
       }
+      // Drain and cancel the underlying stream to release the socket
+      try {
+        await response.data?.stream.listen((_) {}).cancel();
+      } catch (_) {}
       sw.stop();
 
       if (sw.elapsedMilliseconds <= 0) return requestedThreads;
@@ -1914,20 +1923,6 @@ class DownloadEngine {
           }
         }
       }
-      // ── Phase 2B: Checksum verification framework ──
-      try {
-        final downloadedFile = File(currentLocalFilePath);
-        if (await downloadedFile.exists()) {
-          final actualSize = await downloadedFile.length();
-          if (actualSize > 0) {
-            debugPrint(
-              '[DownloadEngine] Download completed: $currentLocalFilePath ($actualSize bytes)',
-            );
-          }
-        }
-      } catch (e) {
-        debugPrint('[DownloadEngine] Final verification failed: $e');
-      }
     } finally {
       _activeDownloadsPerClient[isolatedDio]?.remove(tempFilePath);
       _reservedDioClients.remove(isolatedDio);
@@ -2075,6 +2070,7 @@ class DownloadEngine {
     final speedSamples = Queue<_SpeedSample>();
     int lastReportTime = 0;
     int throttleBaseMs = -1;
+    int? prevSpeedLimit;
     try {
       final stream = response.data?.stream;
       if (stream == null) {
@@ -2150,6 +2146,11 @@ class DownloadEngine {
         }
 
         final limit = speedLimitBytesPerSecond();
+        if (prevSpeedLimit != limit) {
+          throttleBaseMs = stopwatch.elapsedMilliseconds;
+          downloadedThisSession = 0;
+          prevSpeedLimit = limit;
+        }
         if (limit > 0) {
           final activeCount = activeDownloadCount().clamp(1, 1000);
           final perTaskLimit = limit / activeCount.toDouble();
@@ -2167,14 +2168,6 @@ class DownloadEngine {
             }
           }
         }
-        // Reset the throttle window every iteration, whether or not a limit
-        // is currently active. Previously this only reset inside `limit > 0`,
-        // so a download that ran unthrottled for a while and then had a
-        // speed limit applied would compute expectedElapsedMs from ALL bytes
-        // downloaded since the session started, producing one enormous
-        // (and pointless) stall the moment throttling turned on.
-        throttleBaseMs = stopwatch.elapsedMilliseconds;
-        downloadedThisSession = 0;
       }
     } finally {
       try {
@@ -2255,7 +2248,8 @@ class DownloadEngine {
           if (copiedLen == origLen) {
             await tempFile.delete();
           } else {
-            throw Exception('File copy failed on fallback rename.');
+            try { await File(localFilePath).delete(); } catch (_) {}
+            throw Exception('File copy verification failed on fallback rename.');
           }
         }
       }
@@ -2327,9 +2321,14 @@ class DownloadEngine {
     required int expectedEnd,
     required int expectedTotal,
   }) {
+    if (value == null || value.trim().isEmpty) {
+      debugPrint('[DownloadEngine] No Content-Range header; skipping validation.');
+      return;
+    }
     final match = RegExp(
       r'^bytes\s+(\d+)-(\d+)/(\d+|\*)$',
-    ).firstMatch(value?.trim() ?? '');
+      caseSensitive: false,
+    ).firstMatch(value.trim());
     final start = int.tryParse(match?.group(1) ?? '');
     final end = int.tryParse(match?.group(2) ?? '');
     final totalText = match?.group(3);
@@ -2382,7 +2381,7 @@ class DownloadEngine {
       unawaited(poolToClose.shutdown());
     }
 
-    for (final id in _activeTorrentIds) {
+    for (final id in List<int>.from(_activeTorrentIds)) {
       try {
         TorrentService.pauseTorrent(id);
       } catch (_) {}

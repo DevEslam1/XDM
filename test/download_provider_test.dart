@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
@@ -111,7 +112,7 @@ Future<(DatabaseService, SettingsProvider)> _setupServices() async {
   }
   await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
 
-  final database = DatabaseService();
+  final database = DatabaseService.forSubclass();
   await database.init(testPath: 'build/test_hive_provider');
   final settings = SettingsProvider();
   await settings.load();
@@ -121,6 +122,7 @@ Future<(DatabaseService, SettingsProvider)> _setupServices() async {
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
+    drift.driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     Hive.init('build/test_hive_provider');
     ConnectivityPlatform.instance = MockConnectivityPlatform();
 

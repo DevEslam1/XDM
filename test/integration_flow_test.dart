@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
@@ -147,7 +148,7 @@ Future<(DatabaseService, SettingsProvider)> _setupServices() async {
   }
   await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
 
-  final database = DatabaseService();
+  final database = DatabaseService.forSubclass();
   await database.init(testPath: uniqueHivePath);
   final settings = SettingsProvider();
   await settings.load();
@@ -157,6 +158,7 @@ Future<(DatabaseService, SettingsProvider)> _setupServices() async {
 void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
+    drift.driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     uniqueHivePath = 'build/test_hive_int_${DateTime.now().microsecondsSinceEpoch}';
     try {
       final dir = Directory(uniqueHivePath);

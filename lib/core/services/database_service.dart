@@ -14,6 +14,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseService {
+  /// Shared singleton instance.
+  static final DatabaseService instance = DatabaseService._create();
+
+  /// Returns the shared singleton instance.
+  factory DatabaseService() => instance;
+
+  /// Constructor for subclasses (e.g., test fakes).
+  /// Does NOT initialize _db — call [init] first.
+  DatabaseService.forSubclass();
+
+  DatabaseService._create();
+
   late final AppDatabase _db;
   int _historyInsertCount = 0;
   static const int _historyTrimInterval = 100;
@@ -588,11 +600,10 @@ class DatabaseService {
     if (_historyInsertCount >= _historyTrimInterval) {
       _historyInsertCount = 0;
       await _db.customStatement(
-        'DELETE FROM browser_history '
-        'WHERE id NOT IN ('
+        'DELETE FROM browser_history WHERE id IN ('
         '  SELECT id FROM browser_history '
         '  ORDER BY visited_at DESC '
-        '  LIMIT 500'
+        '  LIMIT -1 OFFSET 500'
         ')',
       );
     }

@@ -117,6 +117,14 @@ class MediaSniffer {
         .toList();
     for (final key in staleKeys) {
       detectedMediaSources.remove(key);
+      detectedDownloadUrls.remove(key);
+      detectedPlaylistUrls.remove(key);
+      mediaScanFailed.remove(key);
+      lastYoutubeAuthTimes.remove(key);
+    }
+    if (ytDetectionFailed.length > 200) {
+      final cutoff = DateTime.now().subtract(const Duration(minutes: 30));
+      ytDetectionFailed.removeWhere((_, v) => v.isBefore(cutoff));
     }
     if (YoutubeService.isPlaylistUrl(scannedUrl)) {
       try {

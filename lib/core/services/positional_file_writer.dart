@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:synchronized/synchronized.dart';
 
@@ -53,6 +54,15 @@ class PositionalFileWriter {
     } else {
       openedFile = await File(path).open(mode: FileMode.write);
     }
+    // Defensive seek check: verify the filesystem supports seeking.
+    await openedFile.setPosition(0);
+    final pos = await openedFile.position();
+    if (pos != 0) {
+      debugPrint(
+        '[PositionalFileWriter] WARNING: setPosition(0) returned $pos '
+        '— filesystem may not support seeking',
+      );
+    }
     return PositionalFileWriter._(openedFile, threadCount, bufferSize);
   }
 
@@ -70,16 +80,18 @@ class PositionalFileWriter {
   }
 
   Future<void> flush(int threadIndex) async {
-    final buffer = _buffers[threadIndex];
-    if (buffer.isEmpty) return;
+    await _threadLocks[threadIndex].synchronized(() async {
+      final buffer = _buffers[threadIndex];
+      if (buffer.isEmpty) return;
 
-    final bytes = buffer.takeBytes();
-    await _flushLock.synchronized(() async {
-      await _file.setPosition(_bufferFilePositions[threadIndex]);
-      await _file.writeFrom(bytes);
+      final bytes = buffer.takeBytes();
+      await _flushLock.synchronized(() async {
+        await _file.setPosition(_bufferFilePositions[threadIndex]);
+        await _file.writeFrom(bytes);
+      });
+
+      _bufferFilePositions[threadIndex] += bytes.length;
     });
-
-    _bufferFilePositions[threadIndex] += bytes.length;
   }
 
   Future<void> flushAll() async {

@@ -426,6 +426,65 @@ class DownloadTask {
         );
       }
     }
+    if (matched.isEmpty) {
+      final task = DownloadTask(
+        id: map['id'] as String? ?? '',
+        fileName: map['fileName'] as String? ?? '',
+        url: map['url'] as String? ?? '',
+        fileSize: (map['fileSize'] as num?)?.toInt() ?? 0,
+        downloadedBytes: (map['downloadedBytes'] as num?)?.toInt() ?? 0,
+        speed: (map['speed'] as num?)?.toDouble() ?? 0.0,
+        eta: (map['eta'] as num?)?.toInt(),
+        category: map['category'] as String? ?? 'Other',
+        status: status,
+        savePath: map['savePath'] as String? ?? '',
+        localFilePath: map['localFilePath'] as String? ?? '',
+        tempFilePath: map['tempFilePath'] as String? ?? '',
+        errorMessage: 'Unknown status "$statusName" (recovered as paused)',
+        statusMessage: map['statusMessage'] as String?,
+        threadCount: threadCount,
+        chunks: chunks,
+        createdAt:
+            DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+            DateTime.now(),
+        updatedAt:
+            DateTime.tryParse(map['updatedAt'] as String? ?? '') ??
+            DateTime.now(),
+        completedAt: DateTime.tryParse(map['completedAt'] as String? ?? ''),
+        scheduledAt: DateTime.tryParse(map['scheduledAt'] as String? ?? ''),
+        supportsResume: map['supportsResume'] as bool? ?? false,
+        speedLimitKbps: (map['speedLimitKbps'] as num?)?.toInt() ?? 0,
+        seedingEnabled: map['seedingEnabled'] as bool? ?? false,
+        seedingLimited: map['seedingLimited'] as bool? ?? false,
+        seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
+        torrentFiles: map['torrentFiles'] is List
+            ? (map['torrentFiles'] as List)
+                  .map(
+                    (f) => f is Map
+                        ? Map<String, dynamic>.from(f)
+                        : <String, dynamic>{},
+                  )
+                  .toList()
+            : null,
+        downloadPageUrl: map['downloadPageUrl'] as String?,
+        mergedAudioUrl:
+            map['mergedAudioUrl'] as String? ?? map['audioUrl'] as String?,
+        audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
+        audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
+        pausedByUser: map['pausedByUser'] as bool? ?? false,
+        youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
+        notes: map['notes'] as String?,
+        isAppUpdate: map['isAppUpdate'] as bool? ?? false,
+        priority: map['priority'] as int? ?? 0,
+        playlistId: map['playlistId'] as String?,
+        playlistTitle: map['playlistTitle'] as String?,
+        expectedSha256: map['expectedSha256'] as String?,
+        mirrorUrls: map['mirrorUrls'] is List
+            ? (map['mirrorUrls'] as List).map((e) => e as String).toList()
+            : null,
+      );
+      return task;
+    }
     return DownloadTask(
       id: map['id'] as String? ?? '',
       fileName: map['fileName'] as String? ?? '',

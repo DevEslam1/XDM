@@ -1238,11 +1238,19 @@ class DownloadProvider extends ChangeNotifier
   Future<void> _flushPendingProgress(String id) async {
     _lastProgressUpdateTimes.remove(id);
     _lastDbSaveTimes.remove(id);
-    if (!_pendingProgressUpdates.remove(id)) return;
+    if (!_pendingProgressUpdates.contains(id)) return;
     final index = _tasks.indexWhere((t) => t.id == id);
-    if (index == -1) return;
+    if (index == -1) {
+      _pendingProgressUpdates.remove(id);
+      return;
+    }
     final task = _tasks[index];
-    await _databaseService.saveTask(task);
+    try {
+      await _databaseService.saveTask(task);
+      _pendingProgressUpdates.remove(id);
+    } catch (e) {
+      debugPrint('[DMX] flushPendingProgress failed for $id: $e');
+    }
   }
 
   Future<void> updateTaskSpeedLimit(String taskId, int speedLimitKbps) async {
@@ -1294,8 +1302,10 @@ class DownloadProvider extends ChangeNotifier
       await _databaseService.saveTask(updated);
       // Notify AFTER successful DB write to keep UI and persistence in sync
       notifyListeners();
+      completer.complete();
     } catch (e) {
       debugPrint('Error saving task to database: $e');
+      completer.completeError(e);
       final dbTask = await _databaseService.getTask(updated.id);
       if (dbTask != null) {
         final currentIdx = _tasks.indexWhere((task) => task.id == updated.id);
@@ -1313,8 +1323,7 @@ class DownloadProvider extends ChangeNotifier
       }
       notifyListeners();
     } finally {
-      completer.complete();
-      if (_dbSaveQueues[updated.id] == completer.future) {
+      if (identical(_dbSaveQueues[updated.id], completer.future)) {
         _dbSaveQueues.remove(updated.id);
       }
     }

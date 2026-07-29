@@ -51,8 +51,12 @@ class ScheduleManager {
         timer.cancel();
         return;
       }
-      checkScheduledDownloads();
-      _checkPeriodicAppUpdate();
+      unawaited(
+        checkScheduledDownloads().catchError((e) {
+          debugPrint('[ScheduleManager] checkScheduledDownloads error: $e');
+        }),
+      );
+      unawaited(_checkPeriodicAppUpdate());
       if (_downloadingTasksCount() > 0) {
         unawaited(BackgroundService.sendHeartbeat());
       }

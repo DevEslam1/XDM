@@ -170,6 +170,7 @@ class TestBackupProvider with DownloadBackupMixin {
 }
 
 class FakeDatabaseService extends DatabaseService {
+  FakeDatabaseService() : super.forSubclass();
   int clearCalls = 0;
   final List<DownloadTask> savedTasks = <DownloadTask>[];
 
