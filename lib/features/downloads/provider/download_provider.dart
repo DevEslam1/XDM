@@ -965,17 +965,19 @@ class DownloadProvider extends ChangeNotifier
 
       if (type == FileSystemEntityType.file) {
         final len = File(rootPath).lengthSync();
-
+        final expected = (fileList?.isNotEmpty == true)
+            ? ((fileList!.first['length'] as num?)?.toInt() ?? 0)
+            : 0;
+        // FIX(5): Pre-allocation guard: a full-size file is not proof of completion.
+        final trusted = (expected > 0 && len >= expected) ? 0 : len;
         List<Map<String, dynamic>>? files = fileList;
-
         if (fileList != null && fileList.length == 1) {
           files = [
             Map<String, dynamic>.from(fileList.first)
-              ..['downloadedBytes'] = len,
+              ..['downloadedBytes'] = trusted,
           ];
         }
-
-        return (total: len, files: files);
+        return (total: trusted, files: files);
       }
 
       if (type == FileSystemEntityType.directory) {

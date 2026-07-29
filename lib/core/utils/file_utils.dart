@@ -148,8 +148,11 @@ int scanFolderBytesSync(String path) {
         final file = File(p.join(saveRoot, relPath));
         if (file.existsSync()) {
           final diskLen = file.lengthSync();
-          if (diskLen > 0) {
-            downloaded = diskLen < length ? diskLen : length;
+          // FIX(5): libtorrent pre-allocates files to full length, so a full-size file
+          // is NOT evidence of completion. Only a short file is a reliable
+          // lower bound; a full-size file is ambiguous and must not read 100%.
+          if (diskLen > 0 && diskLen < length) {
+            downloaded = diskLen;
           }
         }
       } catch (_) {}

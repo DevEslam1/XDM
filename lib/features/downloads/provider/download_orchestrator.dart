@@ -944,11 +944,14 @@ class DownloadOrchestrator {
               // per-file bytes, disk scans would overwrite accurate piece-level
               // accounting with imprecise file sizes (libtorrent writes pieces
               // that span multiple files).
+              // FIX(4): Treat "has data" as "real bytes OR an explicit estimate" so disk scans don't clobber engine data
               final engineHasActualPerFileProgress =
                   progress.torrentFiles != null &&
                   progress.torrentFiles!.isNotEmpty &&
                   progress.torrentFiles!.any(
-                    (f) => f['progressEstimated'] != true,
+                    (f) =>
+                        f['progressEstimated'] == true ||
+                        ((f['downloadedBytes'] as int?) ?? 0) > 0,
                   );
               if (task.isTorrent &&
                   !engineHasActualPerFileProgress &&
@@ -1215,17 +1218,13 @@ class DownloadOrchestrator {
     // For torrents: update the file metadata list, but do NOT use the disk
     // scan to set downloadedBytes — libtorrent pre-allocates files to their
     // full size, so file.lengthSync() would falsely report 100% completion.
-    List<Map<String, dynamic>>? verifiedTorrentFiles = task.torrentFiles;
+    final List<Map<String, dynamic>>? verifiedTorrentFiles = task.torrentFiles;
     final int realTotalDownloaded = task.downloadedBytes;
-    if (task.isTorrent) {
-      final scan = _host.scanExistingTorrentData(
-        task.localFilePath,
-        task.torrentFiles,
-      );
-      if (scan.files != null) {
-        verifiedTorrentFiles = scan.files;
-      }
-    }
+    // FIX(3): Do NOT re-derive per-file bytes from disk on resume: libtorrent
+    // pre-allocates files to full length, so File.lengthSync() reports the full
+    // size even for undownloaded files and would render every file as 100%.
+    // Keep the engine's last-known per-file bytes; the engine re-reports
+    // accurate values after the post-resume recheck.
 
     await _host.setTaskState(
       task.copyWith(

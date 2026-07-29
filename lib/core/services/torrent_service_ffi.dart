@@ -13,6 +13,9 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
       // ignore: avoid_dynamic_calls
       return (this as dynamic).getFileProgress(id) as List<dynamic>?;
     } on NoSuchMethodError {
+      // FIX(1): Plugin build lacks per-file progress. Record it so callers fall back
+      // to priority-based estimation instead of silently reporting 0 B.
+      TorrentService.fileProgressSupported = false;
       return null;
     }
   }
@@ -22,6 +25,8 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
       // ignore: avoid_dynamic_calls
       return (this as dynamic).getFilePriorities(id) as List<dynamic>?;
     } on NoSuchMethodError {
+      // FIX(1): Plugin build lacks per-file priorities. Record it.
+      TorrentService.filePrioritiesSupported = false;
       return null;
     }
   }

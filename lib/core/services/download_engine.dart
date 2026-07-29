@@ -1199,15 +1199,24 @@ class DownloadEngine {
           ? torrent.totalWantedDone
           : torrent.totalDone;
 
-      if (!TorrentService.fileProgressSupported &&
-          resolvedFiles != null &&
-          resolvedFiles.isNotEmpty) {
-        _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
-
-        for (final f in resolvedFiles) {
-          f['progressEstimated'] = true;
+        // FIX(2): Per-file bytes can be unavailable (getFileProgress missing or all
+        // zero) even when the total is accurate. Whenever we have a real total
+        // but no per-file breakdown, distribute it across selected files by
+        // priority so the UI shows a faithful estimate instead of a flat 0 B.
+        final bool hasLivePerFileBytes = resolvedFiles != null &&
+            resolvedFiles.any(
+              (f) => ((f['downloadedBytes'] as int?) ?? 0) > 0,
+            );
+        final bool needsEstimation = resolvedFiles != null &&
+            resolvedFiles.isNotEmpty &&
+            (!TorrentService.fileProgressSupported ||
+                (!hasLivePerFileBytes && downloadedBytes > 0));
+        if (needsEstimation) {
+          _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
+          for (final f in resolvedFiles) {
+            f['progressEstimated'] = true;
+          }
         }
-      }
 
       final isCheckingOrMetadata =
           stateLabel.contains('checking') ||
