@@ -1,3 +1,5 @@
+import 'logging_service.dart';
+
 class DownloadMetrics {
   final String taskId;
   final String url;
@@ -39,9 +41,10 @@ class DownloadMetrics {
     return (avgSpeedBps / theoretical).clamp(0.0, 1.0);
   }
 
+  /// Returns a JSON-safe representation with sensitive query params redacted.
   Map<String, dynamic> toJson() => {
     'taskId': taskId,
-    'url': url,
+    'url': LoggingService.sanitize(url),
     'startedAt': startedAt.toIso8601String(),
     'completedAt': completedAt?.toIso8601String(),
     'elapsedMs': elapsed.inMilliseconds,

@@ -15,6 +15,7 @@ import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/services/download_metrics.dart';
 import '../../../core/services/ffmpeg_mux_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/torrent_service.dart';
@@ -52,6 +53,7 @@ abstract class DownloadOrchestratorHost {
   Map<String, int> get effectiveThreadOverrides;
   Map<int, TorrentUpdateInfo> get providerLatestTorrentStats;
   bool get providerDisposed;
+  Map<String, DownloadMetrics> get downloadMetrics;
 
   // Collaborators.
   SettingsProvider get providerSettingsProvider;
@@ -100,7 +102,7 @@ class DownloadOrchestrator {
 
   final DownloadOrchestratorHost _host;
 
-  static const _mediaChannel = MethodChannel('com.example.dmx/media');
+  static const _mediaChannel = MethodChannel('com.dmx.app/media');
 
   final Set<String> _startingTaskIds = {};
   final Map<String, ({String cookie, DateTime timestamp})> _cookieCache = {};
@@ -395,6 +397,14 @@ class DownloadOrchestrator {
     if (current == null) return;
     if (current.status != DownloadStatus.downloading) return;
 
+    // Finalize DownloadMetrics
+    final metrics = _host.downloadMetrics[taskId];
+    if (metrics != null) {
+      metrics.markCompleted();
+      metrics.totalRetries = _host.retryCounts[taskId] ?? 0;
+      metrics.totalBytesDownloaded = current.downloadedBytes;
+    }
+
     final now = DateTime.now();
     final isSeedingTorrent = current.isTorrent && current.seedingEnabled;
     if (!isSeedingTorrent && current.isTorrent) {
@@ -430,6 +440,13 @@ class DownloadOrchestrator {
       } catch (e) {
         debugPrint('[DMX] SHA-256 verification failed: $e');
       }
+    }
+
+    // Record checksum metrics
+    if (metrics != null && current.expectedSha256 != null) {
+      metrics.checksumAlgorithm = 'SHA-256';
+      metrics.checksumVerified = true;
+      metrics.checksumPassed = current.status != DownloadStatus.failed;
     }
 
     final hasAudio =
@@ -561,6 +578,10 @@ class DownloadOrchestrator {
         ? _host.providerSettingsProvider.maxRetries
         : 0;
     int attempt = 0;
+
+    // Track effective thread count and TTFB in metrics
+    _host.downloadMetrics[task.id]?.effectiveThreads = runtimeThreadCount;
+    int? ttfbTimestamp;
 
     int audioBytesSoFar = hasAudio && task.audioSize > 0
         ? (task.audioProgress * task.audioSize).round()
@@ -702,13 +723,17 @@ class DownloadOrchestrator {
           final audioFile = File(liveAudioTempPath);
           final audioExists = await audioFile.exists();
           final audioLen = audioExists ? await audioFile.length() : 0;
+
+          // Audio is considered complete ONLY when:
+          // 1. audioProgress is at 1.0 (exact stream completion), OR
+          // 2. audio exists on disk AND size is known AND downloaded bytes >= expected size.
+          // The 0.99 heuristic is REMOVED because it can merge truncated audio.
           final isAudioComplete =
-              (liveAudioTask.audioProgress >= 1.0) ||
+              liveAudioTask.audioProgress >= 1.0 ||
               (audioExists &&
                   audioLen > 0 &&
-                  (liveAudioSize > 0
-                      ? audioLen >= liveAudioSize
-                      : liveAudioTask.audioProgress >= 0.99));
+                  liveAudioSize > 0 &&
+                  audioLen >= liveAudioSize);
 
           if (isAudioComplete) {
             debugPrint(
@@ -835,6 +860,12 @@ class DownloadOrchestrator {
             cookies: cookieString,
             oauthToken: YoutubeService.oauthToken,
             onProgress: (progress) {
+              // TTFB tracking: record ms until first byte
+              if (ttfbTimestamp == null && progress.downloadedBytes > 0) {
+                ttfbTimestamp = DateTime.now().millisecondsSinceEpoch;
+                _host.downloadMetrics[task.id]?.timeToFirstByteMs =
+                    ttfbTimestamp! - task.createdAt.millisecondsSinceEpoch;
+              }
               final current = _host.findTaskById(task.id);
               if (current == null ||
                   current.status != DownloadStatus.downloading) {
@@ -1236,6 +1267,15 @@ class DownloadOrchestrator {
         torrentFiles: verifiedTorrentFiles,
       ),
     );
+
+    // Wire DownloadMetrics for this task
+    _host.downloadMetrics[task.id] = DownloadMetrics(
+      taskId: task.id,
+      url: task.url,
+    )..requestedThreads = runtimeThreadCount
+     ..resumed = realTotalDownloaded > 0
+     ..resumeBytesSaved = realTotalDownloaded > 0 ? realTotalDownloaded : 0;
+
     final notificationId = _host.notifications.idFor(task.id);
     // Torrents always reconcile: the guessed name (magnet `dn`) may differ from
     // the real torrent name reported after metadata, and the task's paths must

@@ -13,6 +13,8 @@ import 'core/services/torrent_resume_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'core/app_theme.dart';
+import 'core/services/crash_reporting_service.dart';
+import 'core/services/logging_service.dart';
 import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
 import 'core/services/notification_service.dart';
@@ -27,26 +29,19 @@ import 'shared/widgets/main_navigation_container.dart';
 import 'shared/widgets/share_intent_screen.dart';
 
 Future<void> main(List<String> args) async {
-  runZonedGuarded(
-    () async {
-      WidgetsFlutterBinding.ensureInitialized();
+  CrashReportingService.runWithErrorCapture(() async {
+    // ── Logging: must be first so all subsequent init can log ──
+    LoggingService.init();
+    CrashReportingService.captureFlutterErrors();
 
-      // ── Logging setup (unchanged) ──
-      Logger.root.level = kDebugMode ? Level.ALL : Level.WARNING;
-      Logger.root.onRecord.listen((record) {
-        debugPrint('[${record.level.name}] ${record.loggerName}: ${record.message}');
-        if (record.error != null) debugPrint('  Error: ${record.error}');
-      });
-      FlutterError.onError = (details) {
-        FlutterError.presentError(details);
-        debugPrint('FlutterError: ${details.exception}');
-      };
-      PlatformDispatcher.instance.onError = (error, stack) {
-        debugPrint('Platform error: $error\n$stack');
-        return true;
-      };
+    WidgetsFlutterBinding.ensureInitialized();
 
-      try {
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('Platform error: $error\n$stack');
+      return true;
+    };
+
+    try {
         // ── PHASE 1: Gate (must be first — exits if another instance owns the port) ──
         final isPrimary = await SingleInstanceService().initialize(args);
         if (!isPrimary) exit(0);
@@ -131,9 +126,6 @@ Future<void> main(List<String> args) async {
         debugPrint('Initialization error: $e\n$stack');
         runApp(ErrorApp(error: e.toString()));
       }
-    },
-    (error, stack) {
-      debugPrint('Uncaught zone error: $error\n$stack');
     },
   );
 }

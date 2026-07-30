@@ -47,6 +47,10 @@ gradle.projectsEvaluated {
                 jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
             }
         }
+        tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = "17"
+            targetCompatibility = "17"
+        }
     }
 }
 
@@ -55,6 +59,14 @@ tasks.register<Delete>("clean") {
 }
 
 subprojects {
+    plugins.withId("com.android.library") {
+        val libraryExt = extensions.getByType<com.android.build.gradle.LibraryExtension>()
+        libraryExt.compileOptions {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+        }
+    }
+
     val proj = this
     val setNamespace: () -> Unit = {
         val androidExt = proj.extensions.findByName("android")

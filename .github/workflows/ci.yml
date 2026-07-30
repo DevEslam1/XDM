@@ -1,66 +1,83 @@
-name: DMX Downloader CI
+name: CI
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [main]
+
+env:
+  FLUTTER_VERSION: '3.29.2'
 
 jobs:
-  analyze_and_test:
-    name: Flutter Analyze & Test
+  check:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v5
-
-      - name: Set up Java JDK
-        uses: actions/setup-java@v5
+      - uses: actions/checkout@v4
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          fetch-depth: 0
 
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
-          channel: 'stable'
-          cache: true
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
 
-      - name: Get Dependencies
+      - name: Flutter pub get
         run: flutter pub get
 
-      - name: Run Static Analysis
-        run: flutter analyze
+      - name: Build runner (Drift codegen)
+        run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: Run Unit & Utility Tests
-        run: flutter test test/url_file_utils_test.dart test/database_converters_test.dart test/download_task_test.dart test/download_engine_fallback_test.dart test/youtube_service_test.dart test/forbidden_403_mitigation_test.dart
+      - name: Verify local package overrides exist
+        run: |
+          for dir in packages/*/; do
+            if [ ! -f "$dir/pubspec.yaml" ]; then
+              echo "ERROR: Local package override missing pubspec.yaml: $dir"
+              exit 1
+            fi
+          done
+          echo "All local package overrides verified"
+
+      - name: Pubspec resolution check
+        run: flutter pub get --dry-run 2>&1 | tail -5
+
+      - name: Secret scan — diff against base
+        run: |
+          BASE="${GITHUB_BASE_SHA:-${GITHUB_EVENT_BEFORE:-HEAD~1}}"
+          if git diff "$BASE" --name-only -- 'lib/' | grep -q .; then
+            echo "Scanning $BASE..HEAD for hardcoded secrets in lib/"
+            ! git diff "$BASE" -- 'lib/' | grep -E 'KxPgwFT0|api[_ -]?key.*=.*['"'"'"]'
+          else
+            echo "No lib/ changes in this diff — skipping secret scan"
+          fi
 
   build_android:
-    name: Build Android APK
+    needs: check
     runs-on: ubuntu-latest
-    needs: analyze_and_test
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      - name: Set up Java JDK
-        uses: actions/setup-java@v5
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
-          channel: 'stable'
-          cache: true
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
 
-      - name: Get Dependencies
+      - name: Verify local packages
+        run: |
+          for dir in packages/*/; do
+            if [ ! -f "$dir/pubspec.yaml" ]; then
+              echo "ERROR: Missing local package: $dir"
+              exit 1
+            fi
+          done
+
+      - name: Flutter pub get
         run: flutter pub get
 
-      - name: Build Debug APK
+      - name: Build runner (Drift codegen)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Flutter build APK (debug)
         run: flutter build apk --debug

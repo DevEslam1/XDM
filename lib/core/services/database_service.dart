@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 
 import 'database/app_database.dart';
+import 'logging_service.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/browser/models/bookmark.dart';
 
@@ -19,6 +20,8 @@ class DatabaseService {
 
   /// Returns the shared singleton instance.
   factory DatabaseService() => instance;
+
+  static final _log = LoggingService.logger('DatabaseService');
 
   /// Constructor for subclasses (e.g., test fakes).
   /// Does NOT initialize _db — call [init] first.
@@ -81,6 +84,8 @@ class DatabaseService {
       final existingBms = await _db.select(_db.bookmarks).get();
       final existingBmIds = existingBms.map((b) => b.id).toSet();
 
+      bool allExportsSucceeded = true;
+
       if (await Hive.boxExists(downloadsBoxName)) {
         final box = await Hive.openBox<dynamic>(downloadsBoxName);
         if (box.isNotEmpty) {
@@ -118,23 +123,31 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
-            debugPrint(
-              '[DMX Migration] $downloadsBoxName: ${failedItems.length} corrupt '
+            _log.warning(
+              '$downloadsBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${tasks.length} item(s) migrated successfully.',
             );
-            // Persist corrupt items before the box is deleted so the user can
-            // manually recover them instead of losing the data permanently.
-            await _exportFailedItems(
+            // Only delete the box AFTER successful export of failed items.
+            // If export fails, preserve the Hive box as a backup.
+            final exportOk = await _exportFailedItems(
               'migration_failed_downloads.json',
               failedItems,
             );
+            if (!exportOk) {
+              _log.severe(
+                'Failed to export corrupt downloads. '
+                'Preserving Hive box to prevent data loss.',
+              );
+              allExportsSucceeded = false;
+            }
           }
-          // Always delete the box after processing. Corrupt items are logged
-          // above and skipped; keeping the box causes the migration to re-run
-          // on every launch, creating permanent startup lag.
-          await box.deleteFromDisk();
+          if (allExportsSucceeded) {
+            box.deleteFromDisk();
+          } else {
+            await _backupHiveBox(box, downloadsBoxName);
+          }
         } else {
-          await box.deleteFromDisk();
+          box.deleteFromDisk();
         }
       }
 
@@ -173,19 +186,29 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
-            debugPrint(
-              '[DMX Migration] $bookmarksBoxName: ${failedItems.length} corrupt '
+            _log.warning(
+              '$bookmarksBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${bms.length} item(s) migrated successfully.',
             );
-            await _exportFailedItems(
+            final exportOk = await _exportFailedItems(
               'migration_failed_bookmarks.json',
               failedItems,
             );
+            if (!exportOk) {
+              _log.severe(
+                'Failed to export corrupt bookmarks. '
+                'Preserving Hive box.',
+              );
+              allExportsSucceeded = false;
+            }
           }
-          // Always delete the box after processing (see downloads box above).
-          await box.deleteFromDisk();
+          if (allExportsSucceeded) {
+            box.deleteFromDisk();
+          } else {
+            await _backupHiveBox(box, bookmarksBoxName);
+          }
         } else {
-          await box.deleteFromDisk();
+          box.deleteFromDisk();
         }
       }
 
@@ -229,16 +252,29 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
-            debugPrint(
-              '[DMX Migration] $browserTabsBoxName: ${failedItems.length} corrupt '
+            _log.warning(
+              '$browserTabsBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${tabs.length} item(s) migrated successfully.',
             );
-            await _exportFailedItems('migration_failed_tabs.json', failedItems);
+            final exportOk = await _exportFailedItems(
+              'migration_failed_tabs.json',
+              failedItems,
+            );
+            if (!exportOk) {
+              _log.severe(
+                'Failed to export corrupt tabs. '
+                'Preserving Hive box.',
+              );
+              allExportsSucceeded = false;
+            }
           }
-          // Always delete the box after processing (see downloads box above).
-          await box.deleteFromDisk();
+          if (allExportsSucceeded) {
+            box.deleteFromDisk();
+          } else {
+            await _backupHiveBox(box, browserTabsBoxName);
+          }
         } else {
-          await box.deleteFromDisk();
+          box.deleteFromDisk();
         }
       }
 
@@ -282,37 +318,84 @@ class DatabaseService {
             }
           }
           if (failedItems.isNotEmpty) {
-            debugPrint(
-              '[DMX Migration] $browserHistoryBoxName: ${failedItems.length} corrupt '
+            _log.warning(
+              '$browserHistoryBoxName: ${failedItems.length} corrupt '
               'item(s) skipped. ${hist.length} item(s) migrated successfully.',
             );
-            await _exportFailedItems(
+            final exportOk = await _exportFailedItems(
               'migration_failed_history.json',
               failedItems,
             );
+            if (!exportOk) {
+              _log.severe(
+                'Failed to export corrupt history. '
+                'Preserving Hive box.',
+              );
+              allExportsSucceeded = false;
+            }
           }
-          // Always delete the box after processing (see downloads box above).
-          await box.deleteFromDisk();
+          if (allExportsSucceeded) {
+            box.deleteFromDisk();
+          } else {
+            await _backupHiveBox(box, browserHistoryBoxName);
+          }
         } else {
-          await box.deleteFromDisk();
+          box.deleteFromDisk();
         }
       }
-      return true; // Migration always completes; corrupt items are skipped.
+
+      if (!allExportsSucceeded) {
+        _log.severe(
+          'Hive migration completed with export failures. '
+          'Some Hive boxes were backed up instead of deleted. '
+          'Set hive_migrated=false to retry after manual recovery.',
+        );
+        return false;
+      }
+      return true; // All boxes migrated and exported successfully.
     } catch (e, stackTrace) {
-      debugPrint('Hive to Drift migration error: $e\n$stackTrace');
+      _log.severe('Hive to Drift migration error', e, stackTrace);
       return false;
+    }
+  }
+
+  /// Backs up a Hive box to a safe location instead of deleting it.
+  /// [box] is a Hive Box<dynamic> instance.
+  Future<void> _backupHiveBox(dynamic box, String boxName) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final backupDir = Directory(p.join(dir.path, 'hive_backups'));
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+      final backupPath = p.join(backupDir.path, '${boxName}_backup.hive');
+      // Hive Box.path is String?
+      final boxPath = box.path as String?;
+      if (boxPath != null) {
+        final srcDir = Directory(boxPath);
+        if (await srcDir.exists()) {
+          final backupFile = File(backupPath);
+          if (await backupFile.exists()) {
+            await backupFile.delete();
+          }
+          await srcDir.rename(backupPath);
+          _log.info('Backed up Hive box $boxName to $backupPath');
+        }
+      }
+    } catch (e) {
+      _log.severe('Failed to back up Hive box $boxName', e);
     }
   }
 
   /// Writes [failedItems] that could not be migrated to a JSON file named
   /// [fileName] in the application documents directory, so the user can
   /// manually recover data that would otherwise be lost when the Hive box is
-  /// deleted. Failures here are non-fatal — migration continues regardless.
-  Future<void> _exportFailedItems(
+  /// deleted. Returns true if export succeeded, false otherwise.
+  Future<bool> _exportFailedItems(
     String fileName,
     List<dynamic> failedItems,
   ) async {
-    if (failedItems.isEmpty) return;
+    if (failedItems.isEmpty) return true;
     try {
       final dir = await getApplicationDocumentsDirectory();
       final file = File(p.join(dir.path, fileName));
@@ -324,14 +407,13 @@ class DatabaseService {
       await file.writeAsString(
         const JsonEncoder.withIndent('  ').convert(payload),
       );
-      debugPrint(
-        '[DMX Migration] Exported ${failedItems.length} unmigrated item(s) to '
-        '${file.path}',
+      _log.info(
+        'Exported ${failedItems.length} unmigrated item(s) to ${file.path}',
       );
+      return true;
     } catch (e) {
-      debugPrint(
-        '[DMX Migration] Failed to export unmigrated items to $fileName: $e',
-      );
+      _log.severe('Failed to export unmigrated items to $fileName', e);
+      return false;
     }
   }
 

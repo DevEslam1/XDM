@@ -15,8 +15,11 @@ import '../../../core/services/torrent_service.dart';
 import '../../../core/services/update_service.dart';
 // ignore_for_file: prefer_initializing_formals
 import '../../../core/services/background_service.dart';
+import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/services/download_metrics.dart';
+import '../../../core/services/logging_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/utils/file_utils.dart';
@@ -132,6 +135,8 @@ class DownloadProvider extends ChangeNotifier
   final PermissionService _permissionService;
   final NotificationService _notificationService;
 
+  static final _log = LoggingService.logger('DownloadProvider');
+
   final List<DownloadTask> _tasks = [];
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, Queue<double>> _speedHistories = {};
@@ -159,6 +164,7 @@ class DownloadProvider extends ChangeNotifier
   bool _disposed = false;
 
   final Map<String, int> _retryCounts = {};
+  final Map<String, int> _dbRetryCounts = {};
   Map<int, TorrentUpdateInfo> _latestTorrentStats = {};
 
   List<double> getSpeedHistory(String id) =>
@@ -169,10 +175,19 @@ class DownloadProvider extends ChangeNotifier
 
   Timer? _widgetTimer;
   final Map<String, Timer> _retryTimers = {};
+  final Map<String, Timer> _dbRetryTimers = {};
+  final Map<String, DownloadMetrics> _downloadMetrics = {};
   final Map<String, Future<void>> _activeFutures = {};
 
   String? _lastError;
   String? get lastError => _lastError;
+
+  static String _dbCorruptionMessage(String? doubleErr, String? torrentErr) {
+    final parts = <String>[];
+    if (doubleErr != null) parts.add('chunks: $doubleErr');
+    if (torrentErr != null) parts.add('torrent files: $torrentErr');
+    return parts.isEmpty ? 'unknown' : parts.join('; ');
+  }
 
   // ---------------------------------------------------------------------------
   // Mixin contract implementations
@@ -253,6 +268,9 @@ class DownloadProvider extends ChangeNotifier
   bool get providerDisposed => _disposed;
 
   @override
+  Map<String, DownloadMetrics> get downloadMetrics => _downloadMetrics;
+
+  @override
   DownloadEngine get downloadEngine => _downloadEngine;
 
   @override
@@ -291,6 +309,8 @@ class DownloadProvider extends ChangeNotifier
   // ---------------------------------------------------------------------------
 
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
+
+  DownloadMetrics? getMetrics(String taskId) => _downloadMetrics[taskId];
 
   @override
   void notifyListeners() {
@@ -443,6 +463,17 @@ class DownloadProvider extends ChangeNotifier
     final toDelete = <DownloadTask>[];
 
     final dbTasks = await _databaseService.loadTasks();
+
+    // Check for DB converter corruption signals
+    final doubleCorruption = DoubleListConverter.lastConversionError.value;
+    final torrentCorruption = TorrentFilesConverter.lastConversionError.value;
+    if (doubleCorruption != null || torrentCorruption != null) {
+      _log.severe('DB corruption detected: $_dbCorruptionMessage(doubleCorruption, torrentCorruption)');
+      lastSaveError.value = 'Data corruption detected. Some downloads may need re-downloading.';
+      // Reset notifiers to avoid repeated warnings
+      DoubleListConverter.lastConversionError.value = null;
+      TorrentFilesConverter.lastConversionError.value = null;
+    }
 
     final loaded = dbTasks
         .map((task) {
@@ -1456,6 +1487,8 @@ class DownloadProvider extends ChangeNotifier
     if (index == -1) return;
 
     final prev = _tasks[index];
+    // Keep in-memory state as the source of truth during active downloads.
+    // On DB failure, we MUST NOT replace in-memory progress with stale DB data.
     _tasks[index] = updated;
 
     // Only invalidate the filter/sort cache when a "structural" field changes
@@ -1481,7 +1514,7 @@ class DownloadProvider extends ChangeNotifier
     try {
       await previousSave;
     } catch (e) {
-      debugPrint('Previous DB save failed for ${updated.id}: $e');
+      _log.warning('Previous DB save failed for ${updated.id}', e);
     }
 
     try {
@@ -1492,35 +1525,45 @@ class DownloadProvider extends ChangeNotifier
 
       completer.complete();
     } catch (e) {
-      debugPrint('Error saving task to database: $e');
-      // FIX(R2): Surface the error via a notifier so callers can react, but do NOT
-      // propagate via completeError (which caused unhandled-async crashes).
+      // CRITICAL: Do NOT replace in-memory progress with stale DB data.
+      // The in-memory [updated] task is the source of truth during active downloads.
+      _log.severe('Error saving task to database for ${updated.id}', e);
+
+      // Expose the error via a notifier so callers (e.g., UI snackbars) can react
       lastSaveError.value = 'DB save failed for ${updated.id}: $e';
+
+      // Schedule a retry with backoff
+      _scheduleDbRetry(updated.id, updated);
+
       completer.complete();
-
-      final dbTask = await _databaseService.getTask(updated.id);
-      if (dbTask != null) {
-        final currentIdx = _tasks.indexWhere((task) => task.id == updated.id);
-        if (currentIdx != -1) {
-          final current = _tasks[currentIdx];
-
-          _tasks[currentIdx] = dbTask.copyWith(
-            downloadedBytes: current.downloadedBytes,
-            speed: current.speed,
-            eta: current.eta,
-            chunks: current.chunks,
-            status: current.status,
-            errorMessage: current.errorMessage,
-          );
-        }
-      }
-
       notifyListeners();
     } finally {
       if (identical(_dbSaveQueues[updated.id], completer.future)) {
         _dbSaveQueues.remove(updated.id);
       }
     }
+  }
+
+  /// Schedules a retry of a failed DB save with exponential backoff.
+  /// The in-memory task remains the source of truth.
+  void _scheduleDbRetry(String taskId, DownloadTask task) {
+    final retries = _dbRetryCounts[taskId] ?? 0;
+    if (retries >= 5) {
+      _log.severe('DB save retry exhausted for $taskId after $retries attempts');
+      lastSaveError.value = 'DB save failed after $retries retries for $taskId';
+      return;
+    }
+    _dbRetryCounts[taskId] = retries + 1;
+    final delay = Duration(seconds: (retries + 1) * 2);
+    _log.warning('Scheduling DB save retry #${retries + 1} for $taskId in ${delay.inSeconds}s');
+
+    _dbRetryTimers[taskId]?.cancel();
+    _dbRetryTimers[taskId] = Timer(delay, () {
+      _dbRetryTimers.remove(taskId);
+      final idx = _tasks.indexWhere((t) => t.id == taskId);
+      if (idx == -1) return;
+      _setTask(_tasks[idx]); // Retry with current in-memory state
+    });
   }
 
   DownloadTask? _findTask(String id) {
@@ -1642,7 +1685,7 @@ class DownloadProvider extends ChangeNotifier
   void _updateTelemetryWidget() {
     if (!kIsWeb && Platform.isAndroid) {
       try {
-        const MethodChannel('com.example.dmx/widget')
+        const MethodChannel('com.dmx.app/widget')
             .invokeMethod('updateWidget', {
               'activeCount': downloadingTasksCount,
               'totalSpeed': currentDownloadSpeedFormatted,
@@ -2144,6 +2187,10 @@ class DownloadProvider extends ChangeNotifier
       timer.cancel();
     }
     _retryTimers.clear();
+    for (final timer in _dbRetryTimers.values) {
+      timer.cancel();
+    }
+    _dbRetryTimers.clear();
 
     _widgetTimer?.cancel();
 
@@ -2165,7 +2212,9 @@ class DownloadProvider extends ChangeNotifier
     _lastTorrentFileDiskSync.clear();
     _torrentIds.clear();
     _retryCounts.clear();
+    _dbRetryCounts.clear();
     effectiveThreadOverrides.clear();
+    _downloadMetrics.clear();
 
     _orchestrator.dispose();
 

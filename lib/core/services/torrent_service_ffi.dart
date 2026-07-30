@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes;
 import 'package:logging/logging.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -37,6 +38,41 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
       (this as dynamic).forceReCheck(id);
     } on NoSuchMethodError {
       // Plugin does not support forceReCheck; skip silently.
+    }
+  }
+
+  /// Guarded call to saveResumeData.
+  /// Returns a Uint8List if the plugin supports it, or null if not.
+  /// 
+  /// TODO: When libtorrent_flutter exposes saveResumeData natively, remove 
+  /// the dynamic dispatch and use the typed API directly. The native API 
+  /// should return fast-resume data as a serialized Uint8List that can be 
+  /// persisted and passed back to loadResumeData on restart, avoiding the 
+  /// full piece recheck.
+  Uint8List? trySaveResumeData(int id) {
+    try {
+      // ignore: avoid_dynamic_calls
+      return (this as dynamic).saveResumeData(id) as Uint8List?;
+    } on NoSuchMethodError {
+      // Plugin does not support saveResumeData — marker-only fallback.
+      return null;
+    }
+  }
+
+  /// Guarded call to loadResumeData.
+  /// Returns true if the plugin accepted the resume data.
+  ///
+  /// TODO: When libtorrent_flutter exposes loadResumeData natively, remove
+  /// the dynamic dispatch. The native implementation should accept a
+  /// torrent ID and a Uint8List of previously saved fast-resume data.
+  // ignore: unused_element
+  bool tryLoadResumeData(int id, Uint8List data) {
+    try {
+      // ignore: avoid_dynamic_calls
+      (this as dynamic).loadResumeData(id, data);
+      return true;
+    } on NoSuchMethodError {
+      return false;
     }
   }
 }
@@ -207,6 +243,39 @@ class TorrentService {
     }
   }
 
+  /// Attempts to save native fast-resume data for [torrentId].
+  ///
+  /// The native libtorrent_flutter plugin may or may not expose
+  /// saveResumeData. When it does, the raw binary data is persisted via
+  /// [TorrentResumeStore.saveResumeData] and can be reloaded on the next
+  /// session to skip the full piece recheck.
+  ///
+  /// TODO: When libtorrent_flutter exposes saveResumeData with a typed API,
+  /// the native code should return serialized add_torrent_params / fast-resume
+  /// data that libtorrent can consume via loadResumeData. The method signature
+  /// needed is:
+  ///   Uint8List saveResumeData(int torrentId);
+  ///   void loadResumeData(int torrentId, Uint8List data);
+  static Future<void> saveResumeData(int torrentId) async {
+    if (!isInitialized) return;
+    try {
+      final data = LibtorrentFlutter.instance.trySaveResumeData(torrentId);
+      if (data != null) {
+        await TorrentResumeStore.saveResumeData(torrentId, data);
+      }
+    } catch (e) {
+      _log.warning('saveResumeData failed for $torrentId', e);
+    }
+  }
+
+  /// Saves native resume data for all active torrents.
+  static Future<void> saveAllResumeData() async {
+    if (!isInitialized) return;
+    await Future.wait(
+      _activeTorrentIds.map((id) => saveResumeData(id)),
+    );
+  }
+
   static void setDownloadLimit(int bytesPerSecond) {
     if (!isInitialized) return;
     try {
@@ -228,6 +297,13 @@ class TorrentService {
   static Future<void> dispose() async {
     if (_state != TorrentSessionState.ready) return;
     _state = TorrentSessionState.pausing;
+
+    // Save native resume data for all active torrents before shutdown
+    await saveAllResumeData();
+    await TorrentResumeStore.saveAll(
+      _activeTorrentIds,
+      (id) => _latestProgress[id] ?? 0.0,
+    );
 
     _state = TorrentSessionState.disposing;
     await _updatesSub?.cancel();
@@ -294,6 +370,8 @@ class TorrentService {
       try {
         final progress = _latestProgress[id] ?? 0.0;
         TorrentResumeStore.save(id, progress: progress);
+        // Attempt native fast-resume save before pausing
+        unawaited(saveResumeData(id));
         LibtorrentFlutter.instance.pauseTorrent(id);
       } catch (e) {
         _log.warning('pauseTorrent failed for id $id: $e');

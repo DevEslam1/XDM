@@ -5,7 +5,11 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 
+import '../logging_service.dart';
+
 part 'app_database.g.dart';
+
+final _dbLog = LoggingService.logger('AppDatabase');
 
 // Type Converters
 class DoubleListConverter extends TypeConverter<List<double>, String> {
@@ -22,15 +26,17 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
         return decoded.map((e) => (e as num).toDouble()).toList();
       }
       final msg =
-          '[DMX] DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
-      debugPrint(msg);
+          'DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      _dbLog.warning(msg);
       lastConversionError.value = msg;
       return [];
     } catch (e) {
       final msg =
-          '[DMX] Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
-      debugPrint(msg);
+          'Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      _dbLog.warning(msg);
       lastConversionError.value = msg;
+      // Keep the safe empty-list fallback for rendering, but corruption is
+      // reported via lastConversionError so callers can trigger recovery.
       return [];
     }
   }
@@ -54,14 +60,14 @@ class TorrentFilesConverter
         return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
       final msg =
-          '[DMX] TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
-      debugPrint(msg);
+          'TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      _dbLog.warning(msg);
       lastConversionError.value = msg;
       return [];
     } catch (e) {
       final msg =
-          '[DMX] Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
-      debugPrint(msg);
+          'Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      _dbLog.warning(msg);
       lastConversionError.value = msg;
       return [];
     }

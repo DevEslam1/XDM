@@ -62,7 +62,14 @@ class PositionalFileWriter {
     return PositionalFileWriter._(raf, threadCount, bufferSize);
   }
 
-  /// Opens an existing partial file for resume.
+  /// Opens an existing partial file for resume WITHOUT truncating it.
+  ///
+  /// - If the file exists, opens it in non-truncating [FileMode.append] so all
+  ///   previously downloaded bytes are preserved. Positional writes via
+  ///   [setPosition] + [writeFrom] work correctly on all platforms because
+  ///   [RandomAccessFile] allows seeking regardless of the open mode.
+  /// - If the file does not exist, creates it in [FileMode.write].
+  /// - Never calls [FileMode.write] on an existing file (which would truncate).
   static Future<PositionalFileWriter> openForResume(
     String path, {
     required int threadCount,
@@ -73,7 +80,7 @@ class PositionalFileWriter {
 
     final exists = await file.exists();
     final RandomAccessFile raf = exists
-        ? await file.open(mode: FileMode.write)
+        ? await file.open(mode: FileMode.append)
         : await file.open(mode: FileMode.write);
 
     return PositionalFileWriter._(raf, threadCount, bufferSize);

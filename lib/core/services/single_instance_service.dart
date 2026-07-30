@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'logging_service.dart';
 import '../utils/url_utils.dart';
 
 class SingleInstanceService {
@@ -10,6 +11,8 @@ class SingleInstanceService {
       SingleInstanceService._internal();
   factory SingleInstanceService() => _instance;
   SingleInstanceService._internal();
+
+  static final _log = LoggingService.logger('SingleInstanceService');
 
   static const int _port = 37128;
   HttpServer? _server;
@@ -20,53 +23,63 @@ class SingleInstanceService {
 
   String? get initialUrl => _initialUrl;
 
+  /// Returns the secure token file location.
+  ///
+  /// On Linux/macOS: `~/.config/xdm/xdm_instance_<port>.token` with dir 0700.
+  /// On Windows: `%APPDATA%/xdm/xdm_instance_<port>.token` (user-ACL protected).
+  ///
+  /// NEVER falls back to world-readable system temp ([Directory.systemTemp]).
+  /// If the secure directory cannot be created, single-instance forwarding is
+  /// safely disabled (the caller handles this by failing closed).
   static File get _tokenFile {
-    Directory targetDir = Directory.systemTemp;
     if (Platform.isLinux || Platform.isMacOS) {
-      final userHome =
-          Platform.environment['HOME'] ?? Directory.systemTemp.path;
-      final configDir = Directory('$userHome/.config/xdm');
-      if (!configDir.existsSync()) {
+      final userHome = Platform.environment['HOME'];
+      if (userHome != null && userHome.isNotEmpty) {
+        final configDir = Directory('$userHome/.config/xdm');
         try {
-          configDir.createSync(recursive: true);
-          Process.runSync('chmod', ['700', configDir.path]);
+          if (!configDir.existsSync()) {
+            configDir.createSync(recursive: true);
+          }
+          // Set 0700 on Unix — best-effort; if chmod is unavailable, the
+          // umask should have created it with safe defaults on most systems.
+          try {
+            Process.runSync('chmod', ['700', configDir.path]);
+          } catch (_) {}
+          if (configDir.existsSync()) {
+            final tokenFile = File('${configDir.path}/xdm_instance_$_port.token');
+            return tokenFile;
+          }
         } catch (e) {
-          debugPrint(
-            '[SingleInstanceService] Warning: Failed to create user config dir with 0700 perms: $e',
-          );
+          _log.severe('Failed to create secure config dir $userHome/.config/xdm', e);
+          // Fail closed — do NOT fall back to temp.
+          // Return a file in a non-existent path; _startServer will throw,
+          // and the caller will disable single-instance forwarding safely.
         }
       }
-      if (configDir.existsSync()) {
-        targetDir = configDir;
-      } else {
-        debugPrint(
-          '[SingleInstanceService] WARNING: Could not use ~/.config/xdm; '
-          'falling back to system temp (${Directory.systemTemp.path}). '
-          'Token may be readable by other users on this system.',
-        );
-      }
+      // Fail closed if HOME is unset or directory creation failed.
+      return File('/nonexistent/xdm_instance_$_port.token');
     } else if (Platform.isWindows) {
-      // On Windows, use APPDATA which is restricted to the current user by default ACLs
       final appData =
           Platform.environment['APPDATA'] ??
           Platform.environment['LOCALAPPDATA'];
       if (appData != null && appData.isNotEmpty) {
         final configDir = Directory('$appData\\xdm');
-        if (!configDir.existsSync()) {
-          try {
+        try {
+          if (!configDir.existsSync()) {
             configDir.createSync(recursive: true);
-          } catch (e) {
-            debugPrint(
-              '[SingleInstanceService] Warning: Failed to create user AppData dir: $e',
-            );
           }
-        }
-        if (configDir.existsSync()) {
-          targetDir = configDir;
+          if (configDir.existsSync()) {
+            return File('${configDir.path}\\xdm_instance_$_port.token');
+          }
+        } catch (e) {
+          _log.severe('Failed to create AppData config dir', e);
         }
       }
+      // Fail closed on Windows too.
+      return File('C:\\nonexistent\\xdm_instance_$_port.token');
     }
-    return File('${targetDir.path}/xdm_instance_$_port.token');
+    // Web or unknown platform — no-op
+    return File('/nonexistent/xdm_instance_$_port.token');
   }
 
   /// Timing-safe string comparison to prevent timing side-channel attacks.
@@ -108,10 +121,7 @@ class SingleInstanceService {
         return false;
       }
 
-      // If forwarding failed, check if the token file is stale (>10 seconds old) before deleting.
-      debugPrint(
-        '[SingleInstanceService] Primary instance unresponsive. Checking token file age.',
-      );
+      _log.warning('Primary instance unresponsive. Checking token file age.');
       try {
         if (await _tokenFile.exists()) {
           final stat = await _tokenFile.stat();
@@ -125,11 +135,11 @@ class SingleInstanceService {
         await _startServer(candidateUrl);
         return true;
       } catch (e) {
-        debugPrint('SingleInstanceService retry bind failed: $e');
+        _log.warning('Retry bind failed', e);
         return false;
       }
     } catch (e) {
-      debugPrint('SingleInstanceService init error: $e');
+      _log.warning('Init error', e);
       _initialUrl = candidateUrl;
       return true;
     }
@@ -147,9 +157,7 @@ class SingleInstanceService {
         await Process.run('chmod', ['600', tempTokenF.path]);
         await tempTokenF.rename(tokenF.path);
       } catch (e) {
-        debugPrint(
-          '[SingleInstanceService] Warning: Atomic token write failed ($e); falling back to direct write.',
-        );
+        _log.warning('Atomic token write failed, falling back to direct write', e);
         await tokenF.writeAsString(_securityToken!);
         try {
           await Process.run('chmod', ['600', tokenF.path]);
@@ -177,7 +185,7 @@ class SingleInstanceService {
         request.response.statusCode = HttpStatus.ok;
         await request.response.close();
       } catch (e) {
-        debugPrint('SingleInstanceServer request error: $e');
+        _log.warning('Server request error', e);
         try {
           request.response.statusCode = HttpStatus.internalServerError;
           await request.response.close();
@@ -208,7 +216,7 @@ class SingleInstanceService {
       final response = await req.close();
       return response.statusCode == HttpStatus.ok;
     } catch (e) {
-      debugPrint('Failed to forward url to primary instance: $e');
+      _log.warning('Failed to forward URL to primary instance', e);
       return false;
     } finally {
       client.close(force: true);
@@ -232,9 +240,7 @@ class SingleInstanceService {
     try {
       if (_tokenFile.existsSync()) _tokenFile.deleteSync();
     } catch (e) {
-      debugPrint(
-        '[SingleInstanceService] Failed to delete token file on dispose: $e',
-      );
+      _log.warning('Failed to delete token file on dispose', e);
     }
   }
 

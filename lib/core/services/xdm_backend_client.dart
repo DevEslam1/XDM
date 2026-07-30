@@ -3,18 +3,20 @@ import 'dart:convert';
 import 'dart:math' show max;
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/constants.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import 'logging_service.dart';
 import 'xdm_backend_exceptions.dart';
+
+final _log = LoggingService.logger('XdmBackendClient');
 
 class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  static String? _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
+  static String? _apiKey;
 
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
@@ -23,17 +25,19 @@ class XdmBackendClient {
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
-  /// Reads the API key from secure storage, from the compile-time
-  /// [DMX_API_KEY] environment variable, or falls back to a hardcoded
-  /// default token.
+  /// Reads the API key from secure storage or from the compile-time
+  /// [DMX_API_KEY] environment variable.
   ///
   /// Call this once at app startup before using the client.
+  /// If no key is found, [BackendUnauthorizedException] will be thrown
+  /// at the first API call — the app MUST fail closed.
   static Future<void> loadApiKey() async {
     try {
       final stored = await _secureStorage.read(key: _apiKeyStorageKey);
 
       if (stored != null && stored.isNotEmpty) {
         _apiKey = stored;
+        _log.info('API key loaded from secure storage');
         return;
       }
 
@@ -41,14 +45,18 @@ class XdmBackendClient {
 
       if (envKey.isNotEmpty) {
         _apiKey = envKey;
+        _log.info('API key loaded from compile-time define');
         return;
       }
 
-      // Default production token fallback
-      _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
+      // No key configured — fail closed at call time via _effectiveApiKey
+      _apiKey = null;
+      _log.warning(
+        'No API key configured. Set DMX_API_KEY or store via setApiKey().',
+      );
     } catch (e) {
-      debugPrint('[XdmBackendClient] Failed to load API key: $e');
-      _apiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
+      _log.severe('Failed to load API key', e);
+      _apiKey = null;
     }
   }
 
@@ -94,9 +102,7 @@ class XdmBackendClient {
           : kDefaultBackendBaseUrl;
     } catch (e) {
       baseUrl = kDefaultBackendBaseUrl;
-      debugPrint(
-        '[XdmBackendClient] Settings not available yet, using default base URL: $e',
-      );
+      _log.fine('Settings not available yet, using default base URL: $e');
     }
     // Do NOT force-close the old _dio instance — that would cancel any
     // in-flight API requests. Simply replace the reference and let the old
@@ -115,12 +121,7 @@ class XdmBackendClient {
       ),
     );
 
-    if (kDebugMode) {
-      debugPrint(
-        '[XdmBackendClient] Configured with backend URL: '
-        '$baseUrl',
-      );
-    }
+    _log.fine('Configured with backend URL: $baseUrl');
   }
 
   /// Manually updates the backend configuration and refreshes the Dio client
