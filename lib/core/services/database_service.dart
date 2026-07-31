@@ -493,6 +493,7 @@ class DatabaseService {
       notes: drift.Value(task.notes),
       playlistId: drift.Value(task.playlistId),
       playlistTitle: drift.Value(task.playlistTitle),
+      thumbnailUrl: drift.Value(task.thumbnailUrl),
       isAppUpdate: drift.Value(task.isAppUpdate),
       priority: drift.Value(task.priority),
       expectedSha256: drift.Value(task.expectedSha256),
@@ -572,6 +573,7 @@ class DatabaseService {
       playlistTitle: row.playlistTitle?.isNotEmpty == true
           ? row.playlistTitle
           : null,
+      thumbnailUrl: row.thumbnailUrl,
       isAppUpdate: row.isAppUpdate,
       priority: row.priority,
       expectedSha256: row.expectedSha256,

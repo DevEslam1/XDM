@@ -396,6 +396,17 @@ class $DownloadTasksTable extends DownloadTasks
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _thumbnailUrlMeta = const VerificationMeta(
+    'thumbnailUrl',
+  );
+  @override
+  late final GeneratedColumn<String> thumbnailUrl = GeneratedColumn<String>(
+    'thumbnail_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isAppUpdateMeta = const VerificationMeta(
     'isAppUpdate',
   );
@@ -470,6 +481,7 @@ class $DownloadTasksTable extends DownloadTasks
     notes,
     playlistId,
     playlistTitle,
+    thumbnailUrl,
     isAppUpdate,
     priority,
     expectedSha256,
@@ -751,6 +763,15 @@ class $DownloadTasksTable extends DownloadTasks
         ),
       );
     }
+    if (data.containsKey('thumbnail_url')) {
+      context.handle(
+        _thumbnailUrlMeta,
+        thumbnailUrl.isAcceptableOrUnknown(
+          data['thumbnail_url']!,
+          _thumbnailUrlMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_app_update')) {
       context.handle(
         _isAppUpdateMeta,
@@ -924,6 +945,10 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.string,
         data['${effectivePrefix}playlist_title'],
       ),
+      thumbnailUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}thumbnail_url'],
+      ),
       isAppUpdate: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_app_update'],
@@ -987,6 +1012,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? notes;
   final String? playlistId;
   final String? playlistTitle;
+  final String? thumbnailUrl;
   final bool isAppUpdate;
   final int priority;
   final String? expectedSha256;
@@ -1025,6 +1051,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     this.notes,
     this.playlistId,
     this.playlistTitle,
+    this.thumbnailUrl,
     required this.isAppUpdate,
     required this.priority,
     this.expectedSha256,
@@ -1094,6 +1121,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || playlistTitle != null) {
       map['playlist_title'] = Variable<String>(playlistTitle);
     }
+    if (!nullToAbsent || thumbnailUrl != null) {
+      map['thumbnail_url'] = Variable<String>(thumbnailUrl);
+    }
     map['is_app_update'] = Variable<bool>(isAppUpdate);
     map['priority'] = Variable<int>(priority);
     if (!nullToAbsent || expectedSha256 != null) {
@@ -1160,6 +1190,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       playlistTitle: playlistTitle == null && nullToAbsent
           ? const Value.absent()
           : Value(playlistTitle),
+      thumbnailUrl: thumbnailUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(thumbnailUrl),
       isAppUpdate: Value(isAppUpdate),
       priority: Value(priority),
       expectedSha256: expectedSha256 == null && nullToAbsent
@@ -1212,6 +1245,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       notes: serializer.fromJson<String?>(json['notes']),
       playlistId: serializer.fromJson<String?>(json['playlistId']),
       playlistTitle: serializer.fromJson<String?>(json['playlistTitle']),
+      thumbnailUrl: serializer.fromJson<String?>(json['thumbnailUrl']),
       isAppUpdate: serializer.fromJson<bool>(json['isAppUpdate']),
       priority: serializer.fromJson<int>(json['priority']),
       expectedSha256: serializer.fromJson<String?>(json['expectedSha256']),
@@ -1257,6 +1291,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'notes': serializer.toJson<String?>(notes),
       'playlistId': serializer.toJson<String?>(playlistId),
       'playlistTitle': serializer.toJson<String?>(playlistTitle),
+      'thumbnailUrl': serializer.toJson<String?>(thumbnailUrl),
       'isAppUpdate': serializer.toJson<bool>(isAppUpdate),
       'priority': serializer.toJson<int>(priority),
       'expectedSha256': serializer.toJson<String?>(expectedSha256),
@@ -1298,6 +1333,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     Value<String?> notes = const Value.absent(),
     Value<String?> playlistId = const Value.absent(),
     Value<String?> playlistTitle = const Value.absent(),
+    Value<String?> thumbnailUrl = const Value.absent(),
     bool? isAppUpdate,
     int? priority,
     Value<String?> expectedSha256 = const Value.absent(),
@@ -1344,6 +1380,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     playlistTitle: playlistTitle.present
         ? playlistTitle.value
         : this.playlistTitle,
+    thumbnailUrl: thumbnailUrl.present ? thumbnailUrl.value : this.thumbnailUrl,
     isAppUpdate: isAppUpdate ?? this.isAppUpdate,
     priority: priority ?? this.priority,
     expectedSha256: expectedSha256.present
@@ -1426,6 +1463,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       playlistTitle: data.playlistTitle.present
           ? data.playlistTitle.value
           : this.playlistTitle,
+      thumbnailUrl: data.thumbnailUrl.present
+          ? data.thumbnailUrl.value
+          : this.thumbnailUrl,
       isAppUpdate: data.isAppUpdate.present
           ? data.isAppUpdate.value
           : this.isAppUpdate,
@@ -1473,6 +1513,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('notes: $notes, ')
           ..write('playlistId: $playlistId, ')
           ..write('playlistTitle: $playlistTitle, ')
+          ..write('thumbnailUrl: $thumbnailUrl, ')
           ..write('isAppUpdate: $isAppUpdate, ')
           ..write('priority: $priority, ')
           ..write('expectedSha256: $expectedSha256')
@@ -1516,6 +1557,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     notes,
     playlistId,
     playlistTitle,
+    thumbnailUrl,
     isAppUpdate,
     priority,
     expectedSha256,
@@ -1558,6 +1600,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.notes == this.notes &&
           other.playlistId == this.playlistId &&
           other.playlistTitle == this.playlistTitle &&
+          other.thumbnailUrl == this.thumbnailUrl &&
           other.isAppUpdate == this.isAppUpdate &&
           other.priority == this.priority &&
           other.expectedSha256 == this.expectedSha256);
@@ -1598,6 +1641,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> notes;
   final Value<String?> playlistId;
   final Value<String?> playlistTitle;
+  final Value<String?> thumbnailUrl;
   final Value<bool> isAppUpdate;
   final Value<int> priority;
   final Value<String?> expectedSha256;
@@ -1637,6 +1681,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.notes = const Value.absent(),
     this.playlistId = const Value.absent(),
     this.playlistTitle = const Value.absent(),
+    this.thumbnailUrl = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
     this.priority = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
@@ -1677,6 +1722,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.notes = const Value.absent(),
     this.playlistId = const Value.absent(),
     this.playlistTitle = const Value.absent(),
+    this.thumbnailUrl = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
     this.priority = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
@@ -1727,6 +1773,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? notes,
     Expression<String>? playlistId,
     Expression<String>? playlistTitle,
+    Expression<String>? thumbnailUrl,
     Expression<bool>? isAppUpdate,
     Expression<int>? priority,
     Expression<String>? expectedSha256,
@@ -1768,6 +1815,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (notes != null) 'notes': notes,
       if (playlistId != null) 'playlist_id': playlistId,
       if (playlistTitle != null) 'playlist_title': playlistTitle,
+      if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
       if (isAppUpdate != null) 'is_app_update': isAppUpdate,
       if (priority != null) 'priority': priority,
       if (expectedSha256 != null) 'expected_sha256': expectedSha256,
@@ -1810,6 +1858,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Value<String?>? notes,
     Value<String?>? playlistId,
     Value<String?>? playlistTitle,
+    Value<String?>? thumbnailUrl,
     Value<bool>? isAppUpdate,
     Value<int>? priority,
     Value<String?>? expectedSha256,
@@ -1850,6 +1899,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       notes: notes ?? this.notes,
       playlistId: playlistId ?? this.playlistId,
       playlistTitle: playlistTitle ?? this.playlistTitle,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       priority: priority ?? this.priority,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
@@ -1968,6 +2018,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (playlistTitle.present) {
       map['playlist_title'] = Variable<String>(playlistTitle.value);
     }
+    if (thumbnailUrl.present) {
+      map['thumbnail_url'] = Variable<String>(thumbnailUrl.value);
+    }
     if (isAppUpdate.present) {
       map['is_app_update'] = Variable<bool>(isAppUpdate.value);
     }
@@ -2020,6 +2073,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('notes: $notes, ')
           ..write('playlistId: $playlistId, ')
           ..write('playlistTitle: $playlistTitle, ')
+          ..write('thumbnailUrl: $thumbnailUrl, ')
           ..write('isAppUpdate: $isAppUpdate, ')
           ..write('priority: $priority, ')
           ..write('expectedSha256: $expectedSha256, ')
@@ -3135,6 +3189,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<String?> notes,
       Value<String?> playlistId,
       Value<String?> playlistTitle,
+      Value<String?> thumbnailUrl,
       Value<bool> isAppUpdate,
       Value<int> priority,
       Value<String?> expectedSha256,
@@ -3176,6 +3231,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<String?> notes,
       Value<String?> playlistId,
       Value<String?> playlistTitle,
+      Value<String?> thumbnailUrl,
       Value<bool> isAppUpdate,
       Value<int> priority,
       Value<String?> expectedSha256,
@@ -3364,6 +3420,11 @@ class $$DownloadTasksTableFilterComposer
 
   ColumnFilters<String> get playlistTitle => $composableBuilder(
     column: $table.playlistTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get thumbnailUrl => $composableBuilder(
+    column: $table.thumbnailUrl,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3562,6 +3623,11 @@ class $$DownloadTasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get thumbnailUrl => $composableBuilder(
+    column: $table.thumbnailUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isAppUpdate => $composableBuilder(
     column: $table.isAppUpdate,
     builder: (column) => ColumnOrderings(column),
@@ -3730,6 +3796,11 @@ class $$DownloadTasksTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get thumbnailUrl => $composableBuilder(
+    column: $table.thumbnailUrl,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isAppUpdate => $composableBuilder(
     column: $table.isAppUpdate,
     builder: (column) => column,
@@ -3810,6 +3881,7 @@ class $$DownloadTasksTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String?> playlistId = const Value.absent(),
                 Value<String?> playlistTitle = const Value.absent(),
+                Value<String?> thumbnailUrl = const Value.absent(),
                 Value<bool> isAppUpdate = const Value.absent(),
                 Value<int> priority = const Value.absent(),
                 Value<String?> expectedSha256 = const Value.absent(),
@@ -3849,6 +3921,7 @@ class $$DownloadTasksTableTableManager
                 notes: notes,
                 playlistId: playlistId,
                 playlistTitle: playlistTitle,
+                thumbnailUrl: thumbnailUrl,
                 isAppUpdate: isAppUpdate,
                 priority: priority,
                 expectedSha256: expectedSha256,
@@ -3891,6 +3964,7 @@ class $$DownloadTasksTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<String?> playlistId = const Value.absent(),
                 Value<String?> playlistTitle = const Value.absent(),
+                Value<String?> thumbnailUrl = const Value.absent(),
                 Value<bool> isAppUpdate = const Value.absent(),
                 Value<int> priority = const Value.absent(),
                 Value<String?> expectedSha256 = const Value.absent(),
@@ -3930,6 +4004,7 @@ class $$DownloadTasksTableTableManager
                 notes: notes,
                 playlistId: playlistId,
                 playlistTitle: playlistTitle,
+                thumbnailUrl: thumbnailUrl,
                 isAppUpdate: isAppUpdate,
                 priority: priority,
                 expectedSha256: expectedSha256,

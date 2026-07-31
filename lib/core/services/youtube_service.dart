@@ -307,6 +307,9 @@ class YoutubeService {
     Map<String, dynamic> backendRes,
   ) {
     final title = (backendRes['title'] as String?) ?? 'Untitled';
+    final thumbnailUrl =
+        (backendRes['thumbnail'] as String?) ??
+        (backendRes['thumbnailUrl'] as String?);
     final rawStreams =
         (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
 
@@ -354,6 +357,7 @@ class YoutubeService {
           'size': filesize,
           'ext': ext,
           'title': title,
+          'thumbnailUrl': thumbnailUrl,
           if (map.containsKey('itag')) 'itag': map['itag'],
           if (map.containsKey('format_id')) 'format_id': map['format_id'],
         });
@@ -364,6 +368,7 @@ class YoutubeService {
           map['audioSrc'] = null;
         }
         map['title'] = title;
+        if (thumbnailUrl != null) map['thumbnailUrl'] = thumbnailUrl;
         results.add(map);
       }
     }

@@ -124,6 +124,7 @@ class DownloadTasks extends Table {
   TextColumn get notes => text().nullable()();
   TextColumn get playlistId => text().nullable()();
   TextColumn get playlistTitle => text().nullable()();
+  TextColumn get thumbnailUrl => text().nullable()();
   BoolColumn get isAppUpdate => boolean().withDefault(const Constant(false))();
   IntColumn get priority => integer().withDefault(const Constant(0))();
   TextColumn get expectedSha256 => text().nullable()();
@@ -183,7 +184,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -410,6 +411,12 @@ class AppDatabase extends _$AppDatabase {
         );
         await customStatement(
           'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)',
+        );
+      }
+      if (from < 10) {
+        // Migration 9 -> 10: Add thumbnail_url for YouTube playlist items
+        await customStatement(
+          'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT',
         );
       }
     },

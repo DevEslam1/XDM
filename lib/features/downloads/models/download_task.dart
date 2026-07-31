@@ -58,6 +58,7 @@ class DownloadTask {
   final int priority; // 0 = normal, 1 = high, 2 = urgent
   final String? playlistId; // groups playlist videos into one card
   final String? playlistTitle;
+  final String? thumbnailUrl;
   final String? expectedSha256;
   final List<String>? mirrorUrls;
 
@@ -99,6 +100,7 @@ class DownloadTask {
     this.priority = 0,
     this.playlistId,
     this.playlistTitle,
+    this.thumbnailUrl,
     this.expectedSha256,
     this.mirrorUrls,
   });
@@ -481,6 +483,7 @@ class DownloadTask {
         priority: map['priority'] as int? ?? 0,
         playlistId: map['playlistId'] as String?,
         playlistTitle: map['playlistTitle'] as String?,
+        thumbnailUrl: map['thumbnailUrl'] as String?,
         expectedSha256: map['expectedSha256'] as String?,
         mirrorUrls: map['mirrorUrls'] is List
             ? (map['mirrorUrls'] as List).map((e) => e as String).toList()
@@ -539,6 +542,7 @@ class DownloadTask {
       priority: map['priority'] as int? ?? 0,
       playlistId: map['playlistId'] as String?,
       playlistTitle: map['playlistTitle'] as String?,
+      thumbnailUrl: map['thumbnailUrl'] as String?,
       expectedSha256: map['expectedSha256'] as String?,
       mirrorUrls: map['mirrorUrls'] is List
           ? (map['mirrorUrls'] as List).map((e) => e as String).toList()

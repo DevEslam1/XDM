@@ -83,6 +83,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
   String? _resolvedYoutubeQualityPreset;
   String? _resolvedAudioUrl;
   int? _resolvedAudioSize;
+  String? _resolvedThumbnailUrl;
   bool _isMetadataResolved = false;
   bool _isResolvingLink = false;
   String _resolvedFileName = '';
@@ -265,21 +266,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             setState(() {
               _resolvedFileName = meta['name'] as String? ?? '';
               _resolvedCategory = categoryFromFileName(_resolvedFileName);
-              _torrentFiles = (meta['files'] as List? ?? [])
-                  .map(
-                    (f) {
-                      final fileMap = f as Map;
-                      return {
-                        'name': fileMap['name'] as String? ?? '',
-                        'length': fileMap['length'] as int? ?? 0,
-                        'selected': true,
-                        'priority': 4,
-                        'downloadedBytes': 0,
-                        'speed': 0.0,
-                      };
-                    },
-                  )
-                  .toList();
+              _torrentFiles = (meta['files'] as List? ?? []).map((f) {
+                final fileMap = f as Map;
+                return {
+                  'name': fileMap['name'] as String? ?? '',
+                  'length': fileMap['length'] as int? ?? 0,
+                  'selected': true,
+                  'priority': 4,
+                  'downloadedBytes': 0,
+                  'speed': 0.0,
+                };
+              }).toList();
               _updateSelectedTorrentSize();
               _isMetadataResolved = true;
               if (!_userEditedName) _setNameAndExt(_resolvedFileName);
@@ -417,6 +414,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final audioUrl = stream['audioSrc'] as String?;
         final audioSize = stream['audioSize'] as int?;
         final streamType = stream['type'] as String? ?? 'muxed';
+        final thumbnailUrl = stream['thumbnailUrl'] as String?;
         final qualityPreset = streamType == 'audio'
             ? 'audio_only'
             : stream['quality'] as String?;
@@ -438,6 +436,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
           youtubeQualityPreset: qualityPreset,
           mergedAudioUrl: audioUrl,
           audioSize: audioSize ?? 0,
+          thumbnailUrl: thumbnailUrl,
         );
         if (!mounted) return;
         if (provider.lastError != null) {
@@ -522,21 +521,17 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
               _resolvedFileName = meta['name'] ?? '';
               _resolvedFileSize = meta['length'] ?? 0;
               _resolvedCategory = 'Archive';
-              _torrentFiles = (meta['files'] as List? ?? [])
-                  .map(
-                    (f) {
-                      final fileMap = f as Map;
-                      return {
-                        'name': fileMap['name'] as String? ?? '',
-                        'length': fileMap['length'] as int? ?? 0,
-                        'selected': true,
-                        'priority': 4,
-                        'downloadedBytes': 0,
-                        'speed': 0.0,
-                      };
-                    },
-                  )
-                  .toList();
+              _torrentFiles = (meta['files'] as List? ?? []).map((f) {
+                final fileMap = f as Map;
+                return {
+                  'name': fileMap['name'] as String? ?? '',
+                  'length': fileMap['length'] as int? ?? 0,
+                  'selected': true,
+                  'priority': 4,
+                  'downloadedBytes': 0,
+                  'speed': 0.0,
+                };
+              }).toList();
               _isMetadataResolved = true;
               if (!_userEditedName) _setNameAndExt(_resolvedFileName);
               _selectedCategory = 'Archive';
@@ -649,6 +644,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             torrentId: _resolvedTorrentId,
             mergedAudioUrl: _resolvedAudioUrl,
             audioSize: _resolvedAudioSize ?? 0,
+            thumbnailUrl: _resolvedThumbnailUrl,
           );
           addedCount++;
           AddDownloadDialog.recordAddedUrl(singleUrl);
@@ -915,6 +911,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       torrentId: _resolvedTorrentId,
                       mergedAudioUrl: _resolvedAudioUrl,
                       audioSize: _resolvedAudioSize ?? 0,
+                      thumbnailUrl: _resolvedThumbnailUrl,
                     );
                     if (!mounted) return;
                     if (!context.mounted) return;
@@ -977,6 +974,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         torrentId: _resolvedTorrentId,
         mergedAudioUrl: _resolvedAudioUrl,
         audioSize: _resolvedAudioSize ?? 0,
+        thumbnailUrl: _resolvedThumbnailUrl,
       );
       if (!mounted) return;
       if (!context.mounted) return;
@@ -1131,10 +1129,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               const SizedBox(width: 6),
                               _HeaderAction(
                                 icon: Icons.language_rounded,
-                                tooltip: isRtl ? 'فتح في المتصفح' : 'Open in browser',
+                                tooltip: isRtl
+                                    ? 'فتح في المتصفح'
+                                    : 'Open in browser',
                                 color: secClr,
                                 onTap: () async {
-                                  final messenger = ScaffoldMessenger.of(context);
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
                                   final url = _urlController.text.trim();
                                   if (url.isEmpty) {
                                     messenger.removeCurrentSnackBar();
@@ -1143,11 +1145,26 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                         backgroundColor: Colors.transparent,
                                         elevation: 0,
                                         behavior: SnackBarBehavior.floating,
-                                        duration: const Duration(milliseconds: 2600),
-                                        margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                                        duration: const Duration(
+                                          milliseconds: 2600,
+                                        ),
+                                        margin: const EdgeInsets.fromLTRB(
+                                          12,
+                                          0,
+                                          12,
+                                          14,
+                                        ),
                                         padding: EdgeInsets.zero,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        content: Text(isRtl ? 'لا يوجد رابط لفتحه' : 'No URL to open'),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                        content: Text(
+                                          isRtl
+                                              ? 'لا يوجد رابط لفتحه'
+                                              : 'No URL to open',
+                                        ),
                                       ),
                                     );
                                     return;
@@ -1165,11 +1182,26 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                         backgroundColor: Colors.transparent,
                                         elevation: 0,
                                         behavior: SnackBarBehavior.floating,
-                                        duration: const Duration(milliseconds: 2600),
-                                        margin: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                                        duration: const Duration(
+                                          milliseconds: 2600,
+                                        ),
+                                        margin: const EdgeInsets.fromLTRB(
+                                          12,
+                                          0,
+                                          12,
+                                          14,
+                                        ),
                                         padding: EdgeInsets.zero,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        content: Text(isRtl ? 'لا يمكن فتح الرابط' : 'Cannot open URL'),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                        content: Text(
+                                          isRtl
+                                              ? 'لا يمكن فتح الرابط'
+                                              : 'Cannot open URL',
+                                        ),
                                       ),
                                     );
                                   }
@@ -1241,168 +1273,190 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       : (isDark
                                             ? AppTheme.neonRed
                                             : AppTheme.lightNeonRed)),
-            child: AnimatedBuilder(
-              animation: Listenable.merge([
-                _urlController,
-                _urlFocus,
-              ]),
-              builder: (_, _) {
-                return Container(
-                  decoration: BoxDecoration(
-                    color: panelBg,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Stack(
-                    children: [
-                      // scanline sweep while focused
-                      if (_urlFocus.hasFocus && isDark)
-                        Positioned.fill(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(
-                              12,
-                            ),
                             child: AnimatedBuilder(
-                              animation: _scanController,
-                              builder: (_, _) => LayoutBuilder(
-                                builder: (_, c) {
-                                  final x =
-                                      (c.maxWidth + 60) *
-                                          _scanController
-                                              .value -
-                                      60;
-                                  return Stack(
+                              animation: Listenable.merge([
+                                _urlController,
+                                _urlFocus,
+                              ]),
+                              builder: (_, _) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: panelBg,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Stack(
                                     children: [
-                                      Positioned(
-                                        left: x,
-                                        top: 0,
-                                        bottom: 0,
-                                        child: Container(
-                                          width: 40,
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                blueClr
-                                                    .withValues(
-                                                      alpha: 0,
-                                                    ),
-                                                blueClr
-                                                    .withValues(
-                                                      alpha:
-                                                          0.06,
-                                                    ),
-                                                blueClr
-                                                    .withValues(
-                                                      alpha: 0,
-                                                    ),
-                                              ],
+                                      // scanline sweep while focused
+                                      if (_urlFocus.hasFocus && isDark)
+                                        Positioned.fill(
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
                                             ),
+                                            child: AnimatedBuilder(
+                                              animation: _scanController,
+                                              builder: (_, _) => LayoutBuilder(
+                                                builder: (_, c) {
+                                                  final x =
+                                                      (c.maxWidth + 60) *
+                                                          _scanController
+                                                              .value -
+                                                      60;
+                                                  return Stack(
+                                                    children: [
+                                                      Positioned(
+                                                        left: x,
+                                                        top: 0,
+                                                        bottom: 0,
+                                                        child: Container(
+                                                          width: 40,
+                                                          decoration: BoxDecoration(
+                                                            gradient: LinearGradient(
+                                                              colors: [
+                                                                blueClr
+                                                                    .withValues(
+                                                                      alpha: 0,
+                                                                    ),
+                                                                blueClr
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.06,
+                                                                    ),
+                                                                blueClr
+                                                                    .withValues(
+                                                                      alpha: 0,
+                                                                    ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      TextFormField(
+                                        controller: _urlController,
+                                        focusNode: _urlFocus,
+                                        maxLines: 3,
+                                        minLines: 1,
+                                        style: TextStyle(
+                                          color: textClr,
+                                          fontSize: 12,
+                                          fontFamily: 'monospace',
+                                          height: 1.4,
+                                        ),
+                                        validator: (val) {
+                                          if (val == null ||
+                                              val.trim().isEmpty) {
+                                            return L10n.of(
+                                              context,
+                                              'url_empty_error',
+                                            );
+                                          }
+                                          final lines = val
+                                              .split(RegExp(r'[\r\n]+'))
+                                              .map((l) => l.trim())
+                                              .where((l) => l.isNotEmpty)
+                                              .toList();
+                                          if (lines.isEmpty) {
+                                            return L10n.of(
+                                              context,
+                                              'url_empty_error',
+                                            );
+                                          }
+                                          for (final line in lines) {
+                                            if (!isValidTransmissionUrl(line)) {
+                                              return L10n.of(
+                                                context,
+                                                'url_invalid_error',
+                                              );
+                                            }
+                                          }
+                                          return null;
+                                        },
+                                        decoration: InputDecoration(
+                                          hintText:
+                                              'https:// …  |  magnet:?xt= …',
+                                          hintStyle: TextStyle(
+                                            color: mutedClr.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                            fontSize: 12,
+                                            fontFamily: 'monospace',
+                                          ),
+                                          filled: true,
+                                          fillColor: panelBg,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 14,
+                                                vertical: 12,
+                                              ),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color: blueClr.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                              width: 1.2,
+                                            ),
+                                          ),
+                                          errorBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color:
+                                                  (isDark
+                                                          ? AppTheme.neonRed
+                                                          : AppTheme
+                                                                .lightNeonRed)
+                                                      .withValues(alpha: 0.6),
+                                              width: 1.0,
+                                            ),
+                                          ),
+                                          focusedErrorBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: BorderSide(
+                                              color:
+                                                  (isDark
+                                                          ? AppTheme.neonRed
+                                                          : AppTheme
+                                                                .lightNeonRed)
+                                                      .withValues(alpha: 0.8),
+                                              width: 1.2,
+                                            ),
+                                          ),
+                                          errorStyle: const TextStyle(
+                                            fontSize: 10,
+                                            height: 0.8,
                                           ),
                                         ),
                                       ),
                                     ],
-                                  );
-                                },
-                              ),
+                                  ),
+                                );
+                              },
                             ),
-                          ),
-                        ),
-                      TextFormField(
-                        controller: _urlController,
-                        focusNode: _urlFocus,
-                        maxLines: 3,
-                        minLines: 1,
-                        style: TextStyle(
-                          color: textClr,
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          height: 1.4,
-                        ),
-                        validator: (val) {
-                          if (val == null ||
-                              val.trim().isEmpty) {
-                            return L10n.of(
-                              context,
-                              'url_empty_error',
-                            );
-                          }
-                          final lines = val
-                              .split(RegExp(r'[\r\n]+'))
-                              .map((l) => l.trim())
-                              .where((l) => l.isNotEmpty)
-                              .toList();
-                          if (lines.isEmpty) {
-                            return L10n.of(
-                              context,
-                              'url_empty_error',
-                            );
-                          }
-                          for (final line in lines) {
-                            if (!isValidTransmissionUrl(line)) {
-                              return L10n.of(
-                                context,
-                                'url_invalid_error',
-                              );
-                            }
-                          }
-                          return null;
-                        },
-                        decoration: InputDecoration(
-                          hintText:
-                              'https:// …  |  magnet:?xt= …',
-                          hintStyle: TextStyle(
-                            color: mutedClr.withValues(
-                              alpha: 0.6,
-                            ),
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                          ),
-                          filled: true,
-                          fillColor: panelBg,
-                          contentPadding:
-                              const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
-                              ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: blueClr.withValues(alpha: 0.5),
-                              width: 1.2,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
-                              width: 1.0,
-                            ),
-                          ),
-                          focusedErrorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
-                              width: 1.2,
-                            ),
-                          ),
-                          errorStyle: const TextStyle(
-                            fontSize: 10,
-                            height: 0.8,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
                           ),
                           // live validation readout
                           AnimatedBuilder(
@@ -1508,14 +1562,22 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               errorBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
-                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                  color:
+                                      (isDark
+                                              ? AppTheme.neonRed
+                                              : AppTheme.lightNeonRed)
+                                          .withValues(alpha: 0.6),
                                   width: 1.0,
                                 ),
                               ),
                               focusedErrorBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
-                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
+                                  color:
+                                      (isDark
+                                              ? AppTheme.neonRed
+                                              : AppTheme.lightNeonRed)
+                                          .withValues(alpha: 0.8),
                                   width: 1.2,
                                 ),
                               ),
@@ -1546,8 +1608,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               color: textClr,
                                               fontSize: 12,
                                             ),
-                                            onChanged: (v) =>
-                                                _userEditedName = v.trim().isNotEmpty,
+                                            onChanged: (v) => _userEditedName =
+                                                v.trim().isNotEmpty,
                                             validator: (val) {
                                               if (val == null ||
                                                   val.trim().isEmpty) {
@@ -1578,40 +1640,69 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                     vertical: 11,
                                                   ),
                                               border: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  color: borderClr.withValues(
+                                                    alpha: 0.5,
+                                                  ),
                                                   width: 0.8,
                                                 ),
                                               ),
                                               enabledBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  color: borderClr.withValues(
+                                                    alpha: 0.5,
+                                                  ),
                                                   width: 0.8,
                                                 ),
                                               ),
                                               focusedBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: blueClr.withValues(alpha: 0.5),
+                                                  color: blueClr.withValues(
+                                                    alpha: 0.5,
+                                                  ),
                                                   width: 1.2,
                                                 ),
                                               ),
                                               errorBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                                  color:
+                                                      (isDark
+                                                              ? AppTheme.neonRed
+                                                              : AppTheme
+                                                                    .lightNeonRed)
+                                                          .withValues(
+                                                            alpha: 0.6,
+                                                          ),
                                                   width: 1.0,
                                                 ),
                                               ),
-                                              focusedErrorBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
-                                                borderSide: BorderSide(
-                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
-                                                  width: 1.2,
-                                                ),
-                                              ),
+                                              focusedErrorBorder:
+                                                  OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                    borderSide: BorderSide(
+                                                      color:
+                                                          (isDark
+                                                                  ? AppTheme
+                                                                        .neonRed
+                                                                  : AppTheme
+                                                                        .lightNeonRed)
+                                                              .withValues(
+                                                                alpha: 0.8,
+                                                              ),
+                                                      width: 1.2,
+                                                    ),
+                                                  ),
                                             ),
                                           ),
                                         ),
@@ -1654,40 +1745,69 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                     vertical: 11,
                                                   ),
                                               border: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  color: borderClr.withValues(
+                                                    alpha: 0.5,
+                                                  ),
                                                   width: 0.8,
                                                 ),
                                               ),
                                               enabledBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: borderClr.withValues(alpha: 0.5),
+                                                  color: borderClr.withValues(
+                                                    alpha: 0.5,
+                                                  ),
                                                   width: 0.8,
                                                 ),
                                               ),
                                               focusedBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: blueClr.withValues(alpha: 0.5),
+                                                  color: blueClr.withValues(
+                                                    alpha: 0.5,
+                                                  ),
                                                   width: 1.2,
                                                 ),
                                               ),
                                               errorBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                                  color:
+                                                      (isDark
+                                                              ? AppTheme.neonRed
+                                                              : AppTheme
+                                                                    .lightNeonRed)
+                                                          .withValues(
+                                                            alpha: 0.6,
+                                                          ),
                                                   width: 1.0,
                                                 ),
                                               ),
-                                              focusedErrorBorder: OutlineInputBorder(
-                                                borderRadius: BorderRadius.circular(12),
-                                                borderSide: BorderSide(
-                                                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
-                                                  width: 1.2,
-                                                ),
-                                              ),
+                                              focusedErrorBorder:
+                                                  OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                    borderSide: BorderSide(
+                                                      color:
+                                                          (isDark
+                                                                  ? AppTheme
+                                                                        .neonRed
+                                                                  : AppTheme
+                                                                        .lightNeonRed)
+                                                              .withValues(
+                                                                alpha: 0.8,
+                                                              ),
+                                                      width: 1.2,
+                                                    ),
+                                                  ),
                                             ),
                                           ),
                                         ),
@@ -1712,7 +1832,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                         color: panelBg,
                                         borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: borderClr.withValues(alpha: 0.5),
+                                          color: borderClr.withValues(
+                                            alpha: 0.5,
+                                          ),
                                           width: 0.8,
                                         ),
                                       ),
@@ -1794,11 +1916,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       fontSize: 10,
                                       height: 0.8,
                                     ),
-                                    contentPadding:
-                                        const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 11,
-                                        ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 11,
+                                    ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
@@ -1823,14 +1944,22 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     errorBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
-                                        color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.6),
+                                        color:
+                                            (isDark
+                                                    ? AppTheme.neonRed
+                                                    : AppTheme.lightNeonRed)
+                                                .withValues(alpha: 0.6),
                                         width: 1.0,
                                       ),
                                     ),
                                     focusedErrorBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
-                                        color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed).withValues(alpha: 0.8),
+                                        color:
+                                            (isDark
+                                                    ? AppTheme.neonRed
+                                                    : AppTheme.lightNeonRed)
+                                                .withValues(alpha: 0.8),
                                         width: 1.2,
                                       ),
                                     ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/localization.dart';
@@ -788,14 +789,32 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                       color: statusColor.withValues(alpha: 0.15),
                       width: 0.8,
                     ),
+                    image:
+                        task.thumbnailUrl != null &&
+                            task.thumbnailUrl!.isNotEmpty
+                        ? DecorationImage(
+                            image: CachedNetworkImageProvider(
+                              task.thumbnailUrl!.startsWith('//')
+                                  ? 'https:${task.thumbnailUrl}'
+                                  : task.thumbnailUrl!,
+                            ),
+                            fit: BoxFit.cover,
+                            onError: (context, error) {
+                              // Fallback to icon if image fails to load
+                            },
+                          )
+                        : null,
                   ),
-                  child: Icon(
-                    _isAudioOnly
-                        ? Icons.audiotrack_rounded
-                        : Icons.play_arrow_rounded,
-                    color: statusColor,
-                    size: compact ? 18 : 22,
-                  ),
+                  child:
+                      task.thumbnailUrl != null && task.thumbnailUrl!.isNotEmpty
+                      ? null
+                      : Icon(
+                          _isAudioOnly
+                              ? Icons.audiotrack_rounded
+                              : Icons.play_arrow_rounded,
+                          color: statusColor,
+                          size: compact ? 18 : 22,
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1188,8 +1207,8 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
       final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       final effectiveDownloaded =
           widget.task.status == DownloadStatus.completed && selected
-              ? length
-              : downloaded;
+          ? length
+          : downloaded;
       return {...f, 'downloadedBytes': effectiveDownloaded};
     }).toList();
 
@@ -1197,8 +1216,9 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
         ? displayFiles
         : displayFiles.take(_collapsedFileCount).toList();
     final hiddenCount = displayFiles.length - visible.length;
-    final mutedClr =
-        widget.isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final mutedClr = widget.isDark
+        ? AppTheme.textMuted
+        : AppTheme.lightTextMuted;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

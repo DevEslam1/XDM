@@ -673,6 +673,7 @@ class DownloadProvider extends ChangeNotifier
     bool isAppUpdate = false,
     String? playlistId,
     String? playlistTitle,
+    String? thumbnailUrl,
   }) async {
     _lastError = null;
 
@@ -727,6 +728,7 @@ class DownloadProvider extends ChangeNotifier
             isAppUpdate: isAppUpdate,
             playlistId: playlistId,
             playlistTitle: playlistTitle,
+            thumbnailUrl: thumbnailUrl,
           );
 
           addedCount++;
@@ -762,6 +764,7 @@ class DownloadProvider extends ChangeNotifier
           isAppUpdate: isAppUpdate,
           playlistId: playlistId,
           playlistTitle: playlistTitle,
+          thumbnailUrl: thumbnailUrl,
         );
       }
     } catch (e) {
@@ -787,6 +790,7 @@ class DownloadProvider extends ChangeNotifier
     bool isAppUpdate = false,
     String? playlistId,
     String? playlistTitle,
+    String? thumbnailUrl,
   }) async {
     final exists = _tasks.any((t) {
       if (t.status == DownloadStatus.failed ||
@@ -977,6 +981,7 @@ class DownloadProvider extends ChangeNotifier
       isAppUpdate: isAppUpdate,
       playlistId: playlistId,
       playlistTitle: playlistTitle,
+      thumbnailUrl: thumbnailUrl,
     );
 
     _tasks.insert(0, task);
