@@ -93,6 +93,7 @@ const Map<String, String> arTranslations = {
   'permission_download_location_desc': 'اختر مكان حفظ ملفاتك',
   'permission_download_location_button': 'اختر مجلد',
   'permission_download_location_change': 'تغيير',
+  'permission_download_location_required': 'اختر مجلد التحميل للمتابعة',
   'details_title': 'تفاصيل التنزيل',
   'details_channels': 'خيوط الاتصال',
   'details_active_threads': 'خيوط نشطة',

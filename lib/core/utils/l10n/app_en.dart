@@ -98,6 +98,8 @@ const Map<String, String> enTranslations = {
   'permission_download_location_desc': 'Choose where to save your files',
   'permission_download_location_button': 'Choose Folder',
   'permission_download_location_change': 'Change',
+  'permission_download_location_required':
+      'Choose a download folder to continue',
   'details_title': 'Download details',
   'details_channels': 'Connections',
   'details_active_threads': 'Threads active',

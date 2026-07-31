@@ -255,7 +255,8 @@ class DownloadEngine {
 
       final downloadUri = url != null ? Uri.tryParse(url) : null;
       final downloadHost = downloadUri?.host;
-      final effectiveBypassSSL = bypassSSL && kDebugMode;
+      // User-controlled opt-in via the "Bypass SSL" settings toggle.
+      final effectiveBypassSSL = bypassSSL;
 
       adapter.createHttpClient = () {
         final httpClient = HttpClient();

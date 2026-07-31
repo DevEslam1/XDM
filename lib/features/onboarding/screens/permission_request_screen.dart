@@ -55,11 +55,21 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
     final settings = context.read<SettingsProvider>();
     if (settings.customDownloadPath?.isNotEmpty == true) {
       _downloadPath = settings.customDownloadPath;
+    } else if (_isAndroidPlatform()) {
+      // On Android the calculated default may resolve to the app-private
+      // Android/data folder — force the user to explicitly pick a folder
+      // instead of silently accepting a wrong default.
+      _downloadPath = null;
     } else {
       _downloadPath = await _permissionService.defaultDownloadDirectory();
     }
     if (mounted) setState(() {});
   }
+
+  /// On Android the user must explicitly choose a download folder before
+  /// continuing, so files never land in the app-private Android/data path.
+  bool get _folderChosen =>
+      !_isAndroidPlatform() || (_downloadPath?.isNotEmpty ?? false);
 
   Future<void> _pickDownloadPath() async {
     if (_isPickingPath) return;
@@ -230,7 +240,7 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
   }
 
   void _continueToApp() {
-    if (_isNavigating) return;
+    if (_isNavigating || !_folderChosen) return;
     _isNavigating = true;
     if (context.read<SettingsProvider>().vibration) {
       HapticFeedback.mediumImpact();
@@ -342,30 +352,57 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                 // Continue button
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _continueToApp,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDark
-                            ? AppTheme.neonBlue
-                            : AppTheme.lightNeonBlue,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                  child: Column(
+                    children: [
+                      if (!_folderChosen) ...[
+                        Text(
+                          L10n.of(
+                            context,
+                            'permission_download_location_required',
+                          ),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: isDark
+                                ? AppTheme.neonAmber
+                                : AppTheme.lightNeonAmber,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        L10n.of(context, 'permission_continue'),
-                        style: const TextStyle(
-                          fontFamily: 'Space Grotesk',
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                        const SizedBox(height: 10),
+                      ],
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _folderChosen ? _continueToApp : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor:
+                                (isDark
+                                        ? AppTheme.neonBlue
+                                        : AppTheme.lightNeonBlue)
+                                    .withValues(alpha: 0.3),
+                            disabledForegroundColor: Colors.white70,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            L10n.of(context, 'permission_continue'),
+                            style: const TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ],

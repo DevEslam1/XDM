@@ -25,6 +25,7 @@ import 'core/services/remote_api_service.dart';
 import 'features/downloads/provider/download_provider.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
+import 'features/onboarding/screens/permission_request_screen.dart';
 import 'shared/widgets/main_navigation_container.dart';
 import 'shared/widgets/share_intent_screen.dart';
 
@@ -259,6 +260,12 @@ class DmxApp extends StatelessWidget {
             locale: Locale(settings.languageCode),
             home: settings.showOnboarding
                 ? const OnboardingScreen()
+                // Android: block app usage until a download folder is chosen,
+                // otherwise downloads silently land in Android/data.
+                : (!kIsWeb &&
+                      Platform.isAndroid &&
+                      (settings.customDownloadPath?.isEmpty ?? true))
+                ? const PermissionRequestScreen()
                 : (initialUrl != null && initialUrl!.trim().isNotEmpty)
                 ? ShareLaunchScreen(url: initialUrl!)
                 : const MainNavigationContainer(),

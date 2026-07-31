@@ -16,7 +16,11 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  static String? _apiKey;
+  static String? _apiKey = _kDefaultApiKey;
+
+  /// Hardcoded production fallback token used when neither secure storage
+  /// nor the compile-time [DMX_API_KEY] define provides a key.
+  static const _kDefaultApiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
 
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
@@ -25,12 +29,11 @@ class XdmBackendClient {
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
-  /// Reads the API key from secure storage or from the compile-time
-  /// [DMX_API_KEY] environment variable.
+  /// Reads the API key from secure storage, from the compile-time
+  /// [DMX_API_KEY] environment variable, or falls back to the hardcoded
+  /// default token.
   ///
   /// Call this once at app startup before using the client.
-  /// If no key is found, [BackendUnauthorizedException] will be thrown
-  /// at the first API call — the app MUST fail closed.
   static Future<void> loadApiKey() async {
     try {
       final stored = await _secureStorage.read(key: _apiKeyStorageKey);
@@ -49,14 +52,12 @@ class XdmBackendClient {
         return;
       }
 
-      // No key configured — fail closed at call time via _effectiveApiKey
-      _apiKey = null;
-      _log.warning(
-        'No API key configured. Set DMX_API_KEY or store via setApiKey().',
-      );
+      // Default production token fallback
+      _apiKey = _kDefaultApiKey;
+      _log.info('API key falling back to hardcoded default');
     } catch (e) {
       _log.severe('Failed to load API key', e);
-      _apiKey = null;
+      _apiKey = _kDefaultApiKey;
     }
   }
 

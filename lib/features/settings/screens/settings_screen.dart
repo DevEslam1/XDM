@@ -847,6 +847,19 @@ class _SettingsScreenState extends State<SettingsScreen>
                           accentColor: isDark
                               ? AppTheme.neonBlue
                               : AppTheme.lightNeonBlue,
+                          title: L10n.of(context, 'settings_bypass_ssl'),
+                          subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
+                          value: settings.bypassSSL,
+                          onChanged: (val) {
+                            settings.setBypassSSL(val);
+                            triggerHaptic(settings);
+                          },
+                        ),
+                        _Divider(isDark: isDark),
+                        _SwitchTile(
+                          accentColor: isDark
+                              ? AppTheme.neonBlue
+                              : AppTheme.lightNeonBlue,
                           title: L10n.of(context, 'settings_proxy'),
                           subtitle: L10n.of(context, 'settings_proxy_sub'),
                           value: settings.enableProxy,
