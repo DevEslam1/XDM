@@ -287,9 +287,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
       duration: AppTheme.motionBase,
       curve: AppTheme.motionCurve,
       child: ClipRRect(
-        borderRadius: settings.classicUi
-            ? BorderRadius.zero
-            : const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         child: DmxBackdropFilter(
           sigmaX: 15,
           sigmaY: 15,
@@ -299,9 +297,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
                   ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
                   : (isDark ? AppTheme.surface : AppTheme.lightSurface)
                         .withValues(alpha: 0.7),
-              borderRadius: settings.classicUi
-                  ? BorderRadius.zero
-                  : const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               border: Border(
                 top: BorderSide(
                   color: settings.classicUi
@@ -504,9 +500,11 @@ class _NavigationRailWidget extends StatelessWidget {
       sigmaY: 15,
       child: Container(
         decoration: BoxDecoration(
-          color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
-            alpha: 0.85,
-          ),
+          color: settings.classicUi
+              ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+              : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
+                  alpha: 0.85,
+                ),
           border: isRtl
               ? Border(
                   left: BorderSide(

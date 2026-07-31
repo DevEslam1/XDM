@@ -21,7 +21,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final PageController _pageController = PageController(viewportFraction: 1.0);
   int _currentPage = 0;
-  static const int _pageCount = 4;
+  static const int _pageCount = 5;
   double _pageOffset = 0.0;
 
   late AnimationController _particleController;
@@ -50,7 +50,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       _particleController.stop();
       _pulseController.stop();
     } else if (state == AppLifecycleState.resumed) {
@@ -77,12 +78,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Color _getAccentColor(bool isDark, int page) {
     switch (page) {
       case 0:
-        return isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        return isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
       case 1:
-        return isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+        return isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
       case 2:
-        return isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+        return isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
       case 3:
+        return isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+      case 4:
         return isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
       default:
         return isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
@@ -168,10 +171,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         },
                         children: [
                           _buildPage(
+                            title: L10n.of(context, 'onboarding_title_0'),
+                            subtitle: L10n.of(context, 'onboarding_sub_0'),
+                            accentColor: currentAccent,
+                            pageIndex: 0,
+                            graphic: _QuickSetupCard(
+                              accentColor: currentAccent,
+                            ),
+                            tagline: 'PERSONALIZE',
+                          ),
+                          _buildPage(
                             title: L10n.of(context, 'onboarding_title_1'),
                             subtitle: L10n.of(context, 'onboarding_sub_1'),
                             accentColor: currentAccent,
-                            pageIndex: 0,
+                            pageIndex: 1,
                             graphic: const _SpeedometerGraphic(),
                             tagline: 'MULTI-THREADED ENGINE',
                           ),
@@ -179,7 +192,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             title: L10n.of(context, 'onboarding_title_2'),
                             subtitle: L10n.of(context, 'onboarding_sub_2'),
                             accentColor: currentAccent,
-                            pageIndex: 1,
+                            pageIndex: 2,
                             graphic: const _PlatformGridGraphic(),
                             tagline: 'YOUTUBE & BEYOND',
                           ),
@@ -187,7 +200,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             title: L10n.of(context, 'onboarding_title_3'),
                             subtitle: L10n.of(context, 'onboarding_sub_3'),
                             accentColor: currentAccent,
-                            pageIndex: 2,
+                            pageIndex: 3,
                             graphic: const _TorrentGraphic(),
                             tagline: 'BITTORRENT POWER',
                           ),
@@ -195,7 +208,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             title: L10n.of(context, 'onboarding_title_4'),
                             subtitle: L10n.of(context, 'onboarding_sub_4'),
                             accentColor: currentAccent,
-                            pageIndex: 3,
+                            pageIndex: 4,
                             graphic: const _ControlPanelGraphic(),
                             tagline: 'FULL CONTROL',
                           ),
@@ -1820,4 +1833,230 @@ class _ControlItem {
   final IconData icon;
   final String label;
   const _ControlItem(this.icon, this.label);
+}
+
+// ──────────────────────────────────────────────────────────────
+// Onboarding Quick Setup: language / theme / interface selectors
+// Rendered as the graphic of the first onboarding page. Wires
+// directly to SettingsProvider so choices apply live (the screen
+// watches the provider and rebuilds).
+// ──────────────────────────────────────────────────────────────
+class _QuickSetupCard extends StatelessWidget {
+  final Color accentColor;
+  const _QuickSetupCard({required this.accentColor});
+
+  void _haptic(SettingsProvider settings) {
+    if (settings.vibration) HapticFeedback.selectionClick();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final isDark = settings.isDarkMode;
+    final labelClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
+
+    return SizedBox(
+      width: double.infinity,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ─── Language ───
+            _buildLabel(
+              L10n.of(context, 'onboarding_setup_language'),
+              labelClr,
+            ),
+            const SizedBox(height: 6),
+            _SegmentedSelector(
+              accent: accentColor,
+              isDark: isDark,
+              selectedValue: settings.languageCode,
+              options: const [
+                _SegmentOption(value: 'en', label: 'English'),
+                _SegmentOption(value: 'ar', label: 'العربية'),
+              ],
+              onSelected: (v) {
+                settings.setLanguageCode(v);
+                _haptic(settings);
+              },
+            ),
+            const SizedBox(height: 10),
+            // ─── Theme ───
+            _buildLabel(L10n.of(context, 'onboarding_setup_theme'), labelClr),
+            const SizedBox(height: 6),
+            _SegmentedSelector(
+              accent: accentColor,
+              isDark: isDark,
+              selectedValue: settings.themeMode,
+              options: [
+                _SegmentOption(
+                  value: 'light',
+                  label: L10n.of(context, 'onboarding_theme_light'),
+                  icon: Icons.wb_sunny_rounded,
+                ),
+                _SegmentOption(
+                  value: 'dark',
+                  label: L10n.of(context, 'onboarding_theme_dark'),
+                  icon: Icons.nightlight_round,
+                ),
+                _SegmentOption(
+                  value: 'system',
+                  label: L10n.of(context, 'onboarding_theme_system'),
+                  icon: Icons.brightness_auto_rounded,
+                ),
+              ],
+              onSelected: (v) {
+                settings.setThemeMode(v);
+                _haptic(settings);
+              },
+            ),
+            const SizedBox(height: 10),
+            // ─── Interface mode ───
+            _buildLabel(L10n.of(context, 'onboarding_setup_mode'), labelClr),
+            const SizedBox(height: 6),
+            _SegmentedSelector(
+              accent: accentColor,
+              isDark: isDark,
+              selectedValue: settings.classicUi ? 'classic' : 'modern',
+              options: [
+                _SegmentOption(
+                  value: 'modern',
+                  label: L10n.of(context, 'onboarding_mode_modern'),
+                  icon: Icons.auto_awesome_rounded,
+                ),
+                _SegmentOption(
+                  value: 'classic',
+                  label: L10n.of(context, 'onboarding_mode_classic'),
+                  icon: Icons.crop_square_rounded,
+                ),
+              ],
+              onSelected: (v) {
+                settings.setClassicUi(v == 'classic');
+                _haptic(settings);
+              },
+            ),
+          ],
+        ),
+      ),
+    ),
+    );
+  }
+
+  Widget _buildLabel(String text, Color color) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontFamily: 'Space Grotesk',
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.2,
+        color: color,
+      ),
+    );
+  }
+}
+
+class _SegmentOption {
+  final String value;
+  final String label;
+  final IconData? icon;
+  const _SegmentOption({required this.value, required this.label, this.icon});
+}
+
+class _SegmentedSelector extends StatelessWidget {
+  final List<_SegmentOption> options;
+  final String selectedValue;
+  final ValueChanged<String> onSelected;
+  final Color accent;
+  final bool isDark;
+
+  const _SegmentedSelector({
+    required this.options,
+    required this.selectedValue,
+    required this.onSelected,
+    required this.accent,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final unselectedClr = isDark
+        ? AppTheme.textSecondary
+        : AppTheme.lightTextSecondary;
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.white : Colors.black).withValues(
+          alpha: isDark ? 0.04 : 0.03,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.15), width: 1),
+      ),
+      child: Row(
+        children: options.map((o) {
+          final selected = o.value == selectedValue;
+          return Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelected(o.value),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? accent.withValues(alpha: 0.9)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(9),
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                            color: accent.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            spreadRadius: -2,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (o.icon != null) ...[
+                        Icon(
+                          o.icon,
+                          size: 13,
+                          color: selected
+                              ? Colors.white
+                              : unselectedClr.withValues(alpha: 0.7),
+                        ),
+                        const SizedBox(width: 5),
+                      ],
+                      Text(
+                        o.label,
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: selected ? Colors.white : unselectedClr,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
 }

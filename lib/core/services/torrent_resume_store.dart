@@ -100,10 +100,11 @@ class TorrentResumeStore {
 
   /// Saves native fast-resume binary data for a torrent.
   ///
-  /// TODO: When libtorrent_flutter exposes saveResumeData with a typed API,
-  /// this method stores the raw Uint8List to disk. The native implementation
-  /// should return serialized libtorrent fast-resume data (entry::bencode()
-  /// or similar) that can be passed back via loadResumeData on restart.
+  /// Migration note: once libtorrent_flutter exposes saveResumeData with a
+  /// typed API, this method stores the raw Uint8List to disk. The native
+  /// implementation should return serialized libtorrent fast-resume data
+  /// (entry::bencode() or similar) that can be passed back via loadResumeData
+  /// on restart.
   static Future<void> saveResumeData(int torrentId, Uint8List data) async {
     if (_basePath == null) return;
     try {

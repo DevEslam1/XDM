@@ -61,7 +61,7 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'TOTAL DOWNLOAD SPEED',
+                                L10n.of(context, 'stats_total_speed'),
                                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                   color: secClr,
                                   fontSize: 10,
@@ -119,15 +119,15 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          Expanded(child: _buildStatItem(context, title: 'ACTIVE', value: '${data.active}', color: blueClr, isDark: isDark)),
+                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_active_short'), value: '${data.active}', color: blueClr, isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: 'QUEUED', value: '${data.queued}', color: violetClr, isDark: isDark)),
+                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_queued_short'), value: '${data.queued}', color: violetClr, isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: 'COMPLETED', value: '${data.completed}', color: greenClr, isDark: isDark)),
+                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_completed_short'), value: '${data.completed}', color: greenClr, isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: 'PAUSED', value: '${data.paused}', color: amberClr, isDark: isDark)),
+                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_paused_short'), value: '${data.paused}', color: amberClr, isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: 'FAILED', value: '${data.failed}', color: redClr, isDark: isDark)),
+                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_failed_short'), value: '${data.failed}', color: redClr, isDark: isDark)),
                         ],
                       ),
                     ],

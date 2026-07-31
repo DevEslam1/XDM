@@ -30,7 +30,6 @@ class _HomeScreenState extends State<HomeScreen>
   bool _showAnalytics = false;
   int _selectedTab = 0;
   int selectedSegment = 0;
-  bool isFabExpanded = true;
 
   @override
   void initState() {
@@ -55,8 +54,15 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Selector<SettingsProvider, ({bool isDarkMode, bool classicUi})>(
-      selector: (_, s) => (isDarkMode: s.isDarkMode, classicUi: s.classicUi),
+    return Selector<
+      SettingsProvider,
+      ({bool isDarkMode, bool classicUi, String languageCode})
+    >(
+      selector: (_, s) => (
+        isDarkMode: s.isDarkMode,
+        classicUi: s.classicUi,
+        languageCode: s.languageCode,
+      ),
       builder: (context, settingsState, _) {
         final isDark = settingsState.isDarkMode;
         final classicUi = settingsState.classicUi;
@@ -522,7 +528,7 @@ class _HomeScreenState extends State<HomeScreen>
                 (option: p.sortOption, ascending: p.sortAscending),
             builder: (context, sortState, _) {
               return PopupMenuButton<SortOption>(
-                tooltip: 'Sort',
+                tooltip: L10n.of(context, 'sort_tooltip'),
                 color: isDark ? AppTheme.surface : AppTheme.lightSurface,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
@@ -718,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ],
               ),
-        child: FloatingActionButton.extended(
+        child: FloatingActionButton(
           heroTag: null,
           backgroundColor: accentClr,
           foregroundColor: Colors.white,
@@ -730,17 +736,6 @@ class _HomeScreenState extends State<HomeScreen>
               width: 0.8,
             ),
           ),
-          icon: const Icon(Icons.add_rounded, size: 22),
-          label: AnimatedDefaultTextStyle(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutQuart,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: isFabExpanded ? 14 : 0,
-              fontWeight: FontWeight.w600,
-            ),
-            child: Text(isFabExpanded ? 'New Download' : ''),
-          ),
           onPressed: () {
             triggerHaptic(context.read<SettingsProvider>());
             showDialog(
@@ -748,6 +743,7 @@ class _HomeScreenState extends State<HomeScreen>
               builder: (_) => const AddDownloadDialog(),
             );
           },
+          child: const Icon(Icons.add_rounded, size: 22),
         ),
       ),
     );

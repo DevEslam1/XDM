@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../settings/provider/settings_provider.dart';
 
 class BrowserUrlBar extends StatelessWidget {
@@ -225,14 +226,33 @@ class _IndeterminateScanline extends StatefulWidget {
 }
 
 class _IndeterminateScanlineState extends State<_IndeterminateScanline>
-    with SingleTickerProviderStateMixin {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<_IndeterminateScanline> {
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
-  )..repeat();
+  );
+
+  @override
+  AnimationController get loopController => _c;
+
+  bool _allowed = true;
+
+  @override
+  bool get loopWanted => _allowed;
+
+  @override
+  void initState() {
+    super.initState();
+    _allowed = modernAnimationsAllowed(context);
+    startPausableLoop();
+  }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _c.dispose();
     super.dispose();
   }
@@ -241,6 +261,24 @@ class _IndeterminateScanlineState extends State<_IndeterminateScanline>
   Widget build(BuildContext context) {
     final isDark = context.select((SettingsProvider s) => s.isDarkMode);
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final allowed = modernAnimationsAllowed(context, listen: true);
+    if (allowed != _allowed) {
+      _allowed = allowed;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) syncPausableLoop();
+      });
+    }
+    // Classic / battery-saver / reduce-visuals: a static line instead of the
+    // animated scanline, so nothing loops in the background to drain battery.
+    if (!allowed) {
+      return Container(
+        height: 2,
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
+    }
     return SizedBox(
       height: 2,
       child: LayoutBuilder(

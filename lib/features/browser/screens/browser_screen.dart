@@ -16,6 +16,7 @@ import '../../../core/services/permission_service.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -4191,19 +4192,34 @@ class _ScanlineProgress extends StatefulWidget {
 }
 
 class _ScanlineProgressState extends State<_ScanlineProgress>
-    with SingleTickerProviderStateMixin {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<_ScanlineProgress> {
   late AnimationController _c;
+
+  @override
+  AnimationController get loopController => _c;
+
+  bool _allowed = true;
+
+  @override
+  bool get loopWanted => _allowed;
+
   @override
   void initState() {
     super.initState();
     _c = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
-    )..repeat();
+    );
+    _allowed = modernAnimationsAllowed(context);
+    startPausableLoop();
   }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _c.dispose();
     super.dispose();
   }
@@ -4211,6 +4227,23 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
   @override
   Widget build(BuildContext context) {
     final accent = widget.isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final allowed = modernAnimationsAllowed(context, listen: true);
+    if (allowed != _allowed) {
+      _allowed = allowed;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) syncPausableLoop();
+      });
+    }
+    // Classic / battery-saver / reduce-visuals: plain progress bar with no
+    // moving shimmer, so nothing loops while backgrounded.
+    if (!allowed) {
+      return LinearProgressIndicator(
+        value: widget.progress,
+        minHeight: 3,
+        backgroundColor: Colors.transparent,
+        color: accent.withValues(alpha: 0.85),
+      );
+    }
     return SizedBox(
       height: 3,
       child: AnimatedBuilder(
@@ -4256,36 +4289,56 @@ class _RadarSweep extends StatefulWidget {
 }
 
 class _RadarSweepState extends State<_RadarSweep>
-    with SingleTickerProviderStateMixin {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<_RadarSweep> {
   late AnimationController _c;
+
+  @override
+  AnimationController get loopController => _c;
+
+  bool _allowed = true;
+
+  @override
+  bool get loopWanted => widget.active && _allowed;
+
   @override
   void initState() {
     super.initState();
     _c = AnimationController(vsync: this, duration: const Duration(seconds: 3));
-    if (widget.active) _c.repeat();
+    _allowed = modernAnimationsAllowed(context);
+    startPausableLoop();
   }
 
   @override
   void didUpdateWidget(_RadarSweep old) {
     super.didUpdateWidget(old);
-    if (widget.active && !_c.isAnimating) _c.repeat();
-    if (!widget.active && _c.isAnimating) _c.stop();
+    syncPausableLoop();
   }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final allowed = modernAnimationsAllowed(context, listen: true);
+    if (allowed != _allowed) {
+      _allowed = allowed;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) syncPausableLoop();
+      });
+    }
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) => CustomPaint(
         size: const Size(72, 72),
         painter: _RadarPainter(
-          sweep: _c.value * 2 * pi,
+          sweep: allowed ? _c.value * 2 * pi : 0,
           color: widget.color,
           active: widget.active,
         ),
@@ -4513,8 +4566,20 @@ class _SignalFab extends StatefulWidget {
 }
 
 class _SignalFabState extends State<_SignalFab>
-    with SingleTickerProviderStateMixin {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        PausableLoopAnimation<_SignalFab> {
   late AnimationController _c;
+
+  @override
+  AnimationController get loopController => _c;
+
+  bool _allowed = true;
+
+  @override
+  bool get loopWanted => widget.pulse && _allowed;
+
   @override
   void initState() {
     super.initState();
@@ -4522,28 +4587,36 @@ class _SignalFabState extends State<_SignalFab>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
-    if (widget.pulse) _c.repeat();
+    _allowed = modernAnimationsAllowed(context);
+    startPausableLoop();
   }
 
   @override
   void didUpdateWidget(_SignalFab old) {
     super.didUpdateWidget(old);
-    if (widget.pulse && !_c.isAnimating) _c.repeat();
-    if (!widget.pulse && _c.isAnimating) _c.stop();
+    syncPausableLoop();
   }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final allowed = modernAnimationsAllowed(context, listen: true);
+    if (allowed != _allowed) {
+      _allowed = allowed;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) syncPausableLoop();
+      });
+    }
     return Stack(
       alignment: Alignment.center,
       children: [
-        if (widget.pulse)
+        if (widget.pulse && allowed)
           AnimatedBuilder(
             animation: _c,
             builder: (context, child) => Container(

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/app_theme.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
+import '../../../../core/utils/localization.dart';
 
 class StatusChip extends StatefulWidget {
   final DownloadTask task;
@@ -80,34 +81,34 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
 
     if (isSeeding) {
       color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-      label = 'SEEDING';
+      label = L10n.of(context, 'status_seeding');
     } else {
       switch (task.status) {
         case DownloadStatus.queued:
           color = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-          label = 'QUEUED';
+          label = L10n.of(context, 'stats_queued_short');
           break;
         case DownloadStatus.downloading:
           color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-          label = 'DOWNLOADING';
+          label = L10n.of(context, 'stats_downloading').toUpperCase();
           break;
         case DownloadStatus.paused:
           color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
           if (task.errorMessage != null && task.errorMessage!.contains('WiFi')) {
-            label = 'PAUSED (WIFI)';
+            label = L10n.of(context, 'status_paused_wifi');
           } else if (task.errorMessage != null && task.errorMessage!.contains('Network')) {
-            label = 'PAUSED (OFFLINE)';
+            label = L10n.of(context, 'status_paused_offline');
           } else {
-            label = 'PAUSED';
+            label = L10n.of(context, 'stats_paused_short');
           }
           break;
         case DownloadStatus.completed:
           color = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-          label = 'COMPLETED';
+          label = L10n.of(context, 'stats_completed_short');
           break;
         case DownloadStatus.failed:
           color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-          label = 'FAILED';
+          label = L10n.of(context, 'stats_failed_short');
           break;
       }
     }

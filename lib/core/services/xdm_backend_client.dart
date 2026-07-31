@@ -140,10 +140,11 @@ class XdmBackendClient {
   static String get currentBackendUrl => SettingsProvider.instance.backendUrl;
 
   Future<Map<String, dynamic>> health() async {
+    final authHeader = _buildHeaders();
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '/health',
-        options: Options(headers: _buildHeaders()),
+        options: Options(headers: authHeader),
       );
       return response.data ?? {};
     } catch (e) {

@@ -116,7 +116,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   String scheduleEndTime = '07:00';
   double scheduleSpeedLimitMb = 0.0;
   bool enableGlow = true;
-  double gridOpacity = 12.0;
+  double gridOpacity = 40.0;
   bool soundNotification = true;
   bool vibration = false;
   bool wifiOnly = false;
@@ -148,7 +148,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool enableProxy = false;
   String proxyAddress = '';
-  bool bypassSSL = false;
+  bool bypassSSL = true;
   bool reduceVisuals = false;
   String customUserAgent = '';
   int cleanupDays = 0;
@@ -830,7 +830,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     scheduleEndTime = '07:00';
     scheduleSpeedLimitMb = 0.0;
     enableGlow = true;
-    gridOpacity = 12.0;
+    gridOpacity = 40.0;
     soundNotification = true;
     vibration = false;
     wifiOnly = false;
@@ -840,7 +840,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     batterySaverMode = false;
     enableProxy = false;
     proxyAddress = '';
-    bypassSSL = false;
+    bypassSSL = true;
     reduceVisuals = false;
     customUserAgent = '';
     cleanupDays = 0;

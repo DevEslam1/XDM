@@ -44,11 +44,11 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
   /// Guarded call to saveResumeData.
   /// Returns a Uint8List if the plugin supports it, or null if not.
   ///
-  /// TODO: When libtorrent_flutter exposes saveResumeData natively, remove
-  /// the dynamic dispatch and use the typed API directly. The native API
-  /// should return fast-resume data as a serialized Uint8List that can be
-  /// persisted and passed back to loadResumeData on restart, avoiding the
-  /// full piece recheck.
+  /// Migration note: once libtorrent_flutter exposes saveResumeData natively,
+  /// the dynamic dispatch can be replaced with the typed API directly. The
+  /// native API should return fast-resume data as a serialized Uint8List that
+  /// can be persisted and passed back to loadResumeData on restart, avoiding
+  /// the full piece recheck.
   Uint8List? trySaveResumeData(int id) {
     try {
       // ignore: avoid_dynamic_calls
@@ -62,9 +62,9 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
   /// Guarded call to loadResumeData.
   /// Returns true if the plugin accepted the resume data.
   ///
-  /// TODO: When libtorrent_flutter exposes loadResumeData natively, remove
-  /// the dynamic dispatch. The native implementation should accept a
-  /// torrent ID and a Uint8List of previously saved fast-resume data.
+  /// Migration note: once libtorrent_flutter exposes loadResumeData natively,
+  /// the dynamic dispatch can be removed. The native implementation should
+  /// accept a torrent ID and a Uint8List of previously saved fast-resume data.
   // ignore: unused_element
   bool tryLoadResumeData(int id, Uint8List data) {
     try {
@@ -250,10 +250,10 @@ class TorrentService {
   /// [TorrentResumeStore.saveResumeData] and can be reloaded on the next
   /// session to skip the full piece recheck.
   ///
-  /// TODO: When libtorrent_flutter exposes saveResumeData with a typed API,
-  /// the native code should return serialized add_torrent_params / fast-resume
-  /// data that libtorrent can consume via loadResumeData. The method signature
-  /// needed is:
+  /// Migration note: once libtorrent_flutter exposes saveResumeData with a
+  /// typed API, the native code should return serialized add_torrent_params /
+  /// fast-resume data that libtorrent can consume via loadResumeData. The
+  /// method signature needed is:
   ///   Uint8List saveResumeData(int torrentId);
   ///   void loadResumeData(int torrentId, Uint8List data);
   static Future<void> saveResumeData(int torrentId) async {

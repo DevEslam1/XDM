@@ -126,7 +126,26 @@ class FilterChipsBar extends StatelessWidget {
                                     widthFactor: 1.0,
                                     heightFactor: 1.0,
                                     child: Text(
-                                      filter.toUpperCase(),
+                                      (() {
+                                        switch (filter) {
+                                          case 'All':
+                                            return L10n.of(context, 'filter_all').toUpperCase();
+                                          case 'Downloading':
+                                            return L10n.of(context, 'stats_downloading').toUpperCase();
+                                          case 'Completed':
+                                            return L10n.of(context, 'stats_completed_short').toUpperCase();
+                                          case 'Failed':
+                                            return L10n.of(context, 'stats_failed_short').toUpperCase();
+                                          case 'Paused':
+                                            return L10n.of(context, 'stats_paused_short').toUpperCase();
+                                          case 'Scheduled':
+                                            return L10n.of(context, 'add_download_schedule').toUpperCase();
+                                          case 'Torrents':
+                                            return L10n.of(context, 'filter_torrents').toUpperCase();
+                                          default:
+                                            return filter.toUpperCase();
+                                        }
+                                      })(),
                                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                         color: isSelected ? filterClr : secClr,
                                         fontSize: 10,

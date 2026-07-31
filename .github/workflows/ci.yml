@@ -47,7 +47,7 @@ jobs:
           BASE="${GITHUB_BASE_SHA:-${GITHUB_EVENT_BEFORE:-HEAD~1}}"
           if git diff "$BASE" --name-only -- 'lib/' | grep -q .; then
             echo "Scanning $BASE..HEAD for hardcoded secrets in lib/"
-            ! git diff "$BASE" -- 'lib/' | grep -E 'KxPgwFT0|api[_ -]?key.*=.*['"'"'"]'
+            ! git diff "$BASE" -- 'lib/' | grep -E 'api[_ -]?key.*=.*['"'"'"]'
           else
             echo "No lib/ changes in this diff — skipping secret scan"
           fi

@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'lib/core/utils/l10n/app_en.dart';
 import 'lib/core/utils/l10n/app_ar.dart';
 
