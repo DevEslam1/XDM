@@ -36,25 +36,25 @@ void main() {
     });
 
     test('BackendException is properly typed', () {
-      final authErr = BackendUnauthorizedException();
+      final authErr = const BackendUnauthorizedException();
       expect(authErr, isA<BackendException>());
       expect(authErr.toUserMessage(), isNotEmpty);
       expect(authErr.message, isNotEmpty);
 
-      final badReqErr = BackendBadRequestException();
+      final badReqErr = const BackendBadRequestException();
       expect(badReqErr, isA<BackendException>());
 
-      final notFoundErr = BackendNotFoundException();
+      final notFoundErr = const BackendNotFoundException();
       expect(notFoundErr, isA<BackendException>());
 
-      final rateLimitErr = BackendRateLimitException(retryAfterSeconds: 30);
+      final rateLimitErr = const BackendRateLimitException(retryAfterSeconds: 30);
       expect(rateLimitErr, isA<BackendException>());
       expect(rateLimitErr.retryAfterSeconds, 30);
 
-      final networkErr = BackendNetworkException();
+      final networkErr = const BackendNetworkException();
       expect(networkErr, isA<BackendException>());
 
-      final unknownErr = BackendUnknownException();
+      final unknownErr = const BackendUnknownException();
       expect(unknownErr, isA<BackendException>());
     });
   });

@@ -127,12 +127,14 @@ class TabManager {
     // Try Drift first (new persistence path from _quitBrowser)
     try {
       final db = resolveDatabase();
-      final saved = await db.loadOpenTabs();
-      if (saved.isNotEmpty && isActive()) {
-        await db.clearOpenTabs();
-        if (!isActive()) return;
-        await applyRestoredTabs(saved);
-        return;
+      if (db.isInitialized) {
+        final saved = await db.loadOpenTabs();
+        if (saved.isNotEmpty && isActive()) {
+          await db.clearOpenTabs();
+          if (!isActive()) return;
+          await applyRestoredTabs(saved);
+          return;
+        }
       }
     } catch (e) {
       debugPrint(

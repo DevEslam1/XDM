@@ -1685,7 +1685,7 @@ class DownloadProvider extends ChangeNotifier
   void _updateTelemetryWidget() {
     if (!kIsWeb && Platform.isAndroid) {
       try {
-        const MethodChannel('com.dmx.app/widget')
+        const MethodChannel('com.example.dmx/widget')
             .invokeMethod('updateWidget', {
               'activeCount': downloadingTasksCount,
               'totalSpeed': currentDownloadSpeedFormatted,

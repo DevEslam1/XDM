@@ -30,6 +30,9 @@ class DatabaseService {
   DatabaseService._create();
 
   late final AppDatabase _db;
+  bool _initialized = false;
+  bool get isInitialized => _initialized;
+
   int _historyInsertCount = 0;
   static const int _historyTrimInterval = 100;
 
@@ -73,6 +76,7 @@ class DatabaseService {
         await prefs.setBool('hive_migrated', true);
       }
     }
+    _initialized = true;
   }
 
   Future<bool> _migrateFromHive() async {
@@ -360,7 +364,7 @@ class DatabaseService {
   }
 
   /// Backs up a Hive box to a safe location instead of deleting it.
-  /// [box] is a Hive Box<dynamic> instance.
+  /// `box` is a Hive Box instance.
   Future<void> _backupHiveBox(dynamic box, String boxName) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
@@ -370,7 +374,7 @@ class DatabaseService {
       }
       final backupPath = p.join(backupDir.path, '${boxName}_backup.hive');
       // Hive Box.path is String?
-      final boxPath = box.path as String?;
+      final String? boxPath = box is Box ? box.path : (box as dynamic).path as String?;
       if (boxPath != null) {
         final srcDir = Directory(boxPath);
         if (await srcDir.exists()) {
