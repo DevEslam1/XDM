@@ -76,34 +76,28 @@ class RemoteApiService {
     }
 
     _bearerToken = _generateToken();
-    await _writeTokenFile(_bearerToken!);
 
     try {
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+      // FIX(9): bind to port 0 so the OS assigns an ephemeral, guaranteed-free
+      // port instead of a fixed port that a stray process could occupy. The
+      // actual port is recorded in the token file for consumers.
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      await _writeTokenFile(_bearerToken!, _server!.port);
     } catch (e) {
-      // Bind failed — ping the existing server to check if it is still alive
-      try {
-        final client = HttpClient();
-        client.connectionTimeout = const Duration(seconds: 3);
-        final pingRequest = await client.getUrl(
-          Uri.parse('http://127.0.0.1:$_port/api/health'),
-        );
-        pingRequest.headers.set('Authorization', 'Bearer ping');
-        final pingResponse = await pingRequest.close();
-        if (pingResponse.statusCode == 200) {
-          // Server is alive — do nothing, piggyback on existing instance
-          debugPrint('Remote API: existing server on port $_port is alive');
-          return;
-        }
-      } catch (_) {
-        // No response — delete stale token file and retry
-        try {
-          await File(await _tokenFilePath()).delete();
-        } catch (_) {}
+      // Bind failed (rare with port 0) — discover any live primary through
+      // its token file and heartbeat it; if alive, piggyback on it.
+      final primary = await _readRemoteInfo();
+      if (primary != null && await _isPrimaryAlive(primary.$2)) {
+        debugPrint('Remote API: existing server on port ${primary.$2} is alive');
+        return;
       }
-      // Retry bind
+      // No live primary — delete stale token file and retry bind
       try {
-        _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
+        await File(await _tokenFilePath()).delete();
+      } catch (_) {}
+      try {
+        _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        await _writeTokenFile(_bearerToken!, _server!.port);
       } catch (retryError) {
         debugPrint('Remote API: retry bind also failed: $retryError');
         return;
@@ -248,10 +242,11 @@ class RemoteApiService {
     return base64Url.encode(bytes);
   }
 
-  static Future<void> _writeTokenFile(String token) async {
+  static Future<void> _writeTokenFile(String token, int port) async {
     try {
       final path = await _tokenFilePath();
-      await File(path).writeAsString(token);
+      // Format matches single_instance_service: "<token>\n<port>".
+      await File(path).writeAsString('$token\n$port');
       if (!Platform.isWindows) {
         try {
           await Process.run('chmod', ['600', path]);
@@ -259,6 +254,43 @@ class RemoteApiService {
       }
     } catch (e) {
       debugPrint('Remote API: failed to write token file: $e');
+    }
+  }
+
+  /// Reads (token, port) from the token file, falling back to the fixed
+  /// [_port] for legacy single-line files.
+  static Future<(String, int)?> _readRemoteInfo() async {
+    try {
+      final path = await _tokenFilePath();
+      if (!await File(path).exists()) return null;
+      final contents = (await File(path).readAsString()).trim();
+      if (contents.isEmpty) return null;
+      final lines = contents.split('\n');
+      final token = lines.first.trim();
+      if (token.isEmpty) return null;
+      int port = _port;
+      if (lines.length >= 2) {
+        final parsed = int.tryParse(lines[1].trim());
+        if (parsed != null && parsed > 0) port = parsed;
+      }
+      return (token, port);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// TCP heartbeat: does something accept connections on [port]?
+  static Future<bool> _isPrimaryAlive(int port) async {
+    try {
+      final socket = await Socket.connect(
+        InternetAddress.loopbackIPv4,
+        port,
+        timeout: const Duration(seconds: 2),
+      );
+      await socket.close();
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

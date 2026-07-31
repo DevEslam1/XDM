@@ -212,6 +212,29 @@ class YoutubeService {
     return true;
   }
 
+  /// FIX(20): strict, suffix-bounded host check for the hosts the extractor
+  /// backend actually supports. Used to pre-validate shared URLs before
+  /// routing them to [MediaQualitySheet]. Unlike the loose `contains()` checks
+  /// above, this rejects typo-squatted hosts like `evil-instagram.com`.
+  static bool isSupportedMediaHost(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+
+    bool matches(String domain) => host == domain || host.endsWith('.$domain');
+
+    return matches('youtube.com') ||
+        matches('youtu.be') ||
+        matches('vimeo.com') ||
+        matches('dailymotion.com') ||
+        matches('tiktok.com') ||
+        matches('facebook.com') ||
+        matches('instagram.com') ||
+        matches('twitter.com') ||
+        matches('x.com');
+  }
+
   static bool isPlaylistUrl(String url) {
     try {
       final uri = Uri.parse(url);

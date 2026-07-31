@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/url_utils.dart';
 
@@ -7,6 +8,11 @@ class ClipboardService {
   static final ClipboardService _instance = ClipboardService._internal();
   factory ClipboardService() => _instance;
   ClipboardService._internal();
+
+  // FIX(24): the last-detected URL + timestamp are persisted in secure
+  // storage (they can contain auth-embedded share links); the monitoring
+  // enabled flag stays in SharedPreferences since it is not sensitive.
+  static const _secureStorage = FlutterSecureStorage();
 
   String? _lastCheckedUrl;
   DateTime? _lastCheckedTime;
@@ -34,29 +40,26 @@ class ClipboardService {
 
   Future<void> _doInit() async {
     if (_initialized) return;
-    final prefs = await SharedPreferences.getInstance();
-    _lastCheckedUrl = prefs.getString('clipboard_last_url');
-    final timeMs = prefs.getInt('clipboard_last_time');
-    if (timeMs != null) {
-      _lastCheckedTime = DateTime.fromMillisecondsSinceEpoch(timeMs);
+    try {
+      _lastCheckedUrl = await _secureStorage.read(key: 'clipboard_last_url');
+      final timeMsStr = await _secureStorage.read(key: 'clipboard_last_time');
+      final timeMs = int.tryParse(timeMsStr ?? '');
+      if (timeMs != null) {
+        _lastCheckedTime = DateTime.fromMillisecondsSinceEpoch(timeMs);
+      }
+    } catch (e) {
+      debugPrint('ClipboardService error reading secure storage: $e');
     }
     _initialized = true;
   }
 
   /// Checks if there is a new valid HTTP/HTTPS URL on the clipboard.
   /// Returns the URL if it's new (or if the last check was >30 minutes ago),
-  /// otherwise null. Enforces a minimum 30-second interval between checks
-  /// to avoid excessive clipboard access on Android 12+.
+  /// otherwise null. A *new* URL is always returned; only the *same* URL seen
+  /// again within 30 seconds is skipped (per-URL rate limit) to avoid
+  /// re-prompting without dropping genuinely new links.
   Future<String?> checkClipboardForUrl() async {
     await _initIfNeeded();
-
-    // Rate limiting: minimum 30 seconds between clipboard reads
-    if (_lastCheckedTime != null) {
-      final elapsed = DateTime.now().difference(_lastCheckedTime!);
-      if (elapsed < const Duration(seconds: 30)) {
-        return null;
-      }
-    }
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -74,32 +77,37 @@ class ClipboardService {
             lower.startsWith('vbscript:')) {
           return null;
         }
-        if (text != _lastCheckedUrl) {
-          _lastCheckedUrl = text;
-          _lastCheckedTime = DateTime.now();
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('clipboard_last_url', text);
-            await prefs.setInt(
-              'clipboard_last_time',
-              _lastCheckedTime!.millisecondsSinceEpoch,
-            );
-          } catch (_) {}
-          return text;
-        }
+
         final now = DateTime.now();
-        if (_lastCheckedTime == null ||
-            now.difference(_lastCheckedTime!) > _urlTtl) {
+
+        // FIX(11): per-URL rate limit. Same URL re-prompted within 30s (or
+        // within the 30-minute TTL) is skipped; a different URL passes
+        // through immediately.
+        if (text == _lastCheckedUrl && _lastCheckedTime != null) {
+          final elapsed = now.difference(_lastCheckedTime!);
+          if (elapsed < const Duration(seconds: 30) || elapsed <= _urlTtl) {
+            return null;
+          }
           _lastCheckedTime = now;
           try {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setInt(
-              'clipboard_last_time',
-              now.millisecondsSinceEpoch,
+            await _secureStorage.write(
+              key: 'clipboard_last_time',
+              value: '${now.millisecondsSinceEpoch}',
             );
           } catch (_) {}
           return text;
         }
+
+        _lastCheckedUrl = text;
+        _lastCheckedTime = now;
+        try {
+          await _secureStorage.write(key: 'clipboard_last_url', value: text);
+          await _secureStorage.write(
+            key: 'clipboard_last_time',
+            value: '${now.millisecondsSinceEpoch}',
+          );
+        } catch (_) {}
+        return text;
       }
     } catch (e) {
       debugPrint('ClipboardService error checking URL: $e');
@@ -112,14 +120,13 @@ class ClipboardService {
     _lastCheckedUrl = url;
     _lastCheckedTime = DateTime.now();
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('clipboard_last_url', url);
-      await prefs.setInt(
-        'clipboard_last_time',
-        _lastCheckedTime!.millisecondsSinceEpoch,
+      await _secureStorage.write(key: 'clipboard_last_url', value: url);
+      await _secureStorage.write(
+        key: 'clipboard_last_time',
+        value: '${_lastCheckedTime!.millisecondsSinceEpoch}',
       );
     } catch (e) {
-      debugPrint('ClipboardService error saving prefs: $e');
+      debugPrint('ClipboardService error saving last URL: $e');
     }
   }
 }

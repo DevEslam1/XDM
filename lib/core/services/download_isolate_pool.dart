@@ -156,7 +156,10 @@ class _Worker {
       _respawnAttempts++;
       _consecutiveSpawnFailures++;
 
-      if (_consecutiveSpawnFailures > _maxConsecutiveRespawnFailures) {
+      // FIX(N2): Use >= so the breaker trips after exactly
+      // _maxConsecutiveRespawnFailures failures (previously `>` allowed one
+      // extra failure before death).
+      if (_consecutiveSpawnFailures >= _maxConsecutiveRespawnFailures) {
         _isAlive = false;
         debugPrint(
           '[DMX Pool] Worker $id circuit breaker tripped after '
@@ -166,7 +169,7 @@ class _Worker {
         return;
       }
 
-      if (_respawnAttempts > 5) {
+      if (_respawnAttempts >= 5) {
         _isAlive = false;
         debugPrint(
           '[DMX Pool] Worker $id exceeded max respawn attempts. '
@@ -202,6 +205,11 @@ class _Worker {
       if (message is SendPort) {
         if (!handshake.isCompleted) handshake.complete(message);
       } else if (message is IsolateMessage) {
+        // FIX(N2): a successfully routed job message proves the worker is
+        // healthy — clear the failure counter so a single transient failure
+        // (or a crash that was followed by a working respawn) does not
+        // accumulate towards a permanent kill.
+        if (_consecutiveSpawnFailures > 0) _consecutiveSpawnFailures = 0;
         _jobs[message.jobId]?._controller.add(message);
       }
     });

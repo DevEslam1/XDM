@@ -36,6 +36,14 @@ class _HomeScreenState extends State<HomeScreen>
     super.initState();
   }
 
+  bool _isActiveTask(DownloadTask t) {
+    final isSeeding =
+        t.status == DownloadStatus.completed && t.isTorrent && t.seedingEnabled;
+    return (t.status != DownloadStatus.completed &&
+            t.status != DownloadStatus.failed) ||
+        isSeeding;
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -93,6 +101,10 @@ class _HomeScreenState extends State<HomeScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 12),
+                      // FIX(14): iOS has no persistent background downloads —
+                      // surface that clearly so users don't assume downloads
+                      // continue while the app is backgrounded.
+                      ..._buildIosBackgroundBanner(isDark, isRtl),
                       _buildAnimatedSegmentedControl(
                         context,
                         isDark: isDark,
@@ -184,6 +196,43 @@ class _HomeScreenState extends State<HomeScreen>
         );
       },
     );
+  }
+
+  /// FIX(14): persistent iOS-only banner. BackgroundService only keeps Dart
+  /// alive on Android; on iOS the app is suspended and downloads pause.
+  List<Widget> _buildIosBackgroundBanner(bool isDark, bool isRtl) {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return const [];
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    return [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: accent.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 16, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isRtl
+                      ? 'تتوقف التنزيلات عند وضع التطبيق في الخلفية.'
+                      : 'Downloads pause when the app is in the background.',
+                  style: TextStyle(fontSize: 12.5, color: textClr),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
   }
 
   PreferredSizeWidget _buildAppBar(
@@ -325,24 +374,8 @@ class _HomeScreenState extends State<HomeScreen>
       selector: (_, p) => p.filteredTasks,
       builder: (context, allTasks, _) {
         // FIX: per-segment count
-        final activeCount = allTasks.where((t) {
-          final isSeeding =
-              t.status == DownloadStatus.completed &&
-              t.isTorrent &&
-              t.seedingEnabled;
-          return (t.status != DownloadStatus.completed &&
-                  t.status != DownloadStatus.failed) ||
-              isSeeding;
-        }).length;
-        final completedCount = allTasks.where((t) {
-          final isSeeding =
-              t.status == DownloadStatus.completed &&
-              t.isTorrent &&
-              t.seedingEnabled;
-          return (t.status == DownloadStatus.completed ||
-                  t.status == DownloadStatus.failed) &&
-              !isSeeding;
-        }).length;
+        final activeCount = allTasks.where(_isActiveTask).length;
+        final completedCount = allTasks.where((t) => !_isActiveTask(t)).length;
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -465,26 +498,34 @@ class _HomeScreenState extends State<HomeScreen>
         children: [
           // Section title
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      _selectedTab == 0
-                          ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
-                          : (isRtl ? 'سجل المكتملة' : 'COMPLETED'),
-                      style: TextStyle(
-                        color: textClr,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+            child: Selector<DownloadProvider, int>(
+              selector: (_, p) {
+                final tasks = p.filteredTasks;
+                var count = 0;
+                for (final t in tasks) {
+                  final isActive = _isActiveTask(t);
+                  if (_selectedTab == 0 ? isActive : !isActive) count++;
+                }
+                return count;
+              },
+              builder: (context, count, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        _selectedTab == 0
+                            ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
+                            : (isRtl ? 'سجل المكتملة' : 'COMPLETED'),
+                        style: TextStyle(
+                          color: textClr,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Selector<DownloadProvider, int>(
-                      selector: (_, p) => p.filteredTasks.length,
-                      builder: (context, count, _) => Container(
+                      const SizedBox(width: 8),
+                      Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 6,
                           vertical: 2,
@@ -504,13 +545,10 @@ class _HomeScreenState extends State<HomeScreen>
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Selector<DownloadProvider, int>(
-                  selector: (_, p) => p.filteredTasks.length,
-                  builder: (context, count, _) => Text(
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
                     '$count ${isRtl ? 'عنصر' : 'items'}',
                     style: TextStyle(
                       color: mutedClr,
@@ -518,8 +556,8 @@ class _HomeScreenState extends State<HomeScreen>
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // Sort button

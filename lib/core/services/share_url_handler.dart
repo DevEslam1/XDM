@@ -36,7 +36,11 @@ class ShareUrlHandler {
 
     if (YoutubeService.isPlaylistUrl(trimmedUrl)) {
       await YoutubePlaylistSheet.show(context, url);
-    } else if (YoutubeService.isExtractableMediaUrl(url)) {
+    } else if (YoutubeService.isExtractableMediaUrl(url) &&
+        // FIX(20): only route to the extractor backend when the host is
+        // actually supported; otherwise unrelated/typo-squatted URLs would be
+        // handed to MediaQualitySheet and fail inside the backend.
+        YoutubeService.isSupportedMediaHost(url)) {
       final selected = await MediaQualitySheet.show(context, url);
       if (selected == null || !context.mounted) return;
 

@@ -90,13 +90,21 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     setState(() => _selectedTab = index);
   }
 
-  String _formatTimestamp(String? isoString) {
-    if (isoString == null || isoString.isEmpty) return '';
-    try {
-      return _formatDateTime(DateTime.parse(isoString));
-    } catch (_) {
-      return '';
+  String _formatTimestamp(dynamic value) {
+    if (value == null) return '';
+    // FIX(5): visited_at is now INTEGER ms-epoch; keep parsing legacy ISO
+    // strings for robustness.
+    if (value is num) {
+      return _formatDateTime(DateTime.fromMillisecondsSinceEpoch(value.toInt()));
     }
+    if (value is String && value.isNotEmpty) {
+      try {
+        return _formatDateTime(DateTime.parse(value));
+      } catch (_) {
+        return '';
+      }
+    }
+    return '';
   }
 
   String _formatDateTime(DateTime dt) {
@@ -720,7 +728,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     final url = item['url'] as String? ?? '';
     final title = item['title'] as String? ?? url;
     final id = item['id'] as int? ?? 0;
-    final timeStr = _formatTimestamp(item['visitedAt'] as String?);
+    final timeStr = _formatTimestamp(item['visitedAt']);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 

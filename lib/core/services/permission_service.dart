@@ -11,7 +11,7 @@ class PermissionService {
   static int? _cachedSdkLevel;
 
   Future<int> _androidSdkLevel() async {
-    if (_cachedSdkLevel != null) return _cachedSdkLevel!;
+    if (_cachedSdkLevel != null && _cachedSdkLevel! > 0) return _cachedSdkLevel!;
     if (kIsWeb) return 0;
     if (!Platform.isAndroid) return 0;
     try {
@@ -23,34 +23,20 @@ class PermissionService {
       debugPrint(
         '[PermissionService] Error getting SDK level via DeviceInfo: $e',
       );
+      // FIX(19): only trust an explicit API/SDK number from the OS version
+      // string. The old heuristic (grabbing any bare number and mapping
+      // Android version names like "13" to API levels) was unreliable.
       try {
         final version = Platform.operatingSystemVersion;
-        final apiMatch = RegExp(r'API\s+(\d+)').firstMatch(version);
-        if (apiMatch != null) {
-          return int.parse(apiMatch.group(1)!);
-        }
-        final sdkMatch = RegExp(r'SDK\s+(\d+)').firstMatch(version);
-        if (sdkMatch != null) {
-          return int.parse(sdkMatch.group(1)!);
-        }
-        final match = RegExp(r'\b(\d+)\b').firstMatch(version);
+        final match = RegExp(
+          r'(?:API|SDK)\s+(\d+)',
+          caseSensitive: false,
+        ).firstMatch(version);
         if (match != null) {
-          final val = int.tryParse(match.group(1)!);
-          if (val != null) {
-            if (val >= 21 && val <= 50) return val;
-            return switch (val) {
-              14 => 34,
-              13 => 33,
-              12 => 31,
-              11 => 30,
-              10 => 29,
-              9 => 28,
-              8 => 26,
-              7 => 24,
-              6 => 23,
-              5 => 21,
-              _ => 0,
-            };
+          final sdk = int.tryParse(match.group(1)!);
+          if (sdk != null && sdk > 0) {
+            _cachedSdkLevel = sdk;
+            return sdk;
           }
         }
       } catch (err) {
@@ -247,8 +233,22 @@ class PermissionService {
       debugPrint(
         'ensureStorageAccess: failed to create download directory: $e',
       );
-      // Fall back to app-private documents directory to guarantee writability.
-      return false;
+      // FIX(19): roll back to the app-private documents directory (always
+      // writable) instead of reporting failure outright — this keeps the
+      // app functional even when shared/external storage is unavailable.
+      try {
+        final fallback = await _fallbackDirectory();
+        final dir = Directory(fallback);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        return true;
+      } catch (fallbackError) {
+        debugPrint(
+          'ensureStorageAccess: fallback directory also failed: $fallbackError',
+        );
+        return false;
+      }
     }
   }
 

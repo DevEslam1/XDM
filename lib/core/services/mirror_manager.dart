@@ -74,5 +74,15 @@ class MirrorStats {
 
   MirrorStats(this.url);
 
-  double get avgSpeedBps => totalMs > 0 ? totalBytes / totalMs * 1000 : 0;
+  /// FIX(22): precision is computed in doubles, so the reported loss is only
+  /// theoretically possible beyond ~2^53 bytes (>9 PB) — negligible in
+  /// practice. The clamp below just guards against absurd outliers (e.g. from
+  /// a corrupted byte counter) dominating mirror ranking.
+  static const double _maxAvgSpeedBps = 10 * 1024 * 1024 * 1024; // 10 GiB/s
+
+  double get avgSpeedBps {
+    if (totalMs <= 0) return 0;
+    final raw = totalBytes / totalMs * 1000;
+    return raw > _maxAvgSpeedBps ? _maxAvgSpeedBps : raw;
+  }
 }

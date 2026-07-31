@@ -13,16 +13,30 @@ class BandwidthGovernor {
   int _globalBytesPerSecond;
   int _activeConsumers = 0;
 
+  /// FIX(13): how far above the per-consumer share the token bucket may burst.
+  /// 1.0 = strict (never exceeds the configured limit); higher values allow
+  /// short bursts. Configurable so users can trade strictness for speed.
+  double _burstFactor;
+
   double _availableTokens = 0;
   DateTime _lastRefill = DateTime.now();
 
   final Lock _lock = Lock();
 
-  BandwidthGovernor([this._globalBytesPerSecond = 0]);
+  BandwidthGovernor([this._globalBytesPerSecond = 0, double burstFactor = 1.0])
+      : _burstFactor = burstFactor.clamp(1.0, 4.0);
 
   int get globalBytesPerSecond => _globalBytesPerSecond;
 
   int get activeConsumers => _activeConsumers;
+
+  double get burstFactor => _burstFactor;
+
+  /// FIX(13): change the burst allowance at runtime. Values below 1.0 are
+  /// clamped to 1.0 (strict), values above 4.0 are clamped to 4.0.
+  void setBurstFactor(double factor) {
+    _burstFactor = factor.clamp(1.0, 4.0);
+  }
 
   bool get isUnlimited => _globalBytesPerSecond <= 0 || _activeConsumers <= 0;
 
@@ -98,8 +112,9 @@ class BandwidthGovernor {
 
     final newTokens = share * elapsedMs / 1000.0;
 
-    // Allow a small burst window, but keep it bounded.
-    _availableTokens = min(_availableTokens + newTokens, share * 2.0);
+    // FIX(13): burst window is now configurable; with _burstFactor == 1.0 the
+    // governor never exceeds the configured per-consumer limit.
+    _availableTokens = min(_availableTokens + newTokens, share * _burstFactor);
 
     _lastRefill = now;
   }

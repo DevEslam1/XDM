@@ -139,7 +139,9 @@ class Bookmarks extends Table {
   TextColumn get title => text()();
   TextColumn get url => text()();
   TextColumn get folder => text().nullable()();
-  TextColumn get createdAt => text()();
+  // FIX(4): INTEGER ms-epoch since v11. Storing ISO strings in TEXT made
+  // "created_at DESC" ordering lexicographic and inconsistent.
+  IntColumn get createdAt => integer()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -150,7 +152,8 @@ class BrowserHistory extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get url => text()();
   TextColumn get title => text()();
-  TextColumn get visitedAt => text()();
+  // FIX(5): INTEGER ms-epoch since v11 (was TEXT ISO8601).
+  IntColumn get visitedAt => integer()();
 }
 
 @DataClassName('SavedBrowserTab')
@@ -184,7 +187,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -417,6 +420,70 @@ class AppDatabase extends _$AppDatabase {
         // Migration 9 -> 10: Add thumbnail_url for YouTube playlist items
         await customStatement(
           'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT',
+        );
+      }
+      if (from < 11) {
+        // FIX(4)/FIX(5): Migration 10 -> 11. Convert bookmarks.created_at and
+        // browser_history.visited_at from TEXT (ISO8601) to INTEGER (ms since
+        // epoch), matching download_tasks and restoring correct numeric
+        // ordering. ISO8601 strings are converted with the same julianday
+        // formula used by the earlier download_tasks migration.
+
+        // --- bookmarks ---
+        await customStatement('''
+          CREATE TABLE bookmarks_new (
+            id TEXT PRIMARY KEY NOT NULL,
+            title TEXT NOT NULL,
+            url TEXT NOT NULL,
+            folder TEXT,
+            created_at INTEGER NOT NULL
+          )
+        ''');
+        await customStatement('''
+          INSERT INTO bookmarks_new (id, title, url, folder, created_at)
+          SELECT id, title, url, folder,
+            COALESCE(
+              CAST(
+                (julianday(REPLACE(REPLACE(created_at, 'T', ' '), 'Z', '')) - 2440587.5)
+                * 86400000 AS INTEGER
+              ),
+              0
+            )
+          FROM bookmarks
+        ''');
+        await customStatement('DROP TABLE bookmarks');
+        await customStatement(
+          'ALTER TABLE bookmarks_new RENAME TO bookmarks',
+        );
+
+        // --- browser_history ---
+        await customStatement('''
+          CREATE TABLE browser_history_new (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL,
+            visited_at INTEGER NOT NULL
+          )
+        ''');
+        await customStatement('''
+          INSERT INTO browser_history_new (url, title, visited_at)
+          SELECT url, title,
+            COALESCE(
+              CAST(
+                (julianday(REPLACE(REPLACE(visited_at, 'T', ' '), 'Z', '')) - 2440587.5)
+                * 86400000 AS INTEGER
+              ),
+              0
+            )
+          FROM browser_history
+        ''');
+        await customStatement('DROP TABLE browser_history');
+        await customStatement(
+          'ALTER TABLE browser_history_new RENAME TO browser_history',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at '
+          'ON browser_history (visited_at)',
         );
       }
     },

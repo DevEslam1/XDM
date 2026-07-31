@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:drift/drift.dart' as drift;
@@ -33,8 +34,15 @@ class DatabaseService {
   bool _initialized = false;
   bool get isInitialized => _initialized;
 
-  int _historyInsertCount = 0;
-  static const int _historyTrimInterval = 100;
+  /// FIX(23): history is capped on *every* write (below), so the old
+  /// "every Nth insert" counter — which reset on hot restart and let history
+  /// grow unbounded — is removed.
+  static const int _historyMaxEntries = 500;
+
+  /// FIX(15): periodic WAL checkpoint + occasional VACUUM to keep the
+  /// database file small and recovery fast.
+  Timer? _maintenanceTimer;
+  int _maintenanceRuns = 0;
 
   // Hive constants for migration
   static const String downloadsBoxName = 'downloads';
@@ -72,6 +80,24 @@ class DatabaseService {
     final prefs = await SharedPreferences.getInstance();
     await _migrateFromHivePerBox(prefs);
     _initialized = true;
+
+    // FIX(15): periodic WAL checkpoint (TRUNCATE) keeps the -wal file small;
+    // VACUUM reclaims freed pages every ~12 runs (approx 6h).
+    _maintenanceTimer = Timer.periodic(const Duration(minutes: 30), (_) async {
+      try {
+        await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
+      } catch (e) {
+        _log.warning('wal_checkpoint(TRUNCATE) failed', e);
+      }
+      _maintenanceRuns++;
+      if (_maintenanceRuns % 12 == 0) {
+        try {
+          await _db.customStatement('VACUUM');
+        } catch (e) {
+          _log.warning('VACUUM failed', e);
+        }
+      }
+    });
   }
 
   /// Migrates each Hive box independently, tracking success per-box via
@@ -335,8 +361,8 @@ class DatabaseService {
               url: val['url'] as String? ?? '',
               title: val['title'] as String? ?? val['url'] as String? ?? '',
               visitedAt:
-                  val['visitedAt'] as String? ??
-                  DateTime.now().toIso8601String(),
+                  (val['visitedAt'] as num?)?.toInt() ??
+                  DateTime.now().millisecondsSinceEpoch,
             ),
           );
         } catch (e) {
@@ -630,7 +656,7 @@ class DatabaseService {
       title: bm.title,
       url: bm.url,
       folder: drift.Value(bm.folder),
-      createdAt: bm.createdAt.toIso8601String(),
+      createdAt: bm.createdAt.millisecondsSinceEpoch,
     );
   }
 
@@ -691,7 +717,8 @@ class DatabaseService {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return 0;
     final visitedAt =
-        entry['visitedAt'] as String? ?? DateTime.now().toIso8601String();
+        (entry['visitedAt'] as num?)?.toInt() ??
+        DateTime.now().millisecondsSinceEpoch;
     final title = entry['title'] as String? ?? url;
 
     final id = await _db
@@ -704,17 +731,15 @@ class DatabaseService {
           ),
         );
 
-    _historyInsertCount++;
-    if (_historyInsertCount >= _historyTrimInterval) {
-      _historyInsertCount = 0;
-      await _db.customStatement(
-        'DELETE FROM browser_history WHERE id IN ('
-        '  SELECT id FROM browser_history '
-        '  ORDER BY visited_at DESC '
-        '  LIMIT -1 OFFSET 500'
-        ')',
-      );
-    }
+    // FIX(23): cap history on every write (not every Nth insert) so the cap
+    // holds across hot restarts.
+    await _db.customStatement(
+      'DELETE FROM browser_history WHERE id IN ('
+      '  SELECT id FROM browser_history '
+      '  ORDER BY visited_at DESC '
+      '  LIMIT -1 OFFSET $_historyMaxEntries'
+      ')',
+    );
 
     return id;
   }
@@ -751,6 +776,8 @@ class DatabaseService {
   Future<void> clearOpenTabs() => _db.delete(_db.browserTabs).go();
 
   Future<void> dispose() async {
+    _maintenanceTimer?.cancel();
+    _maintenanceTimer = null;
     await _db.close();
   }
 }

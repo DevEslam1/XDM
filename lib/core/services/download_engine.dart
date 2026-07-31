@@ -1039,7 +1039,9 @@ class DownloadEngine {
       _applyFilePriorities(id, currentTorrentFiles);
 
       final saveDir = File(currentLocalFilePath).parent.path;
-      if (Directory(saveDir).existsSync()) {
+      // FIX(16): use the async API so the UI thread isn't blocked by the
+      // filesystem call.
+      if (await Directory(saveDir).exists()) {
         TorrentService.recheckTorrent(id);
 
         await _waitForState(
@@ -1216,7 +1218,6 @@ class DownloadEngine {
       final torrent = torrents[id];
       if (torrent == null) return;
 
-      final progress = torrent.progress.clamp(0.0, 1.0);
       final stateLabel = torrent.stateLabel.toLowerCase();
 
       List<Map<String, dynamic>>? resolvedFiles;
@@ -1345,10 +1346,12 @@ class DownloadEngine {
           stateLabel == 'completed' ||
           stateLabel == 'finished';
 
-      final isCompleted =
-          isFullyDownloaded &&
-          !isCheckingOrMetadata &&
-          (progress >= 0.999 || isStableFinished);
+      // FIX(7): Require a stable finished/seeding/completed state instead of
+      // accepting `progress >= 0.999`. The old shortcut could fire while
+      // libtorrent was still running its final hash verification (a transient
+      // `downloading` tick right before it flips to `checking`).
+      final isCompleted = isFullyDownloaded && !isCheckingOrMetadata &&
+          isStableFinished;
 
       final speed = torrent.downloadRate.toDouble();
 
@@ -1433,7 +1436,15 @@ class DownloadEngine {
     if (requestedThreads <= 1) return 1;
     if (fileSize > 0 && fileSize < 512 * 1024) return 1;
 
-    const probeSize = 256 * 1024;
+    // FIX(16): cap the probe to a fraction of the file so we never download a
+    // large share of a small-ish file just to estimate thread count. Probing
+    // is pointless if the probe would consume most of the payload.
+    var probeSize = 256 * 1024;
+    if (fileSize > 0) {
+      probeSize = fileSize ~/ 4;
+      if (probeSize > 256 * 1024) probeSize = 256 * 1024;
+      if (probeSize < 32 * 1024) probeSize = 32 * 1024;
+    }
 
     try {
       final sw = Stopwatch()..start();
@@ -2439,9 +2450,14 @@ class DownloadEngine {
       }
     }
 
-    if (actualResumeFrom > 0 && isPartialResponse) {
+    if (isPartialResponse) {
       final contentRange = response.headers.value('content-range');
 
+      // FIX(16): validate on *every* 206, including a fresh start (start 0).
+      // A buggy server answering a no-Range request with a 206 body starting
+      // at a non-zero offset would otherwise corrupt the file silently.
+      // `allowUnknown` skips `bytes */size` / missing headers on fresh starts,
+      // but a resuming download still validates strictly.
       if (contentRange != null) {
         _validateContentRange(
           contentRange,
@@ -2449,6 +2465,7 @@ class DownloadEngine {
           expectedEnd: knownFileSize > 0 ? knownFileSize - 1 : -1,
           expectedTotal: knownFileSize,
           punyUrl: punyUrl,
+          allowUnknown: actualResumeFrom == 0,
         );
       }
     }
@@ -2743,9 +2760,22 @@ class DownloadEngine {
         debugPrint(
           '[DMX] _waitForState timed out after ${timeout.inMinutes} min '
           'for torrent $id (last state: "${lastSeenState ?? "unknown"}"). '
-          'Proceeding — piece verification may be incomplete.',
+          'Pausing torrent — piece verification may be incomplete.',
         );
-        completer.complete();
+        // FIX(8): Do NOT proceed with incomplete verification. Pause the
+        // torrent so later file-priority changes / resumes cannot corrupt
+        // state, and surface a user-visible error.
+        try {
+          TorrentService.pauseTorrent(id);
+        } catch (_) {}
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: 'torrent:$id'),
+            type: DioExceptionType.receiveTimeout,
+            message:
+                'Torrent state check timed out. Download paused for safety.',
+          ),
+        );
       }
     });
 
@@ -2767,8 +2797,12 @@ class DownloadEngine {
     required int expectedEnd,
     required int expectedTotal,
     required String punyUrl,
+    bool allowUnknown = false,
   }) {
     if (value == null || value.trim().isEmpty) {
+      // FIX(16): on a fresh (non-resume) start a missing header is fine —
+      // there is nothing to verify against.
+      if (allowUnknown) return;
       debugPrint(
         '[DownloadEngine] No Content-Range header; skipping validation.',
       );
@@ -2780,10 +2814,22 @@ class DownloadEngine {
       caseSensitive: false,
     ).firstMatch(value.trim());
 
-    final start = int.tryParse(match?.group(1) ?? '');
-    final end = int.tryParse(match?.group(2) ?? '');
+    if (match == null) {
+      // `bytes */size` or a malformed header: nothing to verify.
+      if (allowUnknown) return;
+      throw DioException(
+        requestOptions: RequestOptions(path: punyUrl),
+        type: DioExceptionType.badResponse,
+        message:
+            'Malformed Content-Range response during resume: $value. '
+            'Expected start: $expectedStart, expected end: $expectedEnd.',
+      );
+    }
 
-    final totalText = match?.group(3);
+    final start = int.tryParse(match.group(1) ?? '');
+    final end = int.tryParse(match.group(2) ?? '');
+
+    final totalText = match.group(3);
     final total = totalText == null || totalText == '*'
         ? null
         : int.tryParse(totalText);
@@ -2856,6 +2902,15 @@ class DownloadEngine {
 
   /// FIX(4): Dynamically updates file priorities to enforce max concurrent files limit.
   /// Only the top N incomplete selected files get priority > 0 (actively download).
+  ///
+  /// FIX(12): throttled — the native `setFilePriorities` call is expensive and
+  /// was previously issued on *every* torrent tick. Priorities are now only
+  /// re-applied when a file just completed (so the next file in the queue
+  /// starts immediately) or after a short interval.
+  static const Duration _concurrentLimitThrottle = Duration(seconds: 2);
+  static final Map<int, DateTime> _lastConcurrentLimitApply = {};
+  static final Map<int, Set<int>> _lastIncompleteSnapshot = {};
+
   static void _applyMaxConcurrentFilesLimit(
     int torrentId,
     List<Map<String, dynamic>> files,
@@ -2874,6 +2929,7 @@ class DownloadEngine {
 
     // Collect indices of incomplete selected files
     final incompleteSelected = <int>[];
+    final incompleteSet = <int>{};
     for (final idx in sortedIndices) {
       final f = files[idx];
       final selected = f['selected'] as bool? ?? true;
@@ -2881,7 +2937,32 @@ class DownloadEngine {
       final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       if (selected && downloaded < length) {
         incompleteSelected.add(idx);
+        incompleteSet.add(idx);
       }
+    }
+
+    final now = DateTime.now();
+    final lastApply = _lastConcurrentLimitApply[torrentId];
+    final prevSnapshot = _lastIncompleteSnapshot[torrentId];
+
+    // A file "just completed" if it was incomplete on the last application
+    // but is now complete — that unblocks the next file in the queue.
+    var fileCompleted = false;
+    if (prevSnapshot != null) {
+      for (final idx in prevSnapshot) {
+        if (!incompleteSet.contains(idx)) {
+          fileCompleted = true;
+          break;
+        }
+      }
+    }
+
+    // FIX(12): skip the native call unless a file completed or the throttle
+    // interval has elapsed.
+    if (!fileCompleted &&
+        lastApply != null &&
+        now.difference(lastApply) < _concurrentLimitThrottle) {
+      return;
     }
 
     // Build priority list: top N incomplete files get their priority, others get 0
@@ -2895,6 +2976,8 @@ class DownloadEngine {
       }
     }
 
+    _lastConcurrentLimitApply[torrentId] = now;
+    _lastIncompleteSnapshot[torrentId] = incompleteSet;
     TorrentService.setFilePriorities(torrentId, priorities);
   }
 
@@ -3036,9 +3119,22 @@ String _redactUrl(String? url) {
   final scheme = uri.scheme.isEmpty ? 'https' : uri.scheme;
   final host = uri.host.isEmpty ? '<host>' : uri.host;
   final port = uri.hasPort ? ':${uri.port}' : '';
-  final path = uri.path;
 
-  return '$scheme://$host$port$path${uri.hasQuery ? '?<redacted>' : ''}';
+  // FIX(16): redact path segments that look like embedded signatures / signed
+  // tokens (long, token-like, containing digits). Query params are already
+  // redacted wholesale; some CDNs also place credentials in the path.
+  final redactedPath = uri.path
+      .split('/')
+      .map((s) => _looksLikePathToken(s) ? '<redacted>' : s)
+      .join('/');
+
+  return '$scheme://$host$port$redactedPath${uri.hasQuery ? '?<redacted>' : ''}';
+}
+
+bool _looksLikePathToken(String segment) {
+  if (segment.isEmpty || segment.length < 24) return false;
+  if (!RegExp(r'^[A-Za-z0-9._~-]+$').hasMatch(segment)) return false;
+  return segment.contains(RegExp(r'[0-9]'));
 }
 
 int _perTaskSpeedLimit(int globalLimit, int activeCount) {

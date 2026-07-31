@@ -137,8 +137,11 @@ class FFmpegMuxService {
       ];
 
       final int totalInputBytes = videoSize + audioSize;
+      // FIX(17): `-c copy` is a remux (no re-encoding) and is much faster than
+      // the old 50 MB/min assumption, which over-triggered timeouts on large
+      // files. 250 MB/min is a conservative remux rate.
       final calculatedMinutes =
-          (totalInputBytes / (50 * 1024 * 1024)).ceil() + 15;
+          (totalInputBytes / (250 * 1024 * 1024)).ceil() + 15;
       final timeoutDuration = Duration(
         minutes: calculatedMinutes.clamp(15, 300),
       );

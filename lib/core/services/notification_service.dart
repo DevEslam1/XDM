@@ -6,21 +6,41 @@ import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/localization.dart';
+
+/// Persistent key holding the notification-action nonce so that action
+/// intents fired after a process restart can still be validated.
+const String _nonceKey = 'dmx_notification_nonce';
 
 @pragma('vm:entry-point')
 void _onBackgroundNotificationResponse(NotificationResponse response) {
   final actionId = response.actionId;
   final payload = response.payload;
-  if (actionId != null) {
+  if (actionId == null) return;
+
+  // Runs in a fresh isolate after the process may have been killed, so the
+  // in-memory `_nonce` is not available. Read the persisted nonce and forward
+  // the action asynchronously.
+  unawaited(_forwardBackgroundAction(actionId, payload));
+}
+
+Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final nonce = prefs.getString(_nonceKey);
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
-      port.send({'action': actionId, 'taskId': payload, 'nonce': _nonce});
+      port.send({'action': actionId, 'taskId': payload, 'nonce': nonce});
     }
+  } catch (e) {
+    debugPrint('[NotificationService] Background nonce read failed: $e');
   }
 }
 
-// Per-session nonce for notification action validation
+/// Nonce for notification action validation. Persisted across sessions so
+/// pending action intents survive process death; only rotated on explicit
+/// user logout (none exists today, so it is generated once and reused).
 String? _nonce;
 
 class NotificationService {
@@ -50,6 +70,11 @@ class NotificationService {
   // never silently lost during app startup.
   final List<Map<String, String>> _pendingActions = [];
 
+  // FIX(18): the pre-subscribe replay buffer is bounded. 100 is far more than
+  // the realistic number of user-initiated actions in the startup window, but
+  // we surface drops instead of silently discarding them.
+  static const int _maxPendingActions = 100;
+
   static StreamController<Map<String, String>> _createActionStreamController(
     List<Map<String, String>> pending,
   ) {
@@ -73,8 +98,13 @@ class NotificationService {
 
   void _addAction(Map<String, String> event) {
     _pendingActions.add(event);
-    if (_pendingActions.length > 100) {
-      _pendingActions.removeRange(0, _pendingActions.length - 100);
+    if (_pendingActions.length > _maxPendingActions) {
+      final dropped = _pendingActions.length - _maxPendingActions;
+      _pendingActions.removeRange(0, dropped);
+      debugPrint(
+        '[NotificationService] Dropped $dropped queued action(s); '
+        'buffer exceeded $_maxPendingActions.',
+      );
     }
     if (!_actionStreamController.isClosed &&
         _actionStreamController.hasListener) {
@@ -144,9 +174,23 @@ class NotificationService {
       _receivePort?.close();
       _receivePort = null;
 
-      // Generate per-session nonce for action validation
-      final rand = Random.secure();
-      _nonce = base64Encode(List<int>.generate(16, (_) => rand.nextInt(256)));
+      // Load (or create) the persistent nonce so that actions fired from a
+      // previous process lifetime can still be validated. Never rotate here —
+      // the background isolate reads the same persisted value.
+      final prefs = await SharedPreferences.getInstance();
+      var persistedNonce = prefs.getString(_nonceKey);
+      if (persistedNonce == null || persistedNonce.isEmpty) {
+        final rand = Random.secure();
+        persistedNonce = base64Encode(
+          List<int>.generate(16, (_) => rand.nextInt(256)),
+        );
+        try {
+          await prefs.setString(_nonceKey, persistedNonce);
+        } catch (e) {
+          debugPrint('[NotificationService] Failed to persist nonce: $e');
+        }
+      }
+      _nonce = persistedNonce;
 
       if (_actionStreamController.isClosed) {
         _actionStreamController = _createActionStreamController(

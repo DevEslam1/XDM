@@ -2129,11 +2129,11 @@ class $BookmarksTable extends Bookmarks
     'createdAt',
   );
   @override
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
     'created_at',
     aliasedName,
     false,
-    type: DriftSqlType.string,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   @override
@@ -2211,7 +2211,7 @@ class $BookmarksTable extends Bookmarks
         data['${effectivePrefix}folder'],
       ),
       createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}created_at'],
       )!,
     );
@@ -2228,7 +2228,7 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
   final String title;
   final String url;
   final String? folder;
-  final String createdAt;
+  final int createdAt;
   const DbBookmark({
     required this.id,
     required this.title,
@@ -2245,7 +2245,7 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
     if (!nullToAbsent || folder != null) {
       map['folder'] = Variable<String>(folder);
     }
-    map['created_at'] = Variable<String>(createdAt);
+    map['created_at'] = Variable<int>(createdAt);
     return map;
   }
 
@@ -2271,7 +2271,7 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
       title: serializer.fromJson<String>(json['title']),
       url: serializer.fromJson<String>(json['url']),
       folder: serializer.fromJson<String?>(json['folder']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
     );
   }
   @override
@@ -2282,7 +2282,7 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
       'title': serializer.toJson<String>(title),
       'url': serializer.toJson<String>(url),
       'folder': serializer.toJson<String?>(folder),
-      'createdAt': serializer.toJson<String>(createdAt),
+      'createdAt': serializer.toJson<int>(createdAt),
     };
   }
 
@@ -2291,7 +2291,7 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
     String? title,
     String? url,
     Value<String?> folder = const Value.absent(),
-    String? createdAt,
+    int? createdAt,
   }) => DbBookmark(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -2339,7 +2339,7 @@ class BookmarksCompanion extends UpdateCompanion<DbBookmark> {
   final Value<String> title;
   final Value<String> url;
   final Value<String?> folder;
-  final Value<String> createdAt;
+  final Value<int> createdAt;
   final Value<int> rowid;
   const BookmarksCompanion({
     this.id = const Value.absent(),
@@ -2354,7 +2354,7 @@ class BookmarksCompanion extends UpdateCompanion<DbBookmark> {
     required String title,
     required String url,
     this.folder = const Value.absent(),
-    required String createdAt,
+    required int createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -2365,7 +2365,7 @@ class BookmarksCompanion extends UpdateCompanion<DbBookmark> {
     Expression<String>? title,
     Expression<String>? url,
     Expression<String>? folder,
-    Expression<String>? createdAt,
+    Expression<int>? createdAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2383,7 +2383,7 @@ class BookmarksCompanion extends UpdateCompanion<DbBookmark> {
     Value<String>? title,
     Value<String>? url,
     Value<String?>? folder,
-    Value<String>? createdAt,
+    Value<int>? createdAt,
     Value<int>? rowid,
   }) {
     return BookmarksCompanion(
@@ -2412,7 +2412,7 @@ class BookmarksCompanion extends UpdateCompanion<DbBookmark> {
       map['folder'] = Variable<String>(folder.value);
     }
     if (createdAt.present) {
-      map['created_at'] = Variable<String>(createdAt.value);
+      map['created_at'] = Variable<int>(createdAt.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -2475,11 +2475,11 @@ class $BrowserHistoryTable extends BrowserHistory
     'visitedAt',
   );
   @override
-  late final GeneratedColumn<String> visitedAt = GeneratedColumn<String>(
+  late final GeneratedColumn<int> visitedAt = GeneratedColumn<int>(
     'visited_at',
     aliasedName,
     false,
-    type: DriftSqlType.string,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   @override
@@ -2545,7 +2545,7 @@ class $BrowserHistoryTable extends BrowserHistory
         data['${effectivePrefix}title'],
       )!,
       visitedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}visited_at'],
       )!,
     );
@@ -2562,7 +2562,7 @@ class DbBrowserHistory extends DataClass
   final int id;
   final String url;
   final String title;
-  final String visitedAt;
+  final int visitedAt;
   const DbBrowserHistory({
     required this.id,
     required this.url,
@@ -2575,7 +2575,7 @@ class DbBrowserHistory extends DataClass
     map['id'] = Variable<int>(id);
     map['url'] = Variable<String>(url);
     map['title'] = Variable<String>(title);
-    map['visited_at'] = Variable<String>(visitedAt);
+    map['visited_at'] = Variable<int>(visitedAt);
     return map;
   }
 
@@ -2597,7 +2597,7 @@ class DbBrowserHistory extends DataClass
       id: serializer.fromJson<int>(json['id']),
       url: serializer.fromJson<String>(json['url']),
       title: serializer.fromJson<String>(json['title']),
-      visitedAt: serializer.fromJson<String>(json['visitedAt']),
+      visitedAt: serializer.fromJson<int>(json['visitedAt']),
     );
   }
   @override
@@ -2607,7 +2607,7 @@ class DbBrowserHistory extends DataClass
       'id': serializer.toJson<int>(id),
       'url': serializer.toJson<String>(url),
       'title': serializer.toJson<String>(title),
-      'visitedAt': serializer.toJson<String>(visitedAt),
+      'visitedAt': serializer.toJson<int>(visitedAt),
     };
   }
 
@@ -2615,7 +2615,7 @@ class DbBrowserHistory extends DataClass
     int? id,
     String? url,
     String? title,
-    String? visitedAt,
+    int? visitedAt,
   }) => DbBrowserHistory(
     id: id ?? this.id,
     url: url ?? this.url,
@@ -2658,7 +2658,7 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
   final Value<int> id;
   final Value<String> url;
   final Value<String> title;
-  final Value<String> visitedAt;
+  final Value<int> visitedAt;
   const BrowserHistoryCompanion({
     this.id = const Value.absent(),
     this.url = const Value.absent(),
@@ -2669,7 +2669,7 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     this.id = const Value.absent(),
     required String url,
     required String title,
-    required String visitedAt,
+    required int visitedAt,
   }) : url = Value(url),
        title = Value(title),
        visitedAt = Value(visitedAt);
@@ -2677,7 +2677,7 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     Expression<int>? id,
     Expression<String>? url,
     Expression<String>? title,
-    Expression<String>? visitedAt,
+    Expression<int>? visitedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2691,7 +2691,7 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     Value<int>? id,
     Value<String>? url,
     Value<String>? title,
-    Value<String>? visitedAt,
+    Value<int>? visitedAt,
   }) {
     return BrowserHistoryCompanion(
       id: id ?? this.id,
@@ -2714,7 +2714,7 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
       map['title'] = Variable<String>(title.value);
     }
     if (visitedAt.present) {
-      map['visited_at'] = Variable<String>(visitedAt.value);
+      map['visited_at'] = Variable<int>(visitedAt.value);
     }
     return map;
   }
@@ -4041,7 +4041,7 @@ typedef $$BookmarksTableCreateCompanionBuilder =
       required String title,
       required String url,
       Value<String?> folder,
-      required String createdAt,
+      required int createdAt,
       Value<int> rowid,
     });
 typedef $$BookmarksTableUpdateCompanionBuilder =
@@ -4050,7 +4050,7 @@ typedef $$BookmarksTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String> url,
       Value<String?> folder,
-      Value<String> createdAt,
+      Value<int> createdAt,
       Value<int> rowid,
     });
 
@@ -4083,7 +4083,7 @@ class $$BookmarksTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get createdAt => $composableBuilder(
+  ColumnFilters<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
@@ -4118,7 +4118,7 @@ class $$BookmarksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get createdAt => $composableBuilder(
+  ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
@@ -4145,7 +4145,7 @@ class $$BookmarksTableAnnotationComposer
   GeneratedColumn<String> get folder =>
       $composableBuilder(column: $table.folder, builder: (column) => column);
 
-  GeneratedColumn<String> get createdAt =>
+  GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
 
@@ -4184,7 +4184,7 @@ class $$BookmarksTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String> url = const Value.absent(),
                 Value<String?> folder = const Value.absent(),
-                Value<String> createdAt = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BookmarksCompanion(
                 id: id,
@@ -4200,7 +4200,7 @@ class $$BookmarksTableTableManager
                 required String title,
                 required String url,
                 Value<String?> folder = const Value.absent(),
-                required String createdAt,
+                required int createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => BookmarksCompanion.insert(
                 id: id,
@@ -4237,14 +4237,14 @@ typedef $$BrowserHistoryTableCreateCompanionBuilder =
       Value<int> id,
       required String url,
       required String title,
-      required String visitedAt,
+      required int visitedAt,
     });
 typedef $$BrowserHistoryTableUpdateCompanionBuilder =
     BrowserHistoryCompanion Function({
       Value<int> id,
       Value<String> url,
       Value<String> title,
-      Value<String> visitedAt,
+      Value<int> visitedAt,
     });
 
 class $$BrowserHistoryTableFilterComposer
@@ -4271,7 +4271,7 @@ class $$BrowserHistoryTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get visitedAt => $composableBuilder(
+  ColumnFilters<int> get visitedAt => $composableBuilder(
     column: $table.visitedAt,
     builder: (column) => ColumnFilters(column),
   );
@@ -4301,7 +4301,7 @@ class $$BrowserHistoryTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get visitedAt => $composableBuilder(
+  ColumnOrderings<int> get visitedAt => $composableBuilder(
     column: $table.visitedAt,
     builder: (column) => ColumnOrderings(column),
   );
@@ -4325,7 +4325,7 @@ class $$BrowserHistoryTableAnnotationComposer
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
 
-  GeneratedColumn<String> get visitedAt =>
+  GeneratedColumn<int> get visitedAt =>
       $composableBuilder(column: $table.visitedAt, builder: (column) => column);
 }
 
@@ -4369,7 +4369,7 @@ class $$BrowserHistoryTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String> url = const Value.absent(),
                 Value<String> title = const Value.absent(),
-                Value<String> visitedAt = const Value.absent(),
+                Value<int> visitedAt = const Value.absent(),
               }) => BrowserHistoryCompanion(
                 id: id,
                 url: url,
@@ -4381,7 +4381,7 @@ class $$BrowserHistoryTableTableManager
                 Value<int> id = const Value.absent(),
                 required String url,
                 required String title,
-                required String visitedAt,
+                required int visitedAt,
               }) => BrowserHistoryCompanion.insert(
                 id: id,
                 url: url,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 // ignore_for_file: prefer_initializing_formals
 
@@ -56,6 +57,33 @@ class NotificationCoordinator {
   final Map<String, int> _notificationIds = {};
   int _nextNotificationId = 1;
 
+  // FIX(18): notification payloads carry an opaque handle instead of the raw
+  // task id, so the OS-visible payload never leaks internal identifiers and a
+  // forged/duplicated payload cannot be used to target a task directly.
+  final Map<String, String> _opaqueHandles = {};
+  static final Random _handleRandom = Random.secure();
+  static const int _maxOpaqueHandles = 512;
+
+  /// Issues an opaque handle for [taskId] to embed in a notification payload.
+  /// Safe to call repeatedly; each call returns a fresh handle.
+  String opaqueHandleFor(String taskId) {
+    final handle =
+        't${_handleRandom.nextInt(1 << 31).toRadixString(16)}'
+        '${_handleRandom.nextInt(1 << 31).toRadixString(16)}';
+    _opaqueHandles[handle] = taskId;
+    if (_opaqueHandles.length > _maxOpaqueHandles) {
+      // Oldest handles are dropped first; the action stream replay + nonce
+      // validation make a dropped handle harmless (the action is ignored).
+      final oldest = _opaqueHandles.keys.first;
+      _opaqueHandles.remove(oldest);
+    }
+    return handle;
+  }
+
+  String? _resolveOpaqueHandle(String? handle) => handle == null
+      ? null
+      : _opaqueHandles[handle];
+
   void init() {
     _actionSubscription = _notificationService.onActionTapped.listen(
       _handleNotificationAction,
@@ -91,7 +119,9 @@ class NotificationCoordinator {
 
   void _handleNotificationAction(Map<String, String> event) {
     final action = event['action'];
-    final taskId = event['taskId'];
+    // FIX(18): the payload is an opaque handle; resolve it to the real task
+    // id. Unknown/unresolvable handles are ignored (e.g. after restart).
+    final taskId = _resolveOpaqueHandle(event['taskId']);
     if (action == null) return;
 
     switch (action) {
@@ -134,7 +164,7 @@ class NotificationCoordinator {
         title: 'Update ready',
         body: 'App update ${task.fileName} downloaded. Tap to install.',
         playSound: _settingsProvider.soundNotification,
-        payload: task.id,
+        payload: opaqueHandleFor(task.id),
         actions: const [
           AndroidNotificationAction(
             'install_apk',

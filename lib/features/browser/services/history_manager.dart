@@ -61,7 +61,7 @@ class BrowserHistoryManager {
           .addBrowserHistory({
             'url': clean,
             'title': (title != null && title.isNotEmpty) ? title : clean,
-            'visitedAt': now.toIso8601String(),
+            'visitedAt': now.millisecondsSinceEpoch,
           })
           .then((id) {
             if (!isActive()) return;

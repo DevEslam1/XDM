@@ -73,9 +73,20 @@ class Bookmark {
       title: map['title'] as String? ?? '',
       url: map['url'] as String? ?? '',
       folder: map['folder'] as String?,
-      createdAt:
-          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
-          DateTime.now(),
+      createdAt: parseTimestamp(map['createdAt']),
     );
+  }
+
+  /// FIX(4): accepts INTEGER ms-epoch (current DB format) and legacy ISO
+  /// strings so previously-serialized data keeps parsing.
+  static DateTime parseTimestamp(dynamic value) {
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is num) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    }
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 }

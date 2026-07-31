@@ -141,7 +141,7 @@ const Map<String, String> enTranslations = {
   'stats_paused_short': 'PAUSED',
   'stats_failed_short': 'FAILED',
   'status_seeding': 'SEEDING',
-  'status_paused_wifi': 'PAUSED (WIFI)',
+  'status_paused_wifi': 'Paused — waiting for Wi-Fi',
   'status_paused_offline': 'PAUSED (OFFLINE)',
   'filter_all': 'ALL',
   'filter_torrents': 'TORRENTS',
@@ -153,7 +153,7 @@ const Map<String, String> enTranslations = {
   'history_desc': 'Transferred files index is currently empty.',
   'category_overview': 'Storage analytics',
   'category_files': 'Files',
-  'empty_transmissions': 'No active downloads',
+  'empty_transmissions': 'No active downloads yet',
 
   'settings_youtube_backend': 'Backend configuration',
   'settings_adv_console': 'Advanced settings',

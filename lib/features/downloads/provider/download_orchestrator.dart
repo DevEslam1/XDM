@@ -687,7 +687,7 @@ class DownloadOrchestrator {
           progressPercent: progressPercent,
           speed: updated.speedFormatted,
           eta: updated.etaFormatted,
-          payload: task.id,
+          payload: _host.notifications.opaqueHandleFor(task.id),
         );
         unawaited(BackgroundService.sendHeartbeat());
       } else {
