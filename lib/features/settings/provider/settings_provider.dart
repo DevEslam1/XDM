@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
@@ -100,6 +101,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   // tests where each case re-loads settings with fresh mock values).
   late SharedPreferences _prefs;
   final _secureStorage = const FlutterSecureStorage();
+
+  // Debounce timers for rapid-fire settings changes
+  Timer? _gridOpacityDebounce;
+  Timer? _speedLimitDebounce;
 
   bool autoStart = true;
   String? customDownloadPath;
@@ -362,8 +367,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> setSpeedLimit(double value) async {
     speedLimitMb = value;
-    await _prefs.setDouble(_speedLimitKey, value);
-    notifyListeners();
+    _speedLimitDebounce?.cancel();
+    _speedLimitDebounce = Timer(const Duration(milliseconds: 500), () {
+      _prefs.setDouble(_speedLimitKey, value);
+      notifyListeners();
+    });
   }
 
   Future<void> setEnableGlow(bool value) async {
@@ -374,8 +382,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> setGridOpacity(double value) async {
     gridOpacity = value;
-    await _prefs.setDouble(_gridOpacityKey, value);
-    notifyListeners();
+    _gridOpacityDebounce?.cancel();
+    _gridOpacityDebounce = Timer(const Duration(milliseconds: 500), () {
+      _prefs.setDouble(_gridOpacityKey, value);
+      notifyListeners();
+    });
   }
 
   Future<void> setSoundNotification(bool value) async {
@@ -656,8 +667,19 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setProxyHost(String value) async {
-    proxyHost = value;
-    await _prefs.setString(_proxyHostKey, value);
+    // Validate host format
+    final trimmed = value.trim();
+    if (trimmed.isNotEmpty) {
+      final hostRegExp = RegExp(
+        r'^(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])(?:\.(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9]))*$|^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$|^\[?[a-fA-F0-9:]+\]?$',
+      );
+      if (!hostRegExp.hasMatch(trimmed)) {
+        _log.warning('Invalid proxy host format: $trimmed');
+        return;
+      }
+    }
+    proxyHost = trimmed;
+    await _prefs.setString(_proxyHostKey, trimmed);
     if (proxyHost.isNotEmpty) {
       proxyAddress = '$proxyHost:$proxyPort';
       await _prefs.setString(_proxyAddressKey, proxyAddress);
@@ -666,8 +688,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setProxyPort(int value) async {
-    proxyPort = value;
-    await _prefs.setInt(_proxyPortKey, value);
+    // Clamp port to valid range 1-65535
+    proxyPort = value.clamp(1, 65535);
+    await _prefs.setInt(_proxyPortKey, proxyPort);
     if (proxyHost.isNotEmpty) {
       proxyAddress = '$proxyHost:$proxyPort';
       await _prefs.setString(_proxyAddressKey, proxyAddress);

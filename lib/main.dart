@@ -37,6 +37,43 @@ Future<void> main(List<String> args) async {
 
     WidgetsFlutterBinding.ensureInitialized();
 
+    // Custom error widget builder for better UX
+    ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
+      return MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Something went wrong',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    kDebugMode
+                        ? errorDetails.toString()
+                        : 'An unexpected error occurred',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => exit(0),
+                    child: const Text('Restart App'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    };
+
     PlatformDispatcher.instance.onError = (error, stack) {
       debugPrint('Platform error: $error\n$stack');
       unawaited(

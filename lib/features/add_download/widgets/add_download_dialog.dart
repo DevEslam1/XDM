@@ -1343,6 +1343,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                         focusNode: _urlFocus,
                                         maxLines: 3,
                                         minLines: 1,
+                                        maxLength: 2048,
                                         style: TextStyle(
                                           color: textClr,
                                           fontSize: 12,
@@ -1972,12 +1973,29 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 color: blueClr,
                                 onTap: () async {
                                   runHaptic(settings);
-                                  final result =
-                                      await FilePicker.getDirectoryPath();
-                                  if (result != null) {
-                                    setState(
-                                      () => _pathController.text = result,
-                                    );
+                                  try {
+                                    final result =
+                                        await FilePicker.getDirectoryPath()
+                                            .timeout(
+                                              const Duration(seconds: 30),
+                                            );
+                                    if (result != null) {
+                                      setState(
+                                        () => _pathController.text = result,
+                                      );
+                                    }
+                                  } on TimeoutException {
+                                    if (context.mounted) {
+                                      ThemedSnackbar.show(
+                                        context,
+                                        message: L10n.isRtl(context)
+                                            ? 'انتهت مهلة تحديد المجلد'
+                                            : 'File picker timed out',
+                                        color: AppTheme.neonRed,
+                                        icon: Icons.error_outline,
+                                        isDarkMode: settings.isDarkMode,
+                                      );
+                                    }
                                   }
                                 },
                               ),

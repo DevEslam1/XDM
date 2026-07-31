@@ -144,47 +144,79 @@ class RemoteApiService {
           }
 
           try {
+            // Validate path to prevent path traversal attacks
+            if (path.contains('..')) {
+              request.response.statusCode = 400;
+              request.response.write(jsonEncode({'error': 'Invalid path'}));
+              await request.response.close();
+              return;
+            }
+
             if (path == '/api/tasks' && method == 'GET') {
               final tasks = await getTasks();
               request.response.write(jsonEncode(tasks));
             } else if (path.startsWith('/api/tasks/') &&
                 path.endsWith('/pause') &&
                 method == 'POST') {
-              final id = path.split('/')[3];
-              if (!_isValidTaskId(id)) {
+              final segments = path.split('/');
+              if (segments.length != 5) {
                 request.response.statusCode = 400;
                 request.response.write(
-                  jsonEncode({'error': 'Invalid task ID'}),
+                  jsonEncode({'error': 'Invalid path structure'}),
                 );
               } else {
-                await pauseTask(id);
-                request.response.write(jsonEncode({'ok': true}));
+                final id = segments[3];
+                if (!_isValidTaskId(id)) {
+                  request.response.statusCode = 400;
+                  request.response.write(
+                    jsonEncode({'error': 'Invalid task ID'}),
+                  );
+                } else {
+                  await pauseTask(id);
+                  request.response.write(jsonEncode({'ok': true}));
+                }
               }
             } else if (path.startsWith('/api/tasks/') &&
                 path.endsWith('/resume') &&
                 method == 'POST') {
-              final id = path.split('/')[3];
-              if (!_isValidTaskId(id)) {
+              final segments = path.split('/');
+              if (segments.length != 5) {
                 request.response.statusCode = 400;
                 request.response.write(
-                  jsonEncode({'error': 'Invalid task ID'}),
+                  jsonEncode({'error': 'Invalid path structure'}),
                 );
               } else {
-                await resumeTask(id);
-                request.response.write(jsonEncode({'ok': true}));
+                final id = segments[3];
+                if (!_isValidTaskId(id)) {
+                  request.response.statusCode = 400;
+                  request.response.write(
+                    jsonEncode({'error': 'Invalid task ID'}),
+                  );
+                } else {
+                  await resumeTask(id);
+                  request.response.write(jsonEncode({'ok': true}));
+                }
               }
             } else if (path.startsWith('/api/tasks/') &&
                 path.endsWith('/delete') &&
                 method == 'DELETE') {
-              final id = path.split('/')[3];
-              if (!_isValidTaskId(id)) {
+              final segments = path.split('/');
+              if (segments.length != 5) {
                 request.response.statusCode = 400;
                 request.response.write(
-                  jsonEncode({'error': 'Invalid task ID'}),
+                  jsonEncode({'error': 'Invalid path structure'}),
                 );
               } else {
-                await deleteTask(id);
-                request.response.write(jsonEncode({'ok': true}));
+                final id = segments[3];
+                if (!_isValidTaskId(id)) {
+                  request.response.statusCode = 400;
+                  request.response.write(
+                    jsonEncode({'error': 'Invalid task ID'}),
+                  );
+                } else {
+                  await deleteTask(id);
+                  request.response.write(jsonEncode({'ok': true}));
+                }
               }
             } else {
               request.response.statusCode = 404;

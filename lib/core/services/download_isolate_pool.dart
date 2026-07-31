@@ -81,8 +81,18 @@ class DownloadIsolatePool {
   Future<void> init() async {
     for (int i = 0; i < size; i++) {
       final worker = _Worker(i);
-      await worker.spawn();
-      _workers.add(worker);
+      try {
+        await worker.spawn().timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            debugPrint('[DMX Pool] Worker $i spawn timeout - continuing');
+          },
+        );
+        _workers.add(worker);
+      } catch (e) {
+        debugPrint('[DMX Pool] Worker $i failed to spawn: $e');
+        // Continue with remaining workers
+      }
     }
   }
 

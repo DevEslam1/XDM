@@ -16,7 +16,25 @@ class ShareUrlHandler {
     String url, {
     required bool isShareLaunch,
   }) async {
-    if (YoutubeService.isPlaylistUrl(url)) {
+    // Validate URL scheme to reject malicious URLs (e.g., file://)
+    final trimmedUrl = url.trim();
+    final uri = Uri.tryParse(trimmedUrl);
+    final scheme = uri?.scheme.toLowerCase() ?? '';
+    if (uri == null ||
+        (scheme != 'http' &&
+            scheme != 'https' &&
+            scheme != 'magnet' &&
+            scheme != 'file')) {
+      debugPrint('[ShareUrlHandler] Rejected URL with scheme: ${uri?.scheme}');
+      return;
+    }
+    // Reject file:// URLs from share intent for security
+    if (uri.isScheme('file') && isShareLaunch) {
+      debugPrint('[ShareUrlHandler] Rejected file:// URL from share intent');
+      return;
+    }
+
+    if (YoutubeService.isPlaylistUrl(trimmedUrl)) {
       await YoutubePlaylistSheet.show(context, url);
     } else if (YoutubeService.isExtractableMediaUrl(url)) {
       final selected = await MediaQualitySheet.show(context, url);

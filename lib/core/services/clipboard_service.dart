@@ -45,9 +45,19 @@ class ClipboardService {
 
   /// Checks if there is a new valid HTTP/HTTPS URL on the clipboard.
   /// Returns the URL if it's new (or if the last check was >30 minutes ago),
-  /// otherwise null.
+  /// otherwise null. Enforces a minimum 30-second interval between checks
+  /// to avoid excessive clipboard access on Android 12+.
   Future<String?> checkClipboardForUrl() async {
     await _initIfNeeded();
+
+    // Rate limiting: minimum 30 seconds between clipboard reads
+    if (_lastCheckedTime != null) {
+      final elapsed = DateTime.now().difference(_lastCheckedTime!);
+      if (elapsed < const Duration(seconds: 30)) {
+        return null;
+      }
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final enabled = prefs.getBool('clipboard_monitoring_enabled') ?? false;

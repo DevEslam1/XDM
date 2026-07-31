@@ -22,7 +22,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.dmx/widget"
-    private val MEDIA_CHANNEL = "com.example.dmx/media"
+    private val MEDIA_CHANNEL = "com.dmx.app/media"
     private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
     private val SAF_CHANNEL = "com.example.dmx/saf"
     private val WAKE_LOCK_CHANNEL = "com.dmx.app/wakelock"
@@ -94,7 +94,12 @@ class MainActivity : FlutterActivity() {
                             val xdmDir = File(publicDir, "XDM")
                             if (!xdmDir.exists()) xdmDir.mkdirs()
                             val destFile = File(xdmDir, fileName)
-                            // Trigger media scan
+                            // Actually copy the file from source to destination
+                            val sourceFile = File(sourcePath)
+                            if (sourceFile.exists()) {
+                                sourceFile.copyTo(destFile, overwrite = true)
+                            }
+                            // Trigger media scan on the copied file
                             MediaScannerConnection.scanFile(context, arrayOf(destFile.path), arrayOf(mimeType), null)
                             runOnUiThread { result.success(destFile.path) }
                         } catch (e: Exception) {
@@ -215,14 +220,16 @@ class MainActivity : FlutterActivity() {
             val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
             when (call.method) {
                 "acquire" -> {
-                    if (wakeLock == null) {
-                        wakeLock = powerManager.newWakeLock(
-                            PowerManager.PARTIAL_WAKE_LOCK,
-                            "dmx:download_wakelock"
-                        ).apply {
-                            setReferenceCounted(false)
-                            acquire(30 * 60 * 1000L) // 30-minute max timeout as safety net
-                        }
+                    // Release existing lock if held, then acquire fresh one
+                    wakeLock?.let {
+                        if (it.isHeld) it.release()
+                    }
+                    wakeLock = powerManager.newWakeLock(
+                        PowerManager.PARTIAL_WAKE_LOCK,
+                        "dmx:download_wakelock"
+                    ).apply {
+                        setReferenceCounted(false)
+                        acquire(30 * 60 * 1000L) // 30-minute max timeout as safety net
                     }
                     result.success(true)
                 }

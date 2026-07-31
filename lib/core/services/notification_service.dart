@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -13,10 +15,13 @@ void _onBackgroundNotificationResponse(NotificationResponse response) {
   if (actionId != null) {
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
     if (port != null) {
-      port.send({'action': actionId, 'taskId': payload});
+      port.send({'action': actionId, 'taskId': payload, 'nonce': _nonce});
     }
   }
 }
+
+// Per-session nonce for notification action validation
+String? _nonce;
 
 class NotificationService {
   NotificationService._();
@@ -123,7 +128,9 @@ class NotificationService {
       try {
         await _initFuture!.timeout(const Duration(seconds: 5));
       } catch (e) {
-        debugPrint('[NotificationService] In-flight init timed out or failed ($e). Proceeding with fresh init.');
+        debugPrint(
+          '[NotificationService] In-flight init timed out or failed ($e). Proceeding with fresh init.',
+        );
         _initFuture = null;
       }
     }
@@ -136,6 +143,10 @@ class NotificationService {
       _receivePortSub = null;
       _receivePort?.close();
       _receivePort = null;
+
+      // Generate per-session nonce for action validation
+      final rand = Random.secure();
+      _nonce = base64Encode(List<int>.generate(16, (_) => rand.nextInt(256)));
 
       if (_actionStreamController.isClosed) {
         _actionStreamController = _createActionStreamController(
@@ -166,6 +177,16 @@ class NotificationService {
         if (message is Map) {
           final action = message['action'] as String?;
           final taskId = message['taskId'] as String?;
+          final receivedNonce = message['nonce'] as String?;
+
+          // Validate nonce to prevent unauthorized actions
+          if (receivedNonce != _nonce) {
+            debugPrint(
+              '[NotificationService] Invalid nonce - rejecting action',
+            );
+            return;
+          }
+
           if (action != null) {
             if (_groupActions.contains(action)) {
               _addAction({'action': action});

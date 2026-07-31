@@ -1575,6 +1575,12 @@ class DownloadProvider extends ChangeNotifier
     try {
       await _databaseService.saveTask(updated);
 
+      // Re-verify index after async gap to prevent race condition
+      final currentIndex = _tasks.indexWhere((task) => task.id == updated.id);
+      if (currentIndex != -1) {
+        _tasks[currentIndex] = updated;
+      }
+
       // Notify AFTER successful DB write to keep UI and persistence in sync.
       notifyListeners();
 
@@ -1611,9 +1617,13 @@ class DownloadProvider extends ChangeNotifier
       return;
     }
     _dbRetryCounts[taskId] = retries + 1;
-    final delay = Duration(seconds: (retries + 1) * 2);
+    // Exponential backoff with jitter: min(2^retries * 1000 + random(0, 500), 30000)
+    final random = Random();
+    final baseDelay = (1 << retries) * 1000 + random.nextInt(500);
+    final delayMs = baseDelay.clamp(0, 30000);
+    final delay = Duration(milliseconds: delayMs);
     _log.warning(
-      'Scheduling DB save retry #${retries + 1} for $taskId in ${delay.inSeconds}s',
+      'Scheduling DB save retry #${retries + 1} for $taskId in ${delay.inMilliseconds}ms',
     );
 
     _dbRetryTimers[taskId]?.cancel();

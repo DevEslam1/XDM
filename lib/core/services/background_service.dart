@@ -41,6 +41,7 @@ class BackgroundService {
     'com.dmx.app/wakelock',
   );
   static bool _wakeLockHeld = false;
+  static Timer? _wakeLockRenewalTimer;
 
   /// Returns true only on Android. On iOS, background Dart execution is not
   /// supported without a native BGTaskScheduler plugin.
@@ -174,13 +175,29 @@ class BackgroundService {
 
   /// Acquires a partial wake lock to keep the CPU awake during active
   /// downloads. Safe to call multiple times; only the first call invokes
-  /// the platform channel.
+  /// the platform channel. The lock is automatically renewed every 15 minutes
+  /// to prevent the native 30-minute timeout from expiring.
   static Future<void> acquireWakeLock() async {
     if (!isSupported || _wakeLockHeld) return;
     try {
       await _wakeLockChannel.invokeMethod<void>('acquire');
       _wakeLockHeld = true;
       _log.fine('Wake lock acquired');
+
+      // Start periodic renewal every 15 minutes to prevent native timeout expiry
+      _wakeLockRenewalTimer?.cancel();
+      _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 15), (
+        _,
+      ) async {
+        if (_wakeLockHeld && isSupported) {
+          try {
+            await _wakeLockChannel.invokeMethod<void>('acquire');
+            _log.fine('Wake lock renewed');
+          } catch (e) {
+            _log.warning('Failed to renew wake lock', e);
+          }
+        }
+      });
     } catch (e) {
       _log.warning('Failed to acquire wake lock', e);
     }
@@ -190,6 +207,8 @@ class BackgroundService {
   static Future<void> releaseWakeLock() async {
     if (!isSupported || !_wakeLockHeld) return;
     try {
+      _wakeLockRenewalTimer?.cancel();
+      _wakeLockRenewalTimer = null;
       await _wakeLockChannel.invokeMethod<void>('release');
       _wakeLockHeld = false;
       _log.fine('Wake lock released');

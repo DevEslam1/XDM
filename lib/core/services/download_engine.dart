@@ -79,7 +79,9 @@ class DownloadProgress {
 }
 
 class DownloadEngine {
-  static const int _progressReportIntervalMs = 250;
+  // Progress report interval: 500ms = max 2 updates/sec per task
+  // This reduces UI thread pressure when multiple downloads are active.
+  static const int _progressReportIntervalMs = 500;
   static const int _stateSaveIntervalMs = 2000;
   static const int _isolatePoolSize = 4;
 
@@ -358,6 +360,35 @@ class DownloadEngine {
         StreamSubscription? sub;
         Timer? metadataTimer;
 
+        // Handle cancellation
+        void handleCancel() {
+          sub?.cancel();
+          metadataTimer?.cancel();
+          try {
+            TorrentService.pauseTorrent(torrentId);
+            TorrentService.removeTorrent(torrentId);
+          } catch (e) {
+            debugPrint(
+              '[DMX] Error cleaning up torrent during cancellation: $e',
+            );
+          }
+          if (!completer.isCompleted) {
+            completer.completeError(
+              DioException(
+                requestOptions: RequestOptions(path: url),
+                type: DioExceptionType.cancel,
+                message: 'Download cancelled during metadata resolution',
+              ),
+            );
+          }
+        }
+
+        cancelToken?.whenCancel.then((_) => handleCancel());
+        if (cancelToken?.isCancelled == true) {
+          handleCancel();
+          return completer.future;
+        }
+
         sub = TorrentService.torrentUpdates.listen((torrents) {
           final torrent = torrents[torrentId];
 
@@ -409,7 +440,7 @@ class DownloadEngine {
           }
         });
 
-        metadataTimer = Timer(const Duration(seconds: 300), () {
+        metadataTimer = Timer(const Duration(seconds: 60), () {
           if (!completer.isCompleted) {
             sub?.cancel();
 
@@ -766,8 +797,30 @@ class DownloadEngine {
     bool cancelRequested = false;
 
     Timer? watchdog;
+    Timer? inactivityTimer;
+    const inactivityTimeout = Duration(minutes: 30);
+
+    void resetInactivityTimer() {
+      inactivityTimer?.cancel();
+      inactivityTimer = Timer(inactivityTimeout, () {
+        if (!completer.isCompleted) {
+          completer.completeError(
+            DioException(
+              requestOptions: RequestOptions(path: punyUrl),
+              type: DioExceptionType.receiveTimeout,
+              message: 'Download job timed out after 30 minutes of inactivity.',
+            ),
+          );
+        }
+      });
+    }
+
+    // Start the inactivity timer
+    resetInactivityTimer();
+
     watchdog = Timer(const Duration(seconds: 30), () {
       if (!acked && !completer.isCompleted) {
+        inactivityTimer?.cancel();
         completer.completeError(
           const IsolateSpawnTimeoutException(
             'Download engine failed to initialize within 30 seconds. Please retry.',
@@ -796,6 +849,9 @@ class DownloadEngine {
       } else if (type == 'progress') {
         final p = message.data;
 
+        // Reset inactivity timer on progress
+        resetInactivityTimer();
+
         onProgress(
           DownloadProgress(
             downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
@@ -811,6 +867,7 @@ class DownloadEngine {
           ),
         );
       } else if (type == 'done') {
+        inactivityTimer?.cancel();
         if (!completer.isCompleted) completer.complete();
       } else if (type == 'error') {
         final data = message.data;
@@ -820,10 +877,12 @@ class DownloadEngine {
 
         if (errType == 'integrity') {
           if (!completer.isCompleted) {
+            inactivityTimer?.cancel();
             completer.completeError(DownloadIntegrityException(errMsg ?? ''));
           }
         } else if (errType == 'fileChanged') {
           if (!completer.isCompleted) {
+            inactivityTimer?.cancel();
             completer.completeError(
               DioException(
                 requestOptions: RequestOptions(path: punyUrl),
@@ -834,6 +893,7 @@ class DownloadEngine {
           }
         } else if (errType == 'diskFull') {
           if (!completer.isCompleted) {
+            inactivityTimer?.cancel();
             completer.completeError(
               DioException(
                 requestOptions: RequestOptions(path: punyUrl),
@@ -873,24 +933,19 @@ class DownloadEngine {
                 : null,
           );
 
-          if (!completer.isCompleted) completer.completeError(dioException);
+          if (!completer.isCompleted) {
+            inactivityTimer?.cancel();
+            completer.completeError(dioException);
+          }
         }
       }
     });
 
     try {
-      await completer.future.timeout(
-        const Duration(minutes: 30),
-        onTimeout: () {
-          throw DioException(
-            requestOptions: RequestOptions(path: punyUrl),
-            type: DioExceptionType.receiveTimeout,
-            message: 'Download job timed out after 30 minutes of inactivity.',
-          );
-        },
-      );
+      await completer.future;
     } finally {
       watchdog.cancel();
+      inactivityTimer?.cancel();
       await sub.cancel();
       job.dispose();
       _activeCancelTokens.remove(cancelToken);
@@ -1089,7 +1144,7 @@ class DownloadEngine {
       );
     });
 
-    final timeout = Timer(const Duration(seconds: 300), () {
+    final timeout = Timer(const Duration(seconds: 60), () {
       timer?.cancel();
 
       if (completer.isCompleted) return;
@@ -2646,7 +2701,13 @@ class DownloadEngine {
   }
 
   String buildLocalFilePath(String directory, String fileName) {
-    return p.join(directory, safeFileName(fileName));
+    final safeName = safeFileName(fileName);
+    final fullPath = p.join(directory, safeName);
+    // Verify resolved path is still within target directory
+    if (!p.isWithin(directory, fullPath)) {
+      throw ArgumentError('Invalid file name: path traversal detected');
+    }
+    return fullPath;
   }
 
   String buildTempFilePath(String directory, String fileName) {
