@@ -72,8 +72,12 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   }
 
   Future<void> _fetchStreams() async {
+    debugPrint('[MediaQualitySheet] Fetching streams for: ${widget.videoUrl}');
     try {
       final streams = await YoutubeService.getStreamsForAnyUrl(widget.videoUrl);
+      debugPrint(
+        '[MediaQualitySheet] Received ${streams?.length ?? 0} streams',
+      );
       if (!mounted) return;
       setState(() {
         _streams = streams ?? [];
@@ -84,7 +88,8 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
               : 'No streams found for this URL.';
         }
       });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[MediaQualitySheet] Error fetching streams: $e\n$st');
       if (!mounted) return;
       final errorStr = e.toString().replaceAll('Exception: ', '');
       setState(() {

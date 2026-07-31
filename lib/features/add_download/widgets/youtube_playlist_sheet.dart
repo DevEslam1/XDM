@@ -253,7 +253,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       final video = selectedVideos[i];
       final videoId = video['id'] as String;
       final videoTitle = video['title'] as String? ?? 'YouTube Video';
-      final videoThumbnail = video['thumbnailUrl'] as String?;
+      final rawThumb = video['thumbnailUrl'] ?? video['thumbnail'] ?? video['thumbnail_url'];
+      final videoThumbnail = rawThumb != null && rawThumb.toString().isNotEmpty
+          ? rawThumb.toString()
+          : 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
 
       try {
         final videoUrl = YoutubeService.videoUrl(videoId);

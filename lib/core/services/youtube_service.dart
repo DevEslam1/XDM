@@ -580,9 +580,17 @@ class YoutubeService {
       final info = backendRes['info'] as Map<String, dynamic>?;
       final rawVideos = backendRes['videos'] as List?;
       if (info != null && rawVideos != null) {
-        final videoList = rawVideos
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        final videoList = rawVideos.map((e) {
+          final map = Map<String, dynamic>.from(e as Map);
+          final videoId = map['id'] as String?;
+          final thumb = map['thumbnailUrl'] ?? map['thumbnail'] ?? map['thumbnail_url'];
+          if ((thumb == null || thumb.toString().isEmpty) && videoId != null && videoId.isNotEmpty) {
+            map['thumbnailUrl'] = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+          } else if (thumb != null) {
+            map['thumbnailUrl'] = thumb.toString();
+          }
+          return map;
+        }).toList();
         return {'info': info, 'videos': videoList};
       }
     } on BackendRateLimitException catch (e) {
