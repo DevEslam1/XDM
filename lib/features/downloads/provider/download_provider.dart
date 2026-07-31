@@ -116,7 +116,10 @@ class DownloadProvider extends ChangeNotifier
 
     if (!TorrentService.isInitialized) {
       // Retry after a short delay; torrent init is async.
-      Future.delayed(const Duration(seconds: 2), _initTorrentSubscription);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (_disposed) return;
+        _initTorrentSubscription();
+      });
       return;
     }
 
@@ -174,6 +177,7 @@ class DownloadProvider extends ChangeNotifier
   late final ScheduleManager _scheduleManager;
 
   Timer? _widgetTimer;
+  bool _notifyPending = false;
   final Map<String, Timer> _retryTimers = {};
   final Map<String, Timer> _dbRetryTimers = {};
   final Map<String, DownloadMetrics> _downloadMetrics = {};
@@ -468,8 +472,11 @@ class DownloadProvider extends ChangeNotifier
     final doubleCorruption = DoubleListConverter.lastConversionError.value;
     final torrentCorruption = TorrentFilesConverter.lastConversionError.value;
     if (doubleCorruption != null || torrentCorruption != null) {
-      _log.severe('DB corruption detected: $_dbCorruptionMessage(doubleCorruption, torrentCorruption)');
-      lastSaveError.value = 'Data corruption detected. Some downloads may need re-downloading.';
+      _log.severe(
+        'DB corruption detected: $_dbCorruptionMessage(doubleCorruption, torrentCorruption)',
+      );
+      lastSaveError.value =
+          'Data corruption detected. Some downloads may need re-downloading.';
       // Reset notifiers to avoid repeated warnings
       DoubleListConverter.lastConversionError.value = null;
       TorrentFilesConverter.lastConversionError.value = null;
@@ -607,6 +614,10 @@ class DownloadProvider extends ChangeNotifier
 
       final reconciled = <DownloadTask>[];
 
+      // Run all per-task file-stat calls in parallel. Each call already
+      // offloads to a background isolate via _statPartialFileIsolate, so
+      // awaiting them sequentially wastes the parallelism opportunity.
+      final futures = <Future<DownloadTask>>[];
       for (final task in _tasks) {
         final hasActiveStream = _cancelTokens.containsKey(task.id);
 
@@ -618,13 +629,17 @@ class DownloadProvider extends ChangeNotifier
           }
         }
 
-        try {
-          reconciled.add(await _reconcilePartialProgress(task));
-        } catch (e) {
-          debugPrint('Failed to reconcile partial file for ${task.id}: $e');
-          reconciled.add(task);
-        }
+        futures.add(() async {
+          try {
+            return await _reconcilePartialProgress(task);
+          } catch (e) {
+            debugPrint('Failed to reconcile partial file for ${task.id}: $e');
+            return task;
+          }
+        }());
       }
+
+      reconciled.addAll(await Future.wait(futures));
 
       for (final task in reconciled) {
         final idx = _tasks.indexWhere((t) => t.id == task.id);
@@ -1245,6 +1260,10 @@ class DownloadProvider extends ChangeNotifier
     _retryTimers.remove(id);
 
     _lastTorrentFileDiskSync.remove(id);
+    _downloadMetrics.remove(id);
+    _dbRetryCounts.remove(id);
+    _dbRetryTimers[id]?.cancel();
+    _dbRetryTimers.remove(id);
 
     final savedNotificationId = _notifications.removeId(id);
 
@@ -1332,9 +1351,17 @@ class DownloadProvider extends ChangeNotifier
       _lastDbSaveBytes.remove(id);
       _pendingProgressUpdates.remove(id);
       _retryCounts.remove(id);
+      _ytLowSpeedCounts.remove(id);
+      _ytThrottlingRefreshing.remove(id);
+      _lastTorrentFileDiskSync.remove(id);
+      _downloadMetrics.remove(id);
+      _dbRetryCounts.remove(id);
+      effectiveThreadOverrides.remove(id);
 
       _retryTimers[id]?.cancel();
       _retryTimers.remove(id);
+      _dbRetryTimers[id]?.cancel();
+      _dbRetryTimers.remove(id);
 
       _activeFutures.remove(id);
 
@@ -1425,7 +1452,8 @@ class DownloadProvider extends ChangeNotifier
 
   /// Cleans all temporary transfer artifacts safely depending on task type.
   Future<void> cleanupAllArtifacts(DownloadTask task) async {
-    final isTorrent = task.torrentFiles != null && task.torrentFiles!.isNotEmpty;
+    final isTorrent =
+        task.torrentFiles != null && task.torrentFiles!.isNotEmpty;
     if (isTorrent) {
       await cleanupTorrentArtifacts(task);
     } else {
@@ -1496,20 +1524,42 @@ class DownloadProvider extends ChangeNotifier
     // downloadedBytes, chunks, eta) must NOT set filteredTasksDirty to true,
     // otherwise the filtered list would be recomputed on every tick, wasting CPU
     // and causing unnecessary widget rebuilds.
-    if (prev.status != updated.status ||
+    final isStructuralChange =
+        prev.status != updated.status ||
         prev.category != updated.category ||
         prev.fileName != updated.fileName ||
         prev.url != updated.url ||
-        prev.fileSize != updated.fileSize) {
+        prev.fileSize != updated.fileSize;
+
+    if (isStructuralChange) {
       filteredTasksDirty = true;
     }
 
+    updateActualTorrentUploadLimit();
+
+    // Progress-only changes (speed, bytes, eta, chunks) skip the immediate
+    // DB save and notifyListeners. The timer-based batch save persists
+    // progress periodically, and _notifyPending coalesces UI notifications
+    // to the timer frequency (~5 s) so we don't rebuild widgets on every tick.
+    if (!isStructuralChange) {
+      _pendingProgressUpdates.add(updated.id);
+      _notifyPending = true;
+
+      // Complete any previous queued save so the chain stays consistent.
+      final previousSave = _dbSaveQueues[updated.id];
+      if (previousSave != null) {
+        try {
+          await previousSave;
+        } catch (_) {}
+      }
+      return;
+    }
+
+    // Structural change — persist immediately.
     final previousSave = _dbSaveQueues[updated.id] ?? Future.value();
     final completer = Completer<void>();
 
     _dbSaveQueues[updated.id] = completer.future;
-
-    updateActualTorrentUploadLimit();
 
     try {
       await previousSave;
@@ -1520,7 +1570,7 @@ class DownloadProvider extends ChangeNotifier
     try {
       await _databaseService.saveTask(updated);
 
-      // Notify AFTER successful DB write to keep UI and persistence in sync
+      // Notify AFTER successful DB write to keep UI and persistence in sync.
       notifyListeners();
 
       completer.complete();
@@ -1549,20 +1599,27 @@ class DownloadProvider extends ChangeNotifier
   void _scheduleDbRetry(String taskId, DownloadTask task) {
     final retries = _dbRetryCounts[taskId] ?? 0;
     if (retries >= 5) {
-      _log.severe('DB save retry exhausted for $taskId after $retries attempts');
+      _log.severe(
+        'DB save retry exhausted for $taskId after $retries attempts',
+      );
       lastSaveError.value = 'DB save failed after $retries retries for $taskId';
       return;
     }
     _dbRetryCounts[taskId] = retries + 1;
     final delay = Duration(seconds: (retries + 1) * 2);
-    _log.warning('Scheduling DB save retry #${retries + 1} for $taskId in ${delay.inSeconds}s');
+    _log.warning(
+      'Scheduling DB save retry #${retries + 1} for $taskId in ${delay.inSeconds}s',
+    );
 
     _dbRetryTimers[taskId]?.cancel();
     _dbRetryTimers[taskId] = Timer(delay, () {
       _dbRetryTimers.remove(taskId);
       final idx = _tasks.indexWhere((t) => t.id == taskId);
       if (idx == -1) return;
-      _setTask(_tasks[idx]); // Retry with current in-memory state
+      // Re-read from _tasks so the retry always uses the latest in-memory state.
+      // "Latest state wins" semantics: if the task was updated again after the
+      // original failure, the newer values are persisted instead of stale ones.
+      _setTask(_tasks[idx]);
     });
   }
 
@@ -1711,7 +1768,7 @@ class DownloadProvider extends ChangeNotifier
 
         _updateTelemetryWidget();
 
-        unawaited(BackgroundService.sendHeartbeat());
+        unawaited(BackgroundService.sendHeartbeat().catchError((e) {}));
 
         final tasksToSave = <DownloadTask>[];
 
@@ -1730,13 +1787,30 @@ class DownloadProvider extends ChangeNotifier
           // Do NOT save queued tasks here — they have no meaningful progress
         }
 
+        // Also persist any tasks that went through _setTask with progress-only
+        // changes (which deferred the DB write to this batch save).
+        for (final id in _pendingProgressUpdates) {
+          final idx = _tasks.indexWhere((t) => t.id == id);
+          if (idx != -1 && !tasksToSave.contains(_tasks[idx])) {
+            tasksToSave.add(_tasks[idx]);
+            // Keep _lastDbSaveBytes in sync so the byte-change loop on the
+            // next tick doesn't re-detect the same delta and save redundantly.
+            _lastDbSaveBytes[id] = _tasks[idx].downloadedBytes;
+          }
+        }
+        _pendingProgressUpdates.clear();
+
         if (tasksToSave.isNotEmpty) {
           _databaseService.saveTasks(tasksToSave).catchError((e) {
             debugPrint('Batch DB save failed: $e');
           });
         }
 
-        if (updateSeedingSpeeds()) {
+        // Coalesce notifyListeners() calls from _setTask progress-only updates
+        // so widgets rebuild at most once per timer tick instead of on every tick.
+        final shouldNotify = _notifyPending || updateSeedingSpeeds();
+        _notifyPending = false;
+        if (shouldNotify) {
           notifyListeners();
         }
       });
@@ -1782,16 +1856,16 @@ class DownloadProvider extends ChangeNotifier
       }
 
       task = task.copyWith(
-        threadCount: threadCount,
+        threadCount: targetThreadCount,
         downloadedBytes: 0,
-        chunks: List<double>.filled(threadCount, 0.0),
+        chunks: List<double>.filled(targetThreadCount, 0.0),
         status: DownloadStatus.paused,
         clearError: true,
       );
     } else {
       task = task.copyWith(
-        threadCount: threadCount,
-        chunks: List<double>.filled(threadCount, 0.0),
+        threadCount: targetThreadCount,
+        chunks: List<double>.filled(targetThreadCount, 0.0),
       );
     }
 
@@ -2223,9 +2297,10 @@ class DownloadProvider extends ChangeNotifier
     _dbSaveQueues.clear();
 
     if (pendingSaves.isNotEmpty) {
-      Future.wait(pendingSaves)
-          .then((_) => _downloadEngine.close(),
-              onError: (_) => _downloadEngine.close());
+      Future.wait(pendingSaves).then(
+        (_) => _downloadEngine.close(),
+        onError: (_) => _downloadEngine.close(),
+      );
     } else {
       _downloadEngine.close();
     }

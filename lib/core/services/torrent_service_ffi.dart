@@ -43,11 +43,11 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
 
   /// Guarded call to saveResumeData.
   /// Returns a Uint8List if the plugin supports it, or null if not.
-  /// 
-  /// TODO: When libtorrent_flutter exposes saveResumeData natively, remove 
-  /// the dynamic dispatch and use the typed API directly. The native API 
-  /// should return fast-resume data as a serialized Uint8List that can be 
-  /// persisted and passed back to loadResumeData on restart, avoiding the 
+  ///
+  /// TODO: When libtorrent_flutter exposes saveResumeData natively, remove
+  /// the dynamic dispatch and use the typed API directly. The native API
+  /// should return fast-resume data as a serialized Uint8List that can be
+  /// persisted and passed back to loadResumeData on restart, avoiding the
   /// full piece recheck.
   Uint8List? trySaveResumeData(int id) {
     try {
@@ -271,9 +271,7 @@ class TorrentService {
   /// Saves native resume data for all active torrents.
   static Future<void> saveAllResumeData() async {
     if (!isInitialized) return;
-    await Future.wait(
-      _activeTorrentIds.map((id) => saveResumeData(id)),
-    );
+    await Future.wait(_activeTorrentIds.map((id) => saveResumeData(id)));
   }
 
   static void setDownloadLimit(int bytesPerSecond) {
@@ -371,7 +369,11 @@ class TorrentService {
         final progress = _latestProgress[id] ?? 0.0;
         TorrentResumeStore.save(id, progress: progress);
         // Attempt native fast-resume save before pausing
-        unawaited(saveResumeData(id));
+        unawaited(
+          saveResumeData(id).catchError((e) {
+            _log.warning('saveResumeData failed for id $id: $e');
+          }),
+        );
         LibtorrentFlutter.instance.pauseTorrent(id);
       } catch (e) {
         _log.warning('pauseTorrent failed for id $id: $e');

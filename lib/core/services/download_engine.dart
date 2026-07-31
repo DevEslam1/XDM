@@ -97,11 +97,13 @@ class DownloadEngine {
   final Map<Dio, Set<String>> _activeDownloadsPerClient = {};
 
   Timer? _cleanupTimer;
+  bool _closed = false;
 
   DownloadEngine({Dio? dio, bool enableCleanupTimer = true})
     : _sharedDio = dio ?? Dio() {
     if (enableCleanupTimer) {
       _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
+        if (_closed) return;
         final now = DateTime.now();
 
         _activeDioClients.removeWhere((client) {
@@ -124,7 +126,9 @@ class DownloadEngine {
               try {
                 client.close(force: true);
               } catch (e) {
-                debugPrint('[DMX] Failed to close reserved client during cleanup: $e');
+                debugPrint(
+                  '[DMX] Failed to close reserved client during cleanup: $e',
+                );
               }
               _reservedDioClients.remove(client);
               _dioClientCreationTimes.remove(client);
@@ -827,6 +831,16 @@ class DownloadEngine {
               ),
             );
           }
+        } else if (errType == 'diskFull') {
+          if (!completer.isCompleted) {
+            completer.completeError(
+              DioException(
+                requestOptions: RequestOptions(path: punyUrl),
+                type: DioExceptionType.unknown,
+                message: 'Not enough storage space.',
+              ),
+            );
+          }
         } else {
           DioExceptionType dioType = DioExceptionType.unknown;
 
@@ -864,7 +878,16 @@ class DownloadEngine {
     });
 
     try {
-      await completer.future;
+      await completer.future.timeout(
+        const Duration(minutes: 30),
+        onTimeout: () {
+          throw DioException(
+            requestOptions: RequestOptions(path: punyUrl),
+            type: DioExceptionType.receiveTimeout,
+            message: 'Download job timed out after 30 minutes of inactivity.',
+          );
+        },
+      );
     } finally {
       watchdog.cancel();
       await sub.cancel();
@@ -1204,32 +1227,34 @@ class DownloadEngine {
           ? torrent.totalWantedDone
           : torrent.totalDone;
 
-        // FIX(2): Only estimate when we don't have true per-file progress.
-        // When progressEstimated is false from the file mapping, we have real data.
-        final bool hasTruePerFileProgress = resolvedFiles != null &&
-            resolvedFiles.isNotEmpty &&
-            resolvedFiles.any(
-              (f) => (f['progressEstimated'] as bool? ?? true) == false,
-            );
-        final bool needsEstimation = resolvedFiles != null &&
-            resolvedFiles.isNotEmpty &&
-            !hasTruePerFileProgress &&
-            (!TorrentService.fileProgressSupported || downloadedBytes > 0);
-        if (needsEstimation) {
-          _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
-          for (final f in resolvedFiles) {
-            f['progressEstimated'] = true;
-          }
+      // FIX(2): Only estimate when we don't have true per-file progress.
+      // When progressEstimated is false from the file mapping, we have real data.
+      final bool hasTruePerFileProgress =
+          resolvedFiles != null &&
+          resolvedFiles.isNotEmpty &&
+          resolvedFiles.any(
+            (f) => (f['progressEstimated'] as bool? ?? true) == false,
+          );
+      final bool needsEstimation =
+          resolvedFiles != null &&
+          resolvedFiles.isNotEmpty &&
+          !hasTruePerFileProgress &&
+          (!TorrentService.fileProgressSupported || downloadedBytes > 0);
+      if (needsEstimation) {
+        _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
+        for (final f in resolvedFiles) {
+          f['progressEstimated'] = true;
         }
+      }
 
-        // FIX(4): Apply max concurrent files limit
-        if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
-          final maxConcurrentFiles =
-              SettingsProvider.instance.maxConcurrentFilesPerTorrent;
-          if (maxConcurrentFiles > 0) {
-            _applyMaxConcurrentFilesLimit(id, resolvedFiles, maxConcurrentFiles);
-          }
+      // FIX(4): Apply max concurrent files limit
+      if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
+        final maxConcurrentFiles =
+            SettingsProvider.instance.maxConcurrentFilesPerTorrent;
+        if (maxConcurrentFiles > 0) {
+          _applyMaxConcurrentFilesLimit(id, resolvedFiles, maxConcurrentFiles);
         }
+      }
 
       final isCheckingOrMetadata =
           stateLabel.contains('checking') ||
@@ -1305,7 +1330,10 @@ class DownloadEngine {
           });
           if (anyFileJustCompleted) {
             _applyMaxConcurrentFilesLimit(
-                id, resolvedFiles, maxConcurrentFiles);
+              id,
+              resolvedFiles,
+              maxConcurrentFiles,
+            );
           }
         }
       }
@@ -2714,6 +2742,7 @@ class DownloadEngine {
   }
 
   void close() {
+    _closed = true;
     _cleanupTimer?.cancel();
     _cleanupTimer = null;
 
@@ -2747,7 +2776,11 @@ class DownloadEngine {
     _poolInit = null;
 
     if (poolToClose != null) {
-      unawaited(poolToClose.shutdown());
+      unawaited(
+        poolToClose.shutdown().catchError((e) {
+          debugPrint('[DMX] Pool shutdown failed: $e');
+        }),
+      );
     }
 
     for (final id in List<int>.from(_activeTorrentIds)) {
@@ -2870,6 +2903,23 @@ class DownloadEngine {
       }
     }
   }
+
+  int? _lastEta;
+
+  int? _applyEtaSmoothing(int? rawEta) {
+    if (rawEta == null) {
+      _lastEta = null;
+      return null;
+    }
+    final clamped = rawEta.clamp(0, 86400 * 365);
+    if (_lastEta == null) {
+      _lastEta = clamped;
+      return clamped;
+    }
+    final smoothed = ((_lastEta! * 0.7) + (clamped * 0.3)).round();
+    _lastEta = smoothed;
+    return smoothed;
+  }
 }
 
 typedef ValueChangedProgress = void Function(DownloadProgress progress);
@@ -2914,23 +2964,6 @@ class DownloadIntegrityException implements Exception {
   @override
   String toString() => 'DownloadIntegrityException: $message';
 }
-
-  int? _lastEta;
-
-  int? _applyEtaSmoothing(int? rawEta) {
-    if (rawEta == null) {
-      _lastEta = null;
-      return null;
-    }
-    final clamped = rawEta.clamp(0, 86400 * 365);
-    if (_lastEta == null) {
-      _lastEta = clamped;
-      return clamped;
-    }
-    final smoothed = ((_lastEta! * 0.7) + (clamped * 0.3)).round();
-    _lastEta = smoothed;
-    return smoothed;
-  }
 
 String _redactUrl(String? url) {
   if (url == null || url.isEmpty) return '<empty>';

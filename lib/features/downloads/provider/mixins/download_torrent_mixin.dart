@@ -92,7 +92,7 @@ mixin DownloadTorrentMixin {
   }
 
   String get currentUploadSpeedFormatted =>
-      '${_formatBytes(currentUploadSpeed)}/s';
+      '${formatBytes(currentUploadSpeed)}/s';
 
   int get seedingTasksCount => providerTasks
       .where(
@@ -287,18 +287,6 @@ mixin DownloadTorrentMixin {
   // ---------------------------------------------------------------------------
   // Helpers (private to mixin)
   // ---------------------------------------------------------------------------
-  /// Minimal bytes formatter — avoids importing file_utils into this mixin.
-  String _formatBytes(double bytes) {
-    if (bytes <= 0) return '0 B';
-    const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    int i = 0;
-    double size = bytes;
-    while (size >= 1024 && i < suffixes.length - 1) {
-      size /= 1024;
-      i++;
-    }
-    return '${size.toStringAsFixed(i == 0 ? 0 : 1)} ${suffixes[i]}';
-  }
 
   Future<void> updateTaskSeeding(
     String taskId, {

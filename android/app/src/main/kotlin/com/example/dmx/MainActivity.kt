@@ -12,6 +12,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import android.view.WindowManager
+import android.os.PowerManager
 import java.io.File
 import java.util.concurrent.Executors
 import io.flutter.embedding.android.FlutterActivity
@@ -24,7 +25,9 @@ class MainActivity : FlutterActivity() {
     private val MEDIA_CHANNEL = "com.example.dmx/media"
     private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
     private val SAF_CHANNEL = "com.example.dmx/saf"
+    private val WAKE_LOCK_CHANNEL = "com.dmx.app/wakelock"
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
         return FlutterActivityLaunchConfigs.BackgroundMode.transparent
@@ -206,6 +209,31 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
             } else {
                 result.notImplemented()
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WAKE_LOCK_CHANNEL).setMethodCallHandler { call, result ->
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            when (call.method) {
+                "acquire" -> {
+                    if (wakeLock == null) {
+                        wakeLock = powerManager.newWakeLock(
+                            PowerManager.PARTIAL_WAKE_LOCK,
+                            "dmx:download_wakelock"
+                        ).apply {
+                            setReferenceCounted(false)
+                            acquire(30 * 60 * 1000L) // 30-minute max timeout as safety net
+                        }
+                    }
+                    result.success(true)
+                }
+                "release" -> {
+                    wakeLock?.let {
+                        if (it.isHeld) it.release()
+                    }
+                    wakeLock = null
+                    result.success(true)
+                }
+                else -> result.notImplemented()
             }
         }
     }

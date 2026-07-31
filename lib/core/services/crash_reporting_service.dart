@@ -45,23 +45,20 @@ class CrashReportingService {
     if (_initialized) return;
     _initialized = true;
 
-    final effectiveDsn = dsn ??
-        const String.fromEnvironment('SENTRY_DSN');
+    final effectiveDsn = dsn ?? const String.fromEnvironment('SENTRY_DSN');
 
     if (effectiveDsn.isEmpty) {
       _reporter = NoOpCrashReporter();
-      LoggingService.logger('CrashReportingService').info(
-        'No DSN configured — crash reporting is disabled.',
-      );
+      LoggingService.logger(
+        'CrashReportingService',
+      ).info('No DSN configured — crash reporting is disabled.');
       return;
     }
 
-    await SentryFlutter.init(
-      (options) {
-        options.dsn = effectiveDsn;
-        options.tracesSampleRate = 0.1;
-      },
-    );
+    await SentryFlutter.init((options) {
+      options.dsn = effectiveDsn;
+      options.tracesSampleRate = 0.1;
+    });
     _reporter = SentryCrashReporter();
   }
 
@@ -84,22 +81,33 @@ class CrashReportingService {
   static void captureFlutterErrors() {
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
-      unawaited(recordError(
-        details.exception,
-        details.stack ?? StackTrace.current,
-        hint: details.library,
-      ));
+      unawaited(
+        recordError(
+          details.exception,
+          details.stack ?? StackTrace.current,
+          hint: details.library,
+        ).catchError((_) {}),
+      );
     };
   }
 
   /// Wraps [main] in a zone that captures unhandled errors.
   /// Usage: `CrashReportingService.runWithErrorCapture(() => runApp(...))`
   static void runWithErrorCapture(void Function() appRunner) {
-    runZonedGuarded(() {
-      appRunner();
-    }, (Object error, StackTrace stack) {
-      unawaited(recordError(error, stack, hint: 'Unhandled zone error'));
-    });
+    runZonedGuarded(
+      () {
+        appRunner();
+      },
+      (Object error, StackTrace stack) {
+        unawaited(
+          recordError(
+            error,
+            stack,
+            hint: 'Unhandled zone error',
+          ).catchError((_) {}),
+        );
+      },
+    );
   }
 }
 
@@ -131,10 +139,7 @@ class SentryCrashReporter extends CrashReporter {
   @override
   Future<void> recordLog(pkg_logging.Level level, String message) async {
     if (level >= pkg_logging.Level.SEVERE) {
-      await Sentry.captureMessage(
-        message,
-        level: _mapLevel(level),
-      );
+      await Sentry.captureMessage(message, level: _mapLevel(level));
     }
   }
 

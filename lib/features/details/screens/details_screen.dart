@@ -1916,7 +1916,9 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                     };
                   }
                   unawaited(
-                    provider.updateTorrentTaskFiles(task.id, updatedFiles),
+                    provider
+                        .updateTorrentTaskFiles(task.id, updatedFiles)
+                        .catchError((e) {}),
                   );
                 },
               ),
@@ -1937,7 +1939,9 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                     };
                   }
                   unawaited(
-                    provider.updateTorrentTaskFiles(task.id, updatedFiles),
+                    provider
+                        .updateTorrentTaskFiles(task.id, updatedFiles)
+                        .catchError((e) {}),
                   );
                 },
               ),

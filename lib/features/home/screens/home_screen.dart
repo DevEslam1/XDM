@@ -389,8 +389,8 @@ class _HomeScreenState extends State<HomeScreen>
           decoration: BoxDecoration(
             color: selected
                 ? (index == 1
-                    ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                    : Theme.of(context).colorScheme.primary)
+                      ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                      : Theme.of(context).colorScheme.primary)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
           ),
@@ -1221,6 +1221,39 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Render item descriptor – keeps widget construction lazy inside itemBuilder
+// ─────────────────────────────────────────────────────────────────────────────
+class _RenderItem {
+  final bool isPlaylist;
+  final String? playlistId;
+  final String? title;
+  final List<DownloadTask>? items;
+  final DownloadTask? task;
+
+  const _RenderItem._({
+    required this.isPlaylist,
+    this.playlistId,
+    this.title,
+    this.items,
+    this.task,
+  });
+
+  const _RenderItem.playlist({
+    required String playlistId,
+    required String title,
+    required List<DownloadTask> items,
+  }) : this._(
+         isPlaylist: true,
+         playlistId: playlistId,
+         title: title,
+         items: items,
+       );
+
+  const _RenderItem.single({required DownloadTask task})
+    : this._(isPlaylist: false, task: task);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Download Task List
 // ─────────────────────────────────────────────────────────────────────────────
 class _DownloadTaskList extends StatelessWidget {
@@ -1286,21 +1319,21 @@ class _DownloadTaskList extends StatelessWidget {
         }
 
         // Build a mixed list preserving order: playlists first-seen, then singles
-        final renderItems = <Widget>[];
+        final renderItems = <_RenderItem>[];
         final seenPlaylists = <String>{};
         for (final t in displayTasks) {
           if (t.isPlaylistItem) {
             if (seenPlaylists.contains(t.playlistId)) continue;
             seenPlaylists.add(t.playlistId!);
             renderItems.add(
-              PlaylistGroupCard(
+              _RenderItem.playlist(
                 playlistId: t.playlistId!,
                 title: t.playlistTitle ?? 'Playlist',
                 items: groups[t.playlistId!]!,
               ),
             );
           } else {
-            renderItems.add(DownloadCard(task: t, compact: true));
+            renderItems.add(_RenderItem.single(task: t));
           }
         }
 
@@ -1342,8 +1375,25 @@ class _DownloadTaskList extends StatelessWidget {
             ),
             itemCount: renderItems.length,
             separatorBuilder: (_, _) => const SizedBox(height: 10),
-            itemBuilder: (context, index) =>
-                RepaintBoundary(child: renderItems[index]),
+            itemBuilder: (context, index) {
+              final item = renderItems[index];
+              final Widget card;
+              if (item.isPlaylist) {
+                card = PlaylistGroupCard(
+                  key: ValueKey('playlist_${item.playlistId}'),
+                  playlistId: item.playlistId!,
+                  title: item.title!,
+                  items: item.items!,
+                );
+              } else {
+                card = DownloadCard(
+                  key: ValueKey(item.task!.id),
+                  task: item.task!,
+                  compact: true,
+                );
+              }
+              return RepaintBoundary(child: card);
+            },
           ),
         );
       },

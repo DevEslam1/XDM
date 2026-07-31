@@ -123,7 +123,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         TorrentResumeStore.saveAll(
           TorrentService.activeTorrentIds,
           TorrentService.progressFor,
-        ),
+        ).catchError((e) {}),
       );
     }
   }

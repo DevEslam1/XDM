@@ -183,7 +183,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -198,6 +198,12 @@ class AppDatabase extends _$AppDatabase {
       );
       await customStatement(
         'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
+      );
+      await customStatement(
+        'CREATE INDEX idx_download_tasks_playlist_id ON download_tasks (playlist_id)',
+      );
+      await customStatement(
+        'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)',
       );
     },
     onUpgrade: (m, from, to) async {
@@ -395,6 +401,15 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('DROP TABLE browser_history');
         await customStatement(
           'ALTER TABLE browser_history_new RENAME TO browser_history',
+        );
+      }
+      if (from < 9) {
+        // Migration 8 -> 9: Add indexes for playlist_id and visited_at
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_download_tasks_playlist_id ON download_tasks (playlist_id)',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)',
         );
       }
     },

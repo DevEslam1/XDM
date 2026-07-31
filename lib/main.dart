@@ -38,113 +38,138 @@ Future<void> main(List<String> args) async {
 
     PlatformDispatcher.instance.onError = (error, stack) {
       debugPrint('Platform error: $error\n$stack');
-      return true;
+      unawaited(
+        CrashReportingService.recordError(
+          error,
+          stack,
+          hint: 'PlatformDispatcher',
+        ).catchError((e) {}),
+      );
+      return false;
     };
 
     try {
-        // ── PHASE 1: Gate (must be first — exits if another instance owns the port) ──
-        final isPrimary = await SingleInstanceService().initialize(args);
-        if (!isPrimary) exit(0);
+      // ── PHASE 1: Gate (must be first — exits if another instance owns the port) ──
+      final isPrimary = await SingleInstanceService().initialize(args);
+      if (!isPrimary) exit(0);
 
-        // ── PHASE 2: Parallel fast inits (no secure storage, no native) ──
-        await Future.wait([
-          PackageInfo.fromPlatform().then((info) => setAppVersion(info.version)),
-        ]);
+      // ── PHASE 2: Parallel fast inits (no secure storage, no native) ──
+      await Future.wait([
+        PackageInfo.fromPlatform().then((info) => setAppVersion(info.version)),
+      ]);
 
-        // ── PHASE 3: Settings (required for theme before runApp) ──
-        final settingsProvider = SettingsProvider.instance;
-        await settingsProvider.load();
-        XdmBackendClient().refreshConfig();
+      // ── PHASE 3: Settings (required for theme before runApp) ──
+      final settingsProvider = SettingsProvider.instance;
+      await settingsProvider.load();
+      XdmBackendClient().refreshConfig();
 
-        // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──
-        final databaseService = DatabaseService();
-        final notificationService = NotificationService();
-        final downloadProvider = DownloadProvider(
+      // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──
+      final databaseService = DatabaseService();
+      final notificationService = NotificationService();
+      final downloadProvider = DownloadProvider(
+        databaseService: databaseService,
+        settingsProvider: settingsProvider,
+        notificationService: notificationService,
+      );
+
+      // Fast share-intent detection (bounded by 150ms timeout)
+      String? initialUrl = SingleInstanceService().initialUrl;
+      if (initialUrl == null || initialUrl.trim().isEmpty) {
+        try {
+          final sharedFiles = await ReceiveSharingIntent.instance
+              .getInitialMedia()
+              .timeout(const Duration(milliseconds: 150));
+          if (sharedFiles.isNotEmpty) {
+            final raw = sharedFiles.first.path.trim();
+            final extracted = extractUrlFromText(raw) ?? raw;
+            if (isHttpUrl(extracted) ||
+                isMagnetUrl(extracted) ||
+                isTorrentFileUrl(extracted)) {
+              initialUrl = extracted;
+            }
+          }
+        } catch (_) {}
+      }
+
+      runApp(
+        DmxApp(
           databaseService: databaseService,
           settingsProvider: settingsProvider,
-          notificationService: notificationService,
-        );
+          downloadProvider: downloadProvider,
+          initialUrl: initialUrl,
+        ),
+      );
 
-        // Fast share-intent detection (bounded by 150ms timeout)
-        String? initialUrl = SingleInstanceService().initialUrl;
-        if (initialUrl == null || initialUrl.trim().isEmpty) {
-          try {
-            final sharedFiles = await ReceiveSharingIntent.instance
-                .getInitialMedia()
-                .timeout(const Duration(milliseconds: 150));
-            if (sharedFiles.isNotEmpty) {
-              final raw = sharedFiles.first.path.trim();
-              final extracted = extractUrlFromText(raw) ?? raw;
-              if (isHttpUrl(extracted) ||
-                  isMagnetUrl(extracted) ||
-                  isTorrentFileUrl(extracted)) {
-                initialUrl = extracted;
+      // ── PHASE 5: Heavy init AFTER first frame ──
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          // DB + torrent native init in parallel.
+          // Torrent MUST be ready before load() pumps torrent tasks.
+          final initFutures = <Future<void>>[databaseService.init()];
+          if (TorrentService.isSupported) {
+            initFutures.add(() async {
+              try {
+                await TorrentResumeStore.init();
+                await TorrentService.init();
+                debugPrint('Torrent service initialized successfully');
+              } catch (e, s) {
+                debugPrint(
+                  'Torrent init failed, continuing without torrent support: $e',
+                );
+                Logger('main').severe('Torrent init failed', e, s);
               }
-            }
-          } catch (_) {}
+            }());
+          }
+          await Future.wait(initFutures);
+
+          // Load tasks (triggers pumpQueue) — UI is already up; list populates now.
+          await downloadProvider.load();
+        } catch (e, s) {
+          debugPrint('Deferred init failed: $e\n$s');
         }
 
-        runApp(
-          DmxApp(
-            databaseService: databaseService,
-            settingsProvider: settingsProvider,
-            downloadProvider: downloadProvider,
-            initialUrl: initialUrl,
-          ),
+        // Non-critical services — independent, fire-and-forget.
+        unawaited(
+          _initNonCriticalServices(
+            downloadProvider,
+            notificationService,
+          ).catchError((e) {}),
         );
-
-        // ── PHASE 5: Heavy init AFTER first frame ──
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          try {
-            // DB + torrent native init in parallel.
-            // Torrent MUST be ready before load() pumps torrent tasks.
-            final initFutures = <Future<void>>[databaseService.init()];
-            if (TorrentService.isSupported) {
-              initFutures.add(() async {
-                try {
-                  await TorrentResumeStore.init();
-                  await TorrentService.init();
-                  debugPrint('Torrent service initialized successfully');
-                } catch (e, s) {
-                  debugPrint('Torrent init failed, continuing without torrent support: $e');
-                  Logger('main').severe('Torrent init failed', e, s);
-                }
-              }());
-            }
-            await Future.wait(initFutures);
-
-            // Load tasks (triggers pumpQueue) — UI is already up; list populates now.
-            await downloadProvider.load();
-          } catch (e, s) {
-            debugPrint('Deferred init failed: $e\n$s');
-          }
-
-          // Non-critical services — independent, fire-and-forget.
-          unawaited(_initNonCriticalServices(downloadProvider, notificationService));
-        });
-      } catch (e, stack) {
-        debugPrint('Initialization error: $e\n$stack');
-        runApp(ErrorApp(error: e.toString()));
-      }
-    },
-  );
+      });
+    } catch (e, stack) {
+      debugPrint('Initialization error: $e\n$stack');
+      runApp(ErrorApp(error: e.toString()));
+    }
+  });
 }
 
 Future<void> _initNonCriticalServices(
   DownloadProvider downloadProvider,
   NotificationService notificationService,
 ) async {
-  try { await XdmBackendClient.loadApiKey(); }
-  catch (e) { debugPrint('API key load failed: $e'); }
+  try {
+    await XdmBackendClient.loadApiKey();
+  } catch (e) {
+    debugPrint('API key load failed: $e');
+  }
 
-  try { await notificationService.init(requestPermission: false); }
-  catch (e) { debugPrint('Notification init failed: $e'); }
+  try {
+    await notificationService.init(requestPermission: false);
+  } catch (e) {
+    debugPrint('Notification init failed: $e');
+  }
 
-  try { await BackgroundService.initialize(); }
-  catch (e) { debugPrint('Background service init failed: $e'); }
+  try {
+    await BackgroundService.initialize();
+  } catch (e) {
+    debugPrint('Background service init failed: $e');
+  }
 
-  try { await YoutubeService.init(); }
-  catch (e) { debugPrint('YouTube init failed: $e'); }
+  try {
+    await YoutubeService.init();
+  } catch (e) {
+    debugPrint('YouTube init failed: $e');
+  }
 
   unawaited(
     RemoteApiService.start(
@@ -153,7 +178,9 @@ Future<void> _initNonCriticalServices(
       pauseTask: (id) => downloadProvider.pauseTask(id),
       resumeTask: (id) => downloadProvider.resumeTask(id),
       deleteTask: (id) => downloadProvider.deleteTask(id),
-    ),
+    ).catchError((e) {
+      debugPrint('RemoteApiService.start failed: $e');
+    }),
   );
 }
 

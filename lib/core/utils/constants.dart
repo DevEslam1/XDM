@@ -10,12 +10,12 @@ void setAppVersion(String version) {
     kAppVersion = version;
   }
 }
-const String kDeveloperName = 'Eslam Mahmoud';
-const String kDeveloperTitle = 'Mobile Development Engineer';
-const String kDeveloperEmail = 'xdev.eslam@gmail.com';
-const String kDeveloperGithub = 'github.com/DevEslam1';
-const String kDeveloperLinkedin = 'linkedin.com/in/deveslam-mahmoud';
-const String kDeveloperPhone = '+20 112 229 9831';
 
-const String kDefaultBackendBaseUrl =
-    'https://xdm-backend-10763667121.europe-west1.run.app';
+const String kDeveloperName = '';
+const String kDeveloperTitle = '';
+const String kDeveloperEmail = '';
+const String kDeveloperGithub = '';
+const String kDeveloperLinkedin = '';
+const String kDeveloperPhone = '';
+
+const String kDefaultBackendBaseUrl = 'https://xdm-backend.onrender.com';

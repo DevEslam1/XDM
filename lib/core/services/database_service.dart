@@ -70,297 +70,315 @@ class DatabaseService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('hive_migrated') != true) {
-      final success = await _migrateFromHive();
-      if (success) {
-        await prefs.setBool('hive_migrated', true);
-      }
-    }
+    await _migrateFromHivePerBox(prefs);
     _initialized = true;
   }
 
-  Future<bool> _migrateFromHive() async {
-    // Check if hive boxes exist, migrate, and delete
+  /// Migrates each Hive box independently, tracking success per-box via
+  /// individual SharedPreferences keys so that a partial failure + retry
+  /// does not re-migrate already-migrated boxes (which would cause
+  /// duplicates via insertOrReplace).
+  Future<void> _migrateFromHivePerBox(SharedPreferences prefs) async {
+    const boxKeys = {
+      downloadsBoxName: 'hive_migrated_downloads',
+      bookmarksBoxName: 'hive_migrated_bookmarks',
+      browserTabsBoxName: 'hive_migrated_tabs',
+      browserHistoryBoxName: 'hive_migrated_history',
+    };
+
+    for (final entry in boxKeys.entries) {
+      final boxName = entry.key;
+      final prefKey = entry.value;
+      if (prefs.getBool(prefKey) == true) continue;
+
+      final success = await _migrateSingleHiveBox(boxName);
+      if (success) {
+        await prefs.setBool(prefKey, true);
+      } else {
+        _log.warning('Migration failed for box $boxName; will retry next run.');
+      }
+    }
+  }
+
+  /// Migrates a single Hive box by name. Returns true on success.
+  Future<bool> _migrateSingleHiveBox(String boxName) async {
     try {
-      final existingTasks = await _db.select(_db.downloadTasks).get();
-      final existingTaskIds = existingTasks.map((t) => t.id).toSet();
-
-      final existingBms = await _db.select(_db.bookmarks).get();
-      final existingBmIds = existingBms.map((b) => b.id).toSet();
-
-      bool allExportsSucceeded = true;
-
-      if (await Hive.boxExists(downloadsBoxName)) {
-        final box = await Hive.openBox<dynamic>(downloadsBoxName);
-        if (box.isNotEmpty) {
-          final tasks = <DownloadTasksCompanion>[];
-          final parsedValues = <dynamic>[];
-          final failedItems = <dynamic>[];
-          for (final value in box.values) {
-            if (value is Map) {
-              try {
-                final task = DownloadTask.fromMap(
-                  Map<String, dynamic>.from(value),
-                );
-                if (!existingTaskIds.contains(task.id)) {
-                  tasks.add(_taskToCompanion(task));
-                  parsedValues.add(value);
-                }
-              } catch (e) {
-                failedItems.add(value);
-              }
-            } else {
-              failedItems.add(value);
-            }
-          }
-          if (tasks.isNotEmpty) {
-            try {
-              await _db.batch(
-                (batch) => batch.insertAll(
-                  _db.downloadTasks,
-                  tasks,
-                  mode: drift.InsertMode.insertOrReplace,
-                ),
-              );
-            } catch (e) {
-              failedItems.addAll(parsedValues);
-            }
-          }
-          if (failedItems.isNotEmpty) {
-            _log.warning(
-              '$downloadsBoxName: ${failedItems.length} corrupt '
-              'item(s) skipped. ${tasks.length} item(s) migrated successfully.',
-            );
-            // Only delete the box AFTER successful export of failed items.
-            // If export fails, preserve the Hive box as a backup.
-            final exportOk = await _exportFailedItems(
-              'migration_failed_downloads.json',
-              failedItems,
-            );
-            if (!exportOk) {
-              _log.severe(
-                'Failed to export corrupt downloads. '
-                'Preserving Hive box to prevent data loss.',
-              );
-              allExportsSucceeded = false;
-            }
-          }
-          if (allExportsSucceeded) {
-            box.deleteFromDisk();
-          } else {
-            await _backupHiveBox(box, downloadsBoxName);
-          }
-        } else {
-          box.deleteFromDisk();
-        }
+      switch (boxName) {
+        case downloadsBoxName:
+          return await _migrateDownloadsBox();
+        case bookmarksBoxName:
+          return await _migrateBookmarksBox();
+        case browserTabsBoxName:
+          return await _migrateBrowserTabsBox();
+        case browserHistoryBoxName:
+          return await _migrateBrowserHistoryBox();
+        default:
+          _log.warning('Unknown Hive box name for migration: $boxName');
+          return true;
       }
-
-      if (await Hive.boxExists(bookmarksBoxName)) {
-        final box = await Hive.openBox<dynamic>(bookmarksBoxName);
-        if (box.isNotEmpty) {
-          final bms = <BookmarksCompanion>[];
-          final parsedValues = <dynamic>[];
-          final failedItems = <dynamic>[];
-          for (final value in box.values) {
-            if (value is Map) {
-              try {
-                final bm = Bookmark.fromMap(Map<String, dynamic>.from(value));
-                if (!existingBmIds.contains(bm.id)) {
-                  bms.add(_bookmarkToCompanion(bm));
-                  parsedValues.add(value);
-                }
-              } catch (e) {
-                failedItems.add(value);
-              }
-            } else {
-              failedItems.add(value);
-            }
-          }
-          if (bms.isNotEmpty) {
-            try {
-              await _db.batch(
-                (batch) => batch.insertAll(
-                  _db.bookmarks,
-                  bms,
-                  mode: drift.InsertMode.insertOrReplace,
-                ),
-              );
-            } catch (e) {
-              failedItems.addAll(parsedValues);
-            }
-          }
-          if (failedItems.isNotEmpty) {
-            _log.warning(
-              '$bookmarksBoxName: ${failedItems.length} corrupt '
-              'item(s) skipped. ${bms.length} item(s) migrated successfully.',
-            );
-            final exportOk = await _exportFailedItems(
-              'migration_failed_bookmarks.json',
-              failedItems,
-            );
-            if (!exportOk) {
-              _log.severe(
-                'Failed to export corrupt bookmarks. '
-                'Preserving Hive box.',
-              );
-              allExportsSucceeded = false;
-            }
-          }
-          if (allExportsSucceeded) {
-            box.deleteFromDisk();
-          } else {
-            await _backupHiveBox(box, bookmarksBoxName);
-          }
-        } else {
-          box.deleteFromDisk();
-        }
-      }
-
-      if (await Hive.boxExists(browserTabsBoxName)) {
-        final box = await Hive.openBox<dynamic>(browserTabsBoxName);
-        if (box.isNotEmpty) {
-          final tabs = <SavedBrowserTab>[];
-          final failedItems = <dynamic>[];
-          for (final key in box.keys) {
-            final val = box.get(key);
-            if (val is Map) {
-              try {
-                tabs.add(
-                  SavedBrowserTab(
-                    id: key.toString(),
-                    url: val['url'] as String? ?? '',
-                    title: val['title'] as String? ?? '',
-                    isActive: val['isActive'] as bool? ?? false,
-                    position: val['position'] as int? ?? 0,
-                    createdAt: DateTime.now().millisecondsSinceEpoch,
-                  ),
-                );
-              } catch (e) {
-                failedItems.add(val);
-              }
-            } else {
-              failedItems.add(val);
-            }
-          }
-          if (tabs.isNotEmpty) {
-            try {
-              await _db.batch(
-                (batch) => batch.insertAll(
-                  _db.browserTabs,
-                  tabs,
-                  mode: drift.InsertMode.insertOrReplace,
-                ),
-              );
-            } catch (e) {
-              failedItems.addAll(box.values);
-            }
-          }
-          if (failedItems.isNotEmpty) {
-            _log.warning(
-              '$browserTabsBoxName: ${failedItems.length} corrupt '
-              'item(s) skipped. ${tabs.length} item(s) migrated successfully.',
-            );
-            final exportOk = await _exportFailedItems(
-              'migration_failed_tabs.json',
-              failedItems,
-            );
-            if (!exportOk) {
-              _log.severe(
-                'Failed to export corrupt tabs. '
-                'Preserving Hive box.',
-              );
-              allExportsSucceeded = false;
-            }
-          }
-          if (allExportsSucceeded) {
-            box.deleteFromDisk();
-          } else {
-            await _backupHiveBox(box, browserTabsBoxName);
-          }
-        } else {
-          box.deleteFromDisk();
-        }
-      }
-
-      if (await Hive.boxExists(browserHistoryBoxName)) {
-        final box = await Hive.openBox<dynamic>(browserHistoryBoxName);
-        if (box.isNotEmpty) {
-          final hist = <BrowserHistoryCompanion>[];
-          final failedItems = <dynamic>[];
-          for (final key in box.keys) {
-            final val = box.get(key);
-            if (val is Map) {
-              try {
-                hist.add(
-                  BrowserHistoryCompanion.insert(
-                    url: val['url'] as String? ?? '',
-                    title:
-                        val['title'] as String? ?? val['url'] as String? ?? '',
-                    visitedAt:
-                        val['visitedAt'] as String? ??
-                        DateTime.now().toIso8601String(),
-                  ),
-                );
-              } catch (e) {
-                failedItems.add(val);
-              }
-            } else {
-              failedItems.add(val);
-            }
-          }
-          if (hist.isNotEmpty) {
-            try {
-              await _db.batch(
-                (batch) => batch.insertAll(
-                  _db.browserHistory,
-                  hist,
-                  mode: drift.InsertMode.insertOrReplace,
-                ),
-              );
-            } catch (e) {
-              failedItems.addAll(box.values);
-            }
-          }
-          if (failedItems.isNotEmpty) {
-            _log.warning(
-              '$browserHistoryBoxName: ${failedItems.length} corrupt '
-              'item(s) skipped. ${hist.length} item(s) migrated successfully.',
-            );
-            final exportOk = await _exportFailedItems(
-              'migration_failed_history.json',
-              failedItems,
-            );
-            if (!exportOk) {
-              _log.severe(
-                'Failed to export corrupt history. '
-                'Preserving Hive box.',
-              );
-              allExportsSucceeded = false;
-            }
-          }
-          if (allExportsSucceeded) {
-            box.deleteFromDisk();
-          } else {
-            await _backupHiveBox(box, browserHistoryBoxName);
-          }
-        } else {
-          box.deleteFromDisk();
-        }
-      }
-
-      if (!allExportsSucceeded) {
-        _log.severe(
-          'Hive migration completed with export failures. '
-          'Some Hive boxes were backed up instead of deleted. '
-          'Set hive_migrated=false to retry after manual recovery.',
-        );
-        return false;
-      }
-      return true; // All boxes migrated and exported successfully.
     } catch (e, stackTrace) {
-      _log.severe('Hive to Drift migration error', e, stackTrace);
+      _log.severe('Hive migration error for box $boxName', e, stackTrace);
       return false;
     }
+  }
+
+  Future<bool> _migrateDownloadsBox() async {
+    if (!await Hive.boxExists(downloadsBoxName)) return true;
+    final box = await Hive.openBox<dynamic>(downloadsBoxName);
+    if (box.isEmpty) {
+      box.deleteFromDisk();
+      return true;
+    }
+
+    final existingTasks = await _db.select(_db.downloadTasks).get();
+    final existingTaskIds = existingTasks.map((t) => t.id).toSet();
+
+    final tasks = <DownloadTasksCompanion>[];
+    final parsedValues = <dynamic>[];
+    final failedItems = <dynamic>[];
+    for (final value in box.values) {
+      if (value is Map) {
+        try {
+          final task = DownloadTask.fromMap(Map<String, dynamic>.from(value));
+          if (!existingTaskIds.contains(task.id)) {
+            tasks.add(_taskToCompanion(task));
+            parsedValues.add(value);
+          }
+        } catch (e) {
+          failedItems.add(value);
+        }
+      } else {
+        failedItems.add(value);
+      }
+    }
+    if (tasks.isNotEmpty) {
+      try {
+        await _db.batch(
+          (batch) => batch.insertAll(
+            _db.downloadTasks,
+            tasks,
+            mode: drift.InsertMode.insertOrReplace,
+          ),
+        );
+      } catch (e) {
+        failedItems.addAll(parsedValues);
+      }
+    }
+    if (failedItems.isNotEmpty) {
+      _log.warning(
+        '$downloadsBoxName: ${failedItems.length} corrupt '
+        'item(s) skipped. ${tasks.length} item(s) migrated successfully.',
+      );
+      final exportOk = await _exportFailedItems(
+        'migration_failed_downloads.json',
+        failedItems,
+      );
+      if (!exportOk) {
+        _log.severe(
+          'Failed to export corrupt downloads. '
+          'Preserving Hive box to prevent data loss.',
+        );
+        await _backupHiveBox(box, downloadsBoxName);
+        return false;
+      }
+    }
+    box.deleteFromDisk();
+    return true;
+  }
+
+  Future<bool> _migrateBookmarksBox() async {
+    if (!await Hive.boxExists(bookmarksBoxName)) return true;
+    final box = await Hive.openBox<dynamic>(bookmarksBoxName);
+    if (box.isEmpty) {
+      box.deleteFromDisk();
+      return true;
+    }
+
+    final existingBms = await _db.select(_db.bookmarks).get();
+    final existingBmIds = existingBms.map((b) => b.id).toSet();
+
+    final bms = <BookmarksCompanion>[];
+    final parsedValues = <dynamic>[];
+    final failedItems = <dynamic>[];
+    for (final value in box.values) {
+      if (value is Map) {
+        try {
+          final bm = Bookmark.fromMap(Map<String, dynamic>.from(value));
+          if (!existingBmIds.contains(bm.id)) {
+            bms.add(_bookmarkToCompanion(bm));
+            parsedValues.add(value);
+          }
+        } catch (e) {
+          failedItems.add(value);
+        }
+      } else {
+        failedItems.add(value);
+      }
+    }
+    if (bms.isNotEmpty) {
+      try {
+        await _db.batch(
+          (batch) => batch.insertAll(
+            _db.bookmarks,
+            bms,
+            mode: drift.InsertMode.insertOrReplace,
+          ),
+        );
+      } catch (e) {
+        failedItems.addAll(parsedValues);
+      }
+    }
+    if (failedItems.isNotEmpty) {
+      _log.warning(
+        '$bookmarksBoxName: ${failedItems.length} corrupt '
+        'item(s) skipped. ${bms.length} item(s) migrated successfully.',
+      );
+      final exportOk = await _exportFailedItems(
+        'migration_failed_bookmarks.json',
+        failedItems,
+      );
+      if (!exportOk) {
+        _log.severe(
+          'Failed to export corrupt bookmarks. '
+          'Preserving Hive box.',
+        );
+        await _backupHiveBox(box, bookmarksBoxName);
+        return false;
+      }
+    }
+    box.deleteFromDisk();
+    return true;
+  }
+
+  Future<bool> _migrateBrowserTabsBox() async {
+    if (!await Hive.boxExists(browserTabsBoxName)) return true;
+    final box = await Hive.openBox<dynamic>(browserTabsBoxName);
+    if (box.isEmpty) {
+      box.deleteFromDisk();
+      return true;
+    }
+
+    final tabs = <SavedBrowserTab>[];
+    final failedItems = <dynamic>[];
+    for (final key in box.keys) {
+      final val = box.get(key);
+      if (val is Map) {
+        try {
+          tabs.add(
+            SavedBrowserTab(
+              id: key.toString(),
+              url: val['url'] as String? ?? '',
+              title: val['title'] as String? ?? '',
+              isActive: val['isActive'] as bool? ?? false,
+              position: val['position'] as int? ?? 0,
+              createdAt: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+        } catch (e) {
+          failedItems.add(val);
+        }
+      } else {
+        failedItems.add(val);
+      }
+    }
+    if (tabs.isNotEmpty) {
+      try {
+        await _db.batch(
+          (batch) => batch.insertAll(
+            _db.browserTabs,
+            tabs,
+            mode: drift.InsertMode.insertOrReplace,
+          ),
+        );
+      } catch (e) {
+        failedItems.addAll(box.values);
+      }
+    }
+    if (failedItems.isNotEmpty) {
+      _log.warning(
+        '$browserTabsBoxName: ${failedItems.length} corrupt '
+        'item(s) skipped. ${tabs.length} item(s) migrated successfully.',
+      );
+      final exportOk = await _exportFailedItems(
+        'migration_failed_tabs.json',
+        failedItems,
+      );
+      if (!exportOk) {
+        _log.severe(
+          'Failed to export corrupt tabs. '
+          'Preserving Hive box.',
+        );
+        await _backupHiveBox(box, browserTabsBoxName);
+        return false;
+      }
+    }
+    box.deleteFromDisk();
+    return true;
+  }
+
+  Future<bool> _migrateBrowserHistoryBox() async {
+    if (!await Hive.boxExists(browserHistoryBoxName)) return true;
+    final box = await Hive.openBox<dynamic>(browserHistoryBoxName);
+    if (box.isEmpty) {
+      box.deleteFromDisk();
+      return true;
+    }
+
+    final hist = <BrowserHistoryCompanion>[];
+    final failedItems = <dynamic>[];
+    for (final key in box.keys) {
+      final val = box.get(key);
+      if (val is Map) {
+        try {
+          hist.add(
+            BrowserHistoryCompanion.insert(
+              url: val['url'] as String? ?? '',
+              title: val['title'] as String? ?? val['url'] as String? ?? '',
+              visitedAt:
+                  val['visitedAt'] as String? ??
+                  DateTime.now().toIso8601String(),
+            ),
+          );
+        } catch (e) {
+          failedItems.add(val);
+        }
+      } else {
+        failedItems.add(val);
+      }
+    }
+    if (hist.isNotEmpty) {
+      try {
+        await _db.batch(
+          (batch) => batch.insertAll(
+            _db.browserHistory,
+            hist,
+            mode: drift.InsertMode.insertOrReplace,
+          ),
+        );
+      } catch (e) {
+        failedItems.addAll(box.values);
+      }
+    }
+    if (failedItems.isNotEmpty) {
+      _log.warning(
+        '$browserHistoryBoxName: ${failedItems.length} corrupt '
+        'item(s) skipped. ${hist.length} item(s) migrated successfully.',
+      );
+      final exportOk = await _exportFailedItems(
+        'migration_failed_history.json',
+        failedItems,
+      );
+      if (!exportOk) {
+        _log.severe(
+          'Failed to export corrupt history. '
+          'Preserving Hive box.',
+        );
+        await _backupHiveBox(box, browserHistoryBoxName);
+        return false;
+      }
+    }
+    box.deleteFromDisk();
+    return true;
   }
 
   /// Backs up a Hive box to a safe location instead of deleting it.
@@ -374,7 +392,9 @@ class DatabaseService {
       }
       final backupPath = p.join(backupDir.path, '${boxName}_backup.hive');
       // Hive Box.path is String?
-      final String? boxPath = box is Box ? box.path : (box as dynamic).path as String?;
+      final String? boxPath = box is Box
+          ? box.path
+          : (box as dynamic).path as String?;
       if (boxPath != null) {
         final srcDir = Directory(boxPath);
         if (await srcDir.exists()) {

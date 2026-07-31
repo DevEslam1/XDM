@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
 import 'logging_service.dart';
@@ -36,6 +37,10 @@ final _log = LoggingService.logger('BackgroundService');
 class BackgroundService {
   static const int foregroundNotificationId = 888;
   static const String _serviceChannelId = 'dmx_background_service';
+  static const MethodChannel _wakeLockChannel = MethodChannel(
+    'com.dmx.app/wakelock',
+  );
+  static bool _wakeLockHeld = false;
 
   /// Returns true only on Android. On iOS, background Dart execution is not
   /// supported without a native BGTaskScheduler plugin.
@@ -119,11 +124,7 @@ class BackgroundService {
 
     heartbeatSub = service
         .on('heartbeat')
-        .listen(
-          (_) {},
-          cancelOnError: false,
-          onError: (_) {},
-        );
+        .listen((_) {}, cancelOnError: false, onError: (_) {});
   }
 
   @pragma('vm:entry-point')
@@ -169,5 +170,31 @@ class BackgroundService {
     if (!isSupported) return;
     final service = FlutterBackgroundService();
     service.invoke('heartbeat');
+  }
+
+  /// Acquires a partial wake lock to keep the CPU awake during active
+  /// downloads. Safe to call multiple times; only the first call invokes
+  /// the platform channel.
+  static Future<void> acquireWakeLock() async {
+    if (!isSupported || _wakeLockHeld) return;
+    try {
+      await _wakeLockChannel.invokeMethod<void>('acquire');
+      _wakeLockHeld = true;
+      _log.fine('Wake lock acquired');
+    } catch (e) {
+      _log.warning('Failed to acquire wake lock', e);
+    }
+  }
+
+  /// Releases the partial wake lock. Safe to call even if no lock is held.
+  static Future<void> releaseWakeLock() async {
+    if (!isSupported || !_wakeLockHeld) return;
+    try {
+      await _wakeLockChannel.invokeMethod<void>('release');
+      _wakeLockHeld = false;
+      _log.fine('Wake lock released');
+    } catch (e) {
+      _log.warning('Failed to release wake lock', e);
+    }
   }
 }

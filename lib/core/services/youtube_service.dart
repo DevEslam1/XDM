@@ -194,7 +194,8 @@ class YoutubeService {
     }
 
     final host = uri.host.toLowerCase();
-    final isKnownMediaHost = _isYouTubeHost(host) ||
+    final isKnownMediaHost =
+        _isYouTubeHost(host) ||
         _isYouTubeShortHost(host) ||
         host.contains('vimeo.com') ||
         host.contains('dailymotion.com') ||
@@ -296,6 +297,9 @@ class YoutubeService {
       'https://www.youtube.com/watch?v=$videoId';
 
   static void close() {
+    if (!_authStateController.isClosed) {
+      _authStateController.close();
+    }
     resetClient();
   }
 

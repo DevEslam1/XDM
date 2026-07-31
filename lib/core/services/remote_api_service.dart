@@ -110,95 +110,104 @@ class RemoteApiService {
       }
     }
 
-    _server!.listen((request) async {
-      try {
-        final path = request.uri.path;
-        final method = request.method;
-
-        request.response.headers.contentType = ContentType.json;
-
-        // Health check — always allowed without auth
-        if (path == '/api/health' && method == 'GET') {
-          request.response.write(jsonEncode({'ok': true}));
-          await request.response.close();
-          return;
-        }
-
-        // Require bearer token for all other endpoints
-        final authHeader = request.headers.value('authorization');
-        if (authHeader == null || !authHeader.startsWith('Bearer ')) {
-          request.response.statusCode = 401;
-          request.response.write(
-            jsonEncode({'error': 'Missing or invalid authorization header'}),
-          );
-          await request.response.close();
-          return;
-        }
-        final token = authHeader.substring(7).trim();
-        if (!_timingSafeEqual(token, _bearerToken!)) {
-          request.response.statusCode = 401;
-          request.response.write(jsonEncode({'error': 'Invalid token'}));
-          await request.response.close();
-          return;
-        }
-
+    _server!.listen(
+      (request) async {
         try {
-          if (path == '/api/tasks' && method == 'GET') {
-            final tasks = await getTasks();
-            request.response.write(jsonEncode(tasks));
-          } else if (path.startsWith('/api/tasks/') &&
-              path.endsWith('/pause') &&
-              method == 'POST') {
-            final id = path.split('/')[3];
-            if (!_isValidTaskId(id)) {
-              request.response.statusCode = 400;
-              request.response.write(jsonEncode({'error': 'Invalid task ID'}));
-            } else {
-              await pauseTask(id);
-              request.response.write(jsonEncode({'ok': true}));
-            }
-          } else if (path.startsWith('/api/tasks/') &&
-              path.endsWith('/resume') &&
-              method == 'POST') {
-            final id = path.split('/')[3];
-            if (!_isValidTaskId(id)) {
-              request.response.statusCode = 400;
-              request.response.write(jsonEncode({'error': 'Invalid task ID'}));
-            } else {
-              await resumeTask(id);
-              request.response.write(jsonEncode({'ok': true}));
-            }
-          } else if (path.startsWith('/api/tasks/') &&
-              path.endsWith('/delete') &&
-              method == 'DELETE') {
-            final id = path.split('/')[3];
-            if (!_isValidTaskId(id)) {
-              request.response.statusCode = 400;
-              request.response.write(jsonEncode({'error': 'Invalid task ID'}));
-            } else {
-              await deleteTask(id);
-              request.response.write(jsonEncode({'ok': true}));
-            }
-          } else {
-            request.response.statusCode = 404;
-            request.response.write(jsonEncode({'error': 'Not found'}));
+          final path = request.uri.path;
+          final method = request.method;
+
+          request.response.headers.contentType = ContentType.json;
+
+          // Health check — always allowed without auth
+          if (path == '/api/health' && method == 'GET') {
+            request.response.write(jsonEncode({'ok': true}));
+            await request.response.close();
+            return;
           }
-        } catch (e) {
-          request.response.statusCode = 500;
-          request.response.write(jsonEncode({'error': e.toString()}));
+
+          // Require bearer token for all other endpoints
+          final authHeader = request.headers.value('authorization');
+          if (authHeader == null || !authHeader.startsWith('Bearer ')) {
+            request.response.statusCode = 401;
+            request.response.write(
+              jsonEncode({'error': 'Missing or invalid authorization header'}),
+            );
+            await request.response.close();
+            return;
+          }
+          final token = authHeader.substring(7).trim();
+          if (!_timingSafeEqual(token, _bearerToken!)) {
+            request.response.statusCode = 401;
+            request.response.write(jsonEncode({'error': 'Invalid token'}));
+            await request.response.close();
+            return;
+          }
+
+          try {
+            if (path == '/api/tasks' && method == 'GET') {
+              final tasks = await getTasks();
+              request.response.write(jsonEncode(tasks));
+            } else if (path.startsWith('/api/tasks/') &&
+                path.endsWith('/pause') &&
+                method == 'POST') {
+              final id = path.split('/')[3];
+              if (!_isValidTaskId(id)) {
+                request.response.statusCode = 400;
+                request.response.write(
+                  jsonEncode({'error': 'Invalid task ID'}),
+                );
+              } else {
+                await pauseTask(id);
+                request.response.write(jsonEncode({'ok': true}));
+              }
+            } else if (path.startsWith('/api/tasks/') &&
+                path.endsWith('/resume') &&
+                method == 'POST') {
+              final id = path.split('/')[3];
+              if (!_isValidTaskId(id)) {
+                request.response.statusCode = 400;
+                request.response.write(
+                  jsonEncode({'error': 'Invalid task ID'}),
+                );
+              } else {
+                await resumeTask(id);
+                request.response.write(jsonEncode({'ok': true}));
+              }
+            } else if (path.startsWith('/api/tasks/') &&
+                path.endsWith('/delete') &&
+                method == 'DELETE') {
+              final id = path.split('/')[3];
+              if (!_isValidTaskId(id)) {
+                request.response.statusCode = 400;
+                request.response.write(
+                  jsonEncode({'error': 'Invalid task ID'}),
+                );
+              } else {
+                await deleteTask(id);
+                request.response.write(jsonEncode({'ok': true}));
+              }
+            } else {
+              request.response.statusCode = 404;
+              request.response.write(jsonEncode({'error': 'Not found'}));
+            }
+          } catch (e) {
+            request.response.statusCode = 500;
+            request.response.write(jsonEncode({'error': e.toString()}));
+          }
+          try {
+            await request.response.close();
+          } catch (_) {}
+        } catch (outerError) {
+          debugPrint('Remote API request listener error: $outerError');
+          try {
+            await request.response.close();
+          } catch (_) {}
         }
-        try {
-          await request.response.close();
-        } catch (_) {}
-      } catch (outerError) {
-        debugPrint('Remote API request listener error: $outerError');
-        try {
-          await request.response.close();
-        } catch (_) {}
-      }
-    }, onError: (Object err) {
-      debugPrint('Remote API server stream error: $err');
-    });
+      },
+      onError: (Object err) {
+        debugPrint('Remote API server stream error: $err');
+      },
+    );
   }
 
   static String _generateToken() {
@@ -222,11 +231,20 @@ class RemoteApiService {
   }
 
   /// Timing-safe string comparison to prevent timing side-channel attacks.
+  /// Pads both inputs to [_maxTokenLength] so that length mismatches do not
+  /// short-circuit and leak the token length.
+  static const int _maxTokenLength = 256;
+
   static bool _timingSafeEqual(String a, String b) {
-    if (a.length != b.length) return false;
+    // If either string exceeds the expected max length, they cannot match.
+    // The length check itself is O(1) and safe because legitimate tokens
+    // are always well under [_maxTokenLength].
+    if (a.length > _maxTokenLength || b.length > _maxTokenLength) return false;
+    final paddedA = a.padRight(_maxTokenLength, '\x00');
+    final paddedB = b.padRight(_maxTokenLength, '\x00');
     int result = 0;
-    for (int i = 0; i < a.length; i++) {
-      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    for (int i = 0; i < _maxTokenLength; i++) {
+      result |= paddedA.codeUnitAt(i) ^ paddedB.codeUnitAt(i);
     }
     return result == 0;
   }

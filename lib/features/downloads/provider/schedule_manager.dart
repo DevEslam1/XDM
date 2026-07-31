@@ -56,9 +56,9 @@ class ScheduleManager {
           debugPrint('[ScheduleManager] checkScheduledDownloads error: $e');
         }),
       );
-      unawaited(_checkPeriodicAppUpdate());
+      unawaited(_checkPeriodicAppUpdate().catchError((e) {}));
       if (_downloadingTasksCount() > 0) {
-        unawaited(BackgroundService.sendHeartbeat());
+        unawaited(BackgroundService.sendHeartbeat().catchError((e) {}));
       }
     });
   }

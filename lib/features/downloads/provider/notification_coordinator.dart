@@ -71,7 +71,9 @@ class NotificationCoordinator {
   void cancelForTask(String taskId) {
     final notifId = _notificationIds[taskId];
     if (notifId != null) {
-      unawaited(_notificationService.cancelNotification(notifId));
+      unawaited(
+        _notificationService.cancelNotification(notifId).catchError((e) {}),
+      );
     }
   }
 

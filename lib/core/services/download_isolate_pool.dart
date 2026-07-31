@@ -539,6 +539,10 @@ Future<void> _runWorkerJob(
       errType = 'receiveTimeout';
     } else if (e is SocketException) {
       errType = 'connectionError';
+    } else if (e is FileSystemException) {
+      if (_isDiskFullError(e)) {
+        errType = 'diskFull';
+      }
     } else {
       final typeName = e.runtimeType.toString();
       final stringRep = e.toString();
@@ -557,4 +561,36 @@ Future<void> _runWorkerJob(
       }),
     );
   }
+}
+
+/// Checks whether a [FileSystemException] indicates that the disk is full.
+///
+/// Handles platform-specific error codes:
+/// - Android / Linux: ENOSPC (errno 28)
+/// - Windows: ERROR_DISK_FULL (errno 112) or "not enough space" in message
+bool _isDiskFullError(FileSystemException e) {
+  final osError = e.osError;
+  if (osError != null) {
+    final code = osError.errorCode;
+    // 28 = ENOSPC (POSIX), 112 = ERROR_DISK_FULL (Windows)
+    if (code == 28 || code == 112) {
+      return true;
+    }
+  }
+
+  final message = e.message.toLowerCase();
+  if (message.contains('no space left') ||
+      message.contains('not enough space') ||
+      message.contains('disk full')) {
+    return true;
+  }
+
+  final osMessage = osError?.message.toLowerCase() ?? '';
+  if (osMessage.contains('no space left') ||
+      osMessage.contains('not enough space') ||
+      osMessage.contains('disk full')) {
+    return true;
+  }
+
+  return false;
 }

@@ -46,11 +46,16 @@ class SingleInstanceService {
             Process.runSync('chmod', ['700', configDir.path]);
           } catch (_) {}
           if (configDir.existsSync()) {
-            final tokenFile = File('${configDir.path}/xdm_instance_$_port.token');
+            final tokenFile = File(
+              '${configDir.path}/xdm_instance_$_port.token',
+            );
             return tokenFile;
           }
         } catch (e) {
-          _log.severe('Failed to create secure config dir $userHome/.config/xdm', e);
+          _log.severe(
+            'Failed to create secure config dir $userHome/.config/xdm',
+            e,
+          );
           // Fail closed — do NOT fall back to temp.
           // Return a file in a non-existent path; _startServer will throw,
           // and the caller will disable single-instance forwarding safely.
@@ -83,11 +88,17 @@ class SingleInstanceService {
   }
 
   /// Timing-safe string comparison to prevent timing side-channel attacks.
+  /// Pads both inputs to [_maxTokenLength] so that length mismatches do not
+  /// short-circuit and leak the token length.
+  static const int _maxTokenLength = 256;
+
   static bool _timingSafeEqual(String a, String b) {
-    if (a.length != b.length) return false;
+    if (a.length > _maxTokenLength || b.length > _maxTokenLength) return false;
+    final paddedA = a.padRight(_maxTokenLength, '\x00');
+    final paddedB = b.padRight(_maxTokenLength, '\x00');
     int result = 0;
-    for (int i = 0; i < a.length; i++) {
-      result |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    for (int i = 0; i < _maxTokenLength; i++) {
+      result |= paddedA.codeUnitAt(i) ^ paddedB.codeUnitAt(i);
     }
     return result == 0;
   }
@@ -125,7 +136,8 @@ class SingleInstanceService {
       try {
         if (await _tokenFile.exists()) {
           final stat = await _tokenFile.stat();
-          if (DateTime.now().difference(stat.modified) > const Duration(seconds: 10)) {
+          if (DateTime.now().difference(stat.modified) >
+              const Duration(seconds: 10)) {
             await _tokenFile.delete();
           }
         }
@@ -157,7 +169,10 @@ class SingleInstanceService {
         await Process.run('chmod', ['600', tempTokenF.path]);
         await tempTokenF.rename(tokenF.path);
       } catch (e) {
-        _log.warning('Atomic token write failed, falling back to direct write', e);
+        _log.warning(
+          'Atomic token write failed, falling back to direct write',
+          e,
+        );
         await tokenF.writeAsString(_securityToken!);
         try {
           await Process.run('chmod', ['600', tokenF.path]);
