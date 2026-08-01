@@ -84,11 +84,17 @@ class DatabaseService {
     // FIX(15): periodic WAL checkpoint (TRUNCATE) keeps the -wal file small;
     // VACUUM reclaims freed pages every ~12 runs (approx 6h).
     _maintenanceTimer = Timer.periodic(const Duration(minutes: 30), (_) async {
+      final swCheckpoint = Stopwatch()..start();
       try {
         await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
+        swCheckpoint.stop();
+        if (swCheckpoint.elapsedMilliseconds > 500) {
+          _log.info('wal_checkpoint(TRUNCATE) took ${swCheckpoint.elapsedMilliseconds}ms');
+        }
       } catch (e) {
         _log.warning('wal_checkpoint(TRUNCATE) failed', e);
       }
+
       _maintenanceRuns++;
       if (_maintenanceRuns % 12 == 0) {
         try {
@@ -101,7 +107,12 @@ class DatabaseService {
               'Skipping periodic DB VACUUM because $activeCount active download(s) in progress',
             );
           } else {
+            final swVacuum = Stopwatch()..start();
             await _db.customStatement('VACUUM');
+            swVacuum.stop();
+            if (swVacuum.elapsedMilliseconds > 500) {
+              _log.info('VACUUM took ${swVacuum.elapsedMilliseconds}ms');
+            }
           }
         } catch (e) {
           _log.warning('VACUUM failed', e);
@@ -777,6 +788,16 @@ class DatabaseService {
       for (final t in tabs) {
         await _db.into(_db.browserTabs).insert(t);
       }
+    });
+  }
+
+  Future<List<SavedBrowserTab>> loadAndClearOpenTabs() async {
+    return _db.transaction(() async {
+      final tabs = await (_db.select(
+        _db.browserTabs,
+      )..orderBy([(t) => drift.OrderingTerm.asc(t.position)])).get();
+      await _db.delete(_db.browserTabs).go();
+      return tabs;
     });
   }
 

@@ -128,10 +128,8 @@ class TabManager {
     try {
       final db = resolveDatabase();
       if (db.isInitialized) {
-        final saved = await db.loadOpenTabs();
+        final saved = await db.loadAndClearOpenTabs();
         if (saved.isNotEmpty && isActive()) {
-          await db.clearOpenTabs();
-          if (!isActive()) return;
           await applyRestoredTabs(saved);
           return;
         }

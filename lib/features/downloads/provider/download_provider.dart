@@ -1245,9 +1245,21 @@ class DownloadProvider extends ChangeNotifier
     // and final file contents still reflect resume progress.
     // The onProgress callback will pick up the real numbers from the next
     // chunk that arrives.
+    final tempFile = File(task.tempFilePath);
+    final audioFile = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty
+        ? File('${task.tempFilePath}.audio')
+        : null;
+    final tempLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
+    final audioLen = audioFile != null && audioFile.existsSync() ? audioFile.lengthSync() : 0;
+    final actualBytesOnDisk = tempLen + audioLen;
+
     await _setTask(
       task.copyWith(
         status: DownloadStatus.queued,
+        downloadedBytes: actualBytesOnDisk > 0 ? actualBytesOnDisk : task.downloadedBytes,
+        audioProgress: task.audioSize > 0 && audioLen > 0
+            ? (audioLen / task.audioSize).clamp(0.0, 1.0)
+            : task.audioProgress,
         speed: 0,
         clearEta: true,
         clearError: true,

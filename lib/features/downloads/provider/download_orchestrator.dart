@@ -317,7 +317,11 @@ class DownloadOrchestrator {
         await File(current.tempFilePath).exists()) {
       actualVideoPath = current.tempFilePath;
     }
-    final actualAudioPath = audioTempPath;
+    var actualAudioPath = audioTempPath;
+    if (!await File(actualAudioPath).exists() &&
+        await File('${current.tempFilePath}.audio').exists()) {
+      actualAudioPath = '${current.tempFilePath}.audio';
+    }
     final videoExt = p.extension(actualVideoPath).isNotEmpty
         ? p.extension(actualVideoPath)
         : '.mp4';
@@ -381,9 +385,11 @@ class DownloadOrchestrator {
           }
         }
         debugPrint('[DMX] Original video replaced with merged file');
-        try {
-          await videoFile.delete();
-        } catch (_) {}
+        if (videoFile.path != current.localFilePath) {
+          try {
+            await videoFile.delete();
+          } catch (_) {}
+        }
         try {
           await audioFile.delete();
         } catch (_) {}
@@ -615,13 +621,22 @@ class DownloadOrchestrator {
     _host.downloadMetrics[task.id]?.effectiveThreads = runtimeThreadCount;
     int? ttfbTimestamp;
 
+    final tempFile = File(task.tempFilePath);
+    final audioFile = hasAudio && audioTempPath != null ? File(audioTempPath) : null;
+    final tempLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
+    final audioLen = audioFile != null && audioFile.existsSync() ? audioFile.lengthSync() : 0;
+
     int audioBytesSoFar = hasAudio && task.audioSize > 0
-        ? (task.audioProgress * task.audioSize).round()
-        : 0;
-    int videoBytesSoFar = (task.downloadedBytes - audioBytesSoFar).clamp(
-      0,
-      task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
-    );
+        ? (task.audioProgress >= 1.0
+            ? task.audioSize
+            : max((task.audioProgress * task.audioSize).round(), audioLen))
+        : audioLen;
+    int videoBytesSoFar = tempLen > 0
+        ? tempLen
+        : (task.downloadedBytes - audioBytesSoFar).clamp(
+            0,
+            task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
+          );
     double audioSpeedNow = 0.0;
     double videoSpeedNow = 0.0;
     int videoSizeSoFar = videoTransferSize;

@@ -124,6 +124,11 @@ class MainActivity : FlutterActivity() {
                             return@execute
                         }
                         val sourceFile = File(sourcePath)
+                        if (!sourceFile.exists()) {
+                            Log.w("MainActivity", "insertDownload skipped: sourceFile does not exist at $sourcePath")
+                            runOnUiThread { result.success(null) }
+                            return@execute
+                        }
                         resolver.openOutputStream(uri)?.use { output ->
                             sourceFile.inputStream().use { input ->
                                 input.copyTo(output)

@@ -373,9 +373,16 @@ class _HomeScreenState extends State<HomeScreen>
     return Selector<DownloadProvider, List<DownloadTask>>(
       selector: (_, p) => p.filteredTasks,
       builder: (context, allTasks, _) {
-        // FIX: per-segment count
         final activeCount = allTasks.where(_isActiveTask).length;
-        final completedCount = allTasks.where((t) => !_isActiveTask(t)).length;
+        final historyCount = allTasks.where((DownloadTask t) {
+          final isSeeding =
+              t.status == DownloadStatus.completed &&
+              t.isTorrent &&
+              t.seedingEnabled;
+          return (t.status == DownloadStatus.completed ||
+                  t.status == DownloadStatus.failed) &&
+              !isSeeding;
+        }).length;
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -399,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen>
                   context,
                   1,
                   isRtl ? 'المكتملة' : 'Completed',
-                  completedCount,
+                  historyCount,
                   isDark,
                 ),
               ],
@@ -516,7 +523,7 @@ class _HomeScreenState extends State<HomeScreen>
                       Text(
                         _selectedTab == 0
                             ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
-                            : (isRtl ? 'سجل المكتملة' : 'COMPLETED'),
+                            : (isRtl ? 'سجل التنزيلات' : 'HISTORY / COMPLETED'),
                         style: TextStyle(
                           color: textClr,
                           fontSize: 13,
@@ -1509,8 +1516,8 @@ class _EmptyState extends StatelessWidget {
         : L10n.of(context, 'empty_transmissions');
     final subtitle = selectedTab == 1
         ? (isRtl
-              ? 'سيتم تصنيف السجلات المكتملة هنا.'
-              : 'Finished downloads will be cataloged here.')
+              ? 'تظهر جميع التنزيلات المكتملة والفاشلة هنا.'
+              : 'Finished and failed downloads will be cataloged here.')
         : (isRtl
               ? 'أدخل رابطاً لبدء التنزيل.'
               : 'Insert a URL to start downloading.');

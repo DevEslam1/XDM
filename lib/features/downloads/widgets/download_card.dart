@@ -1807,8 +1807,13 @@ void _showAdvancedControls(
                 title: Text('Open File', style: TextStyle(color: textClr)),
                 onTap: () async {
                   Navigator.pop(context);
-                  if (task.localFilePath.isNotEmpty) {
-                    await openFile(context, task.localFilePath, settings);
+                  if (task.localFilePath.isNotEmpty && !_openingTaskIds.contains(task.id)) {
+                    _openingTaskIds.add(task.id);
+                    try {
+                      await openFile(context, task.localFilePath, settings);
+                    } finally {
+                      _openingTaskIds.remove(task.id);
+                    }
                   }
                 },
               ),
@@ -2163,6 +2168,8 @@ Widget _propRow(
     ),
   );
 }
+
+final Set<String> _openingTaskIds = {};
 
 void _confirmDelete(
   BuildContext context,
