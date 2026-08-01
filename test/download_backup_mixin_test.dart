@@ -183,4 +183,11 @@ class FakeDatabaseService extends DatabaseService {
   Future<void> saveTask(DownloadTask task) async {
     savedTasks.add(task);
   }
+
+  @override
+  Future<void> saveTasks(Iterable<DownloadTask> tasks) async {
+    for (final task in tasks) {
+      await saveTask(task);
+    }
+  }
 }

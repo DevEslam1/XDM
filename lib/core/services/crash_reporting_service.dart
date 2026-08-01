@@ -18,6 +18,8 @@ abstract class CrashReporter {
   Future<void> init({String? dsn});
   Future<void> recordError(Object error, StackTrace stackTrace, {String? hint});
   Future<void> recordLog(pkg_logging.Level level, String message);
+  Future<void> setContext(String key, Map<String, dynamic> value);
+  Future<void> addBreadcrumb(String message, {String? category, Map<String, dynamic>? data});
 }
 
 /// No-op crash reporter used when no DSN is configured.
@@ -34,6 +36,12 @@ class NoOpCrashReporter extends CrashReporter {
 
   @override
   Future<void> recordLog(pkg_logging.Level level, String message) async {}
+
+  @override
+  Future<void> setContext(String key, Map<String, dynamic> value) async {}
+
+  @override
+  Future<void> addBreadcrumb(String message, {String? category, Map<String, dynamic>? data}) async {}
 }
 
 class CrashReportingService {
@@ -74,6 +82,20 @@ class CrashReportingService {
     // Never record secrets
     final safeHint = hint != null ? LoggingService.sanitize(hint) : null;
     await reporter.recordError(e, stackTrace, hint: safeHint);
+  }
+
+  /// Sets contextual metadata under [key].
+  static Future<void> setContext(String key, Map<String, dynamic> value) async {
+    await reporter.setContext(key, value);
+  }
+
+  /// Adds a telemetry/execution breadcrumb.
+  static Future<void> addBreadcrumb(
+    String message, {
+    String? category,
+    Map<String, dynamic>? data,
+  }) async {
+    await reporter.addBreadcrumb(message, category: category, data: data);
   }
 
   /// Captures unhandled Flutter errors.
@@ -141,6 +163,29 @@ class SentryCrashReporter extends CrashReporter {
     if (level >= pkg_logging.Level.SEVERE) {
       await Sentry.captureMessage(message, level: _mapLevel(level));
     }
+  }
+
+  @override
+  Future<void> setContext(String key, Map<String, dynamic> value) async {
+    await Sentry.configureScope((scope) {
+      scope.setContexts(key, value);
+    });
+  }
+
+  @override
+  Future<void> addBreadcrumb(
+    String message, {
+    String? category,
+    Map<String, dynamic>? data,
+  }) async {
+    await Sentry.addBreadcrumb(
+      Breadcrumb(
+        message: message,
+        category: category ?? 'app',
+        data: data,
+        timestamp: DateTime.now().toUtc(),
+      ),
+    );
   }
 
   SentryLevel _mapLevel(pkg_logging.Level level) {

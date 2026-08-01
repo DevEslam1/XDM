@@ -1145,6 +1145,36 @@ class DownloadProvider extends ChangeNotifier
     _updateTelemetryWidget();
   }
 
+  // ---------------------------------------------------------------------------
+  // Batch Operations
+  // ---------------------------------------------------------------------------
+  Future<void> pauseMultipleTasks(List<String> ids) async {
+    for (final id in ids) {
+      await pauseTask(id);
+    }
+  }
+
+  Future<void> resumeMultipleTasks(List<String> ids) async {
+    for (final id in ids) {
+      await resumeTask(id);
+    }
+  }
+
+  Future<void> deleteMultipleTasks(List<String> ids, {bool deleteFiles = false}) async {
+    for (final id in List<String>.from(ids)) {
+      await deleteTask(id, deleteFiles: deleteFiles);
+    }
+  }
+
+  Future<void> changeCategoryForMultipleTasks(List<String> ids, String newCategory) async {
+    for (final id in ids) {
+      final task = _findTask(id);
+      if (task != null) {
+        await _setTask(task.copyWith(category: newCategory));
+      }
+    }
+  }
+
   @override
   Future<void> resumeTask(String id) async {
     final task = _findTask(id);

@@ -1,0 +1,68 @@
+name: XDM CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  analyze_and_test:
+    name: Analyze & Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Static Analyzer
+        run: flutter analyze
+
+      - name: Run Tests with Coverage
+        run: flutter test --coverage
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+
+  build_android:
+    name: Build Android Release APK
+    runs-on: ubuntu-latest
+    needs: analyze_and_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      - name: Upload Android Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: xdm-android-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
