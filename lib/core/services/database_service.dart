@@ -92,7 +92,17 @@ class DatabaseService {
       _maintenanceRuns++;
       if (_maintenanceRuns % 12 == 0) {
         try {
-          await _db.customStatement('VACUUM');
+          final activeCountResult = await _db.customSelect(
+            "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'",
+          ).get();
+          final activeCount = activeCountResult.first.read<int>('cnt');
+          if (activeCount > 0) {
+            _log.info(
+              'Skipping periodic DB VACUUM because $activeCount active download(s) in progress',
+            );
+          } else {
+            await _db.customStatement('VACUUM');
+          }
         } catch (e) {
           _log.warning('VACUUM failed', e);
         }

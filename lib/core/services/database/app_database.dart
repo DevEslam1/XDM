@@ -485,6 +485,34 @@ class AppDatabase extends _$AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at '
           'ON browser_history (visited_at)',
         );
+
+        // Post-migration recovery for bookmarks: fix rows stuck at 0 or negative timestamps
+        final badBookmarks = await customSelect(
+          'SELECT COUNT(*) as cnt FROM bookmarks WHERE created_at <= 0',
+        ).get();
+        final badBookmarksCount = badBookmarks.first.read<int>('cnt');
+        if (badBookmarksCount > 0) {
+          await customStatement(
+            "UPDATE bookmarks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at <= 0",
+          );
+          _dbLog.warning(
+            'Migration v10→v11: recovered $badBookmarksCount bookmarks stuck at invalid created_at',
+          );
+        }
+
+        // Post-migration recovery for browser_history: fix rows stuck at 0 or negative timestamps
+        final badHistory = await customSelect(
+          'SELECT COUNT(*) as cnt FROM browser_history WHERE visited_at <= 0',
+        ).get();
+        final badHistoryCount = badHistory.first.read<int>('cnt');
+        if (badHistoryCount > 0) {
+          await customStatement(
+            "UPDATE browser_history SET visited_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE visited_at <= 0",
+          );
+          _dbLog.warning(
+            'Migration v10→v11: recovered $badHistoryCount browser history rows stuck at invalid visited_at',
+          );
+        }
       }
     },
   );
