@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -505,9 +506,29 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
             color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             filled: true,
             tooltip: isRtl ? 'فتح الملف' : 'Open',
-            onPressed: () {
+            onPressed: () async {
               triggerHaptic(settings);
-              openFile(context, task.localFilePath, settings);
+              final path = task.localFilePath;
+              final fileExists = path.isNotEmpty &&
+                  (await File(path).exists() || await Directory(path).exists());
+              if (!fileExists) {
+                await provider.markCompletedFileMissing(task.id);
+                if (context.mounted) {
+                  ThemedSnackbar.show(
+                    context,
+                    message: isRtl
+                        ? 'تعذر العثور على الملف، تم نقله إلى قائمة الإخفاق'
+                        : 'File missing on disk, moved to Failed tab',
+                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                    icon: Icons.error_outline,
+                    isDarkMode: isDark,
+                  );
+                }
+                return;
+              }
+              if (context.mounted) {
+                openFile(context, task.localFilePath, settings);
+              }
             },
           ),
         const SizedBox(width: 6),

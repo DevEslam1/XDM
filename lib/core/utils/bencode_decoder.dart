@@ -77,9 +77,15 @@ class BencodeDecoder {
       throw const FormatException('Invalid bencode string length separator');
     }
     final lenStr = utf8.decode(_data.sublist(start, _offset));
-    final len = int.parse(lenStr);
+    final len = int.tryParse(lenStr);
+    if (len == null) {
+      throw FormatException('Invalid bencode string length: $lenStr');
+    }
     if (len < 0) {
       throw const FormatException('Negative bencode string length');
+    }
+    if (len > _data.length - _offset - 1) {
+      throw const FormatException('Bencode string length exceeds remaining data');
     }
     _offset++; // skip ':'
 

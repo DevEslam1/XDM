@@ -8,8 +8,6 @@ import 'package:synchronized/synchronized.dart';
 /// In the current DMX architecture it is typically used per HTTP download job,
 /// while the effective per-task limit is supplied by the engine.
 class BandwidthGovernor {
-  static const int _maxSleepMs = 5000;
-
   int _globalBytesPerSecond;
   int _activeConsumers = 0;
 
@@ -84,16 +82,16 @@ class BandwidthGovernor {
       final share = perConsumerBytesPerSecond;
       if (share <= 0) return 0;
 
-      if (_availableTokens >= bytes) {
-        _availableTokens -= bytes;
+      _availableTokens -= bytes;
+      if (_availableTokens >= 0) {
         return 0;
       }
 
-      final deficit = bytes - _availableTokens;
-      _availableTokens = 0;
+      final deficit = -_availableTokens;
 
+      // Return the wait time required to repay token debt.
       final waitMs = (deficit / share * 1000.0).ceil();
-      return waitMs.clamp(0, _maxSleepMs);
+      return waitMs.clamp(0, 30000); // Cap at 30s to avoid infinite waits on edge cases
     });
   }
 

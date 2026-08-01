@@ -18,6 +18,7 @@ import 'download_journal.dart';
 import 'positional_file_writer.dart';
 import 'retry_interceptor.dart';
 import 'torrent_service.dart';
+import 'torrent_resume_store.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../utils/bencode_decoder.dart';
 import '../utils/file_utils.dart';
@@ -1042,17 +1043,20 @@ class DownloadEngine {
       // FIX(16): use the async API so the UI thread isn't blocked by the
       // filesystem call.
       if (await Directory(saveDir).exists()) {
-        TorrentService.recheckTorrent(id);
+        final resumeData = await TorrentResumeStore.loadResumeData(id);
+        if (resumeData == null) {
+          TorrentService.recheckTorrent(id);
 
-        await _waitForState(
-          id,
-          cancelToken,
-          predicate: (label) =>
-              !label.contains('checking') &&
-              !label.contains('metadata') &&
-              !label.contains('allocating'),
-          timeout: const Duration(minutes: 5),
-        );
+          await _waitForState(
+            id,
+            cancelToken,
+            predicate: (label) =>
+                !label.contains('checking') &&
+                !label.contains('metadata') &&
+                !label.contains('allocating'),
+            timeout: const Duration(minutes: 5),
+          );
+        }
       }
 
       if (cancelToken.isCancelled) {
@@ -1078,6 +1082,8 @@ class DownloadEngine {
       }
     } finally {
       _activeTorrentIds.remove(id);
+      _lastConcurrentLimitApply.remove(id);
+      _lastIncompleteSnapshot.remove(id);
     }
   }
 
@@ -2780,7 +2786,7 @@ class DownloadEngine {
     });
 
     cancelToken.whenCancel.then((_) {
-      if (!completer.isCompleted) completer.complete();
+      if (!completer.isCompleted) completer.completeError(DioException(requestOptions: RequestOptions(path: 'torrent:$id'), type: DioExceptionType.cancel, error: 'cancelled'));
     });
 
     try {
@@ -3018,19 +3024,19 @@ class DownloadEngine {
 
       final groupSize = group.fold<int>(
         0,
-        (s, f) => s + ((f['length'] as int?) ?? 0),
+        (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0),
       );
 
       if (groupSize <= 0) continue;
 
       if (remaining >= groupSize) {
         for (final f in group) {
-          f['downloadedBytes'] = (f['length'] as int?) ?? 0;
+          f['downloadedBytes'] = (f['length'] as num?)?.toInt() ?? 0;
         }
         remaining -= groupSize;
       } else {
         for (final f in group) {
-          final length = (f['length'] as int?) ?? 0;
+          final length = (f['length'] as num?)?.toInt() ?? 0;
 
           if (length <= 0) {
             f['downloadedBytes'] = 0;

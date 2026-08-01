@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/services/torrent_service.dart';
@@ -194,7 +195,7 @@ mixin DownloadTorrentMixin {
     }
 
     bool anySeedingEnabled = false;
-    for (final taskId in providerTorrentIds.keys) {
+    for (final taskId in List<String>.from(providerTorrentIds.keys)) {
       final task = findTaskById(taskId);
       if (task != null && task.seedingEnabled) {
         anySeedingEnabled = true;
@@ -204,7 +205,7 @@ mixin DownloadTorrentMixin {
 
     if (anySeedingEnabled) {
       int? minLimitBytes;
-      for (final taskId in providerTorrentIds.keys) {
+      for (final taskId in List<String>.from(providerTorrentIds.keys)) {
         final task = findTaskById(taskId);
         if (task != null && task.seedingEnabled && task.seedingLimited) {
           final taskLimitBytes = (task.seedingLimitKbps * 1000) ~/ 8;
@@ -269,9 +270,12 @@ mixin DownloadTorrentMixin {
           if (shouldStopSeeding) {
             if (torrentId != null) {
               TorrentService.pauseTorrent(torrentId);
+              TorrentService.removeTorrent(torrentId);
               providerTorrentIds.remove(task.id);
             }
             providerTasks[i] = task.copyWith(seedingEnabled: false);
+            // FIX(H8): Persist seeding stop to DB so it survives app restart.
+            unawaited(providerDatabaseService.saveTask(providerTasks[i]));
             changed = true;
           }
         }
@@ -322,6 +326,7 @@ mixin DownloadTorrentMixin {
         // while still downloading would abort the in-progress transfer.
         if (torrentId != null && oldTask.status == DownloadStatus.completed) {
           TorrentService.pauseTorrent(torrentId);
+          TorrentService.removeTorrent(torrentId);
           providerTorrentIds.remove(taskId);
         }
         // Snap downloadedBytes to fileSize so the Completed tab shows 100%.

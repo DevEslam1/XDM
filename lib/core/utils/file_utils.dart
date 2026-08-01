@@ -100,7 +100,8 @@ Future<String> getUniqueFilePath(String directoryPath, String fileName) async {
       : safeName;
   var candidatePath = p.join(directoryPath, safeName);
   var counter = 1;
-  while (await File(candidatePath).exists()) {
+  while (await FileSystemEntity.type(candidatePath) !=
+      FileSystemEntityType.notFound) {
     candidatePath = p.join(directoryPath, '$nameWithoutExt ($counter)$ext');
     counter++;
   }
@@ -151,8 +152,13 @@ int scanFolderBytesSync(String path) {
           // FIX(5): libtorrent pre-allocates files to full length, so a full-size file
           // is NOT evidence of completion. Only a short file is a reliable
           // lower bound; a full-size file is ambiguous and must not read 100%.
-          if (diskLen > 0 && diskLen < length) {
+          final storedDownloaded = (copy['downloadedBytes'] as num?)?.toInt() ?? 0;
+          if (storedDownloaded > 0) {
+            downloaded = storedDownloaded;
+          } else if (diskLen > 0 && diskLen < length) {
             downloaded = diskLen;
+          } else if (diskLen >= length && copy['selected'] == true) {
+            downloaded = length;
           }
         }
       } catch (_) {}

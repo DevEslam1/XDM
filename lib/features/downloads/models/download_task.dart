@@ -409,14 +409,14 @@ class DownloadTask {
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
     } else if (rawChunks.length > threadCount) {
-      final totalProgress = rawChunks.fold<double>(0.0, (s, c) => s + c);
-      final redistributed = totalProgress / threadCount;
-      chunks = List<double>.filled(threadCount, redistributed);
+      // Thread count changed: discard stale chunk progress to avoid corrupting
+      // byte offsets on resume. The download will restart from scratch.
+      chunks = List<double>.filled(threadCount, 0.0);
       if (kDebugMode) {
         debugPrint(
           'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
           'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Redistributed total progress ${totalProgress.toStringAsFixed(2)} across $threadCount chunks.',
+          'Discarding stale progress to avoid offset corruption.',
         );
       }
     } else {
@@ -486,7 +486,7 @@ class DownloadTask {
         thumbnailUrl: map['thumbnailUrl'] as String?,
         expectedSha256: map['expectedSha256'] as String?,
         mirrorUrls: map['mirrorUrls'] is List
-            ? (map['mirrorUrls'] as List).map((e) => e as String).toList()
+            ? (map['mirrorUrls'] as List).map((e) => e.toString()).toList()
             : null,
       );
       return task;
@@ -545,7 +545,7 @@ class DownloadTask {
       thumbnailUrl: map['thumbnailUrl'] as String?,
       expectedSha256: map['expectedSha256'] as String?,
       mirrorUrls: map['mirrorUrls'] is List
-          ? (map['mirrorUrls'] as List).map((e) => e as String).toList()
+          ? (map['mirrorUrls'] as List).map((e) => e.toString()).toList()
           : null,
     );
   }

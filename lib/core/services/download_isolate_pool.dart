@@ -223,11 +223,14 @@ class _Worker {
           ? message[0].toString()
           : 'Worker isolate exited unexpectedly without payload.';
 
+      // FIX(H1): Mark jobs with 'worker_crash' type instead of 'uncaught'
+      // so the orchestrator can distinguish a job-specific failure from a
+      // worker crash and potentially re-queue unrelated jobs.
       for (final job in List<DownloadJob>.from(_jobs.values)) {
         job._controller.add(
           IsolateMessage(job.jobId, 'error', {
-            'errorType': 'uncaught',
-            'errorMessage': errorMessage,
+            'errorType': 'worker_crash',
+            'errorMessage': 'Worker isolate crashed: $errorMessage',
           }),
         );
 
@@ -349,6 +352,11 @@ class _Worker {
     _respawnTimer = null;
 
     _send({'type': 'shutdown'});
+
+    // FIX(C4): Give the isolate a brief window to process the shutdown
+    // message, cancel HTTP streams, and close file handles gracefully
+    // before force-killing it.
+    await Future.delayed(const Duration(milliseconds: 500));
 
     for (final job in List<DownloadJob>.from(_jobs.values)) {
       job.dispose();

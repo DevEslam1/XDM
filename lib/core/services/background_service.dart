@@ -204,8 +204,11 @@ class BackgroundService {
   }
 
   /// Releases the partial wake lock. Safe to call even if no lock is held.
+  /// FIX(H6): Always attempt native release regardless of _wakeLockHeld,
+  /// since static state is per-isolate and may be stale if the lock was
+  /// acquired from a different isolate.
   static Future<void> releaseWakeLock() async {
-    if (!isSupported || !_wakeLockHeld) return;
+    if (!isSupported) return;
     try {
       _wakeLockRenewalTimer?.cancel();
       _wakeLockRenewalTimer = null;

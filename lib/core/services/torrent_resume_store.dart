@@ -38,6 +38,12 @@ class TorrentResumeStore {
     }
   }
 
+  static Future<String> _ensureBasePath() async {
+    if (_basePath != null) return _basePath!;
+    await init();
+    return _basePath!;
+  }
+
   static String _pathFor(int torrentId) =>
       p.join(_basePath!, 'resume_$torrentId.json');
 
@@ -49,7 +55,7 @@ class TorrentResumeStore {
     List<Map<String, dynamic>>? torrentFiles,
     bool seedingEnabled = false,
   }) async {
-    if (_basePath == null) return;
+    await _ensureBasePath();
     try {
       final data = jsonEncode({
         'torrentId': torrentId,
@@ -58,7 +64,32 @@ class TorrentResumeStore {
         'torrentFiles': torrentFiles,
         'savedAt': DateTime.now().toIso8601String(),
       });
-      await File(_pathFor(torrentId)).writeAsString(data, flush: true);
+      // FIX(C5): Atomic write via temp file + rename to prevent corruption
+      // if the app crashes mid-write. Handle Windows overwrite limitation.
+      final targetPath = _pathFor(torrentId);
+      final tmpPath = '$targetPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
+      final tmpFile = File(tmpPath);
+      try {
+        await tmpFile.writeAsString(data, flush: true);
+
+        final targetFile = File(targetPath);
+        if (await targetFile.exists()) {
+          try {
+            await targetFile.delete();
+          } catch (_) {}
+        }
+
+        try {
+          await tmpFile.rename(targetPath);
+        } catch (e) {
+          await tmpFile.copy(targetPath);
+          await tmpFile.delete();
+        }
+      } finally {
+        try {
+          if (await tmpFile.exists()) await tmpFile.delete();
+        } catch (_) {}
+      }
     } catch (e) {
       _log.warning('save failed for $torrentId', e);
     }
@@ -66,7 +97,7 @@ class TorrentResumeStore {
 
   /// Returns the saved metadata for a torrent, or null if no record exists.
   static Future<Map<String, dynamic>?> load(int torrentId) async {
-    if (_basePath == null) return null;
+    await _ensureBasePath();
     try {
       final file = File(_pathFor(torrentId));
       if (!await file.exists()) return null;
@@ -74,7 +105,10 @@ class TorrentResumeStore {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       return data;
     } catch (e) {
-      _log.warning('load failed for $torrentId', e);
+      _log.warning('load failed for $torrentId, removing corrupt file', e);
+      try {
+        await File(_pathFor(torrentId)).delete();
+      } catch (_) {}
       return null;
     }
   }
@@ -82,11 +116,11 @@ class TorrentResumeStore {
   /// Returns the saved progress for a torrent, or null if no record exists.
   static Future<double?> loadProgress(int torrentId) async {
     final data = await load(torrentId);
-    return data?['progress'] as double?;
+    return (data?['progress'] as num?)?.toDouble();
   }
 
   static Future<void> delete(int torrentId) async {
-    if (_basePath == null) return;
+    await _ensureBasePath();
     try {
       final file = File(_pathFor(torrentId));
       if (await file.exists()) await file.delete();
@@ -98,17 +132,34 @@ class TorrentResumeStore {
   static String _binaryPathFor(int torrentId) =>
       p.join(_basePath!, 'resume_${torrentId}_fast.bin');
 
-  /// Saves native fast-resume binary data for a torrent.
-  ///
-  /// Migration note: once libtorrent_flutter exposes saveResumeData with a
-  /// typed API, this method stores the raw Uint8List to disk. The native
-  /// implementation should return serialized libtorrent fast-resume data
-  /// (entry::bencode() or similar) that can be passed back via loadResumeData
-  /// on restart.
+  /// Saves native fast-resume binary data for a torrent using atomic temp write.
   static Future<void> saveResumeData(int torrentId, Uint8List data) async {
-    if (_basePath == null) return;
+    await _ensureBasePath();
     try {
-      await File(_binaryPathFor(torrentId)).writeAsBytes(data, flush: true);
+      final targetPath = _binaryPathFor(torrentId);
+      final tmpPath = '$targetPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
+      final tmpFile = File(tmpPath);
+      try {
+        await tmpFile.writeAsBytes(data, flush: true);
+
+        final targetFile = File(targetPath);
+        if (await targetFile.exists()) {
+          try {
+            await targetFile.delete();
+          } catch (_) {}
+        }
+
+        try {
+          await tmpFile.rename(targetPath);
+        } catch (_) {
+          await tmpFile.copy(targetPath);
+          await tmpFile.delete();
+        }
+      } finally {
+        try {
+          if (await tmpFile.exists()) await tmpFile.delete();
+        } catch (_) {}
+      }
     } catch (e) {
       _log.warning('saveResumeData failed for $torrentId', e);
     }
@@ -117,7 +168,7 @@ class TorrentResumeStore {
   /// Loads native fast-resume binary data for a torrent.
   /// Returns null if no data was saved or if loading fails.
   static Future<Uint8List?> loadResumeData(int torrentId) async {
-    if (_basePath == null) return null;
+    await _ensureBasePath();
     try {
       final file = File(_binaryPathFor(torrentId));
       if (!await file.exists()) return null;
@@ -136,15 +187,16 @@ class TorrentResumeStore {
     List<Map<String, dynamic>>? Function(int id)? filesForId,
     bool Function(int id)? seedingForId,
   ]) async {
-    await Future.wait(
-      activeIds.map(
-        (id) => save(
-          id,
-          progress: progressForId(id),
-          torrentFiles: filesForId != null ? filesForId(id) : null,
-          seedingEnabled: seedingForId != null ? seedingForId(id) : false,
-        ),
-      ),
-    );
+    final idList = activeIds.toList();
+    for (var i = 0; i < idList.length; i += 10) {
+      final end = (i + 10).clamp(0, idList.length);
+      final batch = idList.sublist(i, end);
+      await Future.wait(batch.map((id) => save(
+        id,
+        progress: progressForId(id),
+        torrentFiles: filesForId != null ? filesForId(id) : null,
+        seedingEnabled: seedingForId != null ? seedingForId(id) : false,
+      )));
+    }
   }
 }

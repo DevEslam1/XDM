@@ -705,8 +705,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     DownloadTask? duplicateTask;
     final trimmedUrl = singleUrl.trim();
     for (final task in provider.tasks) {
-      final isSameUrl =
-          task.url.trim().toLowerCase() == trimmedUrl.toLowerCase();
+      final normalizedTaskUrl = task.url.trim().toLowerCase().replaceAll(RegExp(r'/+$'), '');
+      final normalizedNewUrl = trimmedUrl.toLowerCase().replaceAll(RegExp(r'/+$'), '');
+      final isSameUrl = normalizedTaskUrl == normalizedNewUrl;
       final isSameNameAndSize =
           finalSize > 0 &&
           task.fileName.toLowerCase() == finalFileName.toLowerCase() &&

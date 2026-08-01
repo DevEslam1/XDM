@@ -5,7 +5,7 @@ import '../../features/settings/provider/settings_provider.dart';
 class TorrentService {
   static bool get isSupported => false;
   static bool get isInitialized => false;
-  static Set<int> get activeTorrentIds => {};
+  static Set<int> get activeTorrentIds => const <int>{};
   static double progressFor(int id) => 0.0;
   static bool fileProgressSupported = false;
   static bool filePrioritiesSupported = false;

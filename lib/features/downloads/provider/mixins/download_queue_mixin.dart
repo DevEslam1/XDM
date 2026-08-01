@@ -129,7 +129,9 @@ mixin DownloadQueueMixin {
       _queueProcessing = false;
       if (_needsRePump) {
         _needsRePump = false;
-        pumpQueue();
+        // FIX(C-H3): Use microtask to break potential synchronous recursion
+        // from listeners that request another pump within pumpQueue.
+        Future.microtask(pumpQueue);
       }
     }
   }

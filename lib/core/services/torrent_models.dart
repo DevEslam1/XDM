@@ -63,7 +63,8 @@ class TorrentUpdateInfo {
     this.currentTracker = '',
     this.nextAnnounceSeconds = 0,
     this.distributedCopies = 0.0,
-    this.fileProgress = const [],
-    this.filePriorities = const [],
-  });
+    List<int> fileProgress = const [],
+    List<int> filePriorities = const [],
+  })  : fileProgress = List.unmodifiable(fileProgress),
+        filePriorities = List.unmodifiable(filePriorities);
 }

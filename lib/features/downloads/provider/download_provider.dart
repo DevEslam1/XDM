@@ -617,7 +617,10 @@ class DownloadProvider extends ChangeNotifier
       // Run all per-task file-stat calls in parallel. Each call already
       // offloads to a background isolate via _statPartialFileIsolate, so
       // awaiting them sequentially wastes the parallelism opportunity.
-      final futures = <Future<DownloadTask>>[];
+      // FIX(C3): Batch reconciliation to avoid spawning N isolates
+      // simultaneously. Process in batches of 4 to limit memory usage.
+      const batchSize = 4;
+      final pendingTasks = <DownloadTask>[];
       for (final task in _tasks) {
         final hasActiveStream = _cancelTokens.containsKey(task.id);
 
@@ -629,22 +632,35 @@ class DownloadProvider extends ChangeNotifier
           }
         }
 
-        futures.add(() async {
-          try {
-            return await _reconcilePartialProgress(task);
-          } catch (e) {
-            debugPrint('Failed to reconcile partial file for ${task.id}: $e');
-            return task;
-          }
-        }());
+        pendingTasks.add(task);
       }
 
-      reconciled.addAll(await Future.wait(futures));
+      for (var i = 0; i < pendingTasks.length; i += batchSize) {
+        if (_disposed || _generation != loadGen) break;
+        final batch = pendingTasks.skip(i).take(batchSize);
+        final batchResults = await Future.wait(
+          batch.map((task) async {
+            try {
+              return await _reconcilePartialProgress(task);
+            } catch (e) {
+              debugPrint('Failed to reconcile partial file for ${task.id}: $e');
+              return task;
+            }
+          }),
+        );
+        reconciled.addAll(batchResults);
+      }
 
       for (final task in reconciled) {
         final idx = _tasks.indexWhere((t) => t.id == task.id);
         if (idx != -1) {
-          _tasks[idx] = task;
+          if (_tasks[idx].status != task.status ||
+              _tasks[idx].downloadedBytes != task.downloadedBytes) {
+            _tasks[idx] = task;
+            await _databaseService.saveTask(task);
+          } else {
+            _tasks[idx] = task;
+          }
         }
       }
 
@@ -1000,6 +1016,19 @@ class DownloadProvider extends ChangeNotifier
     if (!isScheduled) {
       pumpQueue();
     }
+  }
+
+  /// Marks a completed task as failed when its output file is missing on disk.
+  Future<void> markCompletedFileMissing(String taskId) async {
+    final task = _findTask(taskId);
+    if (task == null) return;
+    final updated = task.copyWith(
+      status: DownloadStatus.failed,
+      errorMessage: 'Downloaded file missing or inaccessible',
+      clearEta: true,
+      speed: 0,
+    );
+    await _setTask(updated);
   }
 
   /// Scans the torrent's target folder for data that's already on disk so a
@@ -1515,14 +1544,38 @@ class DownloadProvider extends ChangeNotifier
   @override
   int get pendingStartCount => _orchestrator.pendingStartCount;
 
+  /// Merges structural fields from [incoming] into [live], preserving
+  /// progress fields (downloadedBytes, speed, eta, chunks, audioProgress)
+  /// from the live in-memory task. This prevents state regression when a
+  /// structural update (status change, URL edit, metadata save) carries
+  /// stale progress values captured before the update was enqueued.
+  DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
+    // If the incoming update has MORE progress, use it (e.g. completion).
+    // Otherwise, keep the live progress which is more recent.
+    final useIncomingProgress =
+        incoming.downloadedBytes > live.downloadedBytes ||
+        incoming.status == DownloadStatus.completed;
+
+    return incoming.copyWith(
+      downloadedBytes:
+          useIncomingProgress ? incoming.downloadedBytes : live.downloadedBytes,
+      speed: useIncomingProgress ? incoming.speed : live.speed,
+      eta: useIncomingProgress ? incoming.eta : live.eta,
+      chunks: useIncomingProgress ? incoming.chunks : live.chunks,
+      audioProgress:
+          useIncomingProgress ? incoming.audioProgress : live.audioProgress,
+    );
+  }
+
   Future<void> _setTask(DownloadTask updated) async {
     final index = _tasks.indexWhere((task) => task.id == updated.id);
     if (index == -1) return;
 
     final prev = _tasks[index];
-    // Keep in-memory state as the source of truth during active downloads.
-    // On DB failure, we MUST NOT replace in-memory progress with stale DB data.
-    _tasks[index] = updated;
+    // Merge structural fields from `updated` into the live in-memory task,
+    // preserving progress fields (downloadedBytes, speed, eta, chunks,
+    // audioProgress) to prevent state regression during active downloads.
+    _tasks[index] = _mergeTaskUpdate(prev, updated);
 
     // Only invalidate the filter/sort cache when a "structural" field changes
     // (status, category, name, URL, or fileSize). Progress-only updates (speed,
@@ -1575,10 +1628,11 @@ class DownloadProvider extends ChangeNotifier
     try {
       await _databaseService.saveTask(updated);
 
-      // Re-verify index after async gap to prevent race condition
+      // Re-verify index after async gap — merge structural fields into the
+      // live task again, in case progress ticked during the DB save.
       final currentIndex = _tasks.indexWhere((task) => task.id == updated.id);
       if (currentIndex != -1) {
-        _tasks[currentIndex] = updated;
+        _tasks[currentIndex] = _mergeTaskUpdate(_tasks[currentIndex], updated);
       }
 
       // Notify AFTER successful DB write to keep UI and persistence in sync.

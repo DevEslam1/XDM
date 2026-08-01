@@ -119,9 +119,12 @@ class DatabaseService {
 
       final success = await _migrateSingleHiveBox(boxName);
       if (success) {
+        // Mark as migrated to prevent re-migrating deleted SQLite entries on future launches
         await prefs.setBool(prefKey, true);
       } else {
-        _log.warning('Migration failed for box $boxName; will retry next run.');
+        _log.warning(
+          'Migration had errors for box $boxName; will retry on next launch. Corrupted items exported to JSON.',
+        );
       }
     }
   }

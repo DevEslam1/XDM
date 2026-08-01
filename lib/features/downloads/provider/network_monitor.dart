@@ -114,7 +114,9 @@ class NetworkMonitor {
       _checkingNetwork = false;
       if (_networkRecheckPending) {
         _networkRecheckPending = false;
-        checkNetworkConnectivity(skipPump: skipPump);
+        // FIX(C-H4): Break potential synchronous recursion from rapid
+        // platform connectivity events by deferring to a microtask.
+        unawaited(Future.microtask(() => checkNetworkConnectivity(skipPump: skipPump)));
       }
     }
   }

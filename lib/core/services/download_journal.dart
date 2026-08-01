@@ -192,16 +192,16 @@ class DownloadJournal {
   Future<void> delete() async {
     await _lock.synchronized(() async {
       await _closeLocked();
-    });
 
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (e) {
+        debugPrint('[DownloadJournal] Failed to delete journal $path: $e');
       }
-    } catch (e) {
-      debugPrint('[DownloadJournal] Failed to delete journal $path: $e');
-    }
+    });
   }
 
   Future<void> _closeLocked() async {
@@ -240,8 +240,28 @@ class DownloadJournal {
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
 
-      await tmp.writeAsString('$initLine\n$checkpointLine\n');
-      await tmp.rename(path);
+      await tmp.writeAsString('$initLine\n$checkpointLine\n', flush: true);
+      // FIX(C6): On Windows, file locks can linger after close. Retry rename
+      // with a small delay to avoid FileSystemException during compaction.
+      for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+          final target = File(path);
+          if (await target.exists()) {
+            try {
+              await target.delete();
+            } catch (_) {}
+          }
+          await tmp.rename(path);
+          break;
+        } catch (_) {
+          if (attempt == 2) {
+            await tmp.copy(path);
+            await tmp.delete();
+            break;
+          }
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
 
       _sink = File(path).openWrite(mode: FileMode.append);
       _isOpen = true;

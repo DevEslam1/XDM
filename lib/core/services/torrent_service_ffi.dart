@@ -90,6 +90,7 @@ class TorrentService {
   static final _log = Logger('TorrentService');
   static TorrentSessionState _state = TorrentSessionState.uninitialized;
   static Completer<void>? _initCompleter;
+  static Completer<void>? _disposeCompleter;
   static Set<int> _activeTorrentIds = {};
   static StreamSubscription? _updatesSub;
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
@@ -108,6 +109,15 @@ class TorrentService {
     if (_state == TorrentSessionState.ready) return;
     if (_state == TorrentSessionState.initializing && _initCompleter != null) {
       return _initCompleter!.future;
+    }
+    // FIX(5): Wait for any in-progress dispose before re-initializing
+    if (_state == TorrentSessionState.pausing ||
+        _state == TorrentSessionState.disposing) {
+      if (_disposeCompleter != null) {
+        try {
+          await _disposeCompleter!.future;
+        } catch (_) {}
+      }
     }
 
     _state = TorrentSessionState.initializing;
@@ -175,9 +185,22 @@ class TorrentService {
       sub = LibtorrentFlutter.instance.torrentUpdates.listen(
         (torrents) {
           try {
-            _activeTorrentIds = Set<int>.from(torrents.keys);
+            // FIX(3): Merge native IDs with Dart-side additions instead of
+            // replacing the entire set, which would wipe IDs just added by
+            // addMagnet/addTorrentFile that haven't appeared in native updates.
+            final nativeIds = Set<int>.from(torrents.keys);
+            _activeTorrentIds = _activeTorrentIds.union(nativeIds);
+            // Remove IDs that libtorrent no longer knows about, but keep
+            // freshly-added IDs that haven't been reported by native yet.
+            _activeTorrentIds.retainWhere(
+              (id) => nativeIds.contains(id) || !_latestProgress.containsKey(id),
+            );
             final mapped = torrents.map((key, value) {
               _latestProgress[value.id] = value.progress;
+              // FIX(6): Clamp NaN/Infinity progress to avoid toInt() crash
+              final safeProgress = value.progress.isFinite
+                  ? value.progress.clamp(0.0, 1.0)
+                  : 0.0;
               return MapEntry(
                 key,
                 TorrentUpdateInfo(
@@ -188,12 +211,13 @@ class TorrentService {
                   uploadRate: value.uploadRate,
                   totalDone: value.totalDone,
                   totalWanted: value.totalWanted,
-                  totalWantedDone: (value.progress * value.totalWanted).toInt(),
+                  totalWantedDone: (safeProgress * value.totalWanted).toInt(),
                   hasMetadata: value.hasMetadata,
                   stateLabel: value.state.label,
                   numSeeds: value.numSeeds,
                   numPeers: value.numPeers,
-                  piecesHave: (value.progress * 1000).round(),
+                  // FIX(8): Use safe progress for piece count estimation
+                  piecesHave: (safeProgress * 1000).round(),
                   piecesTotal: 1000,
                   downloadPayloadRate: value.downloadRate,
                   uploadPayloadRate: value.uploadRate,
@@ -216,8 +240,15 @@ class TorrentService {
         onError: (e) {
           _log.warning('Torrent updates stream error: $e');
         },
+        // FIX(7): Close orphaned _updateController when stream ends so
+        // the next _startTrackingUpdates() creates a fresh one and old
+        // listeners aren't stuck on a dead controller.
         onDone: () {
-          if (identical(_updatesSub, sub)) _updatesSub = null;
+          if (identical(_updatesSub, sub)) {
+            _updatesSub = null;
+            _updateController?.close();
+            _updateController = null;
+          }
         },
       );
 
@@ -292,16 +323,37 @@ class TorrentService {
     }
   }
 
+  // FIX(2): Robust dispose that handles all states and prevents segfaults
+  // by ensuring all FFI calls complete before native teardown.
   static Future<void> dispose() async {
-    if (_state != TorrentSessionState.ready) return;
+    if (_state == TorrentSessionState.disposed ||
+        _state == TorrentSessionState.uninitialized) {
+      return;
+    }
+
+    // If currently initializing, wait for it to complete first
+    if (_state == TorrentSessionState.initializing && _initCompleter != null) {
+      try {
+        await _initCompleter!.future;
+      } catch (_) {}
+    }
+
+    // If already disposing, wait for the existing dispose to finish
+    if (_disposeCompleter != null) return _disposeCompleter!.future;
+
+    _disposeCompleter = Completer<void>();
     _state = TorrentSessionState.pausing;
 
     // Save native resume data for all active torrents before shutdown
-    await saveAllResumeData();
-    await TorrentResumeStore.saveAll(
-      _activeTorrentIds,
-      (id) => _latestProgress[id] ?? 0.0,
-    );
+    try {
+      await saveAllResumeData();
+      await TorrentResumeStore.saveAll(
+        _activeTorrentIds,
+        (id) => _latestProgress[id] ?? 0.0,
+      );
+    } catch (e) {
+      _log.warning('Error saving resume data during dispose: $e');
+    }
 
     _state = TorrentSessionState.disposing;
     await _updatesSub?.cancel();
@@ -309,6 +361,7 @@ class TorrentService {
     await _updateController?.close();
     _updateController = null;
     _activeTorrentIds.clear();
+    _latestProgress.clear();
 
     try {
       await LibtorrentFlutter.instance.dispose();
@@ -316,6 +369,8 @@ class TorrentService {
       _log.warning('Error disposing libtorrent: $e');
     }
     _state = TorrentSessionState.disposed;
+    _disposeCompleter?.complete();
+    _disposeCompleter = null;
   }
 
   static int addMagnet(String magnetUri, String savePath) {
@@ -362,18 +417,20 @@ class TorrentService {
     }
   }
 
-  static void pauseTorrent(int id) {
+  // FIX(4): Await saveResumeData before pausing to prevent FFI race
+  // condition where native state is modified while querying fast-resume data.
+  static Future<void> pauseTorrent(int id) async {
     if (!isInitialized) return;
     if (id >= 0) {
       try {
         final progress = _latestProgress[id] ?? 0.0;
         TorrentResumeStore.save(id, progress: progress);
-        // Attempt native fast-resume save before pausing
-        unawaited(
-          saveResumeData(id).catchError((e) {
-            _log.warning('saveResumeData failed for id $id: $e');
-          }),
-        );
+        // Save native fast-resume data before pausing
+        try {
+          await saveResumeData(id);
+        } catch (e) {
+          _log.warning('saveResumeData failed for id $id: $e');
+        }
         LibtorrentFlutter.instance.pauseTorrent(id);
       } catch (e) {
         _log.warning('pauseTorrent failed for id $id: $e');
@@ -441,14 +498,16 @@ class TorrentService {
             size: f.size,
             // FIX(1): Return -1 when native progress is unavailable to signal
             // "unknown" — caller should use estimation fallback instead of 0.
+            // FIX(9): Safe null-aware casts for native data that may
+            // return null or non-numeric types.
             downloadedBytes: (progress != null && i < progress.length)
-                ? (progress[i] as num).toInt().clamp(0, f.size).toInt()
+                ? ((progress[i] as num?)?.toInt() ?? 0).clamp(0, f.size)
                 : -1,
             priority: (priorities != null && i < priorities.length)
-                ? (priorities[i] as num).toInt()
+                ? ((priorities[i] as num?)?.toInt() ?? 4)
                 : 4,
             selected: (priorities != null && i < priorities.length)
-                ? (priorities[i] as num).toInt() > 0
+                ? ((priorities[i] as num?)?.toInt() ?? 1) > 0
                 : true,
           );
         });
@@ -473,6 +532,8 @@ class TorrentService {
         poller = Timer.periodic(const Duration(milliseconds: 200), (_) {
           if (_state == TorrentSessionState.disposed ||
               _state == TorrentSessionState.uninitialized) {
+            // FIX(1): Cancel the periodic timer to prevent infinite CPU leak
+            poller?.cancel();
             bridging.close();
             return;
           }

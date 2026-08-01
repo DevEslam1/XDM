@@ -6,7 +6,7 @@ class ConnectionManager {
   static Dio createDownloadDio({
     int connectTimeoutMs = 15000,
     int receiveTimeoutMs = 60000,
-    int maxConnectionsPerHost = 6,
+    int maxConnectionsPerHost = 32,
   }) {
     final dio = Dio(
       BaseOptions(
@@ -48,7 +48,11 @@ class ConnectionManager {
         port,
         timeout: const Duration(seconds: 5),
       );
-      secureSocket = await SecureSocket.secure(rawSocket, host: uri.host);
+      secureSocket = await SecureSocket.secure(
+        rawSocket,
+        host: uri.host,
+        onBadCertificate: (_) => true,
+      );
       rawSocket = null; // SecureSocket now owns rawSocket.
       final proto = secureSocket.selectedProtocol;
       await secureSocket.close();

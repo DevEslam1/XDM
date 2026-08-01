@@ -363,17 +363,33 @@ class DownloadOrchestrator {
       if (await mergedFile.exists()) {
         final mergedLen = await mergedFile.length();
         debugPrint('[DMX] Merge successful: $mergedPath ($mergedLen bytes)');
+        final targetFile = File(current.localFilePath);
+        if (await targetFile.exists()) {
+          try {
+            await targetFile.delete();
+          } catch (_) {}
+        }
+        try {
+          await mergedFile.rename(current.localFilePath);
+        } catch (e) {
+          await mergedFile.copy(current.localFilePath);
+          final copiedLen = await File(current.localFilePath).length();
+          if (copiedLen == mergedLen) {
+            await mergedFile.delete();
+          } else {
+            throw Exception('File copy verification failed after merge.');
+          }
+        }
+        debugPrint('[DMX] Original video replaced with merged file');
         try {
           await videoFile.delete();
         } catch (_) {}
-        await mergedFile.rename(actualVideoPath);
-        debugPrint('[DMX] Original video replaced with merged file');
+        try {
+          await audioFile.delete();
+        } catch (_) {}
       } else {
         throw Exception('Merged output file not found after FFmpeg success');
       }
-      try {
-        await audioFile.delete();
-      } catch (_) {}
     } else {
       try {
         await audioFile.delete();
@@ -495,25 +511,29 @@ class DownloadOrchestrator {
       if (current.isTorrent && Directory(finalPath).existsSync()) {
         // Multi-file torrent: finalPath is a directory — insert each file.
         final torrentDir = Directory(finalPath);
-        await for (final entity in torrentDir.list(recursive: true)) {
-          if (entity is! File) continue;
-          final ext = p.extension(entity.path);
-          if (ext == '.txt') continue;
-          final mimeType = _mimeTypeFromExtension(ext);
-          final mediaResult = await PermissionService().insertIntoMediaStore(
-            p.basename(entity.path),
-            mimeType,
-            entity.path,
-          );
-          if (mediaResult == null) {
-            try {
-              unawaited(
-                _mediaChannel.invokeMethod('scanMedia', {'path': entity.path}),
-              );
-            } catch (e) {
-              debugPrint('Failed to scan media: $e');
+        try {
+          await for (final entity in torrentDir.list(recursive: true)) {
+            if (entity is! File) continue;
+            final ext = p.extension(entity.path);
+            if (ext == '.txt') continue;
+            final mimeType = _mimeTypeFromExtension(ext);
+            final mediaResult = await PermissionService().insertIntoMediaStore(
+              p.basename(entity.path),
+              mimeType,
+              entity.path,
+            );
+            if (mediaResult == null) {
+              try {
+                unawaited(
+                  _mediaChannel.invokeMethod('scanMedia', {'path': entity.path}),
+                );
+              } catch (e) {
+                debugPrint('Failed to scan media: $e');
+              }
             }
           }
+        } catch (e) {
+          debugPrint('Failed to list or scan torrent directory: $e');
         }
       } else if (current.isTorrent && !File(finalPath).existsSync()) {
         // Single-file torrent: guessed name differs from actual metadata name.
@@ -1002,7 +1022,7 @@ class DownloadOrchestrator {
                     progress.torrentFiles!.isNotEmpty &&
                     progress.torrentFiles!.any(
                       (f) =>
-                          f['progressEstimated'] == true ||
+                          f['progressEstimated'] == false ||
                           ((f['downloadedBytes'] as int?) ?? 0) > 0,
                     );
                 if (task.isTorrent &&
@@ -1254,6 +1274,7 @@ class DownloadOrchestrator {
         }
       } catch (e) {
         _host.cancelTokens.remove(task.id);
+        _host.activeFutures.remove(task.id);
         await _host.setTaskState(
           task.copyWith(
             status: DownloadStatus.failed,

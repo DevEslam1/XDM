@@ -68,6 +68,8 @@ class BrowserDownloadSheet extends StatefulWidget {
 
 class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
     with SingleTickerProviderStateMixin, HapticHelper {
+  bool _isSubmitting = false;
+
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1400),
@@ -375,91 +377,92 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
     BuildContext context,
     SettingsProvider settingsProvider,
   ) async {
-    final downloadProvider = Provider.of<DownloadProvider>(
-      context,
-      listen: false,
-    );
-    final isRtl = L10n.isRtl(context);
-    final isDark = settingsProvider.isDarkMode;
-
-    // 1. Deduplicate by URL
-    final existing = downloadProvider.tasks
-        .where((t) => t.url == widget.url)
-        .toList();
-    if (existing.isNotEmpty) {
-      final task = existing.first;
-      if (task.status == DownloadStatus.completed) {
-        ThemedSnackbar.show(
-          context,
-          message: isRtl
-              ? 'Ù‡Ø°Ø§ Ø§Ù„ØªÙ†Ø²ÙŠÙ„ Ù…ÙƒØªÙ…Ù„ Ø¨Ø§Ù„ÙØ¹Ù„'
-              : 'This download is already completed.',
-          color: AppTheme.neonGreen,
-          icon: Icons.check_circle_outline,
-          isDarkMode: isDark,
-        );
-      } else if (task.status == DownloadStatus.downloading ||
-          task.status == DownloadStatus.queued) {
-        ThemedSnackbar.show(
-          context,
-          message: isRtl
-              ? 'Ù‡Ø°Ø§ Ø§Ù„ØªÙ†Ø²ÙŠÙ„ Ù‚ÙŠØ¯ Ø§Ù„ØªØ´ØºÙŠÙ„ Ø¨Ø§Ù„ÙØ¹Ù„'
-              : 'This download is already in progress.',
-          color: AppTheme.neonBlue,
-          icon: Icons.info_outline,
-          isDarkMode: isDark,
-        );
-      } else {
-        downloadProvider.resumeTask(task.id);
-        ThemedSnackbar.show(
-          context,
-          message: isRtl
-              ? 'ØªÙ… Ø§Ø³ØªØ¦Ù†Ø§Ù Ø§Ù„ØªÙ†Ø²ÙŠÙ„'
-              : 'Download resumed.',
-          color: AppTheme.neonBlue,
-          icon: Icons.play_arrow,
-          isDarkMode: isDark,
-        );
-      }
-      if (context.mounted) Navigator.pop(context);
-      return;
-    }
-
-    // 2. Resolve filename
-    String finalFileName = widget.suggestedName ?? '';
-    if (finalFileName.isEmpty) {
-      finalFileName = widget.url.startsWith('magnet:')
-          ? (parseMagnetUrl(widget.url)['name'] ?? 'Torrent Download')
-          : fileNameFromUrl(widget.url);
-    }
-
-    // 3. Deduplicate name
-    String numbered = finalFileName;
-    final ext = p.extension(finalFileName);
-    final base = p.basenameWithoutExtension(finalFileName);
-    var counter = 1;
-    while (downloadProvider.tasks.any(
-      (t) => t.fileName.toLowerCase() == numbered.toLowerCase(),
-    )) {
-      numbered = '${base}_$counter$ext';
-      counter++;
-    }
-    finalFileName = numbered;
-
-    // 4. Category
-    String category;
-    if (widget.type == 'video') {
-      category = 'Video';
-    } else if (widget.type == 'audio') {
-      category = 'Audio';
-    } else if (widget.type == 'image') {
-      category = 'Image';
-    } else {
-      category = categoryFromFileName(finalFileName);
-    }
-
-    // 5. Fire
+    if (_isSubmitting) return;
+    _isSubmitting = true;
     try {
+      final downloadProvider = Provider.of<DownloadProvider>(
+        context,
+        listen: false,
+      );
+      final isRtl = L10n.isRtl(context);
+      final isDark = settingsProvider.isDarkMode;
+
+      // 1. Deduplicate by URL
+      final existing = downloadProvider.tasks
+          .where((t) => t.url == widget.url)
+          .toList();
+      if (existing.isNotEmpty) {
+        final task = existing.first;
+        if (task.status == DownloadStatus.completed) {
+          ThemedSnackbar.show(
+            context,
+            message: isRtl
+                ? 'هذا التنزيل مكتمل بالفعل'
+                : 'This download is already completed.',
+            color: AppTheme.neonGreen,
+            icon: Icons.check_circle_outline,
+            isDarkMode: isDark,
+          );
+        } else if (task.status == DownloadStatus.downloading ||
+            task.status == DownloadStatus.queued) {
+          ThemedSnackbar.show(
+            context,
+            message: isRtl
+                ? 'هذا التنزيل قيد التشغيل بالفعل'
+                : 'This download is already in progress.',
+            color: AppTheme.neonBlue,
+            icon: Icons.info_outline,
+            isDarkMode: isDark,
+          );
+        } else {
+          downloadProvider.resumeTask(task.id);
+          ThemedSnackbar.show(
+            context,
+            message: isRtl
+                ? 'تم استئناف التنزيل'
+                : 'Download resumed.',
+            color: AppTheme.neonBlue,
+            icon: Icons.play_arrow,
+            isDarkMode: isDark,
+          );
+        }
+        if (context.mounted) Navigator.pop(context);
+        return;
+      }
+
+      // 2. Resolve filename
+      String finalFileName = widget.suggestedName ?? '';
+      if (finalFileName.isEmpty) {
+        finalFileName = widget.url.startsWith('magnet:')
+            ? (parseMagnetUrl(widget.url)['name'] ?? 'Torrent Download')
+            : fileNameFromUrl(widget.url);
+      }
+
+      // 3. Deduplicate name
+      String numbered = finalFileName;
+      final ext = p.extension(finalFileName);
+      final base = p.basenameWithoutExtension(finalFileName);
+      var counter = 1;
+      final existingNames = downloadProvider.tasks.map((t) => t.fileName.toLowerCase()).toSet();
+      while (existingNames.contains(numbered.toLowerCase())) {
+        numbered = '${base}_$counter$ext';
+        counter++;
+      }
+      finalFileName = numbered;
+
+      // 4. Category
+      String category;
+      if (widget.type == 'video') {
+        category = 'Video';
+      } else if (widget.type == 'audio') {
+        category = 'Audio';
+      } else if (widget.type == 'image') {
+        category = 'Image';
+      } else {
+        category = categoryFromFileName(finalFileName);
+      }
+
+      // 5. Fire
       await downloadProvider.addDownload(
         name: finalFileName,
         url: widget.url,
@@ -481,7 +484,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
           ThemedSnackbar.show(
             context,
             message: isRtl
-                ? 'ØªÙ… Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø§ØªØµØ§Ù„. Ø§Ù„Ù‚Ù†ÙˆØ§Øª Ù…ØªØµÙ„Ø©.'
+                ? 'تم إنشاء الاتصال. القنوات متصلة.'
                 : 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
             color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             icon: Icons.rocket_launch_outlined,
@@ -494,11 +497,13 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
         ThemedSnackbar.show(
           context,
           message: e.toString(),
-          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          color: settingsProvider.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
           icon: Icons.error_outline,
-          isDarkMode: isDark,
+          isDarkMode: settingsProvider.isDarkMode,
         );
       }
+    } finally {
+      _isSubmitting = false;
     }
     if (context.mounted) Navigator.pop(context);
   }

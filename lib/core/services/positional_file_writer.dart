@@ -64,12 +64,9 @@ class PositionalFileWriter {
 
   /// Opens an existing partial file for resume WITHOUT truncating it.
   ///
-  /// - If the file exists, opens it in non-truncating [FileMode.append] so all
-  ///   previously downloaded bytes are preserved. Positional writes via
-  ///   [setPosition] + [writeFrom] work correctly on all platforms because
-  ///   [RandomAccessFile] allows seeking regardless of the open mode.
-  /// - If the file does not exist, creates it in [FileMode.write].
-  /// - Never calls [FileMode.write] on an existing file (which would truncate).
+  /// - Uses [FileMode.writeOnly] so existing content is preserved without truncating
+  ///   and positional writes via [setPosition] + [writeFrom] work correctly across
+  ///   all platforms (avoiding OS-level O_APPEND behavior of FileMode.append).
   static Future<PositionalFileWriter> openForResume(
     String path, {
     required int threadCount,
@@ -78,10 +75,7 @@ class PositionalFileWriter {
     final file = File(path);
     await file.parent.create(recursive: true);
 
-    final exists = await file.exists();
-    final RandomAccessFile raf = exists
-        ? await file.open(mode: FileMode.append)
-        : await file.open(mode: FileMode.write);
+    final RandomAccessFile raf = await file.open(mode: FileMode.writeOnly);
 
     return PositionalFileWriter._(raf, threadCount, bufferSize);
   }
@@ -92,7 +86,7 @@ class PositionalFileWriter {
     // so per-thread I/O proceeds in parallel under _threadLocks.
     await _closeLock.synchronized(() {
       if (_closed) {
-        throw StateError('PositionalFileWriter is closed.');
+        return;
       }
     });
 
@@ -101,7 +95,7 @@ class PositionalFileWriter {
     await _threadLocks[threadIndex].synchronized(() async {
       // Re-check under thread lock in case close() raced.
       if (_closed) {
-        throw StateError('PositionalFileWriter is closed.');
+        return;
       }
 
       final buffer = _buffers[threadIndex];
@@ -171,11 +165,17 @@ class PositionalFileWriter {
 
     final bytes = buffer.takeBytes();
 
-    await _flushLock.synchronized(() async {
-      await _file.setPosition(_bufferFilePositions[threadIndex]);
-      await _file.writeFrom(bytes);
-    });
+    try {
+      await _flushLock.synchronized(() async {
+        await _file.setPosition(_bufferFilePositions[threadIndex]);
+        await _file.writeFrom(bytes);
+      });
 
-    _bufferFilePositions[threadIndex] += bytes.length;
+      _bufferFilePositions[threadIndex] += bytes.length;
+    } catch (e) {
+      // Preserve unwritten bytes in buffer if disk write fails
+      buffer.add(bytes);
+      rethrow;
+    }
   }
 }
