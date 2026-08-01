@@ -75,27 +75,24 @@ class PositionalFileWriter {
     final file = File(path);
     await file.parent.create(recursive: true);
 
-    final RandomAccessFile raf = await file.open(mode: FileMode.writeOnly);
+    final RandomAccessFile raf = await file.open(mode: FileMode.append);
 
     return PositionalFileWriter._(raf, threadCount, bufferSize);
   }
 
   /// Writes [data] at [filePosition] for [threadIndex].
   Future<void> write(int threadIndex, int filePosition, Uint8List data) async {
-    // FIX(R1): Brief closed-state check under _closeLock, then release immediately
-    // so per-thread I/O proceeds in parallel under _threadLocks.
     await _closeLock.synchronized(() {
       if (_closed) {
-        return;
+        throw StateError('PositionalFileWriter is closed');
       }
     });
 
     if (data.isEmpty) return;
 
     await _threadLocks[threadIndex].synchronized(() async {
-      // Re-check under thread lock in case close() raced.
       if (_closed) {
-        return;
+        throw StateError('PositionalFileWriter is closed');
       }
 
       final buffer = _buffers[threadIndex];

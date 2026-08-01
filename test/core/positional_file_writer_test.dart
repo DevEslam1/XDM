@@ -37,6 +37,7 @@ void main() {
       }
       await writer.write(0, writeOffset, newData);
       await writer.flushAll();
+      await writer.close();
 
       // 4. Assert bytes 0-512 KB are unchanged (not zeroed).
       final fileAfter = File(filePath);
@@ -56,8 +57,6 @@ void main() {
 
       // 6. Assert file length is still 1 MB.
       expect(await fileAfter.length(), fileSize);
-
-      await writer.close();
       await fileAfter.delete();
     });
 

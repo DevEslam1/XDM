@@ -409,14 +409,14 @@ class DownloadTask {
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
     } else if (rawChunks.length > threadCount) {
-      // Thread count changed: discard stale chunk progress to avoid corrupting
-      // byte offsets on resume. The download will restart from scratch.
-      chunks = List<double>.filled(threadCount, 0.0);
+      final totalSum = rawChunks.fold<double>(0.0, (s, c) => s + c);
+      final perChunk = (totalSum / threadCount).clamp(0.0, 1.0);
+      chunks = List<double>.filled(threadCount, perChunk);
       if (kDebugMode) {
         debugPrint(
           'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
           'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Discarding stale progress to avoid offset corruption.',
+          'Redistributing progress to $perChunk per chunk.',
         );
       }
     } else {

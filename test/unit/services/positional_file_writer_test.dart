@@ -11,9 +11,11 @@ void main() {
     tempDir = Directory.systemTemp.createTempSync('pos_writer_test_');
   });
 
-  tearDown(() {
+  tearDown(() async {
     if (tempDir.existsSync()) {
-      tempDir.deleteSync(recursive: true);
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {}
     }
   });
 
