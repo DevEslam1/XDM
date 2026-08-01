@@ -301,6 +301,18 @@ const Map<String, String> enTranslations = {
   'browser_continue_browsing': 'CONTINUE BROWSING',
   'browser_download_btn': 'DOWNLOAD',
 
+  // Browser – redirect guard sheet
+  'redirect_intercepted': 'Redirect Intercepted',
+  'redirect_subtitle': 'Page is redirecting to an external site',
+  'redirect_from': 'From:',
+  'redirect_to': 'To:',
+  'redirect_new_tab': 'Open in New Tab',
+  'redirect_in_background': 'In Background',
+  'redirect_always_new_tab': 'Always Open in New Tab',
+  'redirect_allow_same_tab': 'Allow redirect in current tab',
+  'redirect_dismiss_hint': 'Swipe down or tap outside to block redirect',
+  'redirect_bg_opened': 'Opened tab in background',
+
   // Browser – quality / media picker
   'browser_select_video_quality': 'SELECT VIDEO QUALITY',
   'browser_alternative_stream': 'Alternative Stream',

@@ -121,9 +121,8 @@ class DownloadInterceptor {
     final ext = p.extension(finalFileName);
     final base = p.basenameWithoutExtension(finalFileName);
     var counter = 1;
-    while (downloadProvider.tasks.any(
-      (t) => t.fileName.toLowerCase() == numberedName.toLowerCase(),
-    )) {
+    final existingNames = downloadProvider.tasks.map((t) => t.fileName.toLowerCase()).toSet();
+    while (existingNames.contains(numberedName.toLowerCase())) {
       numberedName = '${base}_$counter$ext';
       counter++;
     }

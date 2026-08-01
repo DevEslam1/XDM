@@ -381,21 +381,34 @@ class DownloadTask {
     };
   }
 
+  static DateTime _parseFlexDate(dynamic value, {DateTime? fallback}) {
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    if (value is String && value.isNotEmpty) {
+      final intVal = int.tryParse(value);
+      if (intVal != null) return DateTime.fromMillisecondsSinceEpoch(intVal);
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return fallback ?? DateTime.now();
+  }
+
+  static DateTime? _parseNullableFlexDate(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    if (value is num) return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    if (value is String && value.isNotEmpty) {
+      final intVal = int.tryParse(value);
+      if (intVal != null) return DateTime.fromMillisecondsSinceEpoch(intVal);
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
   factory DownloadTask.fromMap(Map<String, dynamic> map) {
-    final statusName = map['status'] as String? ?? DownloadStatus.paused.name;
+    final statusName = map['status'] as String? ?? 'paused';
     final matched = DownloadStatus.values.where((v) => v.name == statusName);
-    final status = matched.isNotEmpty
-        ? matched.first
-        : (() {
-            if (kDebugMode) {
-              debugPrint(
-                'DownloadTask.fromMap: unknown status "$statusName" for task '
-                '${map['id']}; defaulting to paused to avoid silently resuming a '
-                'potentially corrupt task.',
-              );
-            }
-            return DownloadStatus.paused;
-          })();
+    final status = matched.isNotEmpty ? matched.first : DownloadStatus.paused;
     final rawChunks =
         (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
             .map((value) => (value as num?)?.toDouble().clamp(0.0, 1.0) ?? 0.0)
@@ -449,14 +462,10 @@ class DownloadTask {
         statusMessage: map['statusMessage'] as String?,
         threadCount: threadCount,
         chunks: chunks,
-        createdAt:
-            DateTime.tryParse(map['createdAt'] as String? ?? '') ??
-            DateTime.now(),
-        updatedAt:
-            DateTime.tryParse(map['updatedAt'] as String? ?? '') ??
-            DateTime.now(),
-        completedAt: DateTime.tryParse(map['completedAt'] as String? ?? ''),
-        scheduledAt: DateTime.tryParse(map['scheduledAt'] as String? ?? ''),
+        createdAt: _parseFlexDate(map['createdAt']),
+        updatedAt: _parseFlexDate(map['updatedAt']),
+        completedAt: _parseNullableFlexDate(map['completedAt']),
+        scheduledAt: _parseNullableFlexDate(map['scheduledAt']),
         supportsResume: map['supportsResume'] as bool? ?? false,
         speedLimitKbps: (map['speedLimitKbps'] as num?)?.toInt() ?? 0,
         seedingEnabled: map['seedingEnabled'] as bool? ?? false,
@@ -508,14 +517,10 @@ class DownloadTask {
       statusMessage: map['statusMessage'] as String?,
       threadCount: threadCount,
       chunks: chunks,
-      createdAt:
-          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
-          DateTime.now(),
-      updatedAt:
-          DateTime.tryParse(map['updatedAt'] as String? ?? '') ??
-          DateTime.now(),
-      completedAt: DateTime.tryParse(map['completedAt'] as String? ?? ''),
-      scheduledAt: DateTime.tryParse(map['scheduledAt'] as String? ?? ''),
+      createdAt: _parseFlexDate(map['createdAt']),
+      updatedAt: _parseFlexDate(map['updatedAt']),
+      completedAt: _parseNullableFlexDate(map['completedAt']),
+      scheduledAt: _parseNullableFlexDate(map['scheduledAt']),
       supportsResume: map['supportsResume'] as bool? ?? false,
       speedLimitKbps: (map['speedLimitKbps'] as num?)?.toInt() ?? 0,
       seedingEnabled: map['seedingEnabled'] as bool? ?? false,

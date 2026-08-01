@@ -34,11 +34,9 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
       setState(() {
         _bookmarks = bms;
       });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _bookmarks = [];
-      });
+    } catch (e) {
+      debugPrint('[BookmarkManager] Failed to load bookmarks: $e');
+      if (mounted) setState(() => _bookmarks = []);
     }
   }
 
@@ -84,9 +82,13 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
   }
 
   Future<void> _delete(Bookmark bm) async {
-    final db = context.read<DatabaseService>();
-    await db.deleteBookmark(bm.id);
-    _load();
+    try {
+      final db = context.read<DatabaseService>();
+      await db.deleteBookmark(bm.id);
+      await _load();
+    } catch (e) {
+      debugPrint('[BookmarkManager] Failed to delete bookmark: $e');
+    }
   }
 
   @override

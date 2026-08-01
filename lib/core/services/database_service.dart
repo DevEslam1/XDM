@@ -547,6 +547,7 @@ class DatabaseService {
       isAppUpdate: drift.Value(task.isAppUpdate),
       priority: drift.Value(task.priority),
       expectedSha256: drift.Value(task.expectedSha256),
+      mirrorUrls: drift.Value(task.mirrorUrls),
     );
   }
 
@@ -627,6 +628,7 @@ class DatabaseService {
       isAppUpdate: row.isAppUpdate,
       priority: row.priority,
       expectedSha256: row.expectedSha256,
+      mirrorUrls: row.mirrorUrls,
     );
   }
 
@@ -792,13 +794,7 @@ class DatabaseService {
   }
 
   Future<List<SavedBrowserTab>> loadAndClearOpenTabs() async {
-    return _db.transaction(() async {
-      final tabs = await (_db.select(
-        _db.browserTabs,
-      )..orderBy([(t) => drift.OrderingTerm.asc(t.position)])).get();
-      await _db.delete(_db.browserTabs).go();
-      return tabs;
-    });
+    return loadOpenTabs();
   }
 
   Future<List<SavedBrowserTab>> loadOpenTabs() {

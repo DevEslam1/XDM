@@ -161,7 +161,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       final h = await db.loadBrowserHistory();
       if (!mounted) return;
       setState(() => _surfingHistory = h);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[HistorySheet] Error: $e');
       if (!mounted) return;
       setState(() => _surfingHistory = []);
     }
@@ -172,7 +173,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       final db = context.read<DatabaseService>();
       await db.deleteBrowserHistory(id);
       _loadSurfingHistory();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[HistorySheet] Error: $e');
+    }
   }
 
   Future<void> _clearAllSurfingHistory() async {
@@ -180,7 +183,9 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       final db = context.read<DatabaseService>();
       await db.clearBrowserHistory();
       _loadSurfingHistory();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[HistorySheet] Error: $e');
+    }
   }
 
   @override

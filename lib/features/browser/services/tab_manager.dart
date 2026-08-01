@@ -152,9 +152,9 @@ class TabManager {
         final List<BrowserTab> loadedTabs = [];
         for (final item in decoded) {
           if (item is Map<String, dynamic>) {
-            final url = item['url'] as String? ?? 'about:blank';
-            final title = item['title'] as String? ?? restoredTitle;
-            final id = item['id'] as String?;
+            final url = item['url']?.toString() ?? 'about:blank';
+            final title = item['title']?.toString() ?? restoredTitle;
+            final id = item['id']?.toString();
             final isIncognito = item['isIncognito'] as bool? ?? false;
             if (isIncognito) continue; // Skip any incognito tabs (defensive)
             final uri = Uri.tryParse(url);

@@ -192,26 +192,24 @@ mixin DownloadBackupMixin {
           return false;
         }
       }
+      final newTasks = <DownloadTask>[];
+      for (final item in list) {
+        final Map<String, dynamic> map = Map<String, dynamic>.from(item as Map);
+        final task = DownloadTask.fromMap(map);
+        if (replace || !providerTasks.any((t) => t.id == task.id)) {
+          newTasks.add(task);
+        }
+      }
 
       if (replace) {
         await providerDatabaseService.clearAllTasks();
         providerTasks.clear();
+      }
+
+      if (newTasks.isNotEmpty) {
+        providerTasks.addAll(newTasks);
         filteredTasksDirty = true;
-      }
-
-      var hasChanges = false;
-      for (final item in list) {
-        final Map<String, dynamic> map = Map<String, dynamic>.from(item as Map);
-        final task = DownloadTask.fromMap(map);
-        if (!providerTasks.any((t) => t.id == task.id)) {
-          providerTasks.add(task);
-          filteredTasksDirty = true;
-          await providerDatabaseService.saveTask(task);
-          hasChanges = true;
-        }
-      }
-
-      if (hasChanges || replace) {
+        await providerDatabaseService.saveTasks(newTasks);
         notifyListeners();
         updateTelemetryWidget();
       }
@@ -226,25 +224,22 @@ mixin DownloadBackupMixin {
   // Import from other download managers
   // ---------------------------------------------------------------------------
 
-  Future<int> importFromAria2(String filePath) async {
-    int count = 0;
+  Future<int> importFromAria2(String inputPath) async {
     try {
-      final file = File(filePath);
+      final file = File(inputPath);
       if (!await file.exists()) return 0;
       final lines = await file.readAsLines();
+      final newTasks = <DownloadTask>[];
       for (final line in lines) {
         final trimmed = line.trim();
         if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-        final uri = Uri.tryParse(trimmed);
-        if (uri != null &&
-            (uri.scheme == 'http' ||
-                uri.scheme == 'https' ||
-                uri.scheme == 'magnet')) {
+        final url = trimmed.split('\t').first.trim();
+        if (url.startsWith('http://') || url.startsWith('https://')) {
           final id = const Uuid().v4();
-          final fileName = fileNameFromUrl(trimmed);
+          final fileName = fileNameFromUrl(url);
           final task = DownloadTask(
             id: id,
-            url: trimmed,
+            url: url,
             fileName: fileName,
             fileSize: 0,
             downloadedBytes: 0,
@@ -258,30 +253,31 @@ mixin DownloadBackupMixin {
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
           );
-          providerTasks.add(task);
-          await providerDatabaseService.saveTask(task);
-          count++;
+          newTasks.add(task);
         }
       }
-      if (count > 0) {
+      if (newTasks.isNotEmpty) {
+        providerTasks.addAll(newTasks);
+        await providerDatabaseService.saveTasks(newTasks);
         filteredTasksDirty = true;
         notifyListeners();
         updateTelemetryWidget();
       }
+      return newTasks.length;
     } catch (e) {
       debugPrint('[DMX] Failed to import from aria2: $e');
+      return 0;
     }
-    return count;
   }
 
   Future<int> importFromIdm(String filePath) async {
-    int count = 0;
     try {
       final file = File(filePath);
       if (!await file.exists()) return 0;
       final content = await file.readAsString();
       final urlRegex = RegExp(r'(https?://\S+)', caseSensitive: false);
       final matches = urlRegex.allMatches(content);
+      final newTasks = <DownloadTask>[];
       for (final match in matches) {
         final url = match.group(1)!;
         final id = const Uuid().v4();
@@ -302,26 +298,27 @@ mixin DownloadBackupMixin {
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
-        providerTasks.add(task);
-        await providerDatabaseService.saveTask(task);
-        count++;
+        newTasks.add(task);
       }
-      if (count > 0) {
+      if (newTasks.isNotEmpty) {
+        providerTasks.addAll(newTasks);
+        await providerDatabaseService.saveTasks(newTasks);
         filteredTasksDirty = true;
         notifyListeners();
         updateTelemetryWidget();
       }
+      return newTasks.length;
     } catch (e) {
       debugPrint('[DMX] Failed to import from IDM: $e');
+      return 0;
     }
-    return count;
   }
 
   Future<int> importFromJdownloader(String folderPath) async {
-    int count = 0;
     try {
       final dir = Directory(folderPath);
       if (!await dir.exists()) return 0;
+      final newTasks = <DownloadTask>[];
       await for (final entity in dir.list()) {
         if (entity is File && entity.path.endsWith('.crawljob')) {
           final content = await entity.readAsString();
@@ -349,20 +346,21 @@ mixin DownloadBackupMixin {
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
             );
-            providerTasks.add(task);
-            await providerDatabaseService.saveTask(task);
-            count++;
+            newTasks.add(task);
           }
         }
       }
-      if (count > 0) {
+      if (newTasks.isNotEmpty) {
+        providerTasks.addAll(newTasks);
+        await providerDatabaseService.saveTasks(newTasks);
         filteredTasksDirty = true;
         notifyListeners();
         updateTelemetryWidget();
       }
+      return newTasks.length;
     } catch (e) {
       debugPrint('[DMX] Failed to import from JDownloader: $e');
+      return 0;
     }
-    return count;
   }
 }

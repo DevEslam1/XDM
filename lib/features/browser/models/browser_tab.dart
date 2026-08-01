@@ -54,4 +54,10 @@ class BrowserTab {
     final d = domain;
     return d.isNotEmpty ? d : url;
   }
+
+  void dispose() {
+    try {
+      progressNotifier.dispose();
+    } catch (_) {}
+  }
 }

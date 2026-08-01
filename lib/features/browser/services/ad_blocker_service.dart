@@ -57,7 +57,8 @@ class AdBlockerService {
     }
 
     // Extract host from URL for exact domain matching
-    final uri = Uri.tryParse(lower);
+    final normalized = lower.startsWith('http://') || lower.startsWith('https://') ? lower : 'https://$lower';
+    final uri = Uri.tryParse(normalized);
     final host = uri?.host ?? '';
     if (host.isEmpty) {
       // Fallback to substring match if URL can't be parsed

@@ -28,7 +28,6 @@ class BrowserHistoryManager {
 
   String? _lastHistoryEntryUrl;
   int? _lastHistoryEntryId;
-  String? _pendingTitleUpdate;
 
   void recordHistory(String url, {String? title}) {
     if (url.isEmpty || url == 'about:blank') return;
@@ -40,40 +39,37 @@ class BrowserHistoryManager {
         if (_lastHistoryEntryId != null) {
           try {
             final db = resolveDatabase();
-            db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title);
+            db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title).catchError((e) {
+              debugPrint('[HistoryManager] Title update error: $e');
+            });
           } catch (e) {
             debugPrint(
               '[DMX Browser] Failed to update browser history title: $e',
             );
           }
-        } else {
-          _pendingTitleUpdate = title;
         }
       }
       return;
     }
     _lastHistoryEntryUrl = clean;
     _lastHistoryEntryId = null;
-    _pendingTitleUpdate = title;
+    final titleToRecord = (title != null && title.isNotEmpty) ? title : clean;
     try {
       final db = resolveDatabase();
       db
           .addBrowserHistory({
             'url': clean,
-            'title': (title != null && title.isNotEmpty) ? title : clean,
+            'title': titleToRecord,
             'visitedAt': now.millisecondsSinceEpoch,
           })
           .then((id) {
             if (!isActive()) return;
             if (clean == _lastHistoryEntryUrl && id > 0) {
               _lastHistoryEntryId = id;
-              if (_pendingTitleUpdate != null &&
-                  _pendingTitleUpdate!.isNotEmpty &&
-                  _pendingTitleUpdate != clean) {
-                db.updateBrowserHistoryTitle(id, _pendingTitleUpdate!);
-              }
             }
-          });
+          }).catchError((e) {
+        debugPrint('[HistoryManager] Failed to record history: $e');
+      });
     } catch (e) {
       debugPrint('[DMX Browser] Failed to add browser history: $e');
     }

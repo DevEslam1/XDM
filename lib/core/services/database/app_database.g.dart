@@ -446,6 +446,15 @@ class $DownloadTasksTable extends DownloadTasks
     requiredDuringInsert: false,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<List<String>?, String>
+  mirrorUrls = GeneratedColumn<String>(
+    'mirror_urls',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  ).withConverter<List<String>?>($DownloadTasksTable.$convertermirrorUrls);
+  @override
   List<GeneratedColumn> get $columns => [
     id,
     fileName,
@@ -485,6 +494,7 @@ class $DownloadTasksTable extends DownloadTasks
     isAppUpdate,
     priority,
     expectedSha256,
+    mirrorUrls,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -961,6 +971,12 @@ class $DownloadTasksTable extends DownloadTasks
         DriftSqlType.string,
         data['${effectivePrefix}expected_sha256'],
       ),
+      mirrorUrls: $DownloadTasksTable.$convertermirrorUrls.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}mirror_urls'],
+        ),
+      ),
     );
   }
 
@@ -975,6 +991,8 @@ class $DownloadTasksTable extends DownloadTasks
   $convertertorrentFiles = const NullAwareTypeConverter.wrap(
     TorrentFilesConverter(),
   );
+  static TypeConverter<List<String>?, String?> $convertermirrorUrls =
+      const NullAwareTypeConverter.wrap(StringListConverter());
 }
 
 class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
@@ -1016,6 +1034,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final bool isAppUpdate;
   final int priority;
   final String? expectedSha256;
+  final List<String>? mirrorUrls;
   const DbDownloadTask({
     required this.id,
     required this.fileName,
@@ -1055,6 +1074,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     required this.isAppUpdate,
     required this.priority,
     this.expectedSha256,
+    this.mirrorUrls,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1129,6 +1149,11 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     if (!nullToAbsent || expectedSha256 != null) {
       map['expected_sha256'] = Variable<String>(expectedSha256);
     }
+    if (!nullToAbsent || mirrorUrls != null) {
+      map['mirror_urls'] = Variable<String>(
+        $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls),
+      );
+    }
     return map;
   }
 
@@ -1198,6 +1223,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       expectedSha256: expectedSha256 == null && nullToAbsent
           ? const Value.absent()
           : Value(expectedSha256),
+      mirrorUrls: mirrorUrls == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mirrorUrls),
     );
   }
 
@@ -1249,6 +1277,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       isAppUpdate: serializer.fromJson<bool>(json['isAppUpdate']),
       priority: serializer.fromJson<int>(json['priority']),
       expectedSha256: serializer.fromJson<String?>(json['expectedSha256']),
+      mirrorUrls: serializer.fromJson<List<String>?>(json['mirrorUrls']),
     );
   }
   @override
@@ -1295,6 +1324,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'isAppUpdate': serializer.toJson<bool>(isAppUpdate),
       'priority': serializer.toJson<int>(priority),
       'expectedSha256': serializer.toJson<String?>(expectedSha256),
+      'mirrorUrls': serializer.toJson<List<String>?>(mirrorUrls),
     };
   }
 
@@ -1337,6 +1367,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     bool? isAppUpdate,
     int? priority,
     Value<String?> expectedSha256 = const Value.absent(),
+    Value<List<String>?> mirrorUrls = const Value.absent(),
   }) => DbDownloadTask(
     id: id ?? this.id,
     fileName: fileName ?? this.fileName,
@@ -1386,6 +1417,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     expectedSha256: expectedSha256.present
         ? expectedSha256.value
         : this.expectedSha256,
+    mirrorUrls: mirrorUrls.present ? mirrorUrls.value : this.mirrorUrls,
   );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
@@ -1473,6 +1505,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       expectedSha256: data.expectedSha256.present
           ? data.expectedSha256.value
           : this.expectedSha256,
+      mirrorUrls: data.mirrorUrls.present
+          ? data.mirrorUrls.value
+          : this.mirrorUrls,
     );
   }
 
@@ -1516,7 +1551,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('thumbnailUrl: $thumbnailUrl, ')
           ..write('isAppUpdate: $isAppUpdate, ')
           ..write('priority: $priority, ')
-          ..write('expectedSha256: $expectedSha256')
+          ..write('expectedSha256: $expectedSha256, ')
+          ..write('mirrorUrls: $mirrorUrls')
           ..write(')'))
         .toString();
   }
@@ -1561,6 +1597,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     isAppUpdate,
     priority,
     expectedSha256,
+    mirrorUrls,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -1603,7 +1640,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.thumbnailUrl == this.thumbnailUrl &&
           other.isAppUpdate == this.isAppUpdate &&
           other.priority == this.priority &&
-          other.expectedSha256 == this.expectedSha256);
+          other.expectedSha256 == this.expectedSha256 &&
+          other.mirrorUrls == this.mirrorUrls);
 }
 
 class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
@@ -1645,6 +1683,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<bool> isAppUpdate;
   final Value<int> priority;
   final Value<String?> expectedSha256;
+  final Value<List<String>?> mirrorUrls;
   final Value<int> rowid;
   const DownloadTasksCompanion({
     this.id = const Value.absent(),
@@ -1685,6 +1724,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.isAppUpdate = const Value.absent(),
     this.priority = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
+    this.mirrorUrls = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   DownloadTasksCompanion.insert({
@@ -1726,6 +1766,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.isAppUpdate = const Value.absent(),
     this.priority = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
+    this.mirrorUrls = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        fileName = Value(fileName),
@@ -1777,6 +1818,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<bool>? isAppUpdate,
     Expression<int>? priority,
     Expression<String>? expectedSha256,
+    Expression<String>? mirrorUrls,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1819,6 +1861,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (isAppUpdate != null) 'is_app_update': isAppUpdate,
       if (priority != null) 'priority': priority,
       if (expectedSha256 != null) 'expected_sha256': expectedSha256,
+      if (mirrorUrls != null) 'mirror_urls': mirrorUrls,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1862,6 +1905,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Value<bool>? isAppUpdate,
     Value<int>? priority,
     Value<String?>? expectedSha256,
+    Value<List<String>?>? mirrorUrls,
     Value<int>? rowid,
   }) {
     return DownloadTasksCompanion(
@@ -1903,6 +1947,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       priority: priority ?? this.priority,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
+      mirrorUrls: mirrorUrls ?? this.mirrorUrls,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2030,6 +2075,11 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (expectedSha256.present) {
       map['expected_sha256'] = Variable<String>(expectedSha256.value);
     }
+    if (mirrorUrls.present) {
+      map['mirror_urls'] = Variable<String>(
+        $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls.value),
+      );
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2077,6 +2127,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('isAppUpdate: $isAppUpdate, ')
           ..write('priority: $priority, ')
           ..write('expectedSha256: $expectedSha256, ')
+          ..write('mirrorUrls: $mirrorUrls, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3193,6 +3244,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder =
       Value<bool> isAppUpdate,
       Value<int> priority,
       Value<String?> expectedSha256,
+      Value<List<String>?> mirrorUrls,
       Value<int> rowid,
     });
 typedef $$DownloadTasksTableUpdateCompanionBuilder =
@@ -3235,6 +3287,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder =
       Value<bool> isAppUpdate,
       Value<int> priority,
       Value<String?> expectedSha256,
+      Value<List<String>?> mirrorUrls,
       Value<int> rowid,
     });
 
@@ -3442,6 +3495,12 @@ class $$DownloadTasksTableFilterComposer
     column: $table.expectedSha256,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
+  get mirrorUrls => $composableBuilder(
+    column: $table.mirrorUrls,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -3642,6 +3701,11 @@ class $$DownloadTasksTableOrderingComposer
     column: $table.expectedSha256,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get mirrorUrls => $composableBuilder(
+    column: $table.mirrorUrls,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3813,6 +3877,12 @@ class $$DownloadTasksTableAnnotationComposer
     column: $table.expectedSha256,
     builder: (column) => column,
   );
+
+  GeneratedColumnWithTypeConverter<List<String>?, String> get mirrorUrls =>
+      $composableBuilder(
+        column: $table.mirrorUrls,
+        builder: (column) => column,
+      );
 }
 
 class $$DownloadTasksTableTableManager
@@ -3885,6 +3955,7 @@ class $$DownloadTasksTableTableManager
                 Value<bool> isAppUpdate = const Value.absent(),
                 Value<int> priority = const Value.absent(),
                 Value<String?> expectedSha256 = const Value.absent(),
+                Value<List<String>?> mirrorUrls = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion(
                 id: id,
@@ -3925,6 +3996,7 @@ class $$DownloadTasksTableTableManager
                 isAppUpdate: isAppUpdate,
                 priority: priority,
                 expectedSha256: expectedSha256,
+                mirrorUrls: mirrorUrls,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3968,6 +4040,7 @@ class $$DownloadTasksTableTableManager
                 Value<bool> isAppUpdate = const Value.absent(),
                 Value<int> priority = const Value.absent(),
                 Value<String?> expectedSha256 = const Value.absent(),
+                Value<List<String>?> mirrorUrls = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => DownloadTasksCompanion.insert(
                 id: id,
@@ -4008,6 +4081,7 @@ class $$DownloadTasksTableTableManager
                 isAppUpdate: isAppUpdate,
                 priority: priority,
                 expectedSha256: expectedSha256,
+                mirrorUrls: mirrorUrls,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

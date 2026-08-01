@@ -35,10 +35,12 @@ import '../services/download_interceptor.dart';
 import '../services/history_manager.dart';
 import '../services/media_sniffer.dart';
 import '../services/tab_manager.dart';
+import '../services/redirect_guard.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
 import '../widgets/browser_history_sheet.dart';
 import '../widgets/browser_home_page.dart';
+import '../widgets/redirect_sheet.dart';
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -99,6 +101,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   bool _quitPersisted = false;
   bool _isRestoring = false;
   final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
+  final RedirectGuard _redirectGuard = RedirectGuard.instance;
 
   void _ensureTabsExist() {
     if (_tabs.isEmpty && !_isRestoring) {
@@ -399,6 +402,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     _loadCustomJsCss();
     _dashboardScrollController.addListener(_onDashboardScroll);
     _adBlocker.init();
+    _redirectGuard.init();
   }
 
   @override
@@ -426,7 +430,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         : initialUrl;
     final tabId =
         id ??
-        '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(9999)}';
+        '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(999999)}';
     final controller = WebViewController();
     final tab = BrowserTab(
       id: tabId,
@@ -460,7 +464,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             debugPrint(
               '[Browser] WebResourceError on tab ${tab.id}: ${error.description}',
             );
-            if (mounted) {
+            if (mounted && error.isForMainFrame == true) {
               setState(() {
                 tab.isLoading = false;
                 tab.hasCrashed = true;
@@ -669,6 +673,20 @@ class _BrowserScreenState extends State<BrowserScreen>
               _showInterceptionSheet(context, request.url);
               return NavigationDecision.prevent;
             }
+            if (_redirectGuard.consumeUserInitiated(request.url)) {
+              return NavigationDecision.navigate;
+            }
+            if (_redirectGuard.isAlwaysNewTab(request.url)) {
+              _openInNewTab(request.url, isIncognito: tab.isIncognito);
+              return NavigationDecision.prevent;
+            }
+            if (_redirectGuard.isSuspiciousRedirect(
+              currentTabUrl: tab.url,
+              targetUrl: request.url,
+            )) {
+              _handleRedirectIntercept(tab, request.url);
+              return NavigationDecision.prevent;
+            }
             return NavigationDecision.navigate;
           },
         ),
@@ -821,6 +839,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       return;
     }
     debugPrint('[Browser] Opening popup in new tab: $url');
+    _redirectGuard.markUserInitiated(url);
     setState(() {
       final newTab = _createNewTab(
         initialUrl: url,
@@ -832,6 +851,62 @@ class _BrowserScreenState extends State<BrowserScreen>
       _showBars = true;
     });
     _saveTabs();
+  }
+
+  void _openInNewTab(String url, {bool isIncognito = false, bool switchToTab = false}) {
+    if (!mounted || url.isEmpty) return;
+    _redirectGuard.markUserInitiated(url);
+    setState(() {
+      final newTab = _createNewTab(
+        initialUrl: url,
+        isIncognito: isIncognito,
+      );
+      _tabs.add(newTab);
+      if (switchToTab) {
+        _currentTabIndex = _tabs.length - 1;
+        _urlController.text = url;
+        _showBars = true;
+      }
+    });
+    _saveTabs();
+  }
+
+  Future<void> _handleRedirectIntercept(BrowserTab parentTab, String targetUrl) async {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    triggerHaptic(settings);
+
+    final action = await RedirectSheet.show(
+      context,
+      targetUrl: targetUrl,
+      currentTabUrl: parentTab.url,
+    );
+
+    if (!mounted || action == null) return;
+
+    switch (action) {
+      case RedirectAction.openOnceInNewTab:
+        _openInNewTab(targetUrl, isIncognito: parentTab.isIncognito, switchToTab: true);
+        break;
+      case RedirectAction.openInBackgroundTab:
+        _openInNewTab(targetUrl, isIncognito: parentTab.isIncognito, switchToTab: false);
+        if (!mounted) return;
+        ThemedSnackbar.show(
+          context,
+          message: L10n.of(context, 'redirect_bg_opened'),
+          color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          icon: Icons.tab_unselected_rounded,
+          isDarkMode: settings.isDarkMode,
+        );
+        break;
+      case RedirectAction.alwaysOpenInNewTab:
+        await _redirectGuard.addAlwaysNewTabDomain(targetUrl);
+        _openInNewTab(targetUrl, isIncognito: parentTab.isIncognito, switchToTab: true);
+        break;
+      case RedirectAction.allowInSameTab:
+        _redirectGuard.markUserInitiated(targetUrl);
+        parentTab.controller.loadRequest(Uri.parse(targetUrl));
+        break;
+    }
   }
 
   void _onDashboardScroll() {
@@ -856,6 +931,9 @@ class _BrowserScreenState extends State<BrowserScreen>
       _lastScrollY = y;
     } else if (y - _lastScrollY > 40) {
       if (_showBars) {
+        setState(() {
+          _showBars = false;
+        });
         downloadProvider.setNavbarVisible(false);
       }
       _lastScrollY = y;
@@ -881,19 +959,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
     _loadingTimeoutTimers.clear();
     if (!_quitPersisted && _tabs.isNotEmpty) {
-      final persistable = <SavedBrowserTab>[
-        for (var i = 0; i < _tabs.length; i++)
-          if (!_tabs[i].isIncognito)
-            SavedBrowserTab(
-              id: _tabs[i].id,
-              url: _tabs[i].url.isNotEmpty ? _tabs[i].url : 'about:blank',
-              title: _tabs[i].title,
-              isActive: i == _currentTabIndex,
-              position: i,
-              createdAt: DateTime.now().millisecondsSinceEpoch,
-            ),
-      ];
-      DatabaseService().saveOpenTabs(persistable).catchError((_) {});
+      try {
+        _tabManager.saveTabs();
+      } catch (_) {}
     }
     // Clean up ALL per-tab state maps
     for (final tab in _tabs) {
@@ -1076,6 +1144,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _navigateToUrl(String input) {
     var url = input.trim();
     if (url.isEmpty) return;
+    _redirectGuard.markUserInitiated(url);
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final engine = settings.searchEngine;
     String searchPrefix = 'https://google.com/search?q=';
@@ -1102,7 +1171,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     setState(() {
       activeTab.isHome = false;
     });
-    activeTab.controller.loadRequest(Uri.parse(url));
+    final parsed = Uri.tryParse(url);
+    if (parsed != null) {
+      activeTab.controller.loadRequest(parsed);
+    }
     _delayed(const Duration(milliseconds: 300), _updateNavState);
   }
 

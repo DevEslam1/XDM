@@ -26,17 +26,14 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
         return decoded.map((e) => (e as num).toDouble()).toList();
       }
       final msg =
-          'DoubleListConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+          'DoubleListConverter: unexpected type ${decoded.runtimeType} for input';
       _dbLog.warning(msg);
       lastConversionError.value = msg;
       return [];
     } catch (e) {
-      final msg =
-          'Error decoding DoubleList from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      final msg = 'Error decoding DoubleList from DB: $e';
       _dbLog.warning(msg);
       lastConversionError.value = msg;
-      // Keep the safe empty-list fallback for rendering, but corruption is
-      // reported via lastConversionError so callers can trigger recovery.
       return [];
     }
   }
@@ -60,13 +57,12 @@ class TorrentFilesConverter
         return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       }
       final msg =
-          'TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+          'TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input';
       _dbLog.warning(msg);
       lastConversionError.value = msg;
       return [];
     } catch (e) {
-      final msg =
-          'Error decoding TorrentFiles from DB: $e | raw: ${fromDb.length > 200 ? fromDb.substring(0, 200) : fromDb}';
+      final msg = 'Error decoding TorrentFiles from DB: $e';
       _dbLog.warning(msg);
       lastConversionError.value = msg;
       return [];
@@ -77,6 +73,31 @@ class TorrentFilesConverter
   String toSql(List<Map<String, dynamic>> value) {
     return jsonEncode(value);
   }
+}
+
+class StringListConverter extends TypeConverter<List<String>, String> {
+  const StringListConverter();
+
+  @override
+  List<String> fromSql(String fromDb) {
+    if (fromDb.trim().isEmpty) return [];
+    try {
+      final decoded = jsonDecode(fromDb);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).toList();
+      }
+      _dbLog.warning(
+        'StringListConverter: unexpected type ${decoded.runtimeType} for input',
+      );
+      return [];
+    } catch (e) {
+      _dbLog.warning('Error decoding StringList from DB: $e');
+      return [];
+    }
+  }
+
+  @override
+  String toSql(List<String> value) => jsonEncode(value);
 }
 
 // Tables
@@ -128,6 +149,9 @@ class DownloadTasks extends Table {
   BoolColumn get isAppUpdate => boolean().withDefault(const Constant(false))();
   IntColumn get priority => integer().withDefault(const Constant(0))();
   TextColumn get expectedSha256 => text().nullable()();
+  TextColumn get mirrorUrls => text()
+      .map(const NullAwareTypeConverter.wrap(StringListConverter()))
+      .nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -176,6 +200,7 @@ LazyDatabase _openConnection(String path) {
       file,
       setup: (database) {
         database.execute('PRAGMA journal_mode=WAL;');
+        database.execute('PRAGMA foreign_keys=ON;');
       },
     );
   });
@@ -187,7 +212,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -513,6 +538,12 @@ class AppDatabase extends _$AppDatabase {
             'Migration v10→v11: recovered $badHistoryCount browser history rows stuck at invalid visited_at',
           );
         }
+      }
+      if (from < 12) {
+        // Migration 11 -> 12: Add mirrorUrls column
+        await customStatement(
+          'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT',
+        );
       }
     },
   );

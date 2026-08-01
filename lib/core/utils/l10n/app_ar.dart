@@ -290,6 +290,18 @@ const Map<String, String> arTranslations = {
   'browser_continue_browsing': 'متابعة التصفح',
   'browser_download_btn': 'تحميل',
 
+  // Browser – redirect guard sheet
+  'redirect_intercepted': 'تم كشف تحويل تلقائي',
+  'redirect_subtitle': 'الموقع يحاول توجيهك لصفحة خارجية',
+  'redirect_from': 'من:',
+  'redirect_to': 'إلى:',
+  'redirect_new_tab': 'فتح في تاب جديد',
+  'redirect_in_background': 'في الخلفية',
+  'redirect_always_new_tab': 'دايماً افتح في تاب جديد',
+  'redirect_allow_same_tab': 'اسمح بالتحويل في نفس التابة',
+  'redirect_dismiss_hint': 'سحب للأسفل أو لمس الخارج = إلغاء التحويل',
+  'redirect_bg_opened': 'تم فتح التبويب في الخلفية',
+
   // Browser – quality / media picker
   'browser_select_video_quality': 'اختر جودة الفيديو',
   'browser_alternative_stream': 'بث بديل',
