@@ -57,7 +57,9 @@ class _HomeScreenState extends State<HomeScreen>
       _selectedTab = index;
       selectedSegment = index;
     });
-    context.read<DownloadProvider>().setStatusFilter('All');
+    final provider = context.read<DownloadProvider>();
+    provider.setStatusFilter('All');
+    provider.clearCategoryFilters();
   }
 
   @override

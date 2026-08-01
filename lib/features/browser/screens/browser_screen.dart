@@ -132,6 +132,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   String? _homeReturnUrl;
 
   static const String _longPressChannel = 'XDM_LongPress';
+  static const String _popupsChannel = 'XDM_Popups';
 
   static const String _kTimerSpeedScript = '''
 (function() {
@@ -444,6 +445,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       ..addJavaScriptChannel(
         _longPressChannel,
         onMessageReceived: (msg) => _handleLongPressMessageForTab(tab, msg),
+      )
+      ..addJavaScriptChannel(
+        _popupsChannel,
+        onMessageReceived: (msg) => _handlePopupMessageForTab(tab, msg),
       )
       ..setUserAgent(
         _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
@@ -804,6 +809,31 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
+  void _handlePopupMessageForTab(
+    BrowserTab parentTab,
+    JavaScriptMessage message,
+  ) {
+    if (!mounted) return;
+    final url = message.message.trim();
+    if (url.isEmpty || url == 'about:blank') return;
+    if (_adBlocker.shouldBlock(url)) {
+      debugPrint('[AdBlocker] Blocked popup: $url');
+      return;
+    }
+    debugPrint('[Browser] Opening popup in new tab: $url');
+    setState(() {
+      final newTab = _createNewTab(
+        initialUrl: url,
+        isIncognito: parentTab.isIncognito,
+      );
+      _tabs.add(newTab);
+      _currentTabIndex = _tabs.length - 1;
+      _urlController.text = url;
+      _showBars = true;
+    });
+    _saveTabs();
+  }
+
   void _onDashboardScroll() {
     if (!_dashboardScrollController.hasClients) return;
     final y = _dashboardScrollController.offset;
@@ -1002,10 +1032,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     final activeTab = _tabs[_currentTabIndex];
     if (activeTab.canGoBack) {
       _homeReturnUrl = null;
-      await activeTab.controller.goBack();
-      await Future.delayed(const Duration(milliseconds: 400));
-      if (!mounted) return;
-      await _updateNavState();
+      unawaited(activeTab.controller.goBack());
+      _updateNavState();
     } else if (!activeTab.isHome && activeTab.url.isNotEmpty) {
       if (mounted) {
         _homeReturnUrl = activeTab.url;
@@ -1041,10 +1069,8 @@ class _BrowserScreenState extends State<BrowserScreen>
       _navigateToUrl(returnUrl);
       return;
     }
-    await activeTab.controller.goForward();
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-    await _updateNavState();
+    unawaited(activeTab.controller.goForward());
+    _updateNavState();
   }
 
   void _navigateToUrl(String input) {

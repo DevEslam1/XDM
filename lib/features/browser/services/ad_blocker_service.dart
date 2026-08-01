@@ -264,8 +264,17 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   if (window.__xdmAdBlockEarly) return;
   window.__xdmAdBlockEarly = true;
 
-  /* ── Block window.open popups ── */
-  window.open = function() { return null; };
+  /* ── Route window.open popups to new tabs ── */
+  window.open = function(url) {
+    if (url && typeof url === 'string' && url.trim() !== '' && url !== 'about:blank') {
+      try {
+        if (window.XDM_Popups) {
+          window.XDM_Popups.postMessage(url);
+        }
+      } catch(e) {}
+    }
+    return null;
+  };
 
   /* ── Block alert/confirm/prompt spam ── */
   window.alert = function() {};

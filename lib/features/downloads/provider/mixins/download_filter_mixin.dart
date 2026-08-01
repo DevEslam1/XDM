@@ -156,7 +156,9 @@ mixin DownloadFilterMixin {
               (task.status == DownloadStatus.completed &&
                   task.isTorrent &&
                   task.seedingEnabled),
-        'Completed' => task.status == DownloadStatus.completed,
+        'Completed' =>
+          task.status == DownloadStatus.completed &&
+              !(task.isTorrent && task.seedingEnabled),
         'Failed' => task.status == DownloadStatus.failed,
         'Paused' => task.status == DownloadStatus.paused,
         'Scheduled' => task.status == DownloadStatus.paused && task.scheduledAt != null,

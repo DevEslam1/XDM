@@ -261,6 +261,32 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                             ],
                           ),
                         ),
+                        IconButton(
+                          icon: _isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.refresh_rounded,
+                                  color: accent,
+                                  size: 20,
+                                ),
+                          tooltip: L10n.of(context, 'retry_btn'),
+                          onPressed: _isLoading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _isLoading = true;
+                                    _errorMessage = null;
+                                    _streams = [];
+                                  });
+                                  _fetchStreams();
+                                },
+                        ),
                       ],
                     ),
                   ),
