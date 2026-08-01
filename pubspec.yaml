@@ -19,6 +19,8 @@ dependencies:
   # Networking
   dio: ^5.11.0
   connectivity_plus: ^7.3.1
+  cronet_http: ^1.4.0
+  cupertino_http: ^2.2.0
 
   # Storage / DB
   hive: ^2.2.3

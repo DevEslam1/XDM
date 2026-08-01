@@ -191,4 +191,18 @@ mixin DownloadQueueMixin {
       await mixinResumeAllTasks(superNotify);
     }
   }
+
+  /// Boosts priority of a task (0 -> 1 -> 2) and re-pumps the queue.
+  Future<void> boostTaskPriority(
+    String taskId,
+    Future<void> Function(DownloadTask task) saveTask,
+  ) async {
+    final index = providerTasks.indexWhere((t) => t.id == taskId);
+    if (index == -1) return;
+    final task = providerTasks[index];
+    final newPriority = (task.priority + 1).clamp(0, 2);
+    final updated = task.copyWith(priority: newPriority);
+    await saveTask(updated);
+    pumpQueue();
+  }
 }

@@ -98,42 +98,41 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             leading: const Icon(Icons.play_arrow_rounded, color: Colors.green),
             title: const Text('Resume Selected'),
             onTap: () async {
+              final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
               await provider.resumeMultipleTasks(widget.selectedTaskIds);
-              if (mounted) {
-                Navigator.of(context).pop();
-                widget.onCompleted?.call();
-              }
+              if (!mounted) return;
+              navigator.pop();
+              widget.onCompleted?.call();
             },
           ),
           ListTile(
             leading: const Icon(Icons.pause_rounded, color: Colors.amber),
             title: const Text('Pause Selected'),
             onTap: () async {
+              final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
               await provider.pauseMultipleTasks(widget.selectedTaskIds);
-              if (mounted) {
-                Navigator.of(context).pop();
-                widget.onCompleted?.call();
-              }
+              if (!mounted) return;
+              navigator.pop();
+              widget.onCompleted?.call();
             },
           ),
           ListTile(
             leading: const Icon(Icons.category_rounded, color: Colors.blue),
             title: const Text('Change Category'),
             onTap: () async {
+              final navigator = Navigator.of(context);
+              final provider = context.read<DownloadProvider>();
               final category = await _showCategoryDialog(context);
-              if (category != null && mounted) {
-                final provider = context.read<DownloadProvider>();
-                await provider.changeCategoryForMultipleTasks(
-                  widget.selectedTaskIds,
-                  category,
-                );
-                if (mounted) {
-                  Navigator.of(context).pop();
-                  widget.onCompleted?.call();
-                }
-              }
+              if (!mounted || category == null) return;
+              await provider.changeCategoryForMultipleTasks(
+                widget.selectedTaskIds,
+                category,
+              );
+              if (!mounted) return;
+              navigator.pop();
+              widget.onCompleted?.call();
             },
           ),
           StatefulBuilder(
@@ -158,18 +157,17 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
               style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
             ),
             onTap: () async {
+              final navigator = Navigator.of(context);
+              final provider = context.read<DownloadProvider>();
               final confirm = await _showDeleteConfirmDialog(context, count);
-              if (confirm == true && mounted) {
-                final provider = context.read<DownloadProvider>();
-                await provider.deleteMultipleTasks(
-                  widget.selectedTaskIds,
-                  deleteFiles: _deleteFiles,
-                );
-                if (mounted) {
-                  Navigator.of(context).pop();
-                  widget.onCompleted?.call();
-                }
-              }
+              if (!mounted || confirm != true) return;
+              await provider.deleteMultipleTasks(
+                widget.selectedTaskIds,
+                deleteFiles: _deleteFiles,
+              );
+              if (!mounted) return;
+              navigator.pop();
+              widget.onCompleted?.call();
             },
           ),
         ],

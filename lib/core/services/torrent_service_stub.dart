@@ -29,4 +29,36 @@ class TorrentService {
   static Stream<Map<int, TorrentUpdateInfo>> get torrentUpdates =>
       const Stream.empty();
   static void configureSession(SettingsProvider settings) {}
+
+  static List<TrackerInfo> getTrackers(int torrentId) => [];
+  static void addTracker(int torrentId, String trackerUrl, {int tier = 0}) {}
+  static void removeTracker(int torrentId, String trackerUrl) {}
+  static void announceNow(int torrentId) {}
+  static Future<String?> createTorrent({
+    required String sourcePath,
+    required String outputPath,
+    required List<String> trackers,
+    String comment = '',
+    int pieceSize = 0,
+    bool isPrivate = false,
+  }) async => null;
+  static Future<bool> loadIpFilter(String filePath) async => false;
+}
+
+class TrackerInfo {
+  final String url;
+  final int tier;
+  final String status;
+  final int seeds;
+  final int peers;
+  final String message;
+
+  const TrackerInfo({
+    required this.url,
+    required this.tier,
+    required this.status,
+    required this.seeds,
+    required this.peers,
+    required this.message,
+  });
 }

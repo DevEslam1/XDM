@@ -65,6 +65,13 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       'globalTorrentSeedingLimitKbps';
   static const _enableDhtKey = 'enableDht';
   static const _enableUpnpKey = 'enableUpnp';
+  static const _enableNatPmpKey = 'enableNatPmp';
+  static const _enableLpdKey = 'enableLpd';
+  static const _enablePexKey = 'enablePex';
+  static const _maxActiveTorrentsKey = 'maxActiveTorrents';
+  static const _maxActiveDownloadsKey = 'maxActiveDownloads';
+  static const _maxActiveSeedsKey = 'maxActiveSeeds';
+  static const _queueTorrentsKey = 'queueTorrents';
   static const _forceEncryptKey = 'forceEncrypt';
   static const _torrentConnectionsLimitKey = 'torrentConnectionsLimit';
   static const _sequentialDownloadKey = 'sequentialDownload';
@@ -171,6 +178,13 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   // Advanced Torrent settings
   bool enableDht = true;
   bool enableUpnp = true;
+  bool enableNatPmp = true;
+  bool enableLpd = true;
+  bool enablePex = true;
+  int maxActiveTorrents = 3;
+  int maxActiveDownloads = 2;
+  int maxActiveSeeds = 2;
+  bool queueTorrents = true;
   bool forceEncrypt = false;
   int torrentConnectionsLimit = 200;
 
@@ -178,6 +192,48 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int _maxConcurrentFilesPerTorrent = 0; // 0 = unlimited
   double shareRatioLimit = 2.0;
   int maxSeedingTimeMinutes = 0;
+
+  Future<void> setEnableNatPmp(bool value) async {
+    enableNatPmp = value;
+    await _prefs.setBool(_enableNatPmpKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnableLpd(bool value) async {
+    enableLpd = value;
+    await _prefs.setBool(_enableLpdKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setEnablePex(bool value) async {
+    enablePex = value;
+    await _prefs.setBool(_enablePexKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setMaxActiveTorrents(int value) async {
+    maxActiveTorrents = value.clamp(1, 50);
+    await _prefs.setInt(_maxActiveTorrentsKey, maxActiveTorrents);
+    notifyListeners();
+  }
+
+  Future<void> setMaxActiveDownloads(int value) async {
+    maxActiveDownloads = value.clamp(1, 20);
+    await _prefs.setInt(_maxActiveDownloadsKey, maxActiveDownloads);
+    notifyListeners();
+  }
+
+  Future<void> setMaxActiveSeeds(int value) async {
+    maxActiveSeeds = value.clamp(0, 20);
+    await _prefs.setInt(_maxActiveSeedsKey, maxActiveSeeds);
+    notifyListeners();
+  }
+
+  Future<void> setQueueTorrents(bool value) async {
+    queueTorrents = value;
+    await _prefs.setBool(_queueTorrentsKey, value);
+    notifyListeners();
+  }
 
   // FIX(3): Max concurrent files per torrent setting
   int get maxConcurrentFilesPerTorrent => _maxConcurrentFilesPerTorrent;
@@ -291,6 +347,15 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
         globalTorrentSeedingLimitKbps;
     enableDht = _prefs.getBool(_enableDhtKey) ?? enableDht;
     enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
+    enableNatPmp = _prefs.getBool(_enableNatPmpKey) ?? enableNatPmp;
+    enableLpd = _prefs.getBool(_enableLpdKey) ?? enableLpd;
+    enablePex = _prefs.getBool(_enablePexKey) ?? enablePex;
+    maxActiveTorrents =
+        _prefs.getInt(_maxActiveTorrentsKey) ?? maxActiveTorrents;
+    maxActiveDownloads =
+        _prefs.getInt(_maxActiveDownloadsKey) ?? maxActiveDownloads;
+    maxActiveSeeds = _prefs.getInt(_maxActiveSeedsKey) ?? maxActiveSeeds;
+    queueTorrents = _prefs.getBool(_queueTorrentsKey) ?? queueTorrents;
     forceEncrypt = _prefs.getBool(_forceEncryptKey) ?? forceEncrypt;
     torrentConnectionsLimit =
         (_prefs.getInt(_torrentConnectionsLimitKey) ?? torrentConnectionsLimit)

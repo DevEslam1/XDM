@@ -559,4 +559,115 @@ class TorrentService {
   static void configureSession(SettingsProvider settings) {
     _configureSessionFromSettings();
   }
+
+  // ---------------------------------------------------------------------------
+  // Trackers, Torrent Creation & IP Filtering
+  // ---------------------------------------------------------------------------
+  static List<TrackerInfo> getTrackers(int torrentId) {
+    if (!isInitialized || torrentId < 0) return [];
+    try {
+      // ignore: avoid_dynamic_calls
+      final raw = (LibtorrentFlutter.instance as dynamic).getTrackers(torrentId) as List<dynamic>?;
+      if (raw == null) return [];
+      return raw.map((t) {
+        final map = t as Map<String, dynamic>;
+        return TrackerInfo(
+          url: map['url'] as String? ?? '',
+          tier: (map['tier'] as num?)?.toInt() ?? 0,
+          status: map['status'] as String? ?? 'working',
+          seeds: (map['seeds'] as num?)?.toInt() ?? 0,
+          peers: (map['peers'] as num?)?.toInt() ?? 0,
+          message: map['message'] as String? ?? '',
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static void addTracker(int torrentId, String trackerUrl, {int tier = 0}) {
+    if (!isInitialized || torrentId < 0) return;
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic).addTracker(torrentId, trackerUrl, tier);
+    } catch (e) {
+      _log.warning('addTracker failed: $e');
+    }
+  }
+
+  static void removeTracker(int torrentId, String trackerUrl) {
+    if (!isInitialized || torrentId < 0) return;
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic).removeTracker(torrentId, trackerUrl);
+    } catch (e) {
+      _log.warning('removeTracker failed: $e');
+    }
+  }
+
+  static void announceNow(int torrentId) {
+    if (!isInitialized || torrentId < 0) return;
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic).announceNow(torrentId);
+    } catch (e) {
+      _log.warning('announceNow failed: $e');
+    }
+  }
+
+  static Future<String?> createTorrent({
+    required String sourcePath,
+    required String outputPath,
+    required List<String> trackers,
+    String comment = '',
+    int pieceSize = 0,
+    bool isPrivate = false,
+  }) async {
+    if (!isInitialized) return null;
+    try {
+      // ignore: avoid_dynamic_calls
+      final res = await (LibtorrentFlutter.instance as dynamic).createTorrent(
+        sourcePath: sourcePath,
+        outputPath: outputPath,
+        trackers: trackers,
+        comment: comment,
+        pieceSize: pieceSize,
+        isPrivate: isPrivate,
+      );
+      return res as String?;
+    } catch (e) {
+      _log.warning('createTorrent failed: $e');
+      return null;
+    }
+  }
+
+  static Future<bool> loadIpFilter(String filePath) async {
+    if (!isInitialized) return false;
+    try {
+      // ignore: avoid_dynamic_calls
+      await (LibtorrentFlutter.instance as dynamic).loadIpFilter(filePath);
+      return true;
+    } catch (e) {
+      _log.warning('loadIpFilter failed: $e');
+      return false;
+    }
+  }
+}
+
+class TrackerInfo {
+  final String url;
+  final int tier;
+  final String status;
+  final int seeds;
+  final int peers;
+  final String message;
+
+  const TrackerInfo({
+    required this.url,
+    required this.tier,
+    required this.status,
+    required this.seeds,
+    required this.peers,
+    required this.message,
+  });
 }

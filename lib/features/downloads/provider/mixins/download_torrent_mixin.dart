@@ -401,4 +401,89 @@ mixin DownloadTorrentMixin {
 
     providerNotifyListeners();
   }
+
+  // ---------------------------------------------------------------------------
+  // Ratio-Based Auto-Stop & Queue Enforcement
+  // ---------------------------------------------------------------------------
+  void checkTorrentRatioLimits() {
+    final settings = providerSettingsProvider;
+    for (final task in providerTasks) {
+      if (!task.isTorrent || !task.seedingEnabled) continue;
+      if (task.status != DownloadStatus.completed) continue;
+
+      final torrentId = providerTorrentIds[task.id];
+      if (torrentId == null) continue;
+
+      final stats = providerLatestTorrentStats[torrentId];
+      if (stats == null) continue;
+
+      // Check ratio limit
+      if (settings.shareRatioLimit > 0) {
+        final totalDown = stats.totalPayloadDownload > 0
+            ? stats.totalPayloadDownload
+            : (task.fileSize > 0 ? task.fileSize : 1);
+        final ratio = stats.totalPayloadUpload / totalDown;
+        if (ratio >= settings.shareRatioLimit) {
+          debugPrint(
+            '[DownloadTorrentMixin] Task ${task.id} reached ratio limit $ratio (max ${settings.shareRatioLimit})',
+          );
+          updateTaskSeeding(task.id, enabled: false);
+          continue;
+        }
+      }
+
+      // Check max seeding duration
+      if (settings.maxSeedingTimeMinutes > 0 && task.completedAt != null) {
+        final duration = DateTime.now().difference(task.completedAt!);
+        if (duration.inMinutes >= settings.maxSeedingTimeMinutes) {
+          debugPrint(
+            '[DownloadTorrentMixin] Task ${task.id} reached max seeding duration',
+          );
+          updateTaskSeeding(task.id, enabled: false);
+        }
+      }
+    }
+  }
+
+  void enforceTorrentQueue() {
+    final settings = providerSettingsProvider;
+    if (!settings.queueTorrents) return;
+
+    final activeTorrents = providerTasks
+        .where(
+          (t) =>
+              t.isTorrent &&
+              (t.status == DownloadStatus.downloading ||
+                  (t.status == DownloadStatus.completed && t.seedingEnabled)),
+        )
+        .toList();
+
+    final activeDownloads =
+        activeTorrents
+            .where((t) => t.status == DownloadStatus.downloading)
+            .length;
+    final activeSeeds =
+        activeTorrents
+            .where((t) => t.status == DownloadStatus.completed && t.seedingEnabled)
+            .length;
+
+    if (activeDownloads > settings.maxActiveDownloads) {
+      final toPause = activeTorrents
+          .where((t) => t.status == DownloadStatus.downloading)
+          .skip(settings.maxActiveDownloads);
+      for (final task in toPause) {
+        final id = providerTorrentIds[task.id];
+        if (id != null) TorrentService.pauseTorrent(id);
+      }
+    }
+
+    if (activeSeeds > settings.maxActiveSeeds) {
+      final toStopSeed = activeTorrents
+          .where((t) => t.status == DownloadStatus.completed && t.seedingEnabled)
+          .skip(settings.maxActiveSeeds);
+      for (final task in toStopSeed) {
+        updateTaskSeeding(task.id, enabled: false);
+      }
+    }
+  }
 }

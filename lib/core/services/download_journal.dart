@@ -44,6 +44,22 @@ class DownloadJournal {
     });
   }
 
+  static int crc32(List<int> data) {
+    int crc = 0xFFFFFFFF;
+    for (final byte in data) {
+      crc ^= byte;
+      for (var i = 0; i < 8; i++) {
+        crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+      }
+    }
+    return crc ^ 0xFFFFFFFF;
+  }
+
+  static String _wrapPayload(String payload) {
+    final crc = crc32(utf8.encode(payload));
+    return jsonEncode({'d': payload, 'c': crc});
+  }
+
   /// Writes an init event.
   ///
   /// Important:
@@ -58,12 +74,14 @@ class DownloadJournal {
         return;
       }
 
-      final line = jsonEncode({
+      final payload = jsonEncode({
         't': 'init',
         'threads': threadCount,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
+
+      final line = _wrapPayload(payload);
 
       _sink!.writeln(line);
       await _sink!.flush();
@@ -79,12 +97,14 @@ class DownloadJournal {
     await _lock.synchronized(() {
       _ensureOpen();
 
-      final line = jsonEncode({
+      final payload = jsonEncode({
         't': 'chunk',
         'i': index,
         'b': bytes,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
+
+      final line = _wrapPayload(payload);
 
       _sink!.writeln(line);
       _approxBytes += line.length + 1;
@@ -96,12 +116,14 @@ class DownloadJournal {
     await _lock.synchronized(() async {
       _ensureOpen();
 
-      final line = jsonEncode({
+      final payload = jsonEncode({
         't': 'checkpoint',
         'chunks': chunkProgress,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
+
+      final line = _wrapPayload(payload);
 
       _sink!.writeln(line);
       await _sink!.flush();
@@ -134,7 +156,23 @@ class DownloadJournal {
         if (trimmed.isEmpty) continue;
 
         try {
-          final event = jsonDecode(trimmed) as Map<String, dynamic>;
+          final outer = jsonDecode(trimmed) as Map<String, dynamic>;
+          String payloadString;
+          if (outer.containsKey('d') && outer.containsKey('c')) {
+            payloadString = outer['d'] as String;
+            final expectedCrc = (outer['c'] as num).toInt();
+            final actualCrc = crc32(utf8.encode(payloadString));
+            if (expectedCrc != actualCrc) {
+              debugPrint(
+                '[DownloadJournal] Skipping corrupted journal line with invalid CRC32',
+              );
+              continue;
+            }
+          } else {
+            payloadString = trimmed;
+          }
+
+          final event = jsonDecode(payloadString) as Map<String, dynamic>;
 
           switch (event['t']) {
             case 'init':
@@ -226,19 +264,22 @@ class DownloadJournal {
 
       final tmp = File('$path.tmp');
 
-      final initLine = jsonEncode({
+      final initPayload = jsonEncode({
         't': 'init',
         'threads': chunkProgress.length,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
 
-      final checkpointLine = jsonEncode({
+      final checkpointPayload = jsonEncode({
         't': 'checkpoint',
         'chunks': chunkProgress,
         'total': totalSize,
         'ts': DateTime.now().millisecondsSinceEpoch,
       });
+
+      final initLine = _wrapPayload(initPayload);
+      final checkpointLine = _wrapPayload(checkpointPayload);
 
       await tmp.writeAsString('$initLine\n$checkpointLine\n', flush: true);
       // FIX(C6): On Windows, file locks can linger after close. Retry rename

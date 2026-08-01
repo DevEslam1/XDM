@@ -116,4 +116,34 @@ class BandwidthGovernor {
 
     _lastRefill = now;
   }
+
+  // ---------------------------------------------------------------------------
+  // Per-Domain Bandwidth Tracking
+  // ---------------------------------------------------------------------------
+  final Map<String, _DomainState> _domainStates = {};
+
+  void reportDomainSpeed(String domain, double bytesPerSecond) {
+    if (domain.isEmpty) return;
+    final state = _domainStates.putIfAbsent(domain, () => _DomainState());
+    state.updateSpeed(bytesPerSecond);
+  }
+
+  double getAverageSpeedForDomain(String domain) {
+    return _domainStates[domain]?.averageSpeed ?? 0.0;
+  }
+}
+
+class _DomainState {
+  final List<double> _speedHistory = [];
+
+  double get averageSpeed => _speedHistory.isEmpty
+      ? 0
+      : _speedHistory.reduce((a, b) => a + b) / _speedHistory.length;
+
+  void updateSpeed(double speed) {
+    _speedHistory.add(speed);
+    if (_speedHistory.length > 20) {
+      _speedHistory.removeAt(0);
+    }
+  }
 }

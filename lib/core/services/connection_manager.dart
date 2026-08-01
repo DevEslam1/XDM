@@ -7,6 +7,7 @@ class ConnectionManager {
     int connectTimeoutMs = 15000,
     int receiveTimeoutMs = 60000,
     int maxConnectionsPerHost = 32,
+    bool preferHttp3 = true,
   }) {
     final dio = Dio(
       BaseOptions(
@@ -28,14 +29,22 @@ class ConnectionManager {
     return dio;
   }
 
-  /// No-op. Pre-warming opens a connection, reads the response, and closes it,
-  /// but the subsequent download opens a brand-new connection anyway, doubling
-  /// setup time for no measurable benefit. The retry interceptor already
-  /// handles transient connection failures.
-  static Future<void> prewarm(String url) async {
-    // Intentionally empty — see doc comment above.
+  /// Detects HTTP/3 (QUIC) support via the `Alt-Svc` response header.
+  static Future<bool> detectHttp3(String url) async {
+    try {
+      final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 5)));
+      final response = await dio.head(url);
+      final altSvc = response.headers.value('alt-svc');
+      return altSvc?.toLowerCase().contains('h3') ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
+  /// No-op pre-warming.
+  static Future<void> prewarm(String url) async {}
+
+  /// Detects HTTP/2 ALPN support via SecureSocket TLS handshake.
   static Future<bool> detectHttp2(String url) async {
     Socket? rawSocket;
     SecureSocket? secureSocket;

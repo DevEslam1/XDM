@@ -305,6 +305,84 @@ class DownloadEngine {
     return client;
   }
 
+  /// Estimate optimal thread count using a lightweight HEAD request range check
+  /// instead of downloading actual data bytes.
+  Future<int> estimateOptimalThreads({
+    required String url,
+    required int requestedThreads,
+    required int fileSize,
+    Dio? dio,
+    CancelToken? cancelToken,
+  }) async {
+    if (requestedThreads <= 1) return 1;
+    if (fileSize > 0 && fileSize < 512 * 1024) return 1;
+
+    final client = dio ?? _sharedDio;
+    try {
+      final response = await client.head(
+        url,
+        cancelToken: cancelToken,
+        options: Options(
+          headers: const {'Range': 'bytes=0-0'},
+          validateStatus: (_) => true,
+        ),
+      );
+
+      final acceptRanges = response.headers.value('accept-ranges');
+      if (acceptRanges == 'none') return 1;
+
+      final connectionHeader = response.headers.value('connection');
+      if (connectionHeader?.toLowerCase() == 'close') return 1;
+
+      return requestedThreads;
+    } catch (_) {
+      return requestedThreads;
+    }
+  }
+
+  /// Cleans up temporary/orphan files associated with a download task upon cancellation.
+  static Future<void> cleanupOrphanFiles(String tempFilePath) async {
+    if (tempFilePath.isEmpty) return;
+    try {
+      final file = File(tempFilePath);
+      final dir = file.parent;
+      if (!await dir.exists()) return;
+
+      final baseName = p.basenameWithoutExtension(tempFilePath);
+      final patterns = [
+        '$baseName.dmxpart',
+        '$baseName.dmxstate',
+        '$baseName.journal',
+        '$baseName.audio',
+        '$baseName.merged.mp4',
+        '$baseName.merged.mkv',
+      ];
+
+      for (final name in patterns) {
+        final f = File(p.join(dir.path, name));
+        if (await f.exists()) {
+          try {
+            await f.delete();
+          } catch (e) {
+            debugPrint('[DownloadEngine] Failed to delete orphan file ${f.path}: $e');
+          }
+        }
+      }
+
+      await for (final entity in dir.list()) {
+        if (entity is File &&
+            entity.path.contains('$baseName.part') &&
+            entity.path != tempFilePath) {
+          try {
+            await entity.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('[DownloadEngine] Cleanup orphan files error: $e');
+    }
+  }
+
   Future<DownloadMetadata> resolveMetadata({
     required String url,
     String? requestedFileName,
