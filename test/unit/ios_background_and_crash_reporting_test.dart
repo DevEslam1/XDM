@@ -15,6 +15,20 @@ void main() {
       final result = await IosBackgroundService.cancelBackgroundDownload();
       expect(result, isFalse);
     });
+
+    test('startNativeDownload returns false when not on iOS', () async {
+      final result = await IosBackgroundService.startNativeDownload(
+        taskId: 't1',
+        url: 'https://example.com/f.mp4',
+        destinationPath: '/path/f.mp4',
+      );
+      expect(result, isFalse);
+    });
+
+    test('pauseNativeDownload and cancelNativeDownload return false when not on iOS', () async {
+      expect(await IosBackgroundService.pauseNativeDownload('t1'), isFalse);
+      expect(await IosBackgroundService.cancelNativeDownload('t1'), isFalse);
+    });
   });
 
   group('CrashReportingService Enriched API', () {

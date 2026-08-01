@@ -73,9 +73,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.example.dmx.magnet</string>
+			<string>com.example.dmx.scheme</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>dmx</string>
 				<string>magnet</string>
 			</array>
 		</dict>
