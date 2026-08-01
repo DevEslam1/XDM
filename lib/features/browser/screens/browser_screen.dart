@@ -46,7 +46,8 @@ class BrowserScreen extends StatefulWidget {
   State<BrowserScreen> createState() => _BrowserScreenState();
 }
 
-class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
+class _BrowserScreenState extends State<BrowserScreen>
+    with HapticHelper, WidgetsBindingObserver {
   late final TabManager _tabManager = TabManager(
     isActive: () => mounted,
     setHostState: setState,
@@ -101,23 +102,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   void _ensureTabsExist() {
     if (_tabs.isEmpty && !_isRestoring) {
-      _isRestoring = true;
-      _restoreTabs()
-          .then((_) {
-            if (mounted) {
-              setState(() {
-                _isRestoring = false;
-              });
-            }
-          })
-          .catchError((e) {
-            debugPrint('[Browser] _ensureTabsExist restore error: $e');
-            if (mounted) {
-              setState(() {
-                _isRestoring = false;
-              });
-            }
-          });
+      _restoreTabs();
     }
   }
 
@@ -291,11 +276,109 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
   // ─────────────────────────────────────────────────────────────
   Future<void> _saveTabs() => _tabManager.saveTabs();
 
-  Future<void> _restoreTabs() => _tabManager.restoreTabs();
+  final List<String> _lruTabIds = [];
+  final Map<String, Timer> _loadingTimeoutTimers = {};
+
+  void _pauseTabMedia(BrowserTab tab) {
+    if (!tab.isHome) {
+      try {
+        tab.controller.runJavaScript(
+          "try { document.querySelectorAll('video,audio').forEach(function(m){m.pause();}); } catch(e){}",
+        );
+      } catch (e) {
+        debugPrint('[Browser] Pause media on switch error: $e');
+      }
+    }
+  }
+
+  void _updateLruOrder() {
+    if (_tabs.isEmpty) {
+      _lruTabIds.clear();
+      return;
+    }
+    final validIds = _tabs.map((t) => t.id).toSet();
+    _lruTabIds.removeWhere((id) => !validIds.contains(id));
+
+    if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
+      final activeTab = _tabs[_currentTabIndex];
+      _lruTabIds.remove(activeTab.id);
+      _lruTabIds.insert(0, activeTab.id);
+    }
+
+    if (_lruTabIds.length > 3) {
+      _lruTabIds.removeRange(3, _lruTabIds.length);
+    }
+  }
+
+  void _onTabSwitched(int oldIndex, int newIndex) {
+    if (oldIndex >= 0 && oldIndex < _tabs.length && oldIndex != newIndex) {
+      final oldTab = _tabs[oldIndex];
+      _pauseTabMedia(oldTab);
+    }
+    if (newIndex >= 0 && newIndex < _tabs.length) {
+      final newTab = _tabs[newIndex];
+      if (!newTab.isHome &&
+          newTab.url.isNotEmpty &&
+          newTab.url != 'about:blank') {
+        newTab.controller.currentUrl().then((currentUrl) {
+          if (mounted &&
+              (currentUrl == null ||
+                  currentUrl.isEmpty ||
+                  currentUrl == 'about:blank')) {
+            try {
+              newTab.controller.loadRequest(Uri.parse(newTab.url));
+            } catch (_) {}
+          }
+        }).catchError((_) {
+          if (mounted) {
+            try {
+              newTab.controller.loadRequest(Uri.parse(newTab.url));
+            } catch (_) {}
+          }
+        });
+      }
+    }
+  }
+
+  void _switchTab(int newIndex) {
+    if (newIndex == _currentTabIndex && _tabs.isNotEmpty) return;
+    final oldIndex = _currentTabIndex;
+    setState(() {
+      _currentTabIndex = newIndex;
+      _updateLruOrder();
+      if (_tabs.isNotEmpty &&
+          _currentTabIndex >= 0 &&
+          _currentTabIndex < _tabs.length) {
+        final tab = _tabs[_currentTabIndex];
+        _urlController.text = tab.isHome ? '' : tab.url;
+        _showBars = true;
+      }
+    });
+    _onTabSwitched(oldIndex, newIndex);
+    _saveTabs();
+  }
+
+  Future<void> _restoreTabs() async {
+    assert(!_isRestoring, 'restoreTabs re-entered');
+    if (_isRestoring) return;
+    _isRestoring = true;
+    try {
+      await _tabManager.restoreTabs();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRestoring = false;
+        });
+      } else {
+        _isRestoring = false;
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _focusNode.addListener(() {
       setState(() {
         _isFocused = _focusNode.hasFocus;
@@ -314,8 +397,22 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
     _loadSnifferPref();
     _loadCustomJsCss();
     _dashboardScrollController.addListener(_onDashboardScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreTabs());
     _adBlocker.init();
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    super.didHaveMemoryPressure();
+    if (mounted && _tabs.isNotEmpty) {
+      setState(() {
+        if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
+          final activeId = _tabs[_currentTabIndex].id;
+          _lruTabIds
+            ..clear()
+            ..add(activeId);
+        }
+      });
+    }
   }
 
   BrowserTab _createNewTab({
@@ -354,7 +451,31 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
       ..enableZoom(settings.desktopMode || settings.pinchToZoom)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onWebResourceError: (WebResourceError error) {
+            debugPrint(
+              '[Browser] WebResourceError on tab ${tab.id}: ${error.description}',
+            );
+            if (mounted) {
+              setState(() {
+                tab.isLoading = false;
+                tab.hasCrashed = true;
+              });
+            }
+          },
           onPageStarted: (url) {
+            tab.hasCrashed = false;
+            tab.isTimedOut = false;
+            _loadingTimeoutTimers[tab.id]?.cancel();
+            _loadingTimeoutTimers[tab.id] = Timer(
+              const Duration(seconds: 25),
+              () {
+                if (mounted && tab.isLoading) {
+                  setState(() {
+                    tab.isTimedOut = true;
+                  });
+                }
+              },
+            );
             if (url.contains('accounts.google.com') ||
                 url.contains('google.com/ServiceLogin') ||
                 url.contains('google.com/accounts')) {
@@ -398,11 +519,13 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
             _delayed(const Duration(milliseconds: 500), _updateNavState);
           },
           onPageFinished: (url) {
+            _loadingTimeoutTimers[tab.id]?.cancel();
             _injectDesktopModeScript(tab, settings);
             _adBlocker.injectInto(tab);
             if (mounted) {
               setState(() {
                 tab.isLoading = false;
+                tab.isTimedOut = false;
                 _detectedDownloadUrls.remove(tab.id);
                 _detectedMediaSources.remove(tab.id);
               });
@@ -722,6 +845,11 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    for (final timer in _loadingTimeoutTimers.values) {
+      timer.cancel();
+    }
+    _loadingTimeoutTimers.clear();
     if (!_quitPersisted && _tabs.isNotEmpty) {
       final persistable = <SavedBrowserTab>[
         for (var i = 0; i < _tabs.length; i++)
@@ -1714,7 +1842,7 @@ class _BrowserScreenState extends State<BrowserScreen> with HapticHelper {
                           shrinkWrap: true,
                           itemCount: detectedSources.length,
                           separatorBuilder: (context, index) =>
-                              const SizedBox(height: 8),
+                          const SizedBox(height: 8),
                           itemBuilder: (context, i) {
                             final src = detectedSources[i];
                             final label =
@@ -2021,6 +2149,89 @@ $_customJs
     }
   }
 
+  void _showTabLimitDialog(
+    BuildContext switcherContext,
+    StateSetter setModalState, {
+    required bool isIncognito,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          title: const Text('Tab Limit Reached (10 Max)'),
+          content: const Text(
+            'You have reached the limit of 10 tabs. Would you like to close inactive tabs to open a new one?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                int closeIdx = -1;
+                for (int i = 0; i < _tabs.length; i++) {
+                  if (i != _currentTabIndex) {
+                    closeIdx = i;
+                    break;
+                  }
+                }
+                if (closeIdx != -1) {
+                  setModalState(() {
+                    setState(() {
+                      _cleanupTabState(_tabs[closeIdx].id);
+                      _tabs.removeAt(closeIdx);
+                      if (_currentTabIndex >= _tabs.length) {
+                        _currentTabIndex = _tabs.length - 1;
+                      }
+                      final tab = _createNewTab(isIncognito: isIncognito);
+                      _tabs.add(tab);
+                      _currentTabIndex = _tabs.length - 1;
+                      _urlController.text = '';
+                      _showBars = true;
+                    });
+                    _saveTabs();
+                  });
+                  Navigator.pop(switcherContext);
+                }
+              },
+              child: const Text('Close Oldest Inactive'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                setModalState(() {
+                  setState(() {
+                    final active = _tabs[_currentTabIndex];
+                    for (final tab in _tabs) {
+                      if (tab.id != active.id) {
+                        _cleanupTabState(tab.id);
+                      }
+                    }
+                    _tabs.clear();
+                    _tabs.add(active);
+                    _currentTabIndex = 0;
+                    final newTab = _createNewTab(isIncognito: isIncognito);
+                    _tabs.add(newTab);
+                    _currentTabIndex = 1;
+                    _urlController.text = '';
+                    _showBars = true;
+                  });
+                  _saveTabs();
+                });
+                Navigator.pop(switcherContext);
+              },
+              child: const Text('Close All Other Tabs'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────
   // TAB SWITCHER — grid with incognito styling
   // ─────────────────────────────────────────────────────────────
@@ -2132,18 +2343,14 @@ $_customJs
                                     onPressed: () {
                                       triggerHaptic(settings);
                                       if (_tabs.length >= 10) {
-                                        ThemedSnackbar.show(
+                                        _showTabLimitDialog(
                                           context,
-                                          message: L10n.of(
-                                            context,
-                                            'browser_max_tabs',
-                                          ),
-                                          color: Colors.red,
-                                          icon: Icons.warning_amber_rounded,
-                                          isDarkMode: isDark,
+                                          setModalState,
+                                          isIncognito: true,
                                         );
                                         return;
                                       }
+                                      final oldIdx = _currentTabIndex;
                                       setState(() {
                                         final tab = _createNewTab(
                                           isIncognito: true,
@@ -2152,7 +2359,9 @@ $_customJs
                                         _currentTabIndex = _tabs.length - 1;
                                         _urlController.text = '';
                                         _showBars = true;
+                                        _updateLruOrder();
                                       });
+                                      _onTabSwitched(oldIdx, _currentTabIndex);
                                       _saveTabs();
                                       Navigator.pop(context);
                                     },
@@ -2168,25 +2377,23 @@ $_customJs
                                     onPressed: () {
                                       triggerHaptic(settings);
                                       if (_tabs.length >= 10) {
-                                        ThemedSnackbar.show(
+                                        _showTabLimitDialog(
                                           context,
-                                          message: L10n.of(
-                                            context,
-                                            'browser_max_tabs',
-                                          ),
-                                          color: Colors.red,
-                                          icon: Icons.warning_amber_rounded,
-                                          isDarkMode: isDark,
+                                          setModalState,
+                                          isIncognito: false,
                                         );
                                         return;
                                       }
+                                      final oldIdx = _currentTabIndex;
                                       setState(() {
                                         final tab = _createNewTab();
                                         _tabs.add(tab);
                                         _currentTabIndex = _tabs.length - 1;
                                         _urlController.text = '';
                                         _showBars = true;
+                                        _updateLruOrder();
                                       });
+                                      _onTabSwitched(oldIdx, _currentTabIndex);
                                       _saveTabs();
                                       Navigator.pop(context);
                                     },
@@ -2215,14 +2422,7 @@ $_customJs
                                   return GestureDetector(
                                     onTap: () {
                                       triggerHaptic(settings);
-                                      setState(() {
-                                        _currentTabIndex = index;
-                                        _urlController.text = tab.isHome
-                                            ? ''
-                                            : tab.url;
-                                        _showBars = true;
-                                      });
-                                      _saveTabs();
+                                      _switchTab(index);
                                       Navigator.pop(context);
                                     },
                                     child: AnimatedContainer(
@@ -3368,49 +3568,300 @@ $_customJs
                       behavior: HitTestBehavior.translucent,
                       child: _tabs.isEmpty
                           ? const SizedBox.shrink()
-                          : IndexedStack(
-                              index:
-                                  _currentTabIndex >= 0 &&
-                                      _currentTabIndex < _tabs.length
-                                  ? _currentTabIndex
-                                  : 0,
-                              children: _tabs.asMap().entries.map((entry) {
-                                final tabIndex = entry.key;
-                                final tab = entry.value;
-                                final isActiveTab =
-                                    tabIndex == _currentTabIndex;
-                                if (tab.isHome) {
-                                  return SizedBox(
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    child: _buildHomeDashboard(
-                                      context,
-                                      settings,
-                                      scrollController: isActiveTab
-                                          ? _dashboardScrollController
-                                          : null,
-                                    ),
-                                  );
-                                } else {
-                                  return SizedBox(
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    child: RepaintBoundary(
-                                      child: RefreshIndicator(
-                                        color: isDark
-                                            ? AppTheme.neonBlue
-                                            : AppTheme.lightNeonBlue,
-                                        onRefresh: () async {
-                                          await tab.controller.reload();
-                                        },
-                                        child: WebViewWidget(
-                                          controller: tab.controller,
+                          : Builder(
+                              builder: (context) {
+                                _updateLruOrder();
+                                return IndexedStack(
+                                  index:
+                                      _currentTabIndex >= 0 &&
+                                          _currentTabIndex < _tabs.length
+                                      ? _currentTabIndex
+                                      : 0,
+                                  children: _tabs.asMap().entries.map((entry) {
+                                    final tabIndex = entry.key;
+                                    final tab = entry.value;
+                                    final isActiveTab =
+                                        tabIndex == _currentTabIndex;
+                                    if (tab.isHome) {
+                                      return SizedBox(
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        child: _buildHomeDashboard(
+                                          context,
+                                          settings,
+                                          scrollController: isActiveTab
+                                              ? _dashboardScrollController
+                                              : null,
                                         ),
-                                      ),
-                                    ),
-                                  );
-                                }
-                              }).toList(),
+                                      );
+                                    } else {
+                                      final isLive = _lruTabIds.contains(tab.id);
+                                      if (!isLive) {
+                                        return SizedBox(
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          child: Container(
+                                            color: isDark
+                                                ? AppTheme.surface
+                                                : AppTheme.lightSurface,
+                                            child: Center(
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.web,
+                                                    size: 48,
+                                                    color: (isDark
+                                                            ? AppTheme.neonBlue
+                                                            : AppTheme
+                                                                .lightNeonBlue)
+                                                        .withValues(alpha: 0.6),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  Text(
+                                                    tab.title.isNotEmpty
+                                                        ? tab.title
+                                                        : 'Web Page',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: isDark
+                                                          ? Colors.white
+                                                          : Colors.black87,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                  if (tab.url.isNotEmpty) ...[
+                                                    const SizedBox(height: 4),
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            horizontal: 24,
+                                                          ),
+                                                      child: Text(
+                                                        tab.domain.isNotEmpty
+                                                            ? tab.domain
+                                                            : tab.url,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: isDark
+                                                              ? Colors.white54
+                                                              : Colors.black54,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      return SizedBox(
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        child: RepaintBoundary(
+                                          child: RefreshIndicator(
+                                            color: isDark
+                                                ? AppTheme.neonBlue
+                                                : AppTheme.lightNeonBlue,
+                                            onRefresh: () async {
+                                              tab.hasCrashed = false;
+                                              await tab.controller.reload();
+                                            },
+                                            child: tab.hasCrashed
+                                                ? Container(
+                                                    color: isDark
+                                                        ? AppTheme.surface
+                                                        : AppTheme.lightSurface,
+                                                    child: Center(
+                                                      child: Column(
+                                                        mainAxisAlignment:
+                                                            MainAxisAlignment.center,
+                                                        children: [
+                                                          const Icon(
+                                                            Icons.error_outline_rounded,
+                                                            size: 54,
+                                                            color: Colors.orangeAccent,
+                                                          ),
+                                                          const SizedBox(height: 12),
+                                                          Text(
+                                                            'This tab crashed unexpectedly',
+                                                            style: TextStyle(
+                                                              fontSize: 16,
+                                                              fontWeight:
+                                                                  FontWeight.bold,
+                                                              color: isDark
+                                                                  ? Colors.white
+                                                                  : Colors.black87,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(height: 8),
+                                                          Text(
+                                                            tab.url,
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                              color: isDark
+                                                                  ? Colors.white54
+                                                                  : Colors.black54,
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow.ellipsis,
+                                                          ),
+                                                          const SizedBox(height: 16),
+                                                          ElevatedButton.icon(
+                                                            style: ElevatedButton.styleFrom(
+                                                              backgroundColor: isDark
+                                                                  ? AppTheme.neonBlue
+                                                                  : AppTheme.lightNeonBlue,
+                                                              foregroundColor: Colors.white,
+                                                            ),
+                                                            onPressed: () {
+                                                              setState(() {
+                                                                tab.hasCrashed = false;
+                                                              });
+                                                              tab.controller.reload();
+                                                            },
+                                                            icon: const Icon(
+                                                              Icons.refresh_rounded,
+                                                              size: 18,
+                                                            ),
+                                                            label: const Text('Reload Tab'),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  )
+                                                : Stack(
+                                                    children: [
+                                                      WebViewWidget(
+                                                        controller: tab.controller,
+                                                      ),
+                                                      if (tab.isTimedOut &&
+                                                          tab.isLoading)
+                                                        Positioned(
+                                                          top: 0,
+                                                          left: 0,
+                                                          right: 0,
+                                                          child: Container(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                  horizontal: 12,
+                                                                  vertical: 6,
+                                                                ),
+                                                            color: Colors.orange
+                                                                .withValues(
+                                                                  alpha: 0.9,
+                                                                ),
+                                                            child: Row(
+                                                              children: [
+                                                                const Icon(
+                                                                  Icons
+                                                                      .warning_amber_rounded,
+                                                                  size: 16,
+                                                                  color: Colors.white,
+                                                                ),
+                                                                const SizedBox(
+                                                                  width: 8,
+                                                                ),
+                                                                const Expanded(
+                                                                  child: Text(
+                                                                    'Page load taking long...',
+                                                                    style: TextStyle(
+                                                                      fontSize: 12,
+                                                                      color: Colors
+                                                                          .white,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .bold,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                GestureDetector(
+                                                                  onTap: () {
+                                                                    tab.controller
+                                                                        .runJavaScript(
+                                                                          'window.stop();',
+                                                                        );
+                                                                    setState(() {
+                                                                      tab.isLoading =
+                                                                          false;
+                                                                      tab.isTimedOut =
+                                                                          false;
+                                                                    });
+                                                                  },
+                                                                  child:
+                                                                      const Padding(
+                                                                    padding:
+                                                                        EdgeInsets
+                                                                            .symmetric(
+                                                                          horizontal:
+                                                                              6,
+                                                                        ),
+                                                                    child: Text(
+                                                                      'Stop',
+                                                                      style: TextStyle(
+                                                                        color: Colors
+                                                                            .white,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .bold,
+                                                                        fontSize:
+                                                                            12,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                GestureDetector(
+                                                                  onTap: () {
+                                                                    setState(() {
+                                                                      tab.isTimedOut =
+                                                                          false;
+                                                                    });
+                                                                    tab.controller
+                                                                        .reload();
+                                                                  },
+                                                                  child:
+                                                                      const Padding(
+                                                                    padding:
+                                                                        EdgeInsets
+                                                                            .symmetric(
+                                                                          horizontal:
+                                                                              6,
+                                                                        ),
+                                                                    child: Text(
+                                                                      'Reload',
+                                                                      style: TextStyle(
+                                                                        color: Colors
+                                                                            .white,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .bold,
+                                                                        fontSize:
+                                                                            12,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }).toList(),
+                                );
+                              },
                             ),
                     ),
                     if (!activeTab.isHome)

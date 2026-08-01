@@ -378,22 +378,25 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
 
   /* ── Remove fixed/absolute overlays covering the page ── */
   try {
-    var all = document.querySelectorAll('div, section, aside');
-    for (var k = 0; k < all.length; k++) {
-      var el = all[k];
-      var st = window.getComputedStyle(el);
-      if ((st.position === 'fixed' || st.position === 'absolute') &&
-          st.zIndex > 999 &&
-          st.display !== 'none' &&
-          el.offsetWidth > window.innerWidth * 0.5 &&
-          el.offsetHeight > window.innerHeight * 0.3) {
-        /* likely a full-page ad overlay */
-        var text = (el.textContent || '').toLowerCase();
-        if (text.indexOf('ad') !== -1 || text.indexOf('sponsor') !== -1 ||
-            text.indexOf('click here') !== -1 || text.indexOf('download now') !== -1 ||
-            text.indexOf('install') !== -1 || text.indexOf('subscribe') !== -1 ||
-            el.querySelector('iframe') !== null) {
-          el.remove();
+    if (document.querySelectorAll('*').length <= 5000) {
+      var all = document.querySelectorAll('div, section, aside');
+      var maxCount = Math.min(all.length, 300);
+      for (var k = 0; k < maxCount; k++) {
+        var el = all[k];
+        var st = window.getComputedStyle(el);
+        if ((st.position === 'fixed' || st.position === 'absolute') &&
+            st.zIndex > 999 &&
+            st.display !== 'none' &&
+            el.offsetWidth > window.innerWidth * 0.5 &&
+            el.offsetHeight > window.innerHeight * 0.3) {
+          /* likely a full-page ad overlay */
+          var text = (el.textContent || '').toLowerCase();
+          if (text.indexOf('ad') !== -1 || text.indexOf('sponsor') !== -1 ||
+              text.indexOf('click here') !== -1 || text.indexOf('download now') !== -1 ||
+              text.indexOf('install') !== -1 || text.indexOf('subscribe') !== -1 ||
+              el.querySelector('iframe') !== null) {
+            el.remove();
+          }
         }
       }
     }

@@ -8,6 +8,8 @@ class BrowserTab {
   String title;
   bool isIncognito;
   bool isLoading;
+  bool hasCrashed;
+  bool isTimedOut;
   final ValueNotifier<double> progressNotifier;
   bool isHome;
   bool canGoBack;
@@ -20,6 +22,8 @@ class BrowserTab {
     required this.title,
     this.isIncognito = false,
     this.isLoading = false,
+    this.hasCrashed = false,
+    this.isTimedOut = false,
     double progress = 0.0,
     this.isHome = true,
     this.canGoBack = false,

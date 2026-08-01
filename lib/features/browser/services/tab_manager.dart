@@ -246,13 +246,12 @@ class TabManager {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         if (!isActive()) return;
-        for (final tab in tabs) {
-          if (tab.url.isNotEmpty && !tab.isHome) {
-            try {
-              tab.controller.loadRequest(Uri.parse(tab.url));
-            } catch (e) {
-              debugPrint('[Browser] Restored tab load error: $e');
-            }
+        final active = activeTab;
+        if (active != null && active.url.isNotEmpty && !active.isHome) {
+          try {
+            active.controller.loadRequest(Uri.parse(active.url));
+          } catch (e) {
+            debugPrint('[Browser] Restored active tab load error: $e');
           }
         }
       });
