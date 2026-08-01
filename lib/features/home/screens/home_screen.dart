@@ -771,26 +771,31 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ],
               ),
-        child: FloatingActionButton(
-          heroTag: null,
-          backgroundColor: accentClr,
-          foregroundColor: Colors.white,
-          elevation: classicUi ? 4 : 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: BorderSide(
-              color: Colors.white.withValues(alpha: 0.2),
-              width: 0.8,
+        child: Semantics(
+          button: true,
+          label: 'Add new download',
+          hint: 'Double tap to create a new download',
+          child: FloatingActionButton(
+            heroTag: null,
+            backgroundColor: accentClr,
+            foregroundColor: Colors.white,
+            elevation: classicUi ? 4 : 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: Colors.white.withValues(alpha: 0.2),
+                width: 0.8,
+              ),
             ),
+            onPressed: () {
+              triggerHaptic(context.read<SettingsProvider>());
+              showDialog(
+                context: context,
+                builder: (_) => const AddDownloadDialog(),
+              );
+            },
+            child: const Icon(Icons.add_rounded, size: 22),
           ),
-          onPressed: () {
-            triggerHaptic(context.read<SettingsProvider>());
-            showDialog(
-              context: context,
-              builder: (_) => const AddDownloadDialog(),
-            );
-          },
-          child: const Icon(Icons.add_rounded, size: 22),
         ),
       ),
     );

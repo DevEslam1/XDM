@@ -13,6 +13,7 @@ class TorrentService {
   static double get shareRatioLimit => 2.0;
   static int get maxSeedingTimeMinutes => 0;
   static Future<void> init() async {}
+  static Future<void> saveAllResumeData() async {}
   static Future<void> dispose() async {}
   static int addMagnet(String magnetUri, String savePath) => -1;
   static int addTorrentFile(String filePath, String savePath) => -1;

@@ -28,6 +28,7 @@ import 'features/onboarding/screens/onboarding_screen.dart';
 import 'features/onboarding/screens/permission_request_screen.dart';
 import 'shared/widgets/main_navigation_container.dart';
 import 'shared/widgets/share_intent_screen.dart';
+import 'shared/accessibility/xdm_text_scaler.dart';
 
 Future<void> main(List<String> args) async {
   CrashReportingService.runWithErrorCapture(() async {
@@ -137,6 +138,7 @@ Future<void> main(List<String> args) async {
           initialUrl: initialUrl,
         ),
       );
+      WidgetsBinding.instance.addObserver(_AppLifecycleObserver());
 
       // ── PHASE 5: Heavy init AFTER first frame ──
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -307,23 +309,25 @@ class DmxApp extends StatelessWidget {
                 ? ShareLaunchScreen(url: initialUrl!)
                 : const MainNavigationContainer(),
             builder: (context, child) {
-              return AnnotatedRegion<SystemUiOverlayStyle>(
-                value: SystemUiOverlayStyle(
-                  statusBarColor: Colors.transparent,
-                  statusBarIconBrightness: isDark
-                      ? Brightness.light
-                      : Brightness.dark,
-                  statusBarBrightness: isDark
-                      ? Brightness.dark
-                      : Brightness.light,
-                  systemNavigationBarColor: isDark
-                      ? AppTheme.background
-                      : AppTheme.lightBackground,
-                  systemNavigationBarIconBrightness: isDark
-                      ? Brightness.light
-                      : Brightness.dark,
+              return XdmTextScaler(
+                child: AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: SystemUiOverlayStyle(
+                    statusBarColor: Colors.transparent,
+                    statusBarIconBrightness: isDark
+                        ? Brightness.light
+                        : Brightness.dark,
+                    statusBarBrightness: isDark
+                        ? Brightness.dark
+                        : Brightness.light,
+                    systemNavigationBarColor: isDark
+                        ? AppTheme.background
+                        : AppTheme.lightBackground,
+                    systemNavigationBarIconBrightness: isDark
+                        ? Brightness.light
+                        : Brightness.dark,
+                  ),
+                  child: child!,
                 ),
-                child: child!,
               );
             },
           );
@@ -332,3 +336,26 @@ class DmxApp extends StatelessWidget {
     );
   }
 }
+
+class _AppLifecycleObserver with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        if (TorrentService.isSupported) {
+          unawaited(
+            TorrentService.saveAllResumeData().catchError((e) {
+              debugPrint('Failed to save torrent BG state: $e');
+            }),
+          );
+        }
+        break;
+      case AppLifecycleState.resumed:
+        break;
+      default:
+        break;
+    }
+  }
+}
+

@@ -35,7 +35,6 @@ class MockDatabaseService extends DatabaseService {
     }
   }
 
-  @override
   Future<List<DownloadTask>> loadAllTasks() async {
     return tasksMap.values.toList();
   }
@@ -88,7 +87,10 @@ void main() {
     db = MockDatabaseService();
     settings = SettingsProvider();
     await settings.load();
-    provider = DownloadProvider(databaseService: db, settingsProvider: settings);
+    provider = DownloadProvider(
+      databaseService: db,
+      settingsProvider: settings,
+    );
   });
 
   test('batch operations correctly mutate tasks', () async {
@@ -101,14 +103,29 @@ void main() {
     expect(provider.tasks, hasLength(2));
 
     // Test changeCategoryForMultipleTasks
-    await provider.changeCategoryForMultipleTasks(['task-1', 'task-2'], 'Documents');
-    expect(provider.tasks.firstWhere((t) => t.id == 'task-1').category, equals('Documents'));
-    expect(provider.tasks.firstWhere((t) => t.id == 'task-2').category, equals('Documents'));
+    await provider.changeCategoryForMultipleTasks([
+      'task-1',
+      'task-2',
+    ], 'Documents');
+    expect(
+      provider.tasks.firstWhere((t) => t.id == 'task-1').category,
+      equals('Documents'),
+    );
+    expect(
+      provider.tasks.firstWhere((t) => t.id == 'task-2').category,
+      equals('Documents'),
+    );
 
     // Test pauseMultipleTasks
     await provider.pauseMultipleTasks(['task-1', 'task-2']);
-    expect(provider.tasks.firstWhere((t) => t.id == 'task-1').status, equals(DownloadStatus.paused));
-    expect(provider.tasks.firstWhere((t) => t.id == 'task-2').status, equals(DownloadStatus.paused));
+    expect(
+      provider.tasks.firstWhere((t) => t.id == 'task-1').status,
+      equals(DownloadStatus.paused),
+    );
+    expect(
+      provider.tasks.firstWhere((t) => t.id == 'task-2').status,
+      equals(DownloadStatus.paused),
+    );
 
     // Test deleteMultipleTasks
     await provider.deleteMultipleTasks(['task-1']);

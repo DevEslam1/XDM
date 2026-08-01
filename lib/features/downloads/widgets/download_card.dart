@@ -10,6 +10,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/file_opener.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
+import '../../../shared/accessibility/xdm_semantics.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
@@ -97,39 +98,43 @@ class _CardShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(22),
-        child: Container(
-          decoration: AppTheme.panel(
-            isDark: isDark,
-            radius: 22,
-            accentColor: accent,
-            accentAlpha: 0.22,
-          ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // status accent rail
-                Container(
-                  width: 4,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(22),
-                      bottomLeft: Radius.circular(22),
+    return Semantics(
+      container: true,
+      hint: 'Double tap to view details',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            decoration: AppTheme.panel(
+              isDark: isDark,
+              radius: 22,
+              accentColor: accent,
+              accentAlpha: 0.22,
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // status accent rail
+                  Container(
+                    width: 4,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(22),
+                        bottomLeft: Radius.circular(22),
+                      ),
+                      boxShadow: [
+                        AppTheme.glow(accent, alpha: 0.30, blur: 6, spread: 0),
+                      ],
                     ),
-                    boxShadow: [
-                      AppTheme.glow(accent, alpha: 0.30, blur: 6, spread: 0),
-                    ],
                   ),
-                ),
-                Expanded(child: child),
-              ],
+                  Expanded(child: child),
+                ],
+              ),
             ),
           ),
         ),
@@ -335,8 +340,9 @@ class _ChunkedProgressBar extends StatelessWidget {
         }),
       );
     }
+    final Widget effectiveBar;
     if (task.status == DownloadStatus.downloading) {
-      return TweenAnimationBuilder<double>(
+      effectiveBar = TweenAnimationBuilder<double>(
         tween: Tween(begin: 0.6, end: 1.0),
         duration: const Duration(milliseconds: 1500),
         builder: (context, opacity, child) {
@@ -344,8 +350,15 @@ class _ChunkedProgressBar extends StatelessWidget {
         },
         child: bar,
       );
+    } else {
+      effectiveBar = bar;
     }
-    return bar;
+
+    return XdmSemantics.progress(
+      label: 'Download progress',
+      value: task.progress,
+      child: effectiveBar,
+    );
   }
 }
 
