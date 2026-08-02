@@ -187,9 +187,9 @@ class _SnackbarBodyState extends State<_SnackbarBody>
             Positioned.fill(
               child: AnimatedBuilder(
                 animation: _shimmer,
-                builder: (_, _) {
+                builder: (context, child) {
                   return LayoutBuilder(
-                    builder: (_, constraints) {
+                    builder: (context, constraints) {
                       final w = constraints.maxWidth;
                       final x = (w + 140) * _shimmer.value - 140;
                       return Stack(

@@ -1281,7 +1281,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                 _urlController,
                                 _urlFocus,
                               ]),
-                              builder: (_, _) {
+                              builder: (context, child) {
                                 return Container(
                                   decoration: BoxDecoration(
                                     color: panelBg,
@@ -1298,8 +1298,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                             ),
                                             child: AnimatedBuilder(
                                               animation: _scanController,
-                                              builder: (_, _) => LayoutBuilder(
-                                                builder: (_, c) {
+                                              builder: (context, child) => LayoutBuilder(
+                                                builder: (context, c) {
                                                   final x =
                                                       (c.maxWidth + 60) *
                                                           _scanController
@@ -1465,7 +1465,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                           // live validation readout
                           AnimatedBuilder(
                             animation: _urlController,
-                            builder: (_, _) {
+                            builder: (context, child) {
                               if (_urlController.text.trim().isEmpty) {
                                 return const SizedBox.shrink();
                               }
@@ -2412,7 +2412,7 @@ class _SectionLabel extends StatelessWidget {
             letterSpacing: 0.8,
           ),
         ),
-        ?trailing,
+        if (trailing != null) trailing!,
       ],
     );
   }
@@ -2781,7 +2781,7 @@ class _TorrentFilesPanel extends StatelessWidget {
             child: ListView.separated(
               physics: const ClampingScrollPhysics(),
               itemCount: files.length,
-              separatorBuilder: (_, _) =>
+              separatorBuilder: (context, index) =>
                   Divider(color: borderClr.withValues(alpha: 0.3), height: 1),
               itemBuilder: (ctx, idx) {
                 final file = files[idx];

@@ -77,4 +77,10 @@ const Map<String, String> esTranslations = {
       '¡Servidores de AdBlock actualizados con éxito!',
   'settings_adblock_failed_msg':
       'No se pudieron actualizar los servidores de AdBlock. Verifique la conexión.',
+
+  // Settings – Accessibility
+  'settings_accessibility_title': 'CONTROLES DE ACCESIBILIDAD',
+  'settings_text_scaling': 'FACTOR DE ESCALA DE TEXTO',
+  'settings_text_scaling_sub':
+      'Ajustar el tamaño de fuente dinámicamente en la aplicación',
 };

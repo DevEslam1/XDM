@@ -190,7 +190,7 @@ class _TabChip extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 3),
                       child: ValueListenableBuilder<double>(
                         valueListenable: tab.progressNotifier,
-                        builder: (_, value, _) => ClipRRect(
+                        builder: (context, value, child) => ClipRRect(
                           borderRadius: BorderRadius.circular(2),
                           child: LinearProgressIndicator(
                             value: value,

@@ -453,4 +453,9 @@ const Map<String, String> arTranslations = {
       'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
   'settings_adblock_success_msg': 'تم تحديث قائمة المضيفين بنجاح!',
   'settings_adblock_failed_msg': 'فشل تحديث قائمة المضيفين. تحقق من الاتصال.',
+
+  // Settings – Accessibility
+  'settings_accessibility_title': 'خيارات سهولة الوصول (إمكانية الوصول)',
+  'settings_text_scaling': 'مقياس حجم الخط',
+  'settings_text_scaling_sub': 'تعديل وتكبير حجم نصوص التطبيق بشكل حيوي',
 };

@@ -58,6 +58,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _bypassSSLKey = 'bypassSSL_v2'; // v2: default false
   static const _httpsOnlyKey = 'httpsOnly';
   static const _reduceVisualsKey = 'reduceVisuals';
+  static const _textScaleFactorKey = 'textScaleFactor';
   static const _customUserAgentKey = 'customUserAgent';
   static const _cleanupDaysKey = 'cleanupDays';
   static const _categoryFoldersKey = 'categoryFolders';
@@ -169,6 +170,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool bypassSSL = false;
   bool httpsOnly = false;
   bool reduceVisuals = false;
+  double textScaleFactor = 1.0;
   String customUserAgent = '';
   int cleanupDays = 0;
   bool categoryFolders = false;
@@ -337,6 +339,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     bypassSSL = _prefs.getBool(_bypassSSLKey) ?? bypassSSL;
     httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
     reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
+    textScaleFactor = _prefs.getDouble(_textScaleFactorKey) ?? textScaleFactor;
     customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
     if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
@@ -603,6 +606,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setReduceVisuals(bool value) async {
     reduceVisuals = value;
     await _prefs.setBool(_reduceVisualsKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setTextScaleFactor(double value) async {
+    textScaleFactor = value;
+    await _prefs.setDouble(_textScaleFactorKey, value);
     notifyListeners();
   }
 
@@ -1001,6 +1010,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     httpsOnly = false;
     _pendingBypassSSLConfirmation = false;
     reduceVisuals = false;
+    textScaleFactor = 1.0;
     customUserAgent = '';
     cleanupDays = 0;
     categoryFolders = false;
@@ -1065,6 +1075,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setBool(_bypassSSLKey, bypassSSL);
     await _prefs.setBool(_httpsOnlyKey, httpsOnly);
     await _prefs.setBool(_reduceVisualsKey, reduceVisuals);
+    await _prefs.setDouble(_textScaleFactorKey, textScaleFactor);
     await _prefs.setString(_customUserAgentKey, customUserAgent);
     await _prefs.setInt(_cleanupDaysKey, cleanupDays);
     await _prefs.setBool(_categoryFoldersKey, categoryFolders);

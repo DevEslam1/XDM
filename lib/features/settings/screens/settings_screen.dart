@@ -1184,9 +1184,61 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                   const SizedBox(height: 14),
-                  _stagger(0.68, _BackupModule(settings: settings)),
+                  _stagger(
+                    0.66,
+                    _ConsoleSection(
+                      index: '09',
+                      title: L10n.of(context, 'settings_accessibility_title'),
+                      accentColor: isDark
+                          ? AppTheme.neonBlue
+                          : AppTheme.lightNeonBlue,
+                      isDark: isDark,
+                      isExpanded:
+                          _expandedSections['accessibility'] ??
+                          false,
+                      onToggle: () {
+                        triggerHaptic(settings);
+                        setState(() {
+                          _expandedSections['accessibility'] =
+                              !(_expandedSections['accessibility'] ?? false);
+                        });
+                      },
+                      children: [
+                        _SwitchTile(
+                          accentColor: isDark
+                              ? AppTheme.neonBlue
+                              : AppTheme.lightNeonBlue,
+                          title: isRtl ? 'تقليل المؤثرات البصرية' : 'REDUCE MOTION & VISUALS',
+                          subtitle: isRtl
+                              ? 'إيقاف تأثيرات التوهج والضبابية لتحسين سهولة القراءة والأداء'
+                              : 'Disable animation, glow, and blur effects to improve readability and performance',
+                          value: settings.reduceVisuals,
+                          onChanged: (val) {
+                            settings.setReduceVisuals(val);
+                            triggerHaptic(settings);
+                          },
+                        ),
+                        _Divider(isDark: isDark),
+                        _SliderTile(
+                          accentColor: isDark
+                              ? AppTheme.neonBlue
+                              : AppTheme.lightNeonBlue,
+                          title: L10n.of(context, 'settings_text_scaling'),
+                          subtitle: '${(settings.textScaleFactor * 100).toInt()}% ${L10n.of(context, 'settings_text_scaling_sub')}',
+                          value: settings.textScaleFactor,
+                          min: 0.8,
+                          max: 2.0,
+                          divisions: 12,
+                          onChanged: (val) => settings.setTextScaleFactor(val),
+                          onChangeEnd: (val) => triggerHaptic(settings),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 14),
-                  _stagger(0.72, _CommsModule(settings: settings)),
+                  _stagger(0.70, _BackupModule(settings: settings)),
+                  const SizedBox(height: 14),
+                  _stagger(0.74, _CommsModule(settings: settings)),
                   const SizedBox(height: 24),
                 ],
               ),

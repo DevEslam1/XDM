@@ -69,21 +69,30 @@ class NotificationCoordinator {
   // task id, so the OS-visible payload never leaks internal identifiers and a
   // forged/duplicated payload cannot be used to target a task directly.
   final Map<String, String> _opaqueHandles = {};
+  final Map<String, String> _taskToHandle = {};
   static final Random _handleRandom = Random.secure();
   static const int _maxOpaqueHandles = 512;
 
   /// Issues an opaque handle for [taskId] to embed in a notification payload.
-  /// Safe to call repeatedly; each call returns a fresh handle.
+  /// Safe to call repeatedly; returns the stable handle if it exists.
   String opaqueHandleFor(String taskId) {
+    final existing = _taskToHandle[taskId];
+    if (existing != null) return existing;
+
     final handle =
         't${_handleRandom.nextInt(1 << 31).toRadixString(16)}'
         '${_handleRandom.nextInt(1 << 31).toRadixString(16)}';
     _opaqueHandles[handle] = taskId;
+    _taskToHandle[taskId] = handle;
     if (_opaqueHandles.length > _maxOpaqueHandles) {
       // Oldest handles are dropped first; the action stream replay + nonce
       // validation make a dropped handle harmless (the action is ignored).
-      final oldest = _opaqueHandles.keys.first;
-      _opaqueHandles.remove(oldest);
+      final oldestHandle = _opaqueHandles.keys.first;
+      final oldestTaskId = _opaqueHandles[oldestHandle];
+      _opaqueHandles.remove(oldestHandle);
+      if (oldestTaskId != null) {
+        _taskToHandle.remove(oldestTaskId);
+      }
     }
     return handle;
   }
@@ -120,6 +129,10 @@ class NotificationCoordinator {
   /// Drops the ID mapping for [taskId] and returns the removed ID (used by
   /// delete flows that cancel the notification after file cleanup).
   int? removeId(String taskId) {
+    final handle = _taskToHandle.remove(taskId);
+    if (handle != null) {
+      _opaqueHandles.remove(handle);
+    }
     return _notificationIds.remove(taskId);
   }
 

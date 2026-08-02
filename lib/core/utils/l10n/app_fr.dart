@@ -77,4 +77,10 @@ const Map<String, String> frTranslations = {
   'settings_adblock_success_msg': 'Filtres AdBlock mis à jour avec succès !',
   'settings_adblock_failed_msg':
       'Échec de la mise à jour AdBlock. Vérifiez votre connexion.',
+
+  // Settings – Accessibility
+  'settings_accessibility_title': 'CONTRÔLES D\'ACCESSIBILITÉ',
+  'settings_text_scaling': 'MISE À L\'ÉCHELLE DU TEXTE',
+  'settings_text_scaling_sub':
+      'Ajuster dynamiquement la taille de la police dans l\'application',
 };

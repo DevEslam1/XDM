@@ -1422,7 +1422,7 @@ class _DownloadTaskList extends StatelessWidget {
               parent: BouncingScrollPhysics(),
             ),
             itemCount: renderItems.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            separatorBuilder: (context, index) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               final item = renderItems[index];
               final Widget card;

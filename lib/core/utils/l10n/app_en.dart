@@ -469,4 +469,10 @@ const Map<String, String> enTranslations = {
   'settings_adblock_success_msg': 'AdBlock hosts updated successfully!',
   'settings_adblock_failed_msg':
       'Failed to update AdBlock hosts. Check network.',
+
+  // Settings – Accessibility
+  'settings_accessibility_title': 'ACCESSIBILITY CONTROLS',
+  'settings_text_scaling': 'TEXT SCALING FACTOR',
+  'settings_text_scaling_sub':
+      'Adjust font sizing dynamically across the application',
 };

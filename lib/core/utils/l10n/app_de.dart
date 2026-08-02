@@ -76,4 +76,10 @@ const Map<String, String> deTranslations = {
   'settings_adblock_success_msg': 'AdBlock-Filter erfolgreich aktualisiert!',
   'settings_adblock_failed_msg':
       'Aktualisierung fehlgeschlagen. Netzwerkverbindung prüfen.',
+
+  // Settings – Accessibility
+  'settings_accessibility_title': 'BARRIEREFREIHEIT',
+  'settings_text_scaling': 'TEXT-SKALIERUNGSFAKTOR',
+  'settings_text_scaling_sub':
+      'Schriftgröße in der Anwendung dynamisch anpassen',
 };
