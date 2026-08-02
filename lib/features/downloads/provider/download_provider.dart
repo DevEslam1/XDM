@@ -111,12 +111,14 @@ class DownloadProvider extends ChangeNotifier
     _initTorrentSubscription();
   }
 
+  Timer? _torrentInitTimer;
+
   void _initTorrentSubscription() {
     if (_torrentUpdatesSubscription != null) return;
 
     if (!TorrentService.isInitialized) {
-      // Retry after a short delay; torrent init is async.
-      Future.delayed(const Duration(seconds: 2), () {
+      _torrentInitTimer?.cancel();
+      _torrentInitTimer = Timer(const Duration(seconds: 2), () {
         if (_disposed) return;
         _initTorrentSubscription();
       });
@@ -2377,6 +2379,8 @@ class DownloadProvider extends ChangeNotifier
     }
     _dbRetryTimers.clear();
 
+    _torrentInitTimer?.cancel();
+    _scheduleManager.dispose();
     _widgetTimer?.cancel();
 
     // Cancel all active download tokens
