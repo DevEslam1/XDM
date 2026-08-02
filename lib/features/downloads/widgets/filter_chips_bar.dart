@@ -40,7 +40,6 @@ class FilterChipsBar extends StatelessWidget {
             );
           },
           builder: (context, state, _) {
-            final isRtl = L10n.isRtl(context);
             return SizedBox(
               height: 40,
               child: Row(
@@ -57,7 +56,7 @@ class FilterChipsBar extends StatelessWidget {
                             padding: const EdgeInsetsDirectional.only(end: 8.0),
                             child: InputChip(
                               label: Text(
-                                '${isRtl ? 'تصنيف: ' : 'CAT: '}${category.toUpperCase()} ($count)',
+                                '${L10n.of(context, 'cat_filter_label')}${category.toUpperCase()} ($count)',
                                 style: TextStyle(
                                   color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                                   fontSize: 10,

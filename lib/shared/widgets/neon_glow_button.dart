@@ -157,8 +157,15 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                 style: FilledButton.styleFrom(
                   backgroundColor: widget.color,
                   foregroundColor: filledContentColor,
+                  overlayColor: isDark
+                      ? AppTheme.focusRing.withValues(alpha: 0.3)
+                      : AppTheme.lightFocusRing.withValues(alpha: 0.3),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: isDark ? AppTheme.focusRing : AppTheme.lightFocusRing,
+                      width: 0,
+                    ),
                   ),
                   minimumSize: Size(
                     widget.isExpanded ? double.infinity : 0,
@@ -187,6 +194,9 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                 onHover: (h) => setState(() => _pressed = h),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: widget.color,
+                  overlayColor: isDark
+                      ? AppTheme.focusRing.withValues(alpha: 0.3)
+                      : AppTheme.lightFocusRing.withValues(alpha: 0.3),
                   side: BorderSide(
                     color: widget.color.withValues(alpha: 0.3),
                     width: 1.0,

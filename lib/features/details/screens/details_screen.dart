@@ -198,20 +198,24 @@ class _DetailsScreenState extends State<DetailsScreen>
                     children: [
                       _stagger(
                         0.0,
-                        _TelemetryHero(
-                          task: task,
-                          statusColor: statusColor,
-                          speedText: speedTextInsideCircle,
-                          etaText:
-                              (task.status == DownloadStatus.downloading ||
-                                  isSeeding)
-                              ? L10n.translateStatus(
-                                  context,
-                                  task.status,
-                                  task.etaFormatted,
-                                )
-                              : L10n.of(context, 'details_inactive_eta'),
-                          pulse: _pulse,
+                        Hero(
+                          tag: 'download_card_${widget.taskId}',
+                          createRectTween: (begin, end) => RectTween(begin: begin, end: end),
+                          child: _TelemetryHero(
+                            task: task,
+                            statusColor: statusColor,
+                            speedText: speedTextInsideCircle,
+                            etaText:
+                                (task.status == DownloadStatus.downloading ||
+                                    isSeeding)
+                                ? L10n.translateStatus(
+                                    context,
+                                    task.status,
+                                    task.etaFormatted,
+                                  )
+                                : L10n.of(context, 'details_inactive_eta'),
+                            pulse: _pulse,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 14),

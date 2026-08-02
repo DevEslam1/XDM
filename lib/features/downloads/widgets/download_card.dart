@@ -49,8 +49,12 @@ class DownloadCard extends StatelessWidget with HapticHelper {
     return Semantics(
       container: true,
       label: semanticLabel,
-      hint: 'Double tap to view details',
-      child: cardWidget,
+      hint: L10n.of(context, 'double_tap_details_hint'),
+      child: Hero(
+        tag: 'download_card_${task.id}',
+        createRectTween: (begin, end) => RectTween(begin: begin, end: end),
+        child: cardWidget,
+      ),
     );
   }
 }

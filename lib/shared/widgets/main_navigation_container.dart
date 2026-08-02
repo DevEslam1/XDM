@@ -612,6 +612,9 @@ class _RailItem extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
+          focusColor: (Theme.of(context).brightness == Brightness.dark)
+              ? AppTheme.focusRing.withValues(alpha: 0.3)
+              : AppTheme.lightFocusRing.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: AppTheme.motionBase,
@@ -695,6 +698,9 @@ class _NavItem extends StatelessWidget {
             if (settings.vibration) HapticFeedback.mediumImpact();
             downloadProvider.setActiveTabIndex(index);
           },
+          focusColor: isDark
+              ? AppTheme.focusRing.withValues(alpha: 0.3)
+              : AppTheme.lightFocusRing.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(16),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

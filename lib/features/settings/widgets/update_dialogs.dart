@@ -57,7 +57,7 @@ Future<void> showUpdateInfoDialog(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isRtl ? 'ما الجديد في هذا الإصدار:' : 'Changelog:',
+              L10n.of(dialogCtx, 'update_changelog'),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
@@ -77,7 +77,7 @@ Future<void> showUpdateInfoDialog(
               child: Text(
                 update.changelog.isNotEmpty
                     ? update.changelog
-                    : (isRtl ? 'تحسينات عامة وإصلاح أخطاء.' : 'General performance improvements and bug fixes.'),
+                    : L10n.of(dialogCtx, 'update_general_fixes'),
                 style: const TextStyle(fontSize: 13),
               ),
             ),
@@ -87,7 +87,7 @@ Future<void> showUpdateInfoDialog(
           if (!update.mandatory)
             TextButton(
               onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(isRtl ? 'لاحقاً' : 'Later'),
+              child: Text(L10n.of(dialogCtx, 'btn_later')),
             ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
@@ -97,8 +97,8 @@ Future<void> showUpdateInfoDialog(
             icon: Icon(isDownloaded ? Icons.install_mobile : Icons.download_rounded),
             label: Text(
               isDownloaded
-                  ? (isRtl ? 'تثبيت الآن' : 'Install Now')
-                  : (isRtl ? 'تنزيل التحديث' : 'Update'),
+                  ? L10n.of(dialogCtx, 'btn_install_now')
+                  : L10n.of(dialogCtx, 'update_now_btn'),
             ),
             onPressed: () async {
               Navigator.pop(dialogCtx);
@@ -120,8 +120,6 @@ Future<void> showMandatoryUpdateDialog(
   UpdateInfo update,
   DownloadProvider provider,
 ) async {
-  final isRtl = L10n.isRtl(context);
-
   await showDialog(
     context: context,
     barrierDismissible: false,
@@ -129,11 +127,9 @@ Future<void> showMandatoryUpdateDialog(
       return PopScope(
         canPop: false,
         child: AlertDialog(
-          title: Text(isRtl ? 'تحديث إجباري مطلوب' : 'Mandatory Update Required'),
+          title: Text(L10n.of(dialogCtx, 'update_mandatory_title')),
           content: Text(
-            isRtl
-                ? 'يتطلب هذا الإصدار تحديثاً لضمان استمرار عمل الخدمة والأمان.\n\n${update.changelog}'
-                : 'This version requires a mandatory update to ensure continued functionality and security.\n\n${update.changelog}',
+            '${L10n.of(dialogCtx, 'update_mandatory_title')}\n\n${update.changelog}',
           ),
           actions: [
             ElevatedButton(
@@ -147,7 +143,7 @@ Future<void> showMandatoryUpdateDialog(
                   await provider.startUpdateDownload(update);
                 }
               },
-              child: Text(isRtl ? 'تحديث الآن' : 'Update Now'),
+              child: Text(L10n.of(dialogCtx, 'update_now_btn')),
             ),
           ],
         ),

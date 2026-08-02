@@ -41,6 +41,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   late final TextEditingController _proxyUsernameController;
   late final TextEditingController _proxyPasswordController;
   late final TextEditingController _backendUrlController;
+  late final TextEditingController _settingsSearchController;
+  String _settingsSearchQuery = '';
   final Map<String, bool> _expandedSections = {};
   late AnimationController _reveal;
 
@@ -60,6 +62,14 @@ class _SettingsScreenState extends State<SettingsScreen>
       text: settings.proxyPassword,
     );
     _backendUrlController = TextEditingController(text: settings.backendUrl);
+    _settingsSearchController = TextEditingController();
+    _settingsSearchController.addListener(() {
+      if (mounted) {
+        setState(() {
+          _settingsSearchQuery = _settingsSearchController.text.trim().toLowerCase();
+        });
+      }
+    });
     _reveal = AnimationController(vsync: this, duration: AppTheme.motionReveal)
       ..forward();
   }
@@ -72,8 +82,16 @@ class _SettingsScreenState extends State<SettingsScreen>
     _proxyUsernameController.dispose();
     _proxyPasswordController.dispose();
     _backendUrlController.dispose();
+    _settingsSearchController.dispose();
     _reveal.dispose();
     super.dispose();
+  }
+
+  bool _sectionMatches(String title, List<String> keywords) {
+    if (_settingsSearchQuery.isEmpty) return true;
+    final q = _settingsSearchQuery.toLowerCase();
+    return title.toLowerCase().contains(q) ||
+        keywords.any((k) => k.toLowerCase().contains(q));
   }
 
   Widget _stagger(double start, Widget child) {
@@ -196,19 +214,72 @@ class _SettingsScreenState extends State<SettingsScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _stagger(0.0, _SystemHeader(settings: settings)),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   _stagger(
-                    0.08,
-                    _ConsoleSection(
-                      index: '01',
-                      title: L10n.of(context, 'settings_engine_status'),
-                      accentColor: isDark
-                          ? AppTheme.neonBlue
-                          : AppTheme.lightNeonBlue,
-                      isDark: isDark,
-                      isExpanded:
-                          _expandedSections['engine'] ??
-                          true,
+                    0.04,
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                          width: 1.0,
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.search_rounded,
+                            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _settingsSearchController,
+                              style: TextStyle(
+                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                fontFamily: 'Inter',
+                                fontSize: 13,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: L10n.of(context, 'search_settings_hint'),
+                                hintStyle: TextStyle(
+                                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                  fontSize: 13,
+                                ),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                          if (_settingsSearchQuery.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                              onPressed: () {
+                                _settingsSearchController.clear();
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_sectionMatches(L10n.of(context, 'settings_engine_status'), ['auto resume', 'max channels', 'speed limit']))
+                    _stagger(
+                      0.08,
+                      _ConsoleSection(
+                        index: '01',
+                        title: L10n.of(context, 'settings_engine_status'),
+                        accentColor: isDark
+                            ? AppTheme.neonBlue
+                            : AppTheme.lightNeonBlue,
+                        isDark: isDark,
+                        isExpanded: _settingsSearchQuery.isNotEmpty ||
+                            (_expandedSections['engine'] ?? true),
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {

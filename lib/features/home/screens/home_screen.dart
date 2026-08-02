@@ -15,6 +15,7 @@ import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../add_download/widgets/add_download_dialog.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../shared/widgets/neon_glow_button.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -1543,8 +1544,10 @@ class _EmptyState extends StatelessWidget {
         );
       },
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
               padding: const EdgeInsets.all(28),
@@ -1603,9 +1606,26 @@ class _EmptyState extends StatelessWidget {
                 ),
               ),
             ),
+            if (selectedTab == 0) ...[
+              const SizedBox(height: 24),
+              NeonGlowButton(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => const AddDownloadDialog(),
+                  );
+                },
+                text: isRtl ? 'إضافة تنزيل جديد' : 'ADD NEW TRANSMISSION',
+                icon: Icons.add_rounded,
+                isFilled: true,
+                color: accentClr,
+                hasGlow: true,
+              ),
+            ],
           ],
         ),
       ),
+    ),
     );
   }
 }

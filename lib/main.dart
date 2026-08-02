@@ -77,33 +77,118 @@ Future<void> main(List<String> args) async {
     // Custom error widget builder for better UX
     ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
       return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark(),
         home: Scaffold(
+          backgroundColor: const Color(0xFF0F1117),
           body: Center(
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Something went wrong',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    kDebugMode
-                        ? errorDetails.toString()
-                        : 'An unexpected error occurred',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => exit(0),
-                    child: const Text('Restart App'),
-                  ),
-                ],
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 440),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF161A22),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                      ),
+                      child: const Icon(Icons.warning_amber_rounded, size: 36, color: Color(0xFFEF4444)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'SIGNAL DIAGNOSTIC ERROR',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                        color: Color(0xFFF2F4F8),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      kDebugMode
+                          ? errorDetails.exceptionAsString()
+                          : 'An unexpected application exception occurred.',
+                      textAlign: TextAlign.center,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        color: Color(0xFF9AA3B5),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Clipboard.setData(
+                                ClipboardData(text: errorDetails.toString()),
+                              );
+                            },
+                            icon: const Icon(Icons.copy_rounded, size: 14),
+                            label: const Text('COPY DIAGNOSTICS'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF9AA3B5),
+                              side: const BorderSide(color: Color(0xFF2A3040)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              textStyle: const TextStyle(
+                                fontFamily: 'Space Grotesk',
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () => exit(0),
+                            icon: const Icon(Icons.refresh_rounded, size: 14),
+                            label: const Text('RELOAD APP'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              textStyle: const TextStyle(
+                                fontFamily: 'Space Grotesk',
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -93,7 +93,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           Icons.delete_sweep_outlined,
                           color: redClr,
                         ),
-                        tooltip: isRtl ? 'مسح كل السجل' : 'CLEAR ALL HISTORY',
+                        tooltip: L10n.of(context, 'clear_history_logs'),
                         onPressed: () => _showClearHistoryConfirmation(
                           context,
                           context.read<DownloadProvider>(),
@@ -138,7 +138,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     fontSize: 14,
                                   ),
                                   decoration: InputDecoration(
-                                    hintText: isRtl ? 'بحث في السجل...' : 'SEARCH HISTORY SIGNALS...',
+                                    hintText: L10n.of(context, 'search_settings_hint'),
                                     hintStyle: TextStyle(
                                       color: mutedClr,
                                       fontSize: 12,
@@ -181,7 +181,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                isRtl ? 'عمليات النقل المكتملة' : 'RESOLVED TRANSMISSIONS',
+                                L10n.of(context, 'resolved_transmissions'),
                                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                   color: secClr,
                                   fontSize: 9,
@@ -190,7 +190,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 ),
                               ),
                               Text(
-                                '${historyTasks.length} ${isRtl ? 'سجلات' : 'RECORDS'}',
+                                '${historyTasks.length} ${L10n.of(context, 'records')}',
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: mutedClr,
                                   fontSize: 9,
@@ -285,8 +285,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
           const SizedBox(height: 16),
           Text(
             isNoMatch
-                ? (isRtl ? 'لا توجد نتائج مطابقة' : 'NO MATCHING RECORDS')
-                : (isRtl ? 'لم يتم العثور على إشارات مكتملة' : 'NO COMPLETED SIGNALS FOUND'),
+                ? L10n.of(context, 'no_matching_records')
+                : L10n.of(context, 'no_completed_signals'),
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
               color: secClr,
               letterSpacing: 1.0,
@@ -297,8 +297,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
           const SizedBox(height: 8),
           Text(
             isNoMatch
-                ? (isRtl ? 'جرّب كلمات بحث مختلفة.' : 'Try a different search term.')
-                : (isRtl ? 'سيتم تصنيف السجلات المكتملة هنا.' : 'Finished logs will be cataloged here.'),
+                ? L10n.of(context, 'try_different_search')
+                : L10n.of(context, 'finished_logs_cataloged'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: mutedClr,
               fontSize: 11,
@@ -309,7 +309,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             TextButton.icon(
               onPressed: onClearSearch,
               icon: const Icon(Icons.clear, size: 16),
-              label: Text(isRtl ? 'مسح البحث' : 'CLEAR SEARCH'),
+              label: Text(L10n.of(context, 'clear_search')),
             ),
           ],
         ],
@@ -342,7 +342,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               side: BorderSide(color: glassBorder, width: 0.8),
             ),
             title: Text(
-              isRtl ? 'مسح سجل التاريخ' : 'CLEAR HISTORY LOGS',
+              L10n.of(context, 'clear_history_logs'),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: redClr,
                 fontWeight: FontWeight.bold,
@@ -350,9 +350,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             ),
             content: Text(
-              isRtl
-                  ? 'هل أنت متأكد من حذف جميع سجلات التاريخ البالغ عددها ${tasksToClear.length}؟'
-                  : 'Are you sure you want to delete all ${tasksToClear.length} completed history records?',
+              '${L10n.of(context, 'clear_history_logs')} (${tasksToClear.length})',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: secClr),
             ),
             actions: [
@@ -375,7 +373,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
                 child: Text(
-                  isRtl ? 'مسح الكل' : 'CLEAR ALL',
+                  L10n.of(context, 'clear_all'),
                   style: TextStyle(
                     color: redClr,
                     fontWeight: FontWeight.bold,
