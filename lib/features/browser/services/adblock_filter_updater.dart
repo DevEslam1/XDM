@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -215,6 +216,9 @@ class AdBlockFilterUpdater {
 
     return domains;
   }
+
+  @visibleForTesting
+  Future<Set<String>> parseFilterFile(File file, FilterType type) => _parseFilterFile(file, type);
 
   bool shouldBlock(String hostname) {
     if (hostname.isEmpty) return false;

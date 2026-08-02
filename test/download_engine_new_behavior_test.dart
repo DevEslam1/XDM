@@ -350,7 +350,7 @@ void main() {
         await response.close();
       });
 
-      final engine = DownloadEngine();
+      final engine = DownloadEngine(enableCleanupTimer: false);
       final localFile = File('build/test_single_complete.bin');
       final tempFile = File('build/test_single_complete.bin.dmxpart');
       if (localFile.existsSync()) localFile.deleteSync();
@@ -397,7 +397,7 @@ void main() {
           await response.close();
         });
 
-        final engine = DownloadEngine();
+        final engine = DownloadEngine(enableCleanupTimer: false);
         final localFile = File('build/test_integrity_fail.bin');
         final tempFile = File('build/test_integrity_fail.bin.dmxpart');
         if (localFile.existsSync()) localFile.deleteSync();
@@ -456,7 +456,7 @@ void main() {
         }
       });
 
-      final engine = DownloadEngine();
+      final engine = DownloadEngine(enableCleanupTimer: false);
       final localFile = File('build/test_norange_fallback.bin');
       final tempFile = File('build/test_norange_fallback.bin.dmxpart');
       if (localFile.existsSync()) localFile.deleteSync();
@@ -498,7 +498,7 @@ void main() {
         await response.close();
       });
 
-      final engine = DownloadEngine();
+      final engine = DownloadEngine(enableCleanupTimer: false);
       final localFile = File('build/test_speed_limit.bin');
       final tempFile = File('build/test_speed_limit.bin.dmxpart');
       if (localFile.existsSync()) localFile.deleteSync();
@@ -758,7 +758,7 @@ void main() {
           await response.close();
         });
 
-        final engine = DownloadEngine();
+        final engine = DownloadEngine(enableCleanupTimer: false);
         final cancelToken = CancelToken();
 
         final localFile = File('build/test_cancel_cleanup.bin');
@@ -828,7 +828,7 @@ void main() {
         await response.close();
       });
 
-      final engine = DownloadEngine();
+      final engine = DownloadEngine(enableCleanupTimer: false);
       final localFile = File('build/test_resume_partial.bin');
       final tempFile = File('build/test_resume_partial.bin.dmxpart');
       if (localFile.existsSync()) localFile.deleteSync();

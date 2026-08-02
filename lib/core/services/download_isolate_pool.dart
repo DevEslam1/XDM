@@ -133,10 +133,29 @@ class DownloadIsolatePool {
     }
 
     // All workers at capacity — enqueue with priority.
-    final pending = _PendingJob(command: command, priority: priority);
+    final pending = _PendingJob(
+      command: command,
+      priority: priority,
+      pool: this,
+    );
     _pendingQueue.add(pending);
     _pendingQueue.sort((a, b) => b.priority.compareTo(a.priority));
     return pending.job;
+  }
+
+  void _cancelPending(DownloadJob job) {
+    final index = _pendingQueue.indexWhere((pending) => pending.job == job);
+    if (index == -1) return;
+
+    _pendingQueue.removeAt(index);
+    if (!job._controller.isClosed) {
+      job._controller.add(
+        IsolateMessage(job.jobId, 'error', {
+          'errorType': 'cancel',
+          'errorMessage': 'Download cancelled before a worker was available.',
+        }),
+      );
+    }
   }
 
   /// Dequeues the next pending job (highest priority first) and submits it to
@@ -501,15 +520,11 @@ class _Worker {
     _send({'type': 'cancel', 'jobId': jobId});
     if (!job._controller.isClosed) {
       job._controller.add(
-        IsolateMessage(
-          jobId,
-          'error',
-          {
-            'errorType': 'cancel',
-            'errorMessage':
-                'Job cancelled: no progress for over 5 minutes (stuck).',
-          },
-        ),
+        IsolateMessage(jobId, 'error', {
+          'errorType': 'cancel',
+          'errorMessage':
+              'Job cancelled: no progress for over 5 minutes (stuck).',
+        }),
       );
     }
   }
@@ -540,11 +555,13 @@ class _Worker {
   }
 
   Future<void> shutdown() async {
-    _shuttingDown = true;
     _respawnTimer?.cancel();
     _respawnTimer = null;
 
+    // Send shutdown before marking the worker unavailable; _send intentionally
+    // ignores commands after _shuttingDown is set.
     _send({'type': 'shutdown'});
+    _shuttingDown = true;
 
     // FIX(C4): Give the isolate a brief window to process the shutdown
     // message, cancel HTTP streams, and close file handles gracefully
@@ -575,6 +592,7 @@ class _Worker {
 class DownloadJob {
   int _jobId;
   _Worker? _worker;
+  final DownloadIsolatePool? _pool;
 
   final StreamController<IsolateMessage> _controller =
       StreamController<IsolateMessage>();
@@ -583,7 +601,7 @@ class DownloadJob {
   /// health monitor to detect stuck jobs.
   DateTime lastProgress = DateTime.now();
 
-  DownloadJob._(this._jobId, this._worker);
+  DownloadJob._(this._jobId, this._worker, [this._pool]);
 
   int get jobId => _jobId;
   bool get isClosed => _controller.isClosed;
@@ -591,7 +609,12 @@ class DownloadJob {
   Stream<IsolateMessage> get messages => _controller.stream;
 
   void cancel() {
-    _worker?._send({'type': 'cancel', 'jobId': _jobId});
+    final worker = _worker;
+    if (worker != null) {
+      worker._send({'type': 'cancel', 'jobId': _jobId});
+    } else {
+      _pool?._cancelPending(this);
+    }
   }
 
   void dispose() {
@@ -614,8 +637,11 @@ class _PendingJob {
   final int priority;
   final DownloadJob job;
 
-  _PendingJob({required this.command, required this.priority})
-    : job = DownloadJob._(0, null);
+  _PendingJob({
+    required this.command,
+    required this.priority,
+    required DownloadIsolatePool pool,
+  }) : job = DownloadJob._(0, null, pool);
 }
 
 /// Worker-side mutable state for one running job.
@@ -692,7 +718,9 @@ void _downloadWorkerMain(SendPort mainSendPort) {
         try {
           engine.close();
         } catch (e) {
-          _log.info('[DownloadIsolatePool] engine close on shutdown failed: $e');
+          _log.info(
+            '[DownloadIsolatePool] engine close on shutdown failed: $e',
+          );
         }
 
         commandPort.close();

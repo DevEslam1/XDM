@@ -66,6 +66,18 @@ void main() {
       );
       expect(
         YoutubeService.isPlaylistUrl(
+          'youtube.com/playlist?list=PL123456789',
+        ),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isPlaylistUrl(
+          'PL123456789',
+        ),
+        isTrue,
+      );
+      expect(
+        YoutubeService.isPlaylistUrl(
           'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
         ),
         isFalse,
@@ -118,6 +130,18 @@ void main() {
           'https://www.youtube.com/watch?v=abc&list=PL987654321',
         ),
         'PL987654321',
+      );
+      expect(
+        YoutubeService.extractPlaylistId(
+          'youtube.com/playlist?list=PL123456789',
+        ),
+        'PL123456789',
+      );
+      expect(
+        YoutubeService.extractPlaylistId(
+          'PL123456789',
+        ),
+        'PL123456789',
       );
     });
   });

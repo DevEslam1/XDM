@@ -236,13 +236,24 @@ class YoutubeService {
   }
 
   static bool isPlaylistUrl(String url) {
+    final clean = url.trim();
+    if (clean.isEmpty) return false;
+
+    // If it's a raw playlist ID, it's considered a valid target for playlist sheets
+    final idRegex = RegExp(r'^(PL|UU|FL|LL|RD|OLAK5uy_)[a-zA-Z0-9_-]{9,80}$');
+    if (idRegex.hasMatch(clean)) return true;
+
+    final normalized = clean.startsWith('http://') || clean.startsWith('https://')
+        ? clean
+        : 'https://$clean';
+
     try {
-      final uri = Uri.parse(url);
+      final uri = Uri.parse(normalized);
       final host = uri.host.toLowerCase();
       if (!_isYouTubeHost(host) && !_isYouTubeShortHost(host)) {
         return false;
       }
-      return extractPlaylistId(url) != null;
+      return extractPlaylistId(normalized) != null;
     } catch (e) {
       debugPrint('[YouTubeService] isPlaylistUrl failed to parse URL: $e');
       return false;
@@ -257,7 +268,11 @@ class YoutubeService {
 
   static String? extractVideoId(String url) {
     try {
-      final uri = Uri.parse(url);
+      final clean = url.trim();
+      final normalized = clean.startsWith('http://') || clean.startsWith('https://')
+          ? clean
+          : 'https://$clean';
+      final uri = Uri.parse(normalized);
       final host = uri.host.toLowerCase();
       final isYoutubeHost = _isYouTubeHost(host) || _isYouTubeShortHost(host);
       // Without this check, ANY url with a `v=` query parameter or a
@@ -291,8 +306,24 @@ class YoutubeService {
   }
 
   static String? extractPlaylistId(String url) {
+    final clean = url.trim();
+    if (clean.isEmpty) return null;
+
+    final listMatch = RegExp(r'[&?]list=([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(clean);
+    if (listMatch != null) {
+      return listMatch.group(1);
+    }
+
+    final idRegex = RegExp(r'^(PL|UU|FL|LL|RD|OLAK5uy_)[a-zA-Z0-9_-]{9,80}$');
+    if (idRegex.hasMatch(clean)) {
+      return clean;
+    }
+
     try {
-      final uri = Uri.parse(url);
+      final normalized = clean.startsWith('http://') || clean.startsWith('https://')
+          ? clean
+          : 'https://$clean';
+      final uri = Uri.parse(normalized);
       if (uri.queryParameters.containsKey('list')) {
         final listId = uri.queryParameters['list'];
         if (listId != null && listId.isNotEmpty) {

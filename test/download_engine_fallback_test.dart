@@ -30,7 +30,7 @@ void main() {
       }
     });
 
-    final engine = DownloadEngine();
+    final engine = DownloadEngine(enableCleanupTimer: false);
     final tempFile = File('build/test_fallback.tmp');
     final localFile = File('build/test_fallback.bin');
     if (tempFile.existsSync()) tempFile.deleteSync();
@@ -70,7 +70,7 @@ void main() {
       await response.close();
     });
 
-    final engine = DownloadEngine();
+    final engine = DownloadEngine(enableCleanupTimer: false);
     final tempFile = File('build/test_error.tmp');
     final localFile = File('build/test_error.bin');
     if (tempFile.existsSync()) tempFile.deleteSync();
