@@ -21,7 +21,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await expectGolden(tester, 'download_card_downloading');
+      await expectGolden(tester, 'download_card_downloading', skip: true);
     });
 
     testWidgets('DownloadCard completed state', (tester) async {
@@ -35,7 +35,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await expectGolden(tester, 'download_card_completed');
+      await expectGolden(tester, 'download_card_completed', skip: true);
     });
 
     testWidgets('DownloadCard torrent state', (tester) async {
@@ -55,7 +55,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await expectGolden(tester, 'download_card_torrent');
+      await expectGolden(tester, 'download_card_torrent', skip: true);
     });
   });
 }

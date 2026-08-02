@@ -15,7 +15,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('ubuntu-24.04-desktop-amd64.iso'), findsOneWidget);
     });
@@ -26,7 +26,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byIcon(Icons.pause_rounded), findsWidgets);
     });
@@ -37,7 +37,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byIcon(Icons.play_arrow_rounded), findsWidgets);
     });
@@ -51,7 +51,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byIcon(Icons.refresh_rounded), findsWidgets);
     });
@@ -62,7 +62,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byIcon(Icons.folder_open_rounded), findsWidgets);
     });
@@ -73,7 +73,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.textContaining('5.0'), findsWidgets);
     });
@@ -84,7 +84,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(DownloadCard), findsOneWidget);
     });
@@ -101,7 +101,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.textContaining('FILES'), findsWidgets);
     });
@@ -112,7 +112,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.textContaining('8 CH'), findsWidgets);
     });
@@ -123,7 +123,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(DownloadCard), findsOneWidget);
     });
@@ -137,7 +137,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       final textWidget = tester.widget<Text>(
         find.textContaining('a_very_long_file_name'),
@@ -152,10 +152,10 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: DownloadCard(task: task),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       await tester.tap(find.byType(DownloadCard));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(DownloadCard), findsOneWidget);
     });

@@ -1,15 +1,149 @@
+import 'package:flutter/material.dart';
+import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/permission_service.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/browser/models/bookmark.dart';
 
+class FakeWebViewPlatform extends WebViewPlatform {
+  @override
+  PlatformWebViewController createPlatformWebViewController(
+    PlatformWebViewControllerCreationParams params,
+  ) {
+    return FakePlatformWebViewController(params);
+  }
+
+  @override
+  PlatformWebViewWidget createPlatformWebViewWidget(
+    PlatformWebViewWidgetCreationParams params,
+  ) {
+    return FakePlatformWebViewWidget(params);
+  }
+
+  @override
+  PlatformWebViewCookieManager createPlatformWebViewCookieManager(
+    PlatformWebViewCookieManagerCreationParams params,
+  ) {
+    return FakePlatformWebViewCookieManager(params);
+  }
+
+  @override
+  PlatformNavigationDelegate createPlatformNavigationDelegate(
+    PlatformNavigationDelegateCreationParams params,
+  ) {
+    return FakePlatformNavigationDelegate(params);
+  }
+}
+
+class FakePlatformNavigationDelegate extends PlatformNavigationDelegate {
+  FakePlatformNavigationDelegate(super.params) : super.implementation();
+
+  @override
+  Future<void> setOnPageStarted(PageEventCallback onPageStarted) async {}
+
+  @override
+  Future<void> setOnPageFinished(PageEventCallback onPageFinished) async {}
+
+  @override
+  Future<void> setOnProgress(ProgressCallback onProgress) async {}
+
+  @override
+  Future<void> setOnWebResourceError(
+    WebResourceErrorCallback onWebResourceError,
+  ) async {}
+
+  @override
+  Future<void> setOnNavigationRequest(
+    NavigationRequestCallback onNavigationRequest,
+  ) async {}
+
+  @override
+  Future<void> setOnUrlChange(UrlChangeCallback onUrlChange) async {}
+}
+
+class FakePlatformWebViewController extends PlatformWebViewController {
+  FakePlatformWebViewController(super.params) : super.implementation();
+
+  @override
+  Future<void> loadRequest(LoadRequestParams params) async {}
+
+  @override
+  Future<void> setJavaScriptMode(JavaScriptMode javaScriptMode) async {}
+
+  @override
+  Future<void> setBackgroundColor(Color color) async {}
+
+  @override
+  Future<void> setPlatformNavigationDelegate(
+    PlatformNavigationDelegate handler,
+  ) async {}
+
+  @override
+  Future<void> setUserAgent(String? userAgent) async {}
+
+  @override
+  Future<void> addJavaScriptChannel(
+    JavaScriptChannelParams javaScriptChannelParams,
+  ) async {}
+
+  @override
+  Future<void> enableZoom(bool enabled) async {}
+
+  @override
+  Future<void> setOnConsoleMessage(
+    void Function(JavaScriptConsoleMessage consoleMessage) onConsoleMessage,
+  ) async {}
+
+  @override
+  Future<void> setOnPlatformPermissionRequest(
+    void Function(PlatformWebViewPermissionRequest request) onPermissionRequest,
+  ) async {}
+
+  @override
+  Future<void> setOnScrollPositionChange(
+    void Function(ScrollPositionChange scrollPositionChange)? onScrollPositionChange,
+  ) async {}
+
+  @override
+  Future<String?> currentUrl() async => 'https://example.com';
+
+  @override
+  Future<String?> getTitle() async => 'Example Domain';
+
+  @override
+  Future<bool> canGoBack() async => false;
+
+  @override
+  Future<bool> canGoForward() async => false;
+
+  @override
+  Future<void> reload() async {}
+}
+
+class FakePlatformWebViewWidget extends PlatformWebViewWidget {
+  FakePlatformWebViewWidget(super.params) : super.implementation();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
+  }
+}
+
+class FakePlatformWebViewCookieManager extends PlatformWebViewCookieManager {
+  FakePlatformWebViewCookieManager(super.params) : super.implementation();
+}
+
 class FakeDatabaseService extends DatabaseService {
   final List<DownloadTask> _tasks = [];
   final List<Bookmark> _bookmarks = [];
   final List<Map<String, dynamic>> _history = [];
 
-  FakeDatabaseService() : super.forSubclass();
+  FakeDatabaseService({List<DownloadTask>? initialTasks}) : super.forSubclass() {
+    if (initialTasks != null) {
+      _tasks.addAll(initialTasks);
+    }
+  }
 
   Future<void> fakeInit({String? testPath}) async {}
 

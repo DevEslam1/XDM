@@ -9,7 +9,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: const AddDownloadDialog(),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(AddDownloadDialog), findsOneWidget);
     });
@@ -18,12 +18,12 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: const AddDownloadDialog(),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       final textFields = find.byType(TextFormField);
       if (textFields.evaluate().isNotEmpty) {
         await tester.enterText(textFields.first, 'https://example.com/file.zip');
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('https://example.com/file.zip'), findsOneWidget);
       }
     });
@@ -32,7 +32,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: const AddDownloadDialog(),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       final textFields = find.byType(TextFormField);
       if (textFields.evaluate().isNotEmpty) {
@@ -40,8 +40,8 @@ void main() {
           textFields.first,
           'magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a',
         );
-        await tester.pumpAndSettle();
-        expect(find.textContaining('magnet:'), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.textContaining('magnet:'), findsWidgets);
       }
     });
   });

@@ -63,6 +63,7 @@ class DownloadProvider extends ChangeNotifier
     DownloadEngine? downloadEngine,
     PermissionService? permissionService,
     NotificationService? notificationService,
+    bool enableBackgroundTimers = true,
   }) : _databaseService = databaseService,
        _settingsProvider = settingsProvider,
        _downloadEngine = downloadEngine ?? DownloadEngine(),
@@ -89,7 +90,9 @@ class DownloadProvider extends ChangeNotifier
       notifyListeners: notifyListeners,
       pumpQueue: pumpQueue,
     );
-    _scheduleManager.start();
+    if (enableBackgroundTimers) {
+      _scheduleManager.start();
+    }
 
     _notifications = NotificationCoordinator(
       notificationService: _notificationService,
@@ -108,7 +111,9 @@ class DownloadProvider extends ChangeNotifier
     _orchestrator = DownloadOrchestrator(this);
 
     // Subscribe lazily — torrent engine may not be initialized yet.
-    _initTorrentSubscription();
+    if (enableBackgroundTimers) {
+      _initTorrentSubscription();
+    }
   }
 
   Timer? _torrentInitTimer;

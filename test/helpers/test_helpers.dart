@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
+import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
@@ -12,10 +14,14 @@ Widget createTestApp({
   required Widget child,
   DownloadProvider? downloadProvider,
   SettingsProvider? settingsProvider,
+  DatabaseService? databaseService,
   ThemeData? theme,
   Locale? locale,
 }) {
-  final provider = downloadProvider ?? createMockDownloadProvider();
+  WebViewPlatform.instance = FakeWebViewPlatform();
+
+  final db = databaseService ?? FakeDatabaseService();
+  final provider = downloadProvider ?? createMockDownloadProvider(db: db);
   addTearDown(() {
     try {
       provider.dispose();
@@ -24,6 +30,9 @@ Widget createTestApp({
 
   return MultiProvider(
     providers: [
+      Provider<DatabaseService>.value(
+        value: db,
+      ),
       ChangeNotifierProvider<DownloadProvider>.value(
         value: provider,
       ),
@@ -41,20 +50,17 @@ Widget createTestApp({
 
 /// Creates a DownloadProvider with fake services.
 DownloadProvider createMockDownloadProvider({
+  DatabaseService? db,
   List<DownloadTask>? tasks,
 }) {
   final settings = createMockSettingsProvider();
-  final db = FakeDatabaseService();
-  if (tasks != null) {
-    for (final task in tasks) {
-      db.saveTask(task);
-    }
-  }
+  final database = db ?? FakeDatabaseService(initialTasks: tasks);
   final provider = DownloadProvider(
-    databaseService: db,
+    databaseService: database,
     settingsProvider: settings,
     downloadEngine: FakeDownloadEngine(),
     permissionService: FakePermissionService(),
+    enableBackgroundTimers: false,
   );
   return provider;
 }
@@ -71,7 +77,9 @@ SettingsProvider createMockSettingsProvider() {
     'wifiOnly': false,
     'batterySaverMode': false,
   });
-  return SettingsProvider.instance;
+  final instance = SettingsProvider.instance;
+  instance.load();
+  return instance;
 }
 
 /// Creates a sample DownloadTask for testing.

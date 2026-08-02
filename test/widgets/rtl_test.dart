@@ -17,7 +17,7 @@ void main() {
         ),
         locale: const Locale('ar'),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
       expect(find.byType(DownloadCard), findsOneWidget);
@@ -36,7 +36,7 @@ void main() {
         downloadProvider: provider,
         locale: const Locale('ar'),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
@@ -49,7 +49,7 @@ void main() {
         ),
         locale: const Locale('ar'),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
@@ -65,7 +65,7 @@ void main() {
           child: DownloadCard(task: task),
         ),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });
@@ -75,6 +75,8 @@ void main() {
         tasks: createMixedTaskList(),
       );
 
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+
       await tester.pumpWidget(MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
         child: createTestApp(
@@ -82,7 +84,7 @@ void main() {
           downloadProvider: provider,
         ),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
     });

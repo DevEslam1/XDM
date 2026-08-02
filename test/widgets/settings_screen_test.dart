@@ -9,7 +9,7 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(SettingsScreen), findsOneWidget);
     });
@@ -21,12 +21,12 @@ void main() {
         child: const SettingsScreen(),
         settingsProvider: settings,
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       final switches = find.byType(Switch);
       if (switches.evaluate().isNotEmpty) {
         await tester.tap(switches.first);
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 300));
       }
       expect(find.byType(SettingsScreen), findsOneWidget);
     });
@@ -35,13 +35,13 @@ void main() {
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(),
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       await tester.drag(
         find.byType(SettingsScreen),
         const Offset(0, -500),
       );
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(SettingsScreen), findsOneWidget);
     });

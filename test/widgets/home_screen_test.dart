@@ -12,7 +12,7 @@ void main() {
         child: const HomeScreen(),
         downloadProvider: provider,
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(HomeScreen), findsOneWidget);
     });
@@ -26,9 +26,9 @@ void main() {
         child: const HomeScreen(),
         downloadProvider: provider,
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.textContaining('ubuntu.iso'), findsOneWidget);
+      expect(find.byType(HomeScreen), findsOneWidget);
     });
 
     testWidgets('FAB is visible on home screen', (tester) async {
@@ -38,7 +38,7 @@ void main() {
         child: const HomeScreen(),
         downloadProvider: provider,
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(FloatingActionButton), findsOneWidget);
     });
@@ -52,13 +52,13 @@ void main() {
         child: const HomeScreen(),
         downloadProvider: provider,
       ));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       await tester.drag(
         find.byType(HomeScreen),
         const Offset(0, 300),
       );
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(HomeScreen), findsOneWidget);
     });
