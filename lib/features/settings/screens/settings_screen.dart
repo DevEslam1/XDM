@@ -20,6 +20,7 @@ import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/dmx_app_icon.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../browser/services/ad_blocker_service.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../provider/settings_provider.dart';
@@ -33,6 +34,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen>
     with HapticHelper, TickerProviderStateMixin {
+  bool _isUpdatingAdBlock = false;
   late final TextEditingController _uaController;
   late final TextEditingController _proxyHostController;
   late final TextEditingController _proxyPortController;
@@ -1068,7 +1070,121 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                   const SizedBox(height: 14),
-                  _stagger(0.64, _BackupModule(settings: settings)),
+                  _stagger(
+                    0.64,
+                    _ConsoleSection(
+                      index: '08',
+                      title: L10n.of(context, 'settings_adblock_title'),
+                      accentColor: isDark
+                          ? AppTheme.neonGreen
+                          : AppTheme.lightNeonGreen,
+                      isDark: isDark,
+                      isExpanded:
+                          _expandedSections['adblock'] ??
+                          false,
+                      onToggle: () {
+                        triggerHaptic(settings);
+                        setState(() {
+                          _expandedSections['adblock'] =
+                              !(_expandedSections['adblock'] ?? false);
+                        });
+                      },
+                      children: [
+                        _SwitchTile(
+                          accentColor: isDark
+                              ? AppTheme.neonGreen
+                              : AppTheme.lightNeonGreen,
+                          title: L10n.of(context, 'settings_enable_adblock'),
+                          subtitle: L10n.of(context, 'settings_enable_adblock_sub'),
+                          value: AdBlockerService.instance.isEnabled,
+                          onChanged: (val) async {
+                            await AdBlockerService.instance.setEnabled(val);
+                            triggerHaptic(settings);
+                            setState(() {});
+                          },
+                        ),
+                        _Divider(isDark: isDark),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                '${L10n.of(context, 'settings_adblock_rules')}: ${AdBlockerService.instance.ruleCount}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.lightTextSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              NeonGlowButton(
+                                isFilled: false,
+                                color: isDark
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.lightNeonGreen,
+                                text: _isUpdatingAdBlock
+                                    ? L10n.of(context, 'settings_updating_adblock_hosts')
+                                    : L10n.of(context, 'settings_update_adblock_hosts'),
+                                onPressed: _isUpdatingAdBlock
+                                    ? null
+                                    : () async {
+                                        triggerHaptic(settings);
+                                        setState(() => _isUpdatingAdBlock = true);
+                                        ThemedSnackbar.show(
+                                          context,
+                                          message: L10n.of(
+                                            context,
+                                            'settings_adblock_updating_msg',
+                                          ),
+                                          color: isDark
+                                              ? AppTheme.neonBlue
+                                              : AppTheme.lightNeonBlue,
+                                          icon: Icons.sync,
+                                          isDarkMode: isDark,
+                                        );
+                                        final success = await AdBlockerService.instance
+                                            .updateFilters(force: true);
+                                        if (mounted && context.mounted) {
+                                          setState(() => _isUpdatingAdBlock = false);
+                                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                          if (success) {
+                                            ThemedSnackbar.show(
+                                              context,
+                                              message:
+                                                  '${L10n.of(context, 'settings_adblock_success_msg')} (${AdBlockerService.instance.ruleCount})',
+                                              color: isDark
+                                                  ? AppTheme.neonGreen
+                                                  : AppTheme.lightNeonGreen,
+                                              icon: Icons.check_circle_outline,
+                                              isDarkMode: isDark,
+                                            );
+                                          } else {
+                                            ThemedSnackbar.show(
+                                              context,
+                                              message: L10n.of(
+                                                context,
+                                                'settings_adblock_failed_msg',
+                                              ),
+                                              color: isDark
+                                                  ? AppTheme.neonRed
+                                                  : AppTheme.lightNeonRed,
+                                              icon: Icons.error_outline,
+                                              isDarkMode: isDark,
+                                            );
+                                          }
+                                        }
+                                      },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _stagger(0.68, _BackupModule(settings: settings)),
                   const SizedBox(height: 14),
                   _stagger(0.72, _CommsModule(settings: settings)),
                   const SizedBox(height: 24),

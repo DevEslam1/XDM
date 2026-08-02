@@ -62,4 +62,18 @@ const Map<String, String> deTranslations = {
   'settings_https_only': 'Nur-HTTPS-Modus',
   'settings_https_only_sub':
       'http://-Navigation wo möglich auf https:// aktualisieren',
+
+  // Settings – AdBlock
+  'settings_adblock_title': 'ADBLOCKER & HOST-FILTER',
+  'settings_enable_adblock': 'ADBLOCKER AKTIVIEREN',
+  'settings_enable_adblock_sub':
+      'Werbung, Popups und Tracking-Skripte im Browser blockieren',
+  'settings_adblock_rules': 'Geladene Filterregeln',
+  'settings_update_adblock_hosts': 'ADBLOCK-FILTER AKTUALISIEREN',
+  'settings_updating_adblock_hosts': 'AKTUALISIERUNG...',
+  'settings_adblock_updating_msg':
+      'Herunterladen und Aktualisieren der AdBlock-Filter (EasyList)...',
+  'settings_adblock_success_msg': 'AdBlock-Filter erfolgreich aktualisiert!',
+  'settings_adblock_failed_msg':
+      'Aktualisierung fehlgeschlagen. Netzwerkverbindung prüfen.',
 };

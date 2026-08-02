@@ -76,7 +76,8 @@ class PositionalFileWriter {
     final file = File(path);
     await file.parent.create(recursive: true);
 
-    final RandomAccessFile raf = await file.open(mode: FileMode.writeOnly);
+    final RandomAccessFile raf =
+        await file.open(mode: FileMode.writeOnlyAppend);
 
     return PositionalFileWriter._(raf, threadCount, bufferSize);
   }

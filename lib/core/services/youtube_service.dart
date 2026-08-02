@@ -622,10 +622,14 @@ class YoutubeService {
       throw Exception('Invalid YouTube playlist URL.');
     }
 
+    final targetUrl = url.startsWith('http://') || url.startsWith('https://')
+        ? url
+        : 'https://www.youtube.com/playlist?list=$playlistId';
+
     try {
       final settings = SettingsProvider.instance;
       final backendRes = await XdmBackendClient().getPlaylist(
-        url,
+        targetUrl,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
         pageToken: pageToken,
         pageSize: pageSize,
@@ -643,9 +647,18 @@ class YoutubeService {
           } else if (thumb != null) {
             map['thumbnailUrl'] = thumb.toString();
           }
+          if ((map['url'] == null || map['url'].toString().isEmpty) && videoId != null && videoId.isNotEmpty) {
+            map['url'] = 'https://www.youtube.com/watch?v=$videoId';
+          }
           return map;
         }).toList();
-        return {'info': info, 'videos': videoList};
+        return {
+          'info': info,
+          'videos': videoList,
+          if (backendRes['note'] != null) 'note': backendRes['note'],
+          if (backendRes['nextPageToken'] != null)
+            'nextPageToken': backendRes['nextPageToken'],
+        };
       }
     } on BackendRateLimitException catch (e) {
       throw Exception(e.toUserMessage());

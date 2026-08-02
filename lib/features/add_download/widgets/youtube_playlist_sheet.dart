@@ -78,6 +78,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   bool _isDownloading = false;
   bool _isCancelled = false;
   String? _errorMessage;
+  String? _note;
   String _qualityPreset = 'best_combined';
   int _downloadProgress = 0;
   String _currentVideoTitle = '';
@@ -178,9 +179,12 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
             [],
       );
 
+      final note = details?['note'] as String?;
+
       setState(() {
         _playlistInfo = info;
         _videos = videos;
+        _note = note;
         _isLoading = false;
         // No cast: token may be int or String depending on backend.
         _nextPageToken = details?['nextPageToken'];
@@ -565,6 +569,53 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                       ),
                     )
                   else ...[
+                    if (_note != null && _note!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 4,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppTheme.neonAmber.withValues(alpha: 0.15)
+                                : AppTheme.lightNeonAmber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isDark
+                                  ? AppTheme.neonAmber.withValues(alpha: 0.4)
+                                  : AppTheme.lightNeonAmber.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                size: 16,
+                                color: isDark
+                                    ? AppTheme.neonAmber
+                                    : AppTheme.lightNeonAmber,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _note!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? AppTheme.neonAmber
+                                        : AppTheme.lightNeonAmber,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     // Playlist info bar
                     Padding(
                       padding: const EdgeInsets.symmetric(

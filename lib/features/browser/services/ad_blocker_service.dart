@@ -34,6 +34,14 @@ class AdBlockerService {
     }
   }
 
+  AdBlockFilterUpdater get filterUpdater => _updater;
+
+  int get ruleCount => _updater.downloadedDomainCount + _updater.downloadedTrackingCount;
+
+  Future<bool> updateFilters({bool force = true}) async {
+    return await _updater.updateIfNeeded(force: force);
+  }
+
   Future<void> setEnabled(bool value) async {
     _enabled = value;
     try {
@@ -211,7 +219,7 @@ class AdBlockerService {
 [class*="ads-container"], [class*="ads-wrapper"], [class*="ads-banner"],
 [class*="advert"], [class*="advertisement"], [class*="advertising"],
 [class*="sponsor"], [class*="sponsored"],
-[class*="popup-ad"], [class*="pop-up"], [class*="popunder"],
+[class*="popup-ad"], [class*="ad-popup"], [class*="popunder"],
 [class*="interstitial"], [class*="overlay-ad"],
 [class*="floating-ad"], [class*="sticky-ad"],
 [class*="banner-ad"], [class*="leaderboard"],
@@ -220,7 +228,7 @@ class AdBlockerService {
 [id*="ad-container"], [id*="ad-wrapper"], [id*="ad-banner"],
 [id*="ad-slot"], [id*="ad-unit"], [id*="adsbygoogle"],
 [id*="ads-container"], [id*="advert"], [id*="advertisement"],
-[id*="popup"], [id*="popunder"], [id*="interstitial"],
+[id*="ad-popup"], [id*="popunder"], [id*="interstitial"],
 [id*="overlay-ad"], [id*="floating-ad"], [id*="sticky-ad"],
 iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
 iframe[src*="adnxs"], iframe[src*="adsrvr"], iframe[src*="criteo"],
@@ -251,14 +259,12 @@ ytd-companion-slot-renderer,
 ytd-primetime-promo-renderer,
 ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
 /* ═══ MOVIE / STREAMING SITES ═══ */
-[class*="player-overlay"], [class*="video-overlay"],
-[class*="preloader"], [class*="pre-roll"],
-[class*="preroll"], [class*="midroll"],
+[class*="ad-player-overlay"], [class*="preloader"],
+[class*="pre-roll"], [class*="preroll"], [class*="midroll"],
 [class*="countdown-overlay"], [class*="skip-ad"],
 [class*="ad-overlay"], [class*="ad-layer"],
 [class*="pop-overlay"], [class*="modal-ad"],
 [class*="lightbox-ad"], [class*="full-page-ad"],
-[class*="redirect-overlay"], [class*="click-overlay"],
 /* ═══ MOD-APP / APK SITES ═══ */
 [class*="download-ad"], [class*="dl-ad"],
 [class*="fake-download"], [class*="fake-button"],
@@ -271,9 +277,9 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
 [class*="newsletter-popup"], [class*="subscribe-popup"],
 [class*="push-notification"], [class*="notification-prompt"],
 [class*="exit-intent"], [class*="exit-popup"],
-[class*="welcome-ad"], [class*="splash-ad"],
+[class*="welcome-ad"], [class*="splash-ad"]
 { display: none !important; visibility: hidden !important;
-  height: 0 !important; overflow: hidden !important;
+  height: 0 !important;
   pointer-events: none !important; }
 ''';
 
@@ -370,15 +376,23 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   if (window.__xdmAdBlockLate) return;
   window.__xdmAdBlockLate = true;
 
+  var isYoutube = false;
+  try {
+    var host = (window.location && window.location.hostname) || '';
+    if (host.indexOf('youtube.com') !== -1 || host.indexOf('youtu.be') !== -1) {
+      isYoutube = true;
+    }
+  } catch(e) {}
+
   /* ── Remove ad elements by selector ── */
   var selectors = [
     /* generic */
     '[class*="ad-container"]','[class*="ad-wrapper"]','[class*="ad-banner"]',
     '[class*="adsbygoogle"]','[class*="advert"]','[class*="advertisement"]',
-    '[class*="sponsor"]','[class*="popup"]','[class*="popunder"]',
+    '[class*="sponsor"]','[class*="popup-ad"]','[class*="ad-popup"]','[class*="popunder"]',
     '[class*="interstitial"]','[class*="overlay-ad"]',
     '[id*="ad-container"]','[id*="adsbygoogle"]','[id*="advert"]',
-    '[id*="popup"]','[id*="popunder"]',
+    '[id*="ad-popup"]','[id*="popunder"]',
     /* YouTube */
     'ytd-ad-slot-renderer','ytd-promoted-sparkles-web-renderer',
     '#masthead-ad','#player-ads','.ytp-ad-module',
@@ -388,11 +402,10 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
     'ytd-video-masthead-ad-v3-renderer',
     'ytd-companion-slot-renderer',
     /* streaming / movie */
-    '[class*="player-overlay"]','[class*="preloader"]',
+    '[class*="ad-player-overlay"]','[class*="preloader"]',
     '[class*="preroll"]','[class*="midroll"]',
     '[class*="countdown-overlay"]','[class*="ad-overlay"]',
     '[class*="pop-overlay"]','[class*="modal-ad"]',
-    '[class*="redirect-overlay"]','[class*="click-overlay"]',
     /* mod-app / APK */
     '[class*="fake-download"]','[class*="fake-button"]',
     '[class*="ad-download"]','[class*="redirect-btn"]',
@@ -412,30 +425,32 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   }
 
   /* ── Remove fixed/absolute overlays covering the page ── */
-  try {
-    if (document.querySelectorAll('*').length <= 5000) {
-      var all = document.querySelectorAll('div, section, aside');
-      var maxCount = Math.min(all.length, 300);
-      for (var k = 0; k < maxCount; k++) {
-        var el = all[k];
-        var st = window.getComputedStyle(el);
-        if ((st.position === 'fixed' || st.position === 'absolute') &&
-            st.zIndex > 999 &&
-            st.display !== 'none' &&
-            el.offsetWidth > window.innerWidth * 0.5 &&
-            el.offsetHeight > window.innerHeight * 0.3) {
-          /* likely a full-page ad overlay */
-          var text = (el.textContent || '').toLowerCase();
-          if (text.indexOf('ad') !== -1 || text.indexOf('sponsor') !== -1 ||
-              text.indexOf('click here') !== -1 || text.indexOf('download now') !== -1 ||
-              text.indexOf('install') !== -1 || text.indexOf('subscribe') !== -1 ||
-              el.querySelector('iframe') !== null) {
-            el.remove();
+  if (!isYoutube) {
+    try {
+      if (document.querySelectorAll('*').length <= 5000) {
+        var all = document.querySelectorAll('div, section, aside');
+        var maxCount = Math.min(all.length, 300);
+        for (var k = 0; k < maxCount; k++) {
+          var el = all[k];
+          var st = window.getComputedStyle(el);
+          if ((st.position === 'fixed' || st.position === 'absolute') &&
+              st.zIndex > 999 &&
+              st.display !== 'none' &&
+              el.offsetWidth > window.innerWidth * 0.5 &&
+              el.offsetHeight > window.innerHeight * 0.3) {
+            /* likely a full-page ad overlay */
+            var text = (el.textContent || '').toLowerCase();
+            if (text.indexOf('ad') !== -1 || text.indexOf('sponsor') !== -1 ||
+                text.indexOf('click here') !== -1 || text.indexOf('download now') !== -1 ||
+                text.indexOf('install') !== -1 ||
+                el.querySelector('iframe') !== null) {
+              el.remove();
+            }
           }
         }
       }
-    }
-  } catch(e) {}
+    } catch(e) {}
+  }
 
   /* ── YouTube: skip video ads ── */
   try {
@@ -453,10 +468,16 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   } catch(e) {}
 
   /* ── Unblock page scroll (ad overlays often set overflow:hidden) ── */
-  try {
-    document.body.style.overflow = '';
-    document.documentElement.style.overflow = '';
-  } catch(e) {}
+  if (!isYoutube) {
+    try {
+      if (window.getComputedStyle(document.body).overflow === 'hidden') {
+        document.body.style.setProperty('overflow', 'auto', 'important');
+      }
+      if (window.getComputedStyle(document.documentElement).overflow === 'hidden') {
+        document.documentElement.style.setProperty('overflow', 'auto', 'important');
+      }
+    } catch(e) {}
+  }
 })();
 ''';
 

@@ -63,4 +63,18 @@ const Map<String, String> frTranslations = {
   'settings_https_only': 'Mode HTTPS uniquement',
   'settings_https_only_sub':
       'Mettre à niveau toute navigation http:// vers https:// si possible',
+
+  // Settings – AdBlock
+  'settings_adblock_title': 'BLOQUEUR DE PUBLICITÉS & FILTRES',
+  'settings_enable_adblock': 'ACTIVER LE BLOQUEUR DE PUB',
+  'settings_enable_adblock_sub':
+      'Bloquer les publicités, fenêtres surgissantes et scripts de suivi',
+  'settings_adblock_rules': 'Règles de filtrage chargées',
+  'settings_update_adblock_hosts': 'METTRE À JOUR ADBLOCK',
+  'settings_updating_adblock_hosts': 'MISE À JOUR...',
+  'settings_adblock_updating_msg':
+      'Téléchargement et mise à jour des filtres AdBlock (EasyList)...',
+  'settings_adblock_success_msg': 'Filtres AdBlock mis à jour avec succès !',
+  'settings_adblock_failed_msg':
+      'Échec de la mise à jour AdBlock. Vérifiez votre connexion.',
 };

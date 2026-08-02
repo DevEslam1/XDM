@@ -208,14 +208,18 @@ class DownloadOrchestrator {
             }
             resolvedFileName = safeFileName(resolvedFileName);
 
-            final resolvedLocalPath = await getUniqueFilePath(
-              task.savePath,
-              resolvedFileName,
-            );
-            final resolvedTempPath = _host.downloadEngine.buildTempFilePath(
-              p.dirname(resolvedLocalPath),
-              resolvedFileName,
-            );
+            final resolvedLocalPath = task.localFilePath.isNotEmpty
+                ? task.localFilePath
+                : await getUniqueFilePath(
+                    task.savePath,
+                    resolvedFileName,
+                  );
+            final resolvedTempPath = task.tempFilePath.isNotEmpty
+                ? task.tempFilePath
+                : _host.downloadEngine.buildTempFilePath(
+                    p.dirname(resolvedLocalPath),
+                    resolvedFileName,
+                  );
 
             if (type == 'combined') {
               final videoSize = streamInfo['videoSize'] as int? ?? 0;
@@ -228,7 +232,7 @@ class DownloadOrchestrator {
                 mergedAudioUrl: streamInfo['audioSrc'] as String,
                 fileSize: totalSize,
                 audioSize: audioSize,
-                fileName: resolvedFileName,
+                fileName: task.fileName.isNotEmpty ? task.fileName : resolvedFileName,
                 localFilePath: resolvedLocalPath,
                 tempFilePath: resolvedTempPath,
               );
@@ -236,7 +240,7 @@ class DownloadOrchestrator {
               task = task.copyWith(
                 url: streamInfo['src'] as String,
                 fileSize: streamInfo['size'] as int? ?? 0,
-                fileName: resolvedFileName,
+                fileName: task.fileName.isNotEmpty ? task.fileName : resolvedFileName,
                 localFilePath: resolvedLocalPath,
                 tempFilePath: resolvedTempPath,
               );

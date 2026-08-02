@@ -441,4 +441,16 @@ const Map<String, String> arTranslations = {
   'browser_script_type': 'النوع',
   'browser_script_js': 'JS',
   'browser_script_css': 'CSS',
+
+  // Settings – AdBlock
+  'settings_adblock_title': 'حظر الإعلانات وقواعد المضيفين',
+  'settings_enable_adblock': 'حظر الإعلانات في المتصفح',
+  'settings_enable_adblock_sub': 'حظر الإعلانات والنوافذ المنبثقة والمتتبعات',
+  'settings_adblock_rules': 'قواعد وقوائم التصفية المحملة',
+  'settings_update_adblock_hosts': 'تحديث قائمة المضيفين (UPDATE HOSTS)',
+  'settings_updating_adblock_hosts': 'جاري التحديث...',
+  'settings_adblock_updating_msg':
+      'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
+  'settings_adblock_success_msg': 'تم تحديث قائمة المضيفين بنجاح!',
+  'settings_adblock_failed_msg': 'فشل تحديث قائمة المضيفين. تحقق من الاتصال.',
 };

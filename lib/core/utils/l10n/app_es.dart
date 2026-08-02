@@ -62,4 +62,19 @@ const Map<String, String> esTranslations = {
   'settings_https_only': 'Modo solo HTTPS',
   'settings_https_only_sub':
       'Actualizar toda navegación http:// a https:// cuando sea posible',
+
+  // Settings – AdBlock
+  'settings_adblock_title': 'BLOQUEADOR DE ANUNCIOS Y FILTROS',
+  'settings_enable_adblock': 'ACTIVAR BLOQUEADOR DE ANUNCIOS',
+  'settings_enable_adblock_sub':
+      'Bloquear anuncios, ventanas emergentes y scripts de seguimiento en el navegador',
+  'settings_adblock_rules': 'Reglas de filtrado cargadas',
+  'settings_update_adblock_hosts': 'ACTUALIZAR SERVIDORES ADBLOCK',
+  'settings_updating_adblock_hosts': 'ACTUALIZANDO...',
+  'settings_adblock_updating_msg':
+      'Descargando y actualizando servidores de AdBlock (EasyList)...',
+  'settings_adblock_success_msg':
+      '¡Servidores de AdBlock actualizados con éxito!',
+  'settings_adblock_failed_msg':
+      'No se pudieron actualizar los servidores de AdBlock. Verifique la conexión.',
 };

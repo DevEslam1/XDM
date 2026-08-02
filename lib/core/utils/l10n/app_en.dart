@@ -455,4 +455,18 @@ const Map<String, String> enTranslations = {
   'browser_script_type': 'Type',
   'browser_script_js': 'JS',
   'browser_script_css': 'CSS',
+
+  // Settings – AdBlock
+  'settings_adblock_title': 'ADBLOCKER & HOST FILTERS',
+  'settings_enable_adblock': 'ENABLE ADBLOCKER',
+  'settings_enable_adblock_sub':
+      'Block ads, popups, and tracking scripts in browser',
+  'settings_adblock_rules': 'Loaded Blocklist Rules',
+  'settings_update_adblock_hosts': 'UPDATE ADBLOCK HOSTS',
+  'settings_updating_adblock_hosts': 'UPDATING...',
+  'settings_adblock_updating_msg':
+      'Downloading and updating AdBlock hosts (EasyList)...',
+  'settings_adblock_success_msg': 'AdBlock hosts updated successfully!',
+  'settings_adblock_failed_msg':
+      'Failed to update AdBlock hosts. Check network.',
 };

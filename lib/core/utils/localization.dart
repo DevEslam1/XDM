@@ -37,11 +37,11 @@ class L10n {
       context,
       listen: listen,
     ).languageCode;
-    return _getTranslations(lang)[key] ?? key;
+    return _getTranslations(lang)[key] ?? _getTranslations('en')[key] ?? key;
   }
 
   static String translate(String lang, String key) {
-    return _getTranslations(lang)[key] ?? key;
+    return _getTranslations(lang)[key] ?? _getTranslations('en')[key] ?? key;
   }
 
   static bool isRtl(BuildContext context, {bool listen = false}) {
