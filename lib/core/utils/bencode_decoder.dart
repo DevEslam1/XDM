@@ -199,16 +199,23 @@ class BencodeDecoder {
               final rawPath = f['path.utf-8'] ?? f['path'];
               final pathSegments = (rawPath is List ? rawPath : <dynamic>[]);
               final pathList = pathSegments
-                  .map((s) => s is Uint8List ? utf8.decode(s) : s.toString())
+                  .map((s) => s is Uint8List ? utf8.decode(s, allowMalformed: true) : s.toString())
+                  .where((seg) => seg != '.' && seg != '..' && !seg.contains('/') && !seg.contains('\\'))
                   .toList();
-              filesList.add({'name': pathList.join('/'), 'length': length});
+              final safeName = pathList.isNotEmpty ? pathList.join('/') : 'file_$totalLength';
+              filesList.add({'name': safeName, 'length': length});
             }
           }
         }
       } else {
         // Single file torrent
         totalLength = info['length'] as int? ?? 0;
-        filesList.add({'name': name, 'length': totalLength});
+        final safeName = name
+            .replaceAll('\\', '/')
+            .split('/')
+            .where((seg) => seg != '.' && seg != '..')
+            .join('_');
+        filesList.add({'name': safeName.isNotEmpty ? safeName : 'file', 'length': totalLength});
       }
 
       // Compute info hash

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/app_theme.dart';
 import '../../../../core/utils/localization.dart';
 import '../../settings/provider/settings_provider.dart';
+import '../models/download_task.dart';
 import '../provider/download_provider.dart';
 
 class FilterChipsBar extends StatelessWidget {
@@ -28,6 +29,7 @@ class FilterChipsBar extends StatelessWidget {
           selector: (_, p) {
             final counts = <String, int>{};
             for (final task in p.tasks) {
+              if (isHistory && task.status != DownloadStatus.completed && task.status != DownloadStatus.failed) continue;
               final cat = task.category.toLowerCase();
               counts[cat] = (counts[cat] ?? 0) + 1;
             }

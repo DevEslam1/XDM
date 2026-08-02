@@ -94,7 +94,9 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
           break;
         case DownloadStatus.paused:
           color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-          if (task.errorMessage != null && task.errorMessage!.contains('WiFi')) {
+          if (task.scheduledAt != null && task.scheduledAt!.isAfter(DateTime.now())) {
+            label = L10n.of(context, 'add_download_schedule').toUpperCase();
+          } else if (task.errorMessage != null && task.errorMessage!.contains('WiFi')) {
             label = L10n.of(context, 'status_paused_wifi');
           } else if (task.errorMessage != null && task.errorMessage!.contains('Network')) {
             label = L10n.of(context, 'status_paused_offline');

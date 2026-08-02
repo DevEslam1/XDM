@@ -275,9 +275,10 @@ class DownloadTask {
     String? notes,
     bool? isAppUpdate,
     int? priority,
-    String? playlistId,
     String? playlistTitle,
     bool clearPlaylist = false,
+    String? thumbnailUrl,
+    bool clearThumbnail = false,
     String? expectedSha256,
     List<String>? mirrorUrls,
   }) {
@@ -329,8 +330,10 @@ class DownloadTask {
       notes: notes ?? this.notes,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       priority: priority ?? this.priority,
+      // ignore: unnecessary_this
       playlistId: clearPlaylist ? null : playlistId ?? this.playlistId,
       playlistTitle: clearPlaylist ? null : playlistTitle ?? this.playlistTitle,
+      thumbnailUrl: clearThumbnail ? null : thumbnailUrl ?? this.thumbnailUrl,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
       mirrorUrls: mirrorUrls ?? this.mirrorUrls,
     );
@@ -378,6 +381,7 @@ class DownloadTask {
       'priority': priority,
       'playlistId': playlistId,
       'playlistTitle': playlistTitle,
+      'thumbnailUrl': thumbnailUrl,
       'expectedSha256': expectedSha256,
       'mirrorUrls': mirrorUrls,
     };
@@ -424,9 +428,10 @@ class DownloadTask {
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
     } else if (rawChunks.length > threadCount) {
+      final safeThreadCount = threadCount > 0 ? threadCount : 1;
       final totalSum = rawChunks.fold<double>(0.0, (s, c) => s + c);
-      final perChunk = (totalSum / threadCount).clamp(0.0, 1.0);
-      chunks = List<double>.filled(threadCount, perChunk);
+      final perChunk = (totalSum / safeThreadCount).clamp(0.0, 1.0);
+      chunks = List<double>.filled(safeThreadCount, perChunk);
       if (kDebugMode) {
         debugPrint(
           'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
@@ -561,12 +566,8 @@ class DownloadTask {
   // animate correctly in lists.
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is DownloadTask &&
-          other.id == id &&
-          other.playlistId == playlistId &&
-          other.playlistTitle == playlistTitle);
+      identical(this, other) || (other is DownloadTask && other.id == id);
 
   @override
-  int get hashCode => Object.hash(id, playlistId, playlistTitle);
+  int get hashCode => id.hashCode;
 }

@@ -195,10 +195,16 @@ class TorrentService {
             _activeTorrentIds = _activeTorrentIds.union(nativeIds);
             // Remove IDs that libtorrent no longer knows about, but keep
             // freshly-added IDs that haven't been reported by native yet.
+            final previousIds = Set<int>.from(_latestProgress.keys);
             _activeTorrentIds.retainWhere(
               (id) =>
                   nativeIds.contains(id) || !_latestProgress.containsKey(id),
             );
+            final removedIds = previousIds.difference(_activeTorrentIds);
+            for (final removedId in removedIds) {
+              _latestProgress.remove(removedId);
+              _torrentSources.remove(removedId);
+            }
             final mapped = torrents.map((key, value) {
               _latestProgress[value.id] = value.progress;
               // FIX(6): Clamp NaN/Infinity progress to avoid toInt() crash
@@ -292,7 +298,7 @@ class TorrentService {
   ///   Uint8List saveResumeData(int torrentId);
   ///   void loadResumeData(int torrentId, Uint8List data);
   static Future<void> saveResumeData(int torrentId) async {
-    if (!isInitialized) return;
+    if (_state == TorrentSessionState.uninitialized || _state == TorrentSessionState.initializing) return;
     try {
       final data = LibtorrentFlutter.instance.trySaveResumeData(torrentId);
       if (data != null) {
@@ -304,14 +310,20 @@ class TorrentService {
         await TorrentResumeStore.saveResumeData(torrentId, data);
       }
     } catch (e) {
-      _log.warning('saveResumeData failed for $torrentId', e);
+      _log.warning('trySaveResumeData failed for torrentId $torrentId: $e');
     }
   }
 
   /// Saves native resume data for all active torrents.
   static Future<void> saveAllResumeData() async {
-    if (!isInitialized) return;
-    await Future.wait(_activeTorrentIds.map((id) => saveResumeData(id)));
+    final activeIds = Set<int>.from(_activeTorrentIds);
+    for (final id in activeIds) {
+      try {
+        await saveResumeData(id);
+      } catch (e) {
+        _log.warning('saveResumeData failed during batch save for $id: $e');
+      }
+    }
   }
 
   static void setDownloadLimit(int bytesPerSecond) {

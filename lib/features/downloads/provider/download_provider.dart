@@ -460,6 +460,23 @@ class DownloadProvider extends ChangeNotifier
       return task;
     }
 
+    // Fix P5: Crash window auto-recovery — if temp file is missing or task is incomplete,
+    // but the final localFilePath exists and matches/exceeds fileSize, mark task completed.
+    if (task.localFilePath.trim().isNotEmpty) {
+      final localFile = File(task.localFilePath);
+      if (localFile.existsSync()) {
+        final localLen = localFile.lengthSync();
+        if (localLen > 0 && (task.fileSize <= 0 || localLen >= task.fileSize)) {
+          return task.copyWith(
+            status: DownloadStatus.completed,
+            downloadedBytes: task.fileSize > 0 ? task.fileSize : localLen,
+            completedAt: DateTime.now(),
+            clearError: true,
+          );
+        }
+      }
+    }
+
     // Torrents manage their own fastresume data and piece maps.
     // Reading temporary HTTP chunk files would break torrent progress.
     if (task.isTorrent) return task;
@@ -687,6 +704,11 @@ class DownloadProvider extends ChangeNotifier
       for (final task in reconciled) {
         final idx = _tasks.indexWhere((t) => t.id == task.id);
         if (idx != -1) {
+          // If the task status in memory has transitioned during the async gap
+          // (e.g. user resumed/paused/deleted it), do NOT overwrite live state!
+          if (_tasks[idx].status != task.status && _tasks[idx].status != DownloadStatus.paused) {
+            continue;
+          }
           if (_tasks[idx].status != task.status ||
               _tasks[idx].downloadedBytes != task.downloadedBytes) {
             _tasks[idx] = task;
@@ -1691,7 +1713,8 @@ class DownloadProvider extends ChangeNotifier
         prev.category != updated.category ||
         prev.fileName != updated.fileName ||
         prev.url != updated.url ||
-        prev.fileSize != updated.fileSize;
+        prev.fileSize != updated.fileSize ||
+        prev.scheduledAt != updated.scheduledAt;
 
     if (isStructuralChange) {
       filteredTasksDirty = true;
@@ -1735,13 +1758,6 @@ class DownloadProvider extends ChangeNotifier
 
     try {
       await _databaseService.saveTask(updated);
-
-      // Re-verify index after async gap — merge structural fields into the
-      // live task again, in case progress ticked during the DB save.
-      final currentIndex = _tasks.indexWhere((task) => task.id == updated.id);
-      if (currentIndex != -1) {
-        _tasks[currentIndex] = _mergeTaskUpdate(_tasks[currentIndex], updated);
-      }
 
       // Notify AFTER successful DB write to keep UI and persistence in sync.
       notifyListeners();
@@ -1812,12 +1828,19 @@ class DownloadProvider extends ChangeNotifier
     int fileSize,
     int downloadedBytes,
   ) {
-    if (fileSize <= 0 || threadCount <= 0) {
-      return [0.0];
+    final effectiveThreadCount = threadCount > 0 ? threadCount : 1;
+    if (fileSize <= 0) {
+      return List<double>.filled(effectiveThreadCount, 0.0);
     }
 
     final overallProgress = (downloadedBytes / fileSize).clamp(0.0, 1.0);
-    return List<double>.filled(threadCount, overallProgress);
+    final chunks = List<double>.filled(effectiveThreadCount, 0.0);
+    double remaining = overallProgress * effectiveThreadCount;
+    for (int i = 0; i < effectiveThreadCount; i++) {
+      chunks[i] = remaining.clamp(0.0, 1.0);
+      remaining -= chunks[i];
+    }
+    return chunks;
   }
 
   // ---------------------------------------------------------------------------

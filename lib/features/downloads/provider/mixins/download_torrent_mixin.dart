@@ -284,6 +284,7 @@ mixin DownloadTorrentMixin {
             providerTasks[i] = task.copyWith(seedingEnabled: false);
             // FIX(H8): Persist seeding stop to DB so it survives app restart.
             unawaited(providerDatabaseService.saveTask(providerTasks[i]));
+            filteredTasksDirty = true;
             changed = true;
           }
         }

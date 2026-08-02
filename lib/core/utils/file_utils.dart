@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:synchronized/synchronized.dart';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:path/path.dart' as p;
 
@@ -93,20 +94,24 @@ String safeFileName(String value) {
   return sanitized;
 }
 
-Future<String> getUniqueFilePath(String directoryPath, String fileName) async {
-  final safeName = safeFileName(fileName);
-  final ext = p.extension(safeName);
-  final nameWithoutExt = ext.isNotEmpty && safeName.endsWith(ext)
-      ? safeName.substring(0, safeName.length - ext.length)
-      : safeName;
-  var candidatePath = p.join(directoryPath, safeName);
-  var counter = 1;
-  while (await FileSystemEntity.type(candidatePath) !=
-      FileSystemEntityType.notFound) {
-    candidatePath = p.join(directoryPath, '$nameWithoutExt ($counter)$ext');
-    counter++;
-  }
-  return candidatePath;
+final _filePathLock = Lock();
+
+Future<String> getUniqueFilePath(String directoryPath, String fileName) {
+  return _filePathLock.synchronized(() async {
+    final safeName = safeFileName(fileName);
+    final ext = p.extension(safeName);
+    final nameWithoutExt = ext.isNotEmpty && safeName.endsWith(ext)
+        ? safeName.substring(0, safeName.length - ext.length)
+        : safeName;
+    var candidatePath = p.join(directoryPath, safeName);
+    var counter = 1;
+    while (await FileSystemEntity.type(candidatePath) !=
+        FileSystemEntityType.notFound) {
+      candidatePath = p.join(directoryPath, '$nameWithoutExt ($counter)$ext');
+      counter++;
+    }
+    return candidatePath;
+  });
 }
 
 String torrentSavePath(String directoryPath, String name) {
@@ -165,8 +170,6 @@ int scanFolderBytesSync(String path) {
             downloaded = storedDownloaded;
           } else if (diskLen > 0 && diskLen < length) {
             downloaded = diskLen;
-          } else if (diskLen >= length && copy['selected'] == true) {
-            downloaded = length;
           }
         }
       } catch (e) {

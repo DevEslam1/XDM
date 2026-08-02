@@ -85,15 +85,19 @@ class BandwidthGovernor {
       if (share <= 0) return 0;
 
       _availableTokens -= bytes;
+      final maxDeficit = -(share * 2.0);
+      if (_availableTokens < maxDeficit) {
+        _availableTokens = maxDeficit;
+      }
       if (_availableTokens >= 0) {
         return 0;
       }
 
       final deficit = -_availableTokens;
 
-      // Return the wait time required to repay token debt.
+      // Return the wait time required to repay token debt (proportional up to 5s max).
       final waitMs = (deficit / share * 1000.0).ceil();
-      return waitMs.clamp(0, 30000); // Cap at 30s to avoid infinite waits on edge cases
+      return waitMs.clamp(0, 5000);
     });
   }
 

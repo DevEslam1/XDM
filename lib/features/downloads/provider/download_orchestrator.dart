@@ -380,6 +380,18 @@ class DownloadOrchestrator {
       deleteInputsIfTemp: false,
     );
 
+    final latest = _host.findTaskById(taskId);
+    if (latest == null || latest.status != DownloadStatus.downloading) {
+      debugPrint(
+        '[DMX] Task $taskId was cancelled or deleted during FFmpeg merge — cleaning up merged file.',
+      );
+      try {
+        final mergedFile = File(mergedPath);
+        if (await mergedFile.exists()) await mergedFile.delete();
+      } catch (_) {}
+      return false;
+    }
+
     if (success) {
       final mergedFile = File(mergedPath);
       if (await mergedFile.exists()) {
@@ -603,16 +615,28 @@ class DownloadOrchestrator {
         }
       } else if (current.isTorrent && !File(finalPath).existsSync()) {
         // Single-file torrent: guessed name differs from actual metadata name.
-        // Scan savePath for the file libtorrent actually created.
         String actualFilePath = finalPath;
         String actualFileName = current.fileName;
-        final saveDir = Directory(current.savePath);
-        if (saveDir.existsSync()) {
-          await for (final entity in saveDir.list(recursive: false)) {
-            if (entity is File) {
-              actualFilePath = entity.path;
-              actualFileName = p.basename(entity.path);
-              break;
+        final torrentFiles = current.torrentFiles;
+        if (torrentFiles != null && torrentFiles.isNotEmpty) {
+          final targetRelName = torrentFiles.first['name'] as String?;
+          if (targetRelName != null && targetRelName.isNotEmpty) {
+            final candidate = p.join(current.savePath, targetRelName);
+            if (File(candidate).existsSync()) {
+              actualFilePath = candidate;
+              actualFileName = p.basename(candidate);
+            }
+          }
+        }
+        if (!File(actualFilePath).existsSync()) {
+          final saveDir = Directory(current.savePath);
+          if (saveDir.existsSync()) {
+            await for (final entity in saveDir.list(recursive: false)) {
+              if (entity is File && p.extension(entity.path) == p.extension(finalPath)) {
+                actualFilePath = entity.path;
+                actualFileName = p.basename(entity.path);
+                break;
+              }
             }
           }
         }
@@ -695,12 +719,13 @@ class DownloadOrchestrator {
               ? task.audioSize
               : max((task.audioProgress * task.audioSize).round(), audioLen))
         : audioLen;
-    int videoBytesSoFar = tempLen > 0
-        ? tempLen
-        : (task.downloadedBytes - audioBytesSoFar).clamp(
-            0,
-            task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
-          );
+    int videoBytesSoFar = (task.downloadedBytes - audioBytesSoFar).clamp(
+      0,
+      task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
+    );
+    if (videoBytesSoFar == 0 && tempLen > 0 && (task.fileSize <= 0 || tempLen < task.fileSize)) {
+      videoBytesSoFar = tempLen;
+    }
     double audioSpeedNow = 0.0;
     double videoSpeedNow = 0.0;
     int videoSizeSoFar = videoTransferSize;
@@ -988,10 +1013,7 @@ class DownloadOrchestrator {
                     current.status != DownloadStatus.downloading) {
                   return;
                 }
-                videoBytesSoFar = max(
-                  videoBytesSoFar,
-                  progress.downloadedBytes,
-                );
+                videoBytesSoFar = progress.downloadedBytes;
                 videoSpeedNow = progress.speed;
                 if (progress.fileSize > 0) {
                   videoSizeSoFar = progress.fileSize;

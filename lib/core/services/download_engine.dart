@@ -1131,33 +1131,34 @@ class DownloadEngine {
     _activeTorrentIds.add(id);
 
     try {
-      await _waitForMetadata(id, url, cancelToken, onProgress);
+      await _waitForMetadata(
+        id,
+        url,
+        cancelToken,
+        onProgress,
+        initialFileSize: knownFileSize,
+      );
 
       final currentTorrentFiles = getTorrentFiles?.call();
       _applyFilePriorities(id, currentTorrentFiles);
 
-      final saveDir = File(currentLocalFilePath).parent.path;
-      // FIX(16): use the async API so the UI thread isn't blocked by the
-      // filesystem call.
-      if (await Directory(saveDir).exists()) {
-        final resumeData =
-            await TorrentResumeStore.loadResumeDataForSource(url) ??
-            await TorrentResumeStore.loadResumeData(id);
-        final nativeResumeLoaded =
-            resumeData != null && TorrentService.loadResumeData(id, resumeData);
-        if (!nativeResumeLoaded) {
-          TorrentService.recheckTorrent(id);
+      final resumeData =
+          await TorrentResumeStore.loadResumeDataForSource(url) ??
+          await TorrentResumeStore.loadResumeData(id);
+      final nativeResumeLoaded =
+          resumeData != null && TorrentService.loadResumeData(id, resumeData);
+      if (!nativeResumeLoaded) {
+        TorrentService.recheckTorrent(id);
 
-          await _waitForState(
-            id,
-            cancelToken,
-            predicate: (label) =>
-                !label.contains('checking') &&
-                !label.contains('metadata') &&
-                !label.contains('allocating'),
-            timeout: const Duration(minutes: 5),
-          );
-        }
+        await _waitForState(
+          id,
+          cancelToken,
+          predicate: (label) =>
+              !label.contains('checking') &&
+              !label.contains('metadata') &&
+              !label.contains('allocating'),
+          timeout: const Duration(minutes: 5),
+        );
       }
 
       if (cancelToken.isCancelled) {
@@ -1192,8 +1193,10 @@ class DownloadEngine {
     int id,
     String url,
     CancelToken cancelToken,
-    ValueChangedProgress onProgress,
-  ) async {
+    ValueChangedProgress onProgress, {
+    int initialDownloadedBytes = 0,
+    int initialFileSize = 0,
+  }) async {
     final completer = Completer<void>();
     StreamSubscription? sub;
     Timer? timer;
@@ -1252,8 +1255,8 @@ class DownloadEngine {
 
       onProgress(
         DownloadProgress(
-          downloadedBytes: 0,
-          fileSize: 0,
+          downloadedBytes: initialDownloadedBytes,
+          fileSize: initialFileSize,
           speed: 0.0,
           eta: null,
           statusMessage: 'Fetching metadata… (${metadataElapsed}s elapsed)',
@@ -1261,7 +1264,7 @@ class DownloadEngine {
       );
     });
 
-    final timeout = Timer(const Duration(seconds: 60), () {
+    final timeout = Timer(const Duration(seconds: 300), () {
       timer?.cancel();
 
       if (completer.isCompleted) return;
@@ -1364,8 +1367,7 @@ class DownloadEngine {
             } else {
               // No true progress available, use stale bytes as fallback
               final staleBytes = (existing?['downloadedBytes'] as int?) ?? 0;
-              final isRechecking = stateLabel.contains('checking');
-              resolvedBytes = isRechecking ? 0 : staleBytes;
+              resolvedBytes = staleBytes;
             }
 
             return <String, dynamic>{
@@ -2355,22 +2357,25 @@ class DownloadEngine {
           }());
         }
 
-        await Future.wait(futures);
-
-        await writer.flushAll();
-        await closeWriter();
-
         try {
-          await journalLock.synchronized(() => journal.delete());
-        } catch (e, st) {
-          Logger(
-            'download_engine',
-          ).warning('[download_engine] operation failed', e, st);
+          await Future.wait(futures);
+        } finally {
+          try {
+            await writer.flushAll();
+          } catch (_) {}
+          await closeWriter();
+          if (!journalClosed) {
+            try {
+              await journalLock.synchronized(() => journal.delete());
+            } catch (e, st) {
+              Logger(
+                'download_engine',
+              ).warning('[download_engine] operation failed', e, st);
+            }
+            journalClosed = true;
+          }
+          unregisterGovernor();
         }
-
-        journalClosed = true;
-
-        unregisterGovernor();
 
         await saveState();
         await _deleteFileIfExists(stateFile);
@@ -2935,7 +2940,7 @@ class DownloadEngine {
     });
 
     cancelToken.whenCancel.then((_) {
-      if (!completer.isCompleted)
+      if (!completer.isCompleted) {
         completer.completeError(
           DioException(
             requestOptions: RequestOptions(path: 'torrent:$id'),
@@ -2943,6 +2948,7 @@ class DownloadEngine {
             error: 'cancelled',
           ),
         );
+      }
     });
 
     try {

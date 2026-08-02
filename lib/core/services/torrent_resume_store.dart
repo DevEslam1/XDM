@@ -204,7 +204,9 @@ class TorrentResumeStore {
       try {
         await tmpFile.writeAsBytes(data, flush: true);
         final targetFile = File(targetPath);
-        if (await targetFile.exists()) await targetFile.delete();
+        try {
+          if (await targetFile.exists()) await targetFile.delete();
+        } catch (_) {}
         try {
           await tmpFile.rename(targetPath);
         } catch (_) {

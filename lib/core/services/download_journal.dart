@@ -55,7 +55,7 @@ class DownloadJournal {
     for (final byte in data) {
       crc ^= byte;
       for (var i = 0; i < 8; i++) {
-        crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+        crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1));
       }
     }
     return crc ^ 0xFFFFFFFF;

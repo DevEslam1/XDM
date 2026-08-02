@@ -100,7 +100,11 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             onTap: () async {
               final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
-              await provider.resumeMultipleTasks(widget.selectedTaskIds);
+              try {
+                await provider.resumeMultipleTasks(widget.selectedTaskIds);
+              } catch (e) {
+                debugPrint('[BatchOperations] Resume failed: $e');
+              }
               if (!mounted) return;
               navigator.pop();
               widget.onCompleted?.call();
@@ -112,7 +116,11 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             onTap: () async {
               final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
-              await provider.pauseMultipleTasks(widget.selectedTaskIds);
+              try {
+                await provider.pauseMultipleTasks(widget.selectedTaskIds);
+              } catch (e) {
+                debugPrint('[BatchOperations] Pause failed: $e');
+              }
               if (!mounted) return;
               navigator.pop();
               widget.onCompleted?.call();
@@ -126,10 +134,14 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
               final provider = context.read<DownloadProvider>();
               final category = await _showCategoryDialog(context);
               if (!mounted || category == null) return;
-              await provider.changeCategoryForMultipleTasks(
-                widget.selectedTaskIds,
-                category,
-              );
+              try {
+                await provider.changeCategoryForMultipleTasks(
+                  widget.selectedTaskIds,
+                  category,
+                );
+              } catch (e) {
+                debugPrint('[BatchOperations] Category change failed: $e');
+              }
               if (!mounted) return;
               navigator.pop();
               widget.onCompleted?.call();
@@ -161,10 +173,14 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
               final provider = context.read<DownloadProvider>();
               final confirm = await _showDeleteConfirmDialog(context, count);
               if (!mounted || confirm != true) return;
-              await provider.deleteMultipleTasks(
-                widget.selectedTaskIds,
-                deleteFiles: _deleteFiles,
-              );
+              try {
+                await provider.deleteMultipleTasks(
+                  widget.selectedTaskIds,
+                  deleteFiles: _deleteFiles,
+                );
+              } catch (e) {
+                debugPrint('[BatchOperations] Delete failed: $e');
+              }
               if (!mounted) return;
               navigator.pop();
               widget.onCompleted?.call();

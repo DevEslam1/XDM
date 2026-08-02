@@ -32,19 +32,21 @@ class ChannelProgressPainter extends CustomPainter {
 
     // Fill
     final accent = isTorrent ? AppTheme.neonViolet : AppTheme.neonBlue;
-    final fillPaint = Paint()
-      ..shader = LinearGradient(colors: [
-        accent.withValues(alpha: 0.7),
-        accent,
-      ]).createShader(Rect.fromLTWH(0, 0, size.width * value, size.height))
-      ..style = PaintingStyle.fill;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width * value, size.height),
-        Radius.circular(radius),
-      ),
-      fillPaint,
-    );
+    if (value > 0.0) {
+      final fillPaint = Paint()
+        ..shader = LinearGradient(colors: [
+          accent.withValues(alpha: 0.7),
+          accent,
+        ]).createShader(Rect.fromLTWH(0, 0, size.width * value, size.height))
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(0, 0, size.width * value, size.height),
+          Radius.circular(radius),
+        ),
+        fillPaint,
+      );
+    }
 
     // Leading glow dot
     if (value > 0.02 && value < 0.99) {
