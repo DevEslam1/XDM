@@ -1615,7 +1615,7 @@ class DownloadOrchestrator {
   bool _isTorrentAlive(int id) {
     if (_host.providerLatestTorrentStats.containsKey(id)) return true;
     try {
-      return TorrentService.getFiles(id).isNotEmpty;
+      return TorrentService.isTorrentAlive(id);
     } catch (_) {
       return false;
     }

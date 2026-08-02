@@ -8,7 +8,11 @@ import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/services/download_journal.dart';
 import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as p;
+
+class MockDio extends Mock implements Dio {}
+
 
 void main() {
   group('BandwidthGovernor', () {
@@ -899,5 +903,166 @@ void main() {
         );
       },
     );
+  });
+
+  group('DownloadEngine — estimateOptimalThreads', () {
+    late MockDio mockDio;
+
+    setUpAll(() {
+      registerFallbackValue(RequestOptions(path: ''));
+    });
+
+    setUp(() {
+      mockDio = MockDio();
+    });
+
+    test('requestedThreads <= 1 returns 1', () async {
+      final engine = DownloadEngine(enableCleanupTimer: false);
+      final result = await engine.estimateOptimalThreads(
+        url: 'http://example.com/file',
+        requestedThreads: 1,
+        fileSize: 1000000,
+        dio: mockDio,
+      );
+      expect(result, 1);
+    });
+
+    test('fileSize < 512KB returns 1', () async {
+      final engine = DownloadEngine(enableCleanupTimer: false);
+      final result = await engine.estimateOptimalThreads(
+        url: 'http://example.com/file',
+        requestedThreads: 4,
+        fileSize: 500 * 1024,
+        dio: mockDio,
+      );
+      expect(result, 1);
+    });
+
+    test('accept-ranges none returns 1', () async {
+      final headers = Headers();
+      headers.add('accept-ranges', 'none');
+      final response = Response(
+        requestOptions: RequestOptions(path: ''),
+        headers: headers,
+        statusCode: 200,
+      );
+
+      when(() => mockDio.head(
+        any(),
+        cancelToken: any(named: 'cancelToken'),
+        options: any(named: 'options'),
+      )).thenAnswer((_) async => response);
+
+      final engine = DownloadEngine(enableCleanupTimer: false);
+      final result = await engine.estimateOptimalThreads(
+        url: 'http://example.com/file',
+        requestedThreads: 4,
+        fileSize: 1024 * 1024,
+        dio: mockDio,
+      );
+      expect(result, 1);
+    });
+
+    test('connection close header returns 1', () async {
+      final headers = Headers();
+      headers.add('connection', 'close');
+      final response = Response(
+        requestOptions: RequestOptions(path: ''),
+        headers: headers,
+        statusCode: 200,
+      );
+
+      when(() => mockDio.head(
+        any(),
+        cancelToken: any(named: 'cancelToken'),
+        options: any(named: 'options'),
+      )).thenAnswer((_) async => response);
+
+      final engine = DownloadEngine(enableCleanupTimer: false);
+      final result = await engine.estimateOptimalThreads(
+        url: 'http://example.com/file',
+        requestedThreads: 4,
+        fileSize: 1024 * 1024,
+        dio: mockDio,
+      );
+      expect(result, 1);
+    });
+
+    test('valid range support returns requestedThreads', () async {
+      final headers = Headers();
+      headers.add('accept-ranges', 'bytes');
+      final response = Response(
+        requestOptions: RequestOptions(path: ''),
+        headers: headers,
+        statusCode: 200,
+      );
+
+      when(() => mockDio.head(
+        any(),
+        cancelToken: any(named: 'cancelToken'),
+        options: any(named: 'options'),
+      )).thenAnswer((_) async => response);
+
+      final engine = DownloadEngine(enableCleanupTimer: false);
+      final result = await engine.estimateOptimalThreads(
+        url: 'http://example.com/file',
+        requestedThreads: 4,
+        fileSize: 1024 * 1024,
+        dio: mockDio,
+      );
+      expect(result, 4);
+    });
+
+    test('exception in HEAD request falls back to requestedThreads', () async {
+      when(() => mockDio.head(
+        any(),
+        cancelToken: any(named: 'cancelToken'),
+        options: any(named: 'options'),
+      )).thenThrow(Exception('HEAD error'));
+
+      final engine = DownloadEngine(enableCleanupTimer: false);
+      final result = await engine.estimateOptimalThreads(
+        url: 'http://example.com/file',
+        requestedThreads: 4,
+        fileSize: 1024 * 1024,
+        dio: mockDio,
+      );
+      expect(result, 4);
+    });
+  });
+
+  group('DownloadEngine — cleanupOrphanFiles', () {
+    test('cleans up temporary and other orphan files', () async {
+      final tempDir = Directory.systemTemp.createTempSync('dmx_cleanup_test');
+      final baseTempPath = '${tempDir.path}/test_download.dmxpart';
+      
+      final partFile = File(baseTempPath);
+      final stateFile = File('${tempDir.path}/test_download.dmxstate');
+      final journalFile = File('${tempDir.path}/test_download.journal');
+      final audioFile = File('${tempDir.path}/test_download.audio');
+      final customPartFile = File('${tempDir.path}/test_download.part1');
+
+      await partFile.writeAsString('part');
+      await stateFile.writeAsString('state');
+      await journalFile.writeAsString('journal');
+      await audioFile.writeAsString('audio');
+      await customPartFile.writeAsString('custom_part');
+
+      expect(partFile.existsSync(), isTrue);
+      expect(stateFile.existsSync(), isTrue);
+      expect(journalFile.existsSync(), isTrue);
+      expect(audioFile.existsSync(), isTrue);
+      expect(customPartFile.existsSync(), isTrue);
+
+      await DownloadEngine.cleanupOrphanFiles(baseTempPath);
+
+      expect(partFile.existsSync(), isFalse);
+      expect(stateFile.existsSync(), isFalse);
+      expect(journalFile.existsSync(), isFalse);
+      expect(audioFile.existsSync(), isFalse);
+      expect(customPartFile.existsSync(), isFalse);
+
+      tempDir.deleteSync(recursive: true);
+    });
   });
 }

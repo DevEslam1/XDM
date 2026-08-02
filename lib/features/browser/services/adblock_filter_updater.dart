@@ -72,14 +72,18 @@ class AdBlockFilterUpdater {
 
       if (!force) {
         final lastUpdate = prefs.getInt(_lastUpdateKey) ?? 0;
-        final daysSince = (DateTime.now().millisecondsSinceEpoch - lastUpdate) ~/
+        final daysSince =
+            (DateTime.now().millisecondsSinceEpoch - lastUpdate) ~/
             (1000 * 60 * 60 * 24);
         if (daysSince < _updateIntervalDays) return false;
       }
 
       try {
         await _downloadAndParse();
-        await prefs.setInt(_lastUpdateKey, DateTime.now().millisecondsSinceEpoch);
+        await prefs.setInt(
+          _lastUpdateKey,
+          DateTime.now().millisecondsSinceEpoch,
+        );
         return true;
       } catch (e) {
         _log.warning('Ad-block filter update failed', e);
@@ -89,11 +93,13 @@ class AdBlockFilterUpdater {
   }
 
   Future<void> _downloadAndParse() async {
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 60),
-      headers: {'User-Agent': 'XDM/3.0 (AdBlockUpdater)'},
-    ));
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 60),
+        headers: {'User-Agent': 'XDM/3.0 (AdBlockUpdater)'},
+      ),
+    );
 
     final tempDir = await getTemporaryDirectory();
     final newAds = <String>{};
@@ -139,6 +145,12 @@ class AdBlockFilterUpdater {
     );
   }
 
+  final Set<String> _urlPatterns = {};
+  final Set<String> _cosmeticRules = {};
+
+  Set<String> get cosmeticRules => _cosmeticRules;
+  Set<String> get urlPatterns => _urlPatterns;
+
   Future<Set<String>> _parseFilterFile(File file, FilterType type) async {
     final domains = <String>{};
     final lines = await file.readAsLines();
@@ -147,17 +159,43 @@ class AdBlockFilterUpdater {
       if (domains.length >= _maxDomains) break;
       if (line.isEmpty || line.length > _maxLineLength) continue;
 
-      if (line.startsWith('!') || line.startsWith('[') || line.startsWith('#')) {
+      if (line.startsWith('!') || line.startsWith('[')) continue;
+
+      // Exception rules @@||
+      if (line.startsWith('@@')) {
+        final inner = line.substring(2);
+        final domainMatch = RegExp(
+          r'^\|\|([a-zA-Z0-9.-]+)\^',
+        ).firstMatch(inner);
+        if (domainMatch != null) {
+          domains.remove(domainMatch.group(1)!.toLowerCase());
+        }
         continue;
       }
 
-      final domainMatch = RegExp(r'^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9])\^').firstMatch(line);
+      // Cosmetic rules: ##.ad-container, ###sidebar-ad
+      if (line.contains('##')) {
+        final parts = line.split('##');
+        if (parts.length == 2 && parts[1].isNotEmpty && parts[1].length < 100) {
+          _cosmeticRules.add(parts[1]);
+        }
+        continue;
+      }
+
+      final domainMatch = RegExp(
+        r'^\|\|([a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9])\^',
+      ).firstMatch(line);
       if (domainMatch != null) {
         final domain = domainMatch.group(1)!.toLowerCase();
         if (domain.contains('.') && !domain.startsWith('.')) {
           domains.add(domain);
         }
         continue;
+      }
+
+      // URL path patterns: /ads/banner
+      if (line.startsWith('/') && !line.startsWith('//')) {
+        _urlPatterns.add(line);
       }
     }
 

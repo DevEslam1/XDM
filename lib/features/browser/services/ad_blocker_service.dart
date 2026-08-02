@@ -83,6 +83,14 @@ class AdBlockerService {
       return true;
     }
 
+    // Check URL path patterns
+    final path = Uri.tryParse(url)?.path ?? '';
+    if (path.isNotEmpty) {
+      for (final pattern in _updater.urlPatterns) {
+        if (path.contains(pattern)) return true;
+      }
+    }
+
     return false;
   }
 

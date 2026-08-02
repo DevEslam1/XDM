@@ -670,7 +670,103 @@ void main() {
       );
     },
   );
+
+  test('pauseAllTasks pauses all non-completed/non-failed tasks', () async {
+    final (database, settings) = await _setupServices();
+    
+    final t1 = DownloadTask(
+      id: 'task_running',
+      fileName: 'run.zip',
+      url: 'https://example.com/run.zip',
+      fileSize: 100,
+      downloadedBytes: 10,
+      category: 'Archive',
+      status: DownloadStatus.downloading,
+      savePath: 'build',
+      localFilePath: 'build/run.zip',
+      tempFilePath: 'build/run.zip.dmxpart',
+      threadCount: 1,
+      chunks: const [0.1],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    final t2 = DownloadTask(
+      id: 'task_queued',
+      fileName: 'queued.zip',
+      url: 'https://example.com/queued.zip',
+      fileSize: 100,
+      downloadedBytes: 0,
+      category: 'Archive',
+      status: DownloadStatus.queued,
+      savePath: 'build',
+      localFilePath: 'build/queued.zip',
+      tempFilePath: 'build/queued.zip.dmxpart',
+      threadCount: 1,
+      chunks: const [0.0],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    await database.saveTask(t1);
+    await database.saveTask(t2);
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    expect(provider.tasks[0].status, anyOf(DownloadStatus.paused, DownloadStatus.downloading, DownloadStatus.queued));
+    
+    await provider.pauseAllTasks();
+
+    expect(provider.tasks.firstWhere((t) => t.id == 'task_running').status, DownloadStatus.paused);
+    expect(provider.tasks.firstWhere((t) => t.id == 'task_queued').status, DownloadStatus.paused);
+  });
+
+  test('resumeAllTasks resumes paused tasks', () async {
+    final (database, settings) = await _setupServices();
+    
+    final t1 = DownloadTask(
+      id: 'paused_1',
+      fileName: 'p1.zip',
+      url: 'https://example.com/p1.zip',
+      fileSize: 100,
+      downloadedBytes: 10,
+      category: 'Archive',
+      status: DownloadStatus.paused,
+      savePath: 'build',
+      localFilePath: 'build/p1.zip',
+      tempFilePath: 'build/p1.zip.dmxpart',
+      threadCount: 1,
+      chunks: const [0.1],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      pausedByUser: true,
+    );
+
+    await database.saveTask(t1);
+
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    expect(provider.tasks.first.status, DownloadStatus.paused);
+    
+    await provider.resumeAllTasks();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(provider.tasks.first.status, anyOf(DownloadStatus.queued, DownloadStatus.downloading));
+  });
 }
+
 
 class FakeDownloadEngine403 extends DownloadEngine {
   final Response response;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'torrent_models.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
@@ -20,6 +21,9 @@ class TorrentService {
   static void removeTorrent(int id, {bool deleteFiles = false}) {}
   static void pauseTorrent(int id) {}
   static void resumeTorrent(int id) {}
+  static Uint8List? saveResumeData(int id) => null;
+  static bool loadResumeData(int id, List<int> data) => false;
+  static bool isTorrentAlive(int id) => false;
   static void recheckTorrent(int id) {}
   static void setFilePriorities(int id, List<int> priorities) {}
   static int getFileCount(int id) => 0;

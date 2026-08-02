@@ -438,6 +438,16 @@ class TorrentService {
     }
   }
 
+  static bool loadResumeData(int id, Uint8List data) {
+    if (!isInitialized || id < 0) return false;
+    return LibtorrentFlutter.instance.tryLoadResumeData(id, data);
+  }
+
+  static bool isTorrentAlive(int id) {
+    if (!isInitialized || id < 0) return false;
+    return _activeTorrentIds.contains(id);
+  }
+
   static void resumeTorrent(int id) {
     if (!isInitialized) return;
     if (id >= 0) {
