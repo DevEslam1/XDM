@@ -14,6 +14,7 @@ import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
+import 'package:logging/logging.dart';
 
 class BrowserHistorySheet extends StatefulWidget {
   const BrowserHistorySheet({super.key});
@@ -100,7 +101,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     if (value is String && value.isNotEmpty) {
       try {
         return _formatDateTime(DateTime.parse(value));
-      } catch (_) {
+      } catch (e, st) {
+        Logger('browser_history_sheet').warning('[browser_history_sheet] operation failed', e, st);
         return '';
       }
     }

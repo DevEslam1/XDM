@@ -96,7 +96,9 @@ class ChecksumService {
               hexValue = bytes
                   .map((b) => b.toRadixString(16).padLeft(2, '0'))
                   .join();
-            } catch (_) {}
+            } catch (e, st) {
+              _log.warning('[checksum_service] operation failed', e, st);
+            }
           }
           final normalizedAlgo = algo.replaceFirst('-', '');
           return MapEntry(normalizedAlgo, hexValue);

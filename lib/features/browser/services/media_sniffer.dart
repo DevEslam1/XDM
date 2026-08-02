@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/services/youtube_service.dart';
 import '../models/browser_tab.dart';
+import 'package:logging/logging.dart';
 
 /// Detects downloadable media on browser pages (REFACTOR B extraction from
 /// `_BrowserScreenState`).
@@ -238,7 +239,8 @@ class MediaSniffer {
         if (cleanResult.startsWith('"') && cleanResult.endsWith('"')) {
           try {
             cleanResult = jsonDecode(cleanResult);
-          } catch (_) {
+          } catch (e, st) {
+            Logger('media_sniffer').warning('[media_sniffer] operation failed', e, st);
             if (cleanResult.length > 2) {
               cleanResult = cleanResult.substring(1, cleanResult.length - 1);
             }

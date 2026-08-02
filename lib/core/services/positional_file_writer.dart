@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 
@@ -146,7 +147,10 @@ class PositionalFileWriter {
 
     try {
       await _file.close();
-    } catch (_) {
+    } catch (e) {
+      LoggingService.logger('PositionalFileWriter').info(
+        '[PositionalFileWriter] file close errors ignored: $e',
+      );
       // Ignore close errors.
     }
   }

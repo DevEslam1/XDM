@@ -18,6 +18,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 class DetailsScreen extends StatefulWidget {
   final String taskId;
@@ -1926,7 +1927,12 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                   unawaited(
                     provider
                         .updateTorrentTaskFiles(task.id, updatedFiles)
-                        .catchError((e) {}),
+                        .catchError((e) {
+                      LoggingService.logger('DetailsScreen').warning(
+                        '[DetailsScreen] selecting all torrent files failed',
+                        e,
+                      );
+                    }),
                   );
                 },
               ),
@@ -1949,7 +1955,12 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                   unawaited(
                     provider
                         .updateTorrentTaskFiles(task.id, updatedFiles)
-                        .catchError((e) {}),
+                        .catchError((e) {
+                      LoggingService.logger('DetailsScreen').warning(
+                        '[DetailsScreen] deselecting all torrent files failed',
+                        e,
+                      );
+                    }),
                   );
                 },
               ),

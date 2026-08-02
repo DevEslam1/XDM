@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 enum ProtocolSupport { http11, http2, http3 }
 
@@ -62,7 +63,10 @@ class ProtocolCache {
       return map.map(
         (k, v) => MapEntry(k, _HostCaps.fromJson(v as Map<String, dynamic>)),
       );
-    } catch (_) {
+    } catch (e) {
+      LoggingService.logger('ProtocolCache').info(
+        '[ProtocolCache] cached protocol data unreadable, starting fresh: $e',
+      );
       return {};
     }
   }

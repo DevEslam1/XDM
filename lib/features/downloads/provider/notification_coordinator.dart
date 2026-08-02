@@ -12,6 +12,7 @@ import '../../../core/services/notification_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 /// Translates download events into user-facing notifications.
 ///
@@ -107,7 +108,11 @@ class NotificationCoordinator {
     final notifId = _notificationIds[taskId];
     if (notifId != null) {
       unawaited(
-        _notificationService.cancelNotification(notifId).catchError((e) {}),
+        _notificationService.cancelNotification(notifId).catchError((e) {
+          LoggingService.logger('NotificationCoordinator').info(
+            '[NotificationCoordinator] cancel notification failed: $e',
+          );
+        }),
       );
     }
   }

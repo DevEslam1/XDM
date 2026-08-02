@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../models/browser_tab.dart';
 import 'ad_blocker_service.dart';
+import 'package:logging/logging.dart';
 
 /// Thin delegate around [AdBlockerService] used by the browser screen.
 ///
@@ -30,7 +31,7 @@ class AdBlockerDelegate {
   /// Injects the early-phase blocking script (call from `onPageStarted`).
   void injectEarly(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
-    tab.controller.runJavaScript(_adBlocker.earlyJs).catchError((_) {});
+    tab.controller.runJavaScript(_adBlocker.earlyJs).catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
   }
 
   /// Injects cosmetic CSS + late-phase scripts (call from `onPageFinished`).
@@ -51,12 +52,12 @@ class AdBlockerDelegate {
         s.textContent = $cssJson;
       })();
     ''')
-        .catchError((_) {});
+        .catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
 
-    tab.controller.runJavaScript(_adBlocker.lateJs).catchError((_) {});
+    tab.controller.runJavaScript(_adBlocker.lateJs).catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
 
     if (AdBlockerService.isYoutubePage(url)) {
-      tab.controller.runJavaScript(_adBlocker.youtubeJs).catchError((_) {});
+      tab.controller.runJavaScript(_adBlocker.youtubeJs).catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
     }
   }
 }

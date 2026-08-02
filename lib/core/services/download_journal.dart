@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
 
@@ -32,7 +33,12 @@ class DownloadJournal {
       if (await file.exists()) {
         try {
           _approxBytes = await file.length();
-        } catch (_) {
+        } catch (e, st) {
+          LoggingService.logger('DownloadJournal').warning(
+            '[DownloadJournal] reading existing journal length failed, treating as empty',
+            e,
+            st,
+          );
           _approxBytes = 0;
         }
       } else {
@@ -201,7 +207,10 @@ class DownloadJournal {
               }
               break;
           }
-        } catch (_) {
+        } catch (e) {
+          LoggingService.logger('DownloadJournal').info(
+            '[DownloadJournal] malformed journal line skipped: $e',
+          );
           // Ignore malformed lines.
         }
       }
@@ -250,7 +259,10 @@ class DownloadJournal {
     try {
       await _sink?.flush();
       await _sink?.close();
-    } catch (_) {
+    } catch (e) {
+      LoggingService.logger('DownloadJournal').info(
+        '[DownloadJournal] journal close errors ignored: $e',
+      );
       // Ignore close errors.
     }
 
@@ -290,11 +302,18 @@ class DownloadJournal {
           if (await target.exists()) {
             try {
               await target.delete();
-            } catch (_) {}
+            } catch (e) {
+              LoggingService.logger('DownloadJournal').info(
+                '[DownloadJournal] deleting old journal during compaction failed: $e',
+              );
+            }
           }
           await tmp.rename(path);
           break;
-        } catch (_) {
+        } catch (e) {
+          LoggingService.logger('DownloadJournal').info(
+            '[DownloadJournal] journal rename attempt $attempt failed, retrying or copying: $e',
+          );
           if (attempt == 2) {
             await tmp.copy(path);
             await tmp.delete();
@@ -312,13 +331,22 @@ class DownloadJournal {
 
       try {
         await File('$path.tmp').delete();
-      } catch (_) {}
+      } catch (e) {
+        LoggingService.logger('DownloadJournal').info(
+          '[DownloadJournal] deleting compaction tmp file failed: $e',
+        );
+      }
 
       // Best effort: try to reopen in append mode so writes can continue.
       try {
         _sink = File(path).openWrite(mode: FileMode.append);
         _isOpen = true;
-      } catch (_) {
+      } catch (e, st) {
+        LoggingService.logger('DownloadJournal').warning(
+          '[DownloadJournal] reopening journal after compaction failure failed',
+          e,
+          st,
+        );
         _isOpen = false;
         _sink = null;
       }

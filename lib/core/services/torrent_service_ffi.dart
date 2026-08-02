@@ -116,7 +116,9 @@ class TorrentService {
       if (_disposeCompleter != null) {
         try {
           await _disposeCompleter!.future;
-        } catch (_) {}
+        } catch (e, st) {
+          _log.warning('[torrent_service_ffi] operation failed', e, st);
+        }
       }
     }
 
@@ -335,7 +337,9 @@ class TorrentService {
     if (_state == TorrentSessionState.initializing && _initCompleter != null) {
       try {
         await _initCompleter!.future;
-      } catch (_) {}
+      } catch (e, st) {
+        _log.warning('[torrent_service_ffi] operation failed', e, st);
+      }
     }
 
     // If already disposing, wait for the existing dispose to finish
@@ -590,7 +594,8 @@ class TorrentService {
           message: map['message'] as String? ?? '',
         );
       }).toList();
-    } catch (_) {
+    } catch (e, st) {
+      _log.warning('[torrent_service_ffi] operation failed', e, st);
       return [];
     }
   }

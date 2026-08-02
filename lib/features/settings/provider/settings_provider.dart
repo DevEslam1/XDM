@@ -56,6 +56,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _enableProxyKey = 'enableProxy';
   static const _proxyAddressKey = 'proxyAddress';
   static const _bypassSSLKey = 'bypassSSL_v2'; // v2: default false
+  static const _httpsOnlyKey = 'httpsOnly';
   static const _reduceVisualsKey = 'reduceVisuals';
   static const _customUserAgentKey = 'customUserAgent';
   static const _cleanupDaysKey = 'cleanupDays';
@@ -143,7 +144,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       try {
         final binding = WidgetsBinding.instance;
         return binding.platformDispatcher.platformBrightness == Brightness.dark;
-      } catch (_) {
+      } catch (e, st) {
+        _log.warning('[settings_provider] operation failed', e, st);
         return _isDarkMode;
       }
     }
@@ -164,7 +166,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   bool enableProxy = false;
   String proxyAddress = '';
-  bool bypassSSL = true;
+  bool bypassSSL = false;
+  bool httpsOnly = false;
   bool reduceVisuals = false;
   String customUserAgent = '';
   int cleanupDays = 0;
@@ -332,6 +335,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     enableProxy = _prefs.getBool(_enableProxyKey) ?? enableProxy;
     proxyAddress = _prefs.getString(_proxyAddressKey) ?? proxyAddress;
     bypassSSL = _prefs.getBool(_bypassSSLKey) ?? bypassSSL;
+    httpsOnly = _prefs.getBool(_httpsOnlyKey) ?? httpsOnly;
     reduceVisuals = _prefs.getBool(_reduceVisualsKey) ?? reduceVisuals;
     customUserAgent = _prefs.getString(_customUserAgentKey) ?? customUserAgent;
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
@@ -567,8 +571,32 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setBypassSSL(bool value) async {
-    bypassSSL = value;
-    await _prefs.setBool(_bypassSSLKey, value);
+    if (value) {
+      // Require explicit confirmation before enabling — the UI checks this
+      // flag and shows a warning dialog; only confirmBypassSSL() enables it.
+      _pendingBypassSSLConfirmation = true;
+      notifyListeners();
+      return;
+    }
+    bypassSSL = false;
+    _pendingBypassSSLConfirmation = false;
+    await _prefs.setBool(_bypassSSLKey, false);
+    notifyListeners();
+  }
+
+  bool _pendingBypassSSLConfirmation = false;
+  bool get pendingBypassSSLConfirmation => _pendingBypassSSLConfirmation;
+
+  Future<void> confirmBypassSSL() async {
+    bypassSSL = true;
+    _pendingBypassSSLConfirmation = false;
+    await _prefs.setBool(_bypassSSLKey, true);
+    notifyListeners();
+  }
+
+  Future<void> setHttpsOnly(bool value) async {
+    httpsOnly = value;
+    await _prefs.setBool(_httpsOnlyKey, value);
     notifyListeners();
   }
 
@@ -902,6 +930,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _enableProxyKey,
       _proxyAddressKey,
       _bypassSSLKey,
+      _httpsOnlyKey,
       _reduceVisualsKey,
       _customUserAgentKey,
       _cleanupDaysKey,
@@ -968,7 +997,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     batterySaverMode = false;
     enableProxy = false;
     proxyAddress = '';
-    bypassSSL = true;
+    bypassSSL = false; // secure default — never auto-enable cert bypass
+    httpsOnly = false;
+    _pendingBypassSSLConfirmation = false;
     reduceVisuals = false;
     customUserAgent = '';
     cleanupDays = 0;
@@ -1032,6 +1063,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setBool(_enableProxyKey, enableProxy);
     await _prefs.setString(_proxyAddressKey, proxyAddress);
     await _prefs.setBool(_bypassSSLKey, bypassSSL);
+    await _prefs.setBool(_httpsOnlyKey, httpsOnly);
     await _prefs.setBool(_reduceVisualsKey, reduceVisuals);
     await _prefs.setString(_customUserAgentKey, customUserAgent);
     await _prefs.setInt(_cleanupDaysKey, cleanupDays);

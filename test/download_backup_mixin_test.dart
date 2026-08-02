@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/mixins/download_backup_mixin.dart';
+import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -55,6 +57,23 @@ void main() {
       final encoded = base64Encode([...legacy, ...cipherBytes]);
 
       expect(provider.decryptBackup(encoded, 'legacy-password'), payload);
+    });
+
+    test('decrypts XDMCRYPT v3 backups (SHA-256 KDF, pre-PBKDF2)', () {
+      final keyBytes = sha256.convert(utf8.encode('legacy-password')).bytes;
+      final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
+      final iv = encrypt_lib.IV.fromSecureRandom(16);
+      final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(key));
+      final encrypted = encrypter.encrypt('old format payload', iv: iv);
+      final magic = utf8.encode('XDMCRYPT3');
+      final payload = [...magic, ...iv.bytes, ...encrypted.bytes];
+      final mac = Hmac(sha256, keyBytes).convert(payload).bytes;
+      final encoded = base64Encode([...payload, ...mac]);
+
+      expect(
+        provider.decryptBackup(encoded, 'legacy-password'),
+        'old format payload',
+      );
     });
 
     test('exports and imports backups without a password', () async {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/url_utils.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 class ClipboardService {
   static final ClipboardService _instance = ClipboardService._internal();
@@ -24,7 +25,10 @@ class ClipboardService {
     if (_initFuture != null) {
       try {
         await _initFuture;
-      } catch (_) {
+      } catch (e) {
+        LoggingService.logger('ClipboardService').info(
+          '[ClipboardService] previous init future failed, will retry on next check: $e',
+        );
         _initFuture = null;
       }
     }
@@ -94,7 +98,11 @@ class ClipboardService {
               key: 'clipboard_last_time',
               value: '${now.millisecondsSinceEpoch}',
             );
-          } catch (_) {}
+          } catch (e) {
+            LoggingService.logger('ClipboardService').info(
+              '[ClipboardService] rate-limit timestamp persist skipped: $e',
+            );
+          }
           return text;
         }
 
@@ -106,7 +114,11 @@ class ClipboardService {
             key: 'clipboard_last_time',
             value: '${now.millisecondsSinceEpoch}',
           );
-        } catch (_) {}
+        } catch (e) {
+          LoggingService.logger('ClipboardService').info(
+            '[ClipboardService] last-checked URL persist skipped: $e',
+          );
+        }
         return text;
       }
     } catch (e) {

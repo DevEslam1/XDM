@@ -54,4 +54,12 @@ const Map<String, String> deTranslations = {
   'url_invalid_error': 'Bitte geben Sie eine gültige URL ein',
   'browser_menu_reload': 'Neu laden',
   'browser_menu_history': 'Browser-Verlauf',
+  'bypass_ssl_dialog_title': 'SSL-Prüfung deaktivieren?',
+  'bypass_ssl_dialog_body':
+      'Dadurch sind alle Downloads Man-in-the-Middle-Angriffen '
+      'ausgesetzt. Nur in vertrauenswürdigen Netzwerken aktivieren.',
+  'bypass_ssl_dialog_confirm': 'Ich verstehe das Risiko',
+  'settings_https_only': 'Nur-HTTPS-Modus',
+  'settings_https_only_sub':
+      'http://-Navigation wo möglich auf https:// aktualisieren',
 };

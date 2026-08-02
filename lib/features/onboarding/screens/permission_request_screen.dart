@@ -13,6 +13,7 @@ import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/main_navigation_container.dart';
 import '../../settings/provider/settings_provider.dart';
+import 'package:logging/logging.dart';
 
 class PermissionRequestScreen extends StatefulWidget {
   const PermissionRequestScreen({super.key});
@@ -177,7 +178,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
           });
         }
       }
-    } catch (_) {
+    } catch (e, st) {
+      Logger('permission_request_screen').warning('[permission_request_screen] operation failed', e, st);
     } finally {
       if (mounted) setState(() => _storageOpening = false);
     }
@@ -210,7 +212,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
           });
         }
       }
-    } catch (_) {
+    } catch (e, st) {
+      Logger('permission_request_screen').warning('[permission_request_screen] operation failed', e, st);
     } finally {
       if (mounted) setState(() => _notificationsOpening = false);
     }
@@ -229,7 +232,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
           _batteryGranted = granted;
         });
       }
-    } catch (_) {
+    } catch (e, st) {
+      Logger('permission_request_screen').warning('[permission_request_screen] operation failed', e, st);
     } finally {
       if (mounted) {
         setState(() {

@@ -90,7 +90,9 @@ class PowerMonitor {
           }
         }
         _level = await _battery.batteryLevel;
-      } catch (_) {}
+      } catch (e) {
+        _log.info('[PowerMonitor] thermal poll skipped: $e');
+      }
     });
   }
 

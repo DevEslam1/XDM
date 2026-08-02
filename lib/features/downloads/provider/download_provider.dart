@@ -375,7 +375,9 @@ class DownloadProvider extends ChangeNotifier
       if (await stateFile.exists()) {
         try {
           stateContent = await stateFile.readAsString();
-        } catch (_) {}
+        } catch (e, st) {
+          _log.warning('[download_provider] operation failed', e, st);
+        }
       }
 
       return _PartialFileState(
@@ -1298,7 +1300,7 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> retryTask(String id) async {
     final task = _findTask(id);
-    if (task == null) return;
+    if (task == null || task.status == DownloadStatus.completed) return;
 
     _retryCounts.remove(id);
 
@@ -1315,7 +1317,7 @@ class DownloadProvider extends ChangeNotifier
     final hasState = await File('${task.tempFilePath}.dmxstate').exists();
     final chunks = hasState
         ? task.chunks
-        : List<double>.filled(task.threadCount, 0.0);
+        : List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
 
     await _setTask(
       task.copyWith(
@@ -1330,7 +1332,13 @@ class DownloadProvider extends ChangeNotifier
         clearError: true,
         clearStatusMessage: true,
         clearCompletedAt: true,
+        pausedByUser: false,
       ),
+    );
+
+    _downloadEngine.updateSpeedLimit(
+      _effectiveSpeedLimit(),
+      activeOrSeedingCount,
     );
 
     pumpQueue();
@@ -1350,7 +1358,8 @@ class DownloadProvider extends ChangeNotifier
         return (decoded['progress'] as List)
             .fold<int>(0, (sum, chunk) => sum + ((chunk as num).toInt()));
       }
-    } catch (_) {
+    } catch (e, st) {
+      _log.warning('[download_provider] operation failed', e, st);
       // Corrupt state → treat as fresh start
     }
     return 0;
@@ -1705,7 +1714,9 @@ class DownloadProvider extends ChangeNotifier
       if (previousSave != null) {
         try {
           await previousSave;
-        } catch (_) {}
+        } catch (e, st) {
+          _log.warning('[download_provider] operation failed', e, st);
+        }
       }
       return;
     }
@@ -1934,7 +1945,7 @@ class DownloadProvider extends ChangeNotifier
 
         _updateTelemetryWidget();
 
-        unawaited(BackgroundService.sendHeartbeat().catchError((e) {}));
+        unawaited(BackgroundService.sendHeartbeat().catchError((e, st) { _log.warning('[download_provider] operation failed', e, st); }));
 
         final tasksToSave = <DownloadTask>[];
 

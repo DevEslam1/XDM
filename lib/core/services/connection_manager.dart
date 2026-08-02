@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'protocol_cache.dart';
 import 'protocol_fallback_memory.dart';
+import 'package:logging/logging.dart';
 
 class ConnectionManager {
   static Dio createDownloadDio({
@@ -86,7 +87,8 @@ class ConnectionManager {
 
       await ProtocolCache.record(url, support);
       return support;
-    } catch (_) {
+    } catch (e, st) {
+      Logger('connection_manager').warning('[connection_manager] operation failed', e, st);
       return ProtocolSupport.http11;
     }
   }
@@ -120,7 +122,8 @@ class ConnectionManager {
           validateStatus: (_) => true,
         ),
       );
-    } catch (_) {
+    } catch (e, st) {
+      Logger('connection_manager').warning('[connection_manager] operation failed', e, st);
     } finally {
       dio.close();
     }
@@ -149,7 +152,8 @@ class ConnectionManager {
       await secureSocket.close();
       secureSocket = null;
       return proto == 'h2';
-    } catch (_) {
+    } catch (e, st) {
+      Logger('connection_manager').warning('[connection_manager] operation failed', e, st);
       return false;
     } finally {
       secureSocket?.destroy();

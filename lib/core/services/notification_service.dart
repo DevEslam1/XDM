@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/localization.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 /// Persistent key holding the notification-action nonce so that action
 /// intents fired after a process restart can still be validated.
@@ -134,7 +135,13 @@ class NotificationService {
         final granted = await androidPlugin.requestNotificationsPermission();
         return granted ?? false;
       }
-    } catch (_) {}
+    } catch (e, st) {
+      LoggingService.logger('NotificationService').warning(
+        '[NotificationService] notification permission request failed',
+        e,
+        st,
+      );
+    }
     return false;
   }
 

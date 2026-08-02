@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../models/browser_tab.dart';
+import 'package:logging/logging.dart';
 
 /// Signature matching the screen's `_createNewTab` factory — building a tab
 /// (WebViewController + NavigationDelegate) stays on the screen.
@@ -215,7 +216,9 @@ class TabManager {
       _disposedTabIds.add(tab.id);
       try {
         tab.progressNotifier.dispose();
-      } catch (_) {}
+      } catch (e, st) {
+        Logger('tab_manager').warning('[tab_manager] operation failed', e, st);
+      }
     }
     var activeIdx = 0;
     final newTabs = <BrowserTab>[];

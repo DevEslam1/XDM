@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'error_taxonomy.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 /// One recorded diagnostic entry.
 class DiagnosticEntry {
@@ -78,7 +79,11 @@ class DiagnosticService {
     try {
       final package = await PackageInfo.fromPlatform();
       info['app'] = '${package.appName} ${package.version}+${package.buildNumber}';
-    } catch (_) {}
+    } catch (e) {
+      LoggingService.logger('DiagnosticService').info(
+        '[DiagnosticService] package info unavailable, skipping app field: $e',
+      );
+    }
 
     try {
       if (!kIsWeb) {
@@ -95,7 +100,11 @@ class DiagnosticService {
       } else {
         info['device'] = 'web';
       }
-    } catch (_) {}
+    } catch (e) {
+      LoggingService.logger('DiagnosticService').info(
+        '[DiagnosticService] device info unavailable, skipping device field: $e',
+      );
+    }
 
     info['dart'] = Platform.version.split(' ').first;
     info['arch'] = Platform.operatingSystemVersion;

@@ -54,4 +54,13 @@ const Map<String, String> frTranslations = {
   'url_invalid_error': 'Veuillez saisir une URL valide',
   'browser_menu_reload': 'Recharger',
   'browser_menu_history': 'Historique du navigateur',
+  'bypass_ssl_dialog_title': 'Désactiver la vérification SSL ?',
+  'bypass_ssl_dialog_body':
+      'Cela expose tous les téléchargements à des attaques '
+      'de l\u2019homme du milieu. À activer uniquement sur des '
+      'réseaux de confiance.',
+  'bypass_ssl_dialog_confirm': 'Je comprends le risque',
+  'settings_https_only': 'Mode HTTPS uniquement',
+  'settings_https_only_sub':
+      'Mettre à niveau toute navigation http:// vers https:// si possible',
 };

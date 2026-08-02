@@ -12,6 +12,8 @@ abstract final class DownloadStatusMessages {
   static const pausedOrphaned =
       'Paused because XDM was closed during a foreground download.';
   static const ffmpegMergeFailed = 'FFmpeg merge failed: ';
+  static const mergeFailedVideoOnly =
+      'Merged audio failed - saved video only';
   static const forbidden = 'Forbidden';
 }
 

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 /// A single user-authored script or stylesheet that runs on matching pages.
 class UserScript {
@@ -167,7 +168,11 @@ class UserScriptManager extends ChangeNotifier {
         candidates.add(host);
         candidates.add('$host/*');
       }
-    } catch (_) {}
+    } catch (e) {
+      LoggingService.logger('UserScriptManager').info(
+        '[UserScriptManager] host extraction failed, matching full URL only: $e',
+      );
+    }
 
     final regex = _globToRegex(trimmed.toLowerCase());
     return candidates.any((candidate) => regex.hasMatch(candidate));

@@ -76,7 +76,9 @@ class TorrentResumeStore {
         if (await targetFile.exists()) {
           try {
             await targetFile.delete();
-          } catch (_) {}
+          } catch (e, st) {
+            _log.warning('[torrent_resume_store] operation failed', e, st);
+          }
         }
 
         try {
@@ -88,7 +90,9 @@ class TorrentResumeStore {
       } finally {
         try {
           if (await tmpFile.exists()) await tmpFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+          _log.warning('[torrent_resume_store] operation failed', e, st);
+        }
       }
     } catch (e) {
       _log.warning('save failed for $torrentId', e);
@@ -108,7 +112,9 @@ class TorrentResumeStore {
       _log.warning('load failed for $torrentId, removing corrupt file', e);
       try {
         await File(_pathFor(torrentId)).delete();
-      } catch (_) {}
+      } catch (e, st) {
+        _log.warning('[torrent_resume_store] operation failed', e, st);
+      }
       return null;
     }
   }
@@ -126,7 +132,9 @@ class TorrentResumeStore {
       if (await file.exists()) await file.delete();
       final binFile = File(_binaryPathFor(torrentId));
       if (await binFile.exists()) await binFile.delete();
-    } catch (_) {}
+    } catch (e, st) {
+      _log.warning('[torrent_resume_store] operation failed', e, st);
+    }
   }
 
   static String _binaryPathFor(int torrentId) =>
@@ -146,19 +154,24 @@ class TorrentResumeStore {
         if (await targetFile.exists()) {
           try {
             await targetFile.delete();
-          } catch (_) {}
+          } catch (e, st) {
+            _log.warning('[torrent_resume_store] operation failed', e, st);
+          }
         }
 
         try {
           await tmpFile.rename(targetPath);
-        } catch (_) {
+        } catch (e, st) {
+          _log.warning('[torrent_resume_store] operation failed', e, st);
           await tmpFile.copy(targetPath);
           await tmpFile.delete();
         }
       } finally {
         try {
           if (await tmpFile.exists()) await tmpFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+          _log.warning('[torrent_resume_store] operation failed', e, st);
+        }
       }
     } catch (e) {
       _log.warning('saveResumeData failed for $torrentId', e);

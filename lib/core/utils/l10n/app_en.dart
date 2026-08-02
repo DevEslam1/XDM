@@ -165,6 +165,14 @@ const Map<String, String> enTranslations = {
   'settings_bypass_ssl': 'Trust all ssl certificates',
   'settings_bypass_ssl_sub':
       'Bypass SSL validation (WARNING: MITM vulnerability)',
+  'bypass_ssl_dialog_title': 'Disable SSL Verification?',
+  'bypass_ssl_dialog_body':
+      'This exposes all downloads to man-in-the-middle attacks. '
+      'Only enable on trusted networks.',
+  'bypass_ssl_dialog_confirm': 'I Understand the Risk',
+  'settings_https_only': 'HTTPS-only mode',
+  'settings_https_only_sub':
+      'Upgrade all http:// navigation to https:// where possible',
   'settings_reduce_visuals': 'Reduce visual effects',
   'settings_reduce_visuals_sub':
       'Disable blur and glow effects for better performance',

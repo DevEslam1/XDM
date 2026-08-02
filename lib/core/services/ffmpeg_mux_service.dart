@@ -62,7 +62,9 @@ class FFmpegMuxService {
     await _mergeSemaphore.acquire();
     try {
       await WakelockPlus.enable();
-    } catch (_) {}
+    } catch (e) {
+      _log.info('[FFmpegMuxService] wakelock enable skipped: $e');
+    }
 
     try {
       return await _mergeLocked(
@@ -76,7 +78,9 @@ class FFmpegMuxService {
     } finally {
       try {
         await WakelockPlus.disable();
-      } catch (_) {}
+      } catch (e) {
+        _log.info('[FFmpegMuxService] wakelock disable skipped: $e');
+      }
       _mergeSemaphore.release();
     }
   }
@@ -296,7 +300,9 @@ class FFmpegMuxService {
     try {
       final outFile = File(outputPath);
       if (await outFile.exists()) await outFile.delete();
-    } catch (_) {}
+    } catch (e) {
+      _log.info('[FFmpegMuxService] deleting partial output failed: $e');
+    }
 
     return false;
   }

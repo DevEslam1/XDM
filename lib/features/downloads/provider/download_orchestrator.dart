@@ -388,7 +388,9 @@ class DownloadOrchestrator {
         if (await targetFile.exists()) {
           try {
             await targetFile.delete();
-          } catch (_) {}
+          } catch (e, st) {
+            Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+          }
         }
         try {
           await mergedFile.rename(current.localFilePath);
@@ -405,21 +407,51 @@ class DownloadOrchestrator {
         if (videoFile.path != current.localFilePath) {
           try {
             await videoFile.delete();
-          } catch (_) {}
+          } catch (e, st) {
+            Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+          }
         }
         try {
           await audioFile.delete();
-        } catch (_) {}
+        } catch (e, st) {
+          Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+        }
       } else {
         throw Exception('Merged output file not found after FFmpeg success');
       }
     } else {
+      // FFmpeg merge failed � don't fail the task. Keep the video-only
+      // stream accessible and mark the task completed with a note.
       try {
         await audioFile.delete();
       } catch (_) {}
-      throw Exception(
-        'FFmpeg merge failed. The video-only file is saved at: $actualVideoPath',
+      var videoOnlyPath =
+          '${p.withoutExtension(actualVideoPath)}_video_only$videoExt';
+      try {
+        if (videoFile.path != videoOnlyPath) {
+          await videoFile.rename(videoOnlyPath);
+        }
+      } catch (e) {
+        debugPrint('[DMX] Failed to rename video-only file: $e');
+        videoOnlyPath = actualVideoPath;
+      }
+      await _host.setTaskState(
+        current.copyWith(
+          status: DownloadStatus.completed,
+          downloadedBytes: current.fileSize > 0
+              ? current.fileSize
+              : current.downloadedBytes,
+          speed: 0,
+          clearEta: true,
+          statusMessage: DownloadStatusMessages.mergeFailedVideoOnly,
+          localFilePath: videoOnlyPath,
+          completedAt: DateTime.now(),
+        ),
       );
+      debugPrint(
+        '[DMX] FFmpeg merge failed. Saved video-only file: $videoOnlyPath',
+      );
+      return true;
     }
     return true;
   }
@@ -1529,7 +1561,9 @@ class DownloadOrchestrator {
                   final audioFile = File(audioTempPath);
                   if (await audioFile.exists()) await audioFile.delete();
                 }
-              } catch (_) {}
+              } catch (e, st) {
+                Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+              }
 
               final isRetryable = isRetryableError(realError);
               final maxRetries =
@@ -1575,6 +1609,7 @@ class DownloadOrchestrator {
               _recordDownloadFailure(task.id, realError);
               try {
                 await _host.cleanupPartFiles(current);
+                await cleanupTempFiles(current);
               } catch (e) {
                 debugPrint('Failed to clean up temp files on non-retryable error: $e');
               }
@@ -1622,7 +1657,8 @@ class DownloadOrchestrator {
     if (_host.providerLatestTorrentStats.containsKey(id)) return true;
     try {
       return TorrentService.isTorrentAlive(id);
-    } catch (_) {
+    } catch (e, st) {
+      Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
       return false;
     }
   }
@@ -1796,5 +1832,29 @@ class DownloadOrchestrator {
     _cookieCache.clear();
     _ytRefreshAttempts.clear();
     _startingTaskIds.clear();
+  }
+
+  /// Cleans up temporary download artifacts (.dmxpart, .dmxstate, .journal, .audio)
+  /// for a task when a non-retryable failure occurs.
+  Future<void> cleanupTempFiles(DownloadTask task) async {
+    final paths = [
+      task.tempFilePath,
+      '${task.tempFilePath}.dmxstate',
+      '${task.tempFilePath}.journal',
+    ];
+    if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      paths.addAll([
+        '${task.tempFilePath}.audio',
+        '${task.tempFilePath}.audio.dmxstate',
+      ]);
+    }
+    for (final p in paths) {
+      try {
+        final f = File(p);
+        if (await f.exists()) await f.delete();
+      } catch (e, st) {
+        Logger('download_orchestrator').warning('[download_orchestrator] cleanupTempFiles failed for $p', e, st);
+      }
+    }
   }
 }

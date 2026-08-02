@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
+import 'package:pointycastle/export.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/services/database_service.dart';
@@ -43,16 +46,41 @@ mixin DownloadBackupMixin {
     return result;
   }
 
+  /// Derives a 256-bit key from [password] and [salt] using PBKDF2-HMAC-SHA256.
+  /// 100k iterations makes brute-force cost ~hours per guess instead of instant.
+  List<int> _deriveKey(String password, List<int> salt) {
+    final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(
+        Uint8List.fromList(salt),
+        100000,
+        32,
+      ));
+    return pbkdf2.process(Uint8List.fromList(utf8.encode(password)));
+  }
+
+  List<int> _secureRandomBytes(int length) {
+    final rng = Random.secure();
+    return List<int>.generate(length, (_) => rng.nextInt(256));
+  }
+
+  /// Encrypts [jsonStr] as XDMCRYPT4 (AES-256-CBC + HMAC-SHA256,
+  /// PBKDF2-derived key with random per-backup salt):
+  ///
+  ///   [XDMCRYPT4][salt 16][iv 16][ciphertext][hmac 32]
+  ///
+  /// The salt is stored alongside the ciphertext so decryptBackup can
+  /// re-derive the same key.
   String encryptBackup(String jsonStr, String password) {
-    final keyBytes = sha256.convert(utf8.encode(password)).bytes;
+    final salt = _secureRandomBytes(16);
+    final keyBytes = _deriveKey(password, salt);
     final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
     final iv = encrypt_lib.IV.fromSecureRandom(16);
 
     final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(key));
     final encrypted = encrypter.encrypt(jsonStr, iv: iv);
 
-    final magic = utf8.encode('XDMCRYPT3');
-    final payload = [...magic, ...iv.bytes, ...encrypted.bytes];
+    final magic = utf8.encode('XDMCRYPT4');
+    final payload = [...magic, ...salt, ...iv.bytes, ...encrypted.bytes];
     final mac = Hmac(sha256, keyBytes).convert(payload).bytes;
     final finalBytes = [...payload, ...mac];
     return base64Encode(finalBytes);
@@ -61,6 +89,32 @@ mixin DownloadBackupMixin {
   String? decryptBackup(String encryptedBase64, String password) {
     try {
       final bytes = base64Decode(encryptedBase64);
+      final v4Magic = utf8.encode('XDMCRYPT4');
+      if (_hasMagic(bytes, v4Magic)) {
+        // XDMCRYPT4 (PBKDF2): [magic][salt 16][iv 16][ciphertext][hmac 32]
+        final saltStart = v4Magic.length;
+        final ivStart = saltStart + 16;
+        final keyBytes =
+            _deriveKey(password, bytes.sublist(saltStart, ivStart));
+        final payload = bytes.sublist(0, bytes.length - 32);
+        final expectedMac = Hmac(sha256, keyBytes).convert(payload).bytes;
+        final actualMac = bytes.sublist(bytes.length - 32);
+        if (!_constantTimeEquals(expectedMac, actualMac)) return null;
+
+        final ivBytes = payload.sublist(ivStart, ivStart + 16);
+        final cipherBytes = payload.sublist(ivStart + 16);
+        final encrypter =
+            encrypt_lib.Encrypter(encrypt_lib.AES(encrypt_lib.Key(
+          Uint8List.fromList(keyBytes),
+        )));
+        final encrypted =
+            encrypt_lib.Encrypted(Uint8List.fromList(cipherBytes));
+        return encrypter.decrypt(
+          encrypted,
+          iv: encrypt_lib.IV(Uint8List.fromList(ivBytes)),
+        );
+      }
+
       final authenticatedMagic = utf8.encode('XDMCRYPT3');
       final isAuthenticated =
           bytes.length >= authenticatedMagic.length &&
@@ -170,7 +224,9 @@ mixin DownloadBackupMixin {
             }
           }
         }
-      } catch (_) {}
+      } catch (e, st) {
+        Logger('download_backup_mixin').warning('[download_backup_mixin] operation failed', e, st);
+      }
 
       if (isEncrypted) {
         if (password == null || password.isEmpty) {

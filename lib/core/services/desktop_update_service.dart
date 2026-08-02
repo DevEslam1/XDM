@@ -73,7 +73,10 @@ class DesktopUpdateService {
       } else if (response.data is String) {
         return jsonDecode(response.data as String) as Map<String, dynamic>;
       }
-    } catch (_) {
+    } catch (e) {
+      _log.info(
+        '[DesktopUpdateService] primary manifest fetch failed, falling back to mirror: $e',
+      );
       try {
         final response = await dio.get(_mirrorUrl);
         if (response.data is Map<String, dynamic>) {

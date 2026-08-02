@@ -67,7 +67,9 @@ class SingleInstanceService {
         }
         try {
           await Process.run('chmod', ['700', configDir.path]);
-        } catch (_) {}
+        } catch (e) {
+          _log.info('[SingleInstanceService] chmod on token dir skipped: $e');
+        }
       } else if (Platform.isWindows) {
         final appData =
             Platform.environment['APPDATA'] ??
@@ -136,7 +138,9 @@ class SingleInstanceService {
     // No live primary — clean the stale token file, then become the primary.
     try {
       if (await _tokenFile.exists()) await _tokenFile.delete();
-    } catch (_) {}
+    } catch (e) {
+      _log.info('[SingleInstanceService] deleting stale token file failed: $e');
+    }
 
     try {
       await _startServer(candidateUrl);
@@ -177,7 +181,9 @@ class SingleInstanceService {
         await tokenF.writeAsString(tokenContents);
         try {
           await Process.run('chmod', ['600', tokenF.path]);
-        } catch (_) {}
+        } catch (e) {
+          _log.info('[SingleInstanceService] chmod on token file skipped: $e');
+        }
       }
     } else {
       // AppData directory is already restricted to the user by default ACLs on Windows
@@ -205,7 +211,9 @@ class SingleInstanceService {
         try {
           request.response.statusCode = HttpStatus.internalServerError;
           await request.response.close();
-        } catch (_) {}
+        } catch (e) {
+          _log.info('[SingleInstanceService] closing error response failed: $e');
+        }
       }
     });
   }
@@ -220,7 +228,8 @@ class SingleInstanceService {
       );
       await socket.close();
       return true;
-    } catch (_) {
+    } catch (e) {
+      _log.info('[SingleInstanceService] primary heartbeat probe failed: $e');
       return false;
     }
   }
@@ -242,7 +251,10 @@ class SingleInstanceService {
         if (parsed != null && parsed > 0) port = parsed;
       }
       return (token, port);
-    } catch (_) {
+    } catch (e) {
+      _log.info(
+        '[SingleInstanceService] reading token file failed, returning null: $e',
+      );
       return null;
     }
   }

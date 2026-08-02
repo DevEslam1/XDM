@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:logging/logging.dart';
 
 /// Parsed payload of a long-press / context-menu message from the webview.
 class LongPressPayload {
@@ -26,7 +27,8 @@ class LongPressPayload {
         type: (map['type'] as String?)?.trim().toLowerCase() ?? 'link',
         text: (map['text'] as String?) ?? '',
       );
-    } catch (_) {
+    } catch (e, st) {
+      Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
       return null;
     }
   }
@@ -42,7 +44,8 @@ class LongPressPayload {
   static Object? _jsonDecode(String raw) {
     try {
       return jsonDecode(raw);
-    } catch (_) {
+    } catch (e, st) {
+      Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
       return null;
     }
   }
@@ -124,7 +127,8 @@ String _defaultLabel(String type) {
 String _host(String url) {
   try {
     return Uri.parse(url).host.toLowerCase();
-  } catch (_) {
+  } catch (e, st) {
+    Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
     return '';
   }
 }
@@ -140,7 +144,8 @@ String _baseUrl(String url) {
     // Compare only the host + first path segment so quality variants of the
     // same media (e.g. /video/720p.mp4 vs /video/1080p.mp4) are grouped.
     return '${uri.scheme}://$host${segments.isEmpty ? '' : '/${segments.first}'}';
-  } catch (_) {
+  } catch (e, st) {
+    Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
     return '';
   }
 }

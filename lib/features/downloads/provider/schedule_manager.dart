@@ -8,6 +8,7 @@ import '../../../core/services/background_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/update_service.dart';
 import '../models/download_task.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 /// Owns the periodic scheduling timer and schedule evaluation.
 ///
@@ -56,9 +57,23 @@ class ScheduleManager {
           debugPrint('[ScheduleManager] checkScheduledDownloads error: $e');
         }),
       );
-      unawaited(_checkPeriodicAppUpdate().catchError((e) {}));
+      unawaited(
+        _checkPeriodicAppUpdate().catchError((e) {
+          LoggingService.logger('ScheduleManager').warning(
+            '[ScheduleManager] periodic app update check failed',
+            e,
+          );
+        }),
+      );
       if (_downloadingTasksCount() > 0) {
-        unawaited(BackgroundService.sendHeartbeat().catchError((e) {}));
+        unawaited(
+          BackgroundService.sendHeartbeat().catchError((e) {
+            LoggingService.logger('ScheduleManager').warning(
+              '[ScheduleManager] background heartbeat failed',
+              e,
+            );
+          }),
+        );
       }
     });
   }

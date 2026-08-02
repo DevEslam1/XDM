@@ -7,6 +7,7 @@ import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../services/redirect_guard.dart';
+import 'package:logging/logging.dart';
 
 enum RedirectAction {
   openOnceInNewTab,
@@ -61,7 +62,8 @@ class RedirectSheet extends StatelessWidget {
       final uri = Uri.parse(normalized);
       final path = uri.path.isEmpty ? '/' : uri.path;
       return '${uri.host}$path';
-    } catch (_) {
+    } catch (e, st) {
+      Logger('redirect_sheet').warning('[redirect_sheet] operation failed', e, st);
       return url.split('?').first;
     }
   }

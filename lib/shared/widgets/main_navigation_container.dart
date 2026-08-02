@@ -21,6 +21,7 @@ import '../../features/home/screens/home_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/widgets/update_dialogs.dart';
 import 'themed_snackbar.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   final String? initialUrl;
@@ -123,7 +124,12 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         TorrentResumeStore.saveAll(
           TorrentService.activeTorrentIds,
           TorrentService.progressFor,
-        ).catchError((e) {}),
+        ).catchError((e) {
+          LoggingService.logger('MainNavigationContainer').warning(
+            '[MainNavigationContainer] saving torrent resume state failed',
+            e,
+          );
+        }),
       );
     }
   }

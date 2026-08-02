@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:logging/logging.dart';
 
 class BrowserTab {
   final String id;
@@ -42,7 +43,8 @@ class BrowserTab {
       var host = Uri.parse(url).host;
       if (host.startsWith('www.')) host = host.substring(4);
       return host;
-    } catch (_) {
+    } catch (e, st) {
+      Logger('browser_tab').warning('[browser_tab] operation failed', e, st);
       return '';
     }
   }
@@ -58,6 +60,8 @@ class BrowserTab {
   void dispose() {
     try {
       progressNotifier.dispose();
-    } catch (_) {}
+    } catch (e, st) {
+      Logger('browser_tab').warning('[browser_tab] operation failed', e, st);
+    }
   }
 }

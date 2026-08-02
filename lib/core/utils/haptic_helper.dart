@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 mixin HapticHelper {
   void triggerHaptic(SettingsProvider settings) {
@@ -26,7 +27,11 @@ mixin HapticHelper {
 
   void errorPulse(SettingsProvider settings) {
     if (settings.vibration) {
-      _runErrorPulse().catchError((Object _) {});
+      _runErrorPulse().catchError((e) {
+        LoggingService.logger('HapticHelper').info(
+          '[HapticHelper] error pulse skipped: $e',
+        );
+      });
     }
   }
 

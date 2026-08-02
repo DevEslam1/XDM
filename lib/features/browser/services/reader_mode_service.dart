@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
+import 'package:logging/logging.dart';
 
 class ReaderArticle {
   final String title;
@@ -63,7 +64,8 @@ class ReaderModeService {
         url: data['url'] as String? ?? '',
         domain: data['domain'] as String? ?? '',
       );
-    } catch (_) {
+    } catch (e, st) {
+      Logger('reader_mode_service').warning('[reader_mode_service] operation failed', e, st);
       return null;
     }
   }

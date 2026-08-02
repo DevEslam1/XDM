@@ -39,7 +39,8 @@ class ConnectionWarmer {
 
       _warmedHosts[host] = DateTime.now();
       _log.fine('[ConnectionWarmer] Pre-warmed TLS connection to $host');
-    } catch (_) {
+    } catch (e) {
+      _log.info('[ConnectionWarmer] pre-warm skipped: $e');
       // Best effort pre-warming
     }
   }
@@ -57,7 +58,8 @@ class ConnectionWarmer {
       final host = Uri.parse(url).host;
       final lastWarm = _warmedHosts[host];
       return lastWarm != null && DateTime.now().difference(lastWarm) < _warmTtl;
-    } catch (_) {
+    } catch (e) {
+      _log.info('[ConnectionWarmer] URL parse skipped, returning not warmed: $e');
       return false;
     }
   }

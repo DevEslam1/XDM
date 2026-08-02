@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:logging/logging.dart';
 
 class SiteSettings {
   final bool? desktopMode;
@@ -63,7 +64,8 @@ class SiteSettingsStore {
     try {
       final map = jsonDecode(raw) as Map<String, dynamic>;
       _cache = map.map((k, v) => MapEntry(k, SiteSettings.fromJson(v)));
-    } catch (_) {
+    } catch (e, st) {
+      Logger('site_settings_store').warning('[site_settings_store] operation failed', e, st);
       _cache = {};
     }
     return _cache!;

@@ -12,7 +12,7 @@ import 'logging_service.dart';
 ///   2. Pass the DSN via `--dart-define=SENTRY_DSN=...` or secure storage.
 ///   3. Call [CrashReportingService.init()] at app startup.
 ///
-/// When no DSN is configured, [NoOpCrashReporter] is used — all calls are
+/// When no DSN is configured, [NoOpCrashReporter] is used â€” all calls are
 /// silently no-ops.
 abstract class CrashReporter {
   Future<void> init({String? dsn});
@@ -59,15 +59,70 @@ class CrashReportingService {
       _reporter = NoOpCrashReporter();
       LoggingService.logger(
         'CrashReportingService',
-      ).info('No DSN configured — crash reporting is disabled.');
+      ).info('No DSN configured â€” crash reporting is disabled.');
       return;
     }
 
     await SentryFlutter.init((options) {
       options.dsn = effectiveDsn;
       options.tracesSampleRate = 0.1;
+      options.environment =
+          kDebugMode ? 'dev' : 'production';
+      options.beforeSend = (event, hint) {
+        // Redact URLs that carry auth tokens (e.g. signed download URLs).
+        if (event.request?.url != null &&
+            event.request!.url!.contains('?')) {
+          final uri = Uri.tryParse(event.request!.url!);
+          if (uri != null) {
+            final redacted = uri.replace(queryParameters: {
+              for (final entry in uri.queryParameters.entries)
+                entry.key: entry.key.toLowerCase().contains('token') ||
+                        entry.key.toLowerCase().contains('key') ||
+                        entry.key.toLowerCase().contains('auth') ||
+                        entry.key.toLowerCase().contains('sig') ||
+                        entry.key.toLowerCase().contains('secret')
+                    ? '***'
+                    : entry.value,
+            }).toString();
+            if (event.request != null) {
+              event.request!.url = redacted;
+            }
+          }
+        }
+        // Strip credential-bearing exceptions/messages.
+        event.message = event.message != null
+            ? SentryMessage(_redactSensitive(event.message!.formatted))
+            : null;
+        return event;
+      };
     });
     _reporter = SentryCrashReporter();
+  }
+
+  static final RegExp _sensitiveUrlPattern =
+      RegExp(r'''(https?://[^\s"'<]+)(?<params>[?&][^\s"'<]*)''', caseSensitive: false);
+
+  static String _redactSensitive(String input) {
+    return input.replaceAllMapped(_sensitiveUrlPattern, (match) {
+      final query = match.group(2) ?? '';
+      if (query.isEmpty) return match.group(0)!;
+      final sanitized = query
+          .split('&')
+          .map((part) {
+            final idx = part.indexOf('=');
+            if (idx <= 0) return part;
+            final name = part.substring(0, idx).toLowerCase();
+            return (name.contains('token') ||
+                    name.contains('key') ||
+                    name.contains('auth') ||
+                    name.contains('sig') ||
+                    name.contains('secret'))
+                ? '${part.substring(0, idx)}=***'
+                : part;
+          })
+          .join('&');
+      return '${match.group(1)}$sanitized';
+    });
   }
 
   /// Returns the current reporter (never null).
@@ -108,7 +163,7 @@ class CrashReportingService {
           details.exception,
           details.stack ?? StackTrace.current,
           hint: details.library,
-        ).catchError((_) {}),
+        ).catchError((e, st) { pkg_logging.Logger('crash_reporting_service').warning('[crash_reporting_service] operation failed', e, st); }),
       );
     };
   }
@@ -126,7 +181,7 @@ class CrashReportingService {
             error,
             stack,
             hint: 'Unhandled zone error',
-          ).catchError((_) {}),
+          ).catchError((e, st) { pkg_logging.Logger('crash_reporting_service').warning('[crash_reporting_service] operation failed', e, st); }),
         );
       },
     );

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 class RemoteApiService {
   static HttpServer? _server;
@@ -42,7 +43,11 @@ class RemoteApiService {
     if (!Platform.isWindows) {
       try {
         await Process.run('chmod', ['700', dir]);
-      } catch (_) {}
+      } catch (e) {
+        LoggingService.logger('RemoteApiService').info(
+          '[RemoteApiService] chmod on token dir skipped: $e',
+        );
+      }
     }
 
     _cachedTokenFilePath = dir.endsWith('/')
@@ -94,7 +99,11 @@ class RemoteApiService {
       // No live primary — delete stale token file and retry bind
       try {
         await File(await _tokenFilePath()).delete();
-      } catch (_) {}
+      } catch (e) {
+        LoggingService.logger('RemoteApiService').info(
+          '[RemoteApiService] deleting stale token file failed: $e',
+        );
+      }
       try {
         _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         await _writeTokenFile(_bearerToken!, _server!.port);
@@ -222,12 +231,20 @@ class RemoteApiService {
           }
           try {
             await request.response.close();
-          } catch (_) {}
+          } catch (e) {
+            LoggingService.logger('RemoteApiService').info(
+              '[RemoteApiService] closing response failed: $e',
+            );
+          }
         } catch (outerError) {
           debugPrint('Remote API request listener error: $outerError');
           try {
             await request.response.close();
-          } catch (_) {}
+          } catch (e) {
+            LoggingService.logger('RemoteApiService').info(
+              '[RemoteApiService] closing response failed: $e',
+            );
+          }
         }
       },
       onError: (Object err) {
@@ -250,7 +267,11 @@ class RemoteApiService {
       if (!Platform.isWindows) {
         try {
           await Process.run('chmod', ['600', path]);
-        } catch (_) {}
+        } catch (e) {
+          LoggingService.logger('RemoteApiService').info(
+            '[RemoteApiService] chmod on token file skipped: $e',
+          );
+        }
       }
     } catch (e) {
       debugPrint('Remote API: failed to write token file: $e');
@@ -274,7 +295,10 @@ class RemoteApiService {
         if (parsed != null && parsed > 0) port = parsed;
       }
       return (token, port);
-    } catch (_) {
+    } catch (e) {
+      LoggingService.logger('RemoteApiService').info(
+        '[RemoteApiService] reading token file failed, returning null: $e',
+      );
       return null;
     }
   }
@@ -289,7 +313,10 @@ class RemoteApiService {
       );
       await socket.close();
       return true;
-    } catch (_) {
+    } catch (e) {
+      LoggingService.logger('RemoteApiService').info(
+        '[RemoteApiService] primary heartbeat probe failed: $e',
+      );
       return false;
     }
   }

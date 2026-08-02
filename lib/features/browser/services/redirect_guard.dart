@@ -1,6 +1,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:logging/logging.dart';
 
 /// Detects cross-domain automatic redirects and manages user preferences
 /// for opening them in a new tab versus the current tab.
@@ -166,7 +167,8 @@ class RedirectGuard {
         return '${parts[parts.length - 3]}.$lastTwo';
       }
       return lastTwo;
-    } catch (_) {
+    } catch (e, st) {
+      Logger('redirect_guard').warning('[redirect_guard] operation failed', e, st);
       return '';
     }
   }

@@ -6,6 +6,7 @@ import '../../../../core/services/database_service.dart';
 import '../../../../core/utils/file_utils.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 import '../../models/download_task.dart';
+import 'package:logging/logging.dart';
 
 /// Mixin that encapsulates torrent-specific orchestration: seeding lifecycle,
 /// per-file progress distribution, upload limit management, and torrent stats
@@ -181,7 +182,8 @@ mixin DownloadTorrentMixin {
     try {
       final files = TorrentService.getFiles(torrentId);
       return files.map((f) => f.downloadedBytes).toList();
-    } catch (_) {
+    } catch (e, st) {
+      Logger('download_torrent_mixin').warning('[download_torrent_mixin] operation failed', e, st);
       return task.torrentFiles!
           .map((f) => (f['downloadedBytes'] as int?) ?? 0)
           .toList();

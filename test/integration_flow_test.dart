@@ -291,13 +291,12 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 10));
     }
 
-    // In a test environment without real ffmpeg binary, the merge phase will throw an exception
-    // (FFmpeg merge failed).
-    // The provider should catch this and transition the task to failed.
-    expect(provider.tasks.first.status, DownloadStatus.failed);
+    // In a test environment without real ffmpeg binary, the merge phase will fail.
+    // The provider should fall back to keeping the video-only file and complete the task with mergeFailedVideoOnly status message.
+    expect(provider.tasks.first.status, DownloadStatus.completed);
+    expect(provider.tasks.first.statusMessage, DownloadStatusMessages.mergeFailedVideoOnly);
     expect(engine.knownFileSizes['https://example.com/video'], 50,
         reason: 'Combined tasks must request only the video stream length.');
-    expect(provider.tasks.first.errorMessage, contains('FFmpeg merge failed'));
   });
 
 }

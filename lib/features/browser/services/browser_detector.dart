@@ -1,3 +1,4 @@
+import 'package:logging/logging.dart';
 enum DetectedMediaKind { video, audio, image, document, archive, executable, torrent, magnet, unknown }
 
 class DetectedMedia {
@@ -181,7 +182,8 @@ class BrowserDetector {
         last = '$last$ext';
       }
       return last;
-    } catch (_) {
+    } catch (e, st) {
+      Logger('browser_detector').warning('[browser_detector] operation failed', e, st);
       return 'download${ext.isEmpty ? '' : ext}';
     }
   }

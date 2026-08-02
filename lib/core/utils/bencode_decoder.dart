@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 class BencodeDecoder {
   final Uint8List _data;
@@ -147,7 +148,10 @@ class BencodeDecoder {
       }
       try {
         return utf8.decode(obj);
-      } catch (_) {
+      } catch (e) {
+        LoggingService.logger('BencodeDecoder').info(
+          '[BencodeDecoder] utf8 decode skipped, keeping raw bytes: $e',
+        );
         return obj; // keep as bytes if not valid utf8
       }
     } else if (obj is List) {

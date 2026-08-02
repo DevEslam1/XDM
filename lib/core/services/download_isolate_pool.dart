@@ -691,7 +691,9 @@ void _downloadWorkerMain(SendPort mainSendPort) {
 
         try {
           engine.close();
-        } catch (_) {}
+        } catch (e) {
+          _log.info('[DownloadIsolatePool] engine close on shutdown failed: $e');
+        }
 
         commandPort.close();
       }

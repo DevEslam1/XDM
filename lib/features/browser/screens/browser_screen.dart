@@ -44,6 +44,7 @@ import '../widgets/browser_download_sheet.dart';
 import '../widgets/browser_history_sheet.dart';
 import '../widgets/browser_home_page.dart';
 import '../widgets/redirect_sheet.dart';
+import 'package:logging/logging.dart';
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -334,13 +335,17 @@ class _BrowserScreenState extends State<BrowserScreen>
                   currentUrl == 'about:blank')) {
             try {
               newTab.controller.loadRequest(Uri.parse(newTab.url));
-            } catch (_) {}
+            } catch (e, st) {
+              Logger('browser_screen').warning('[browser_screen] operation failed', e, st);
+            }
           }
         }).catchError((_) {
           if (mounted) {
             try {
               newTab.controller.loadRequest(Uri.parse(newTab.url));
-            } catch (_) {}
+            } catch (e, st) {
+              Logger('browser_screen').warning('[browser_screen] operation failed', e, st);
+            }
           }
         });
       }
@@ -661,6 +666,14 @@ class _BrowserScreenState extends State<BrowserScreen>
             }
           },
           onNavigationRequest: (NavigationRequest request) {
+            if (settings.httpsOnly &&
+                request.isMainFrame == true &&
+                request.url.startsWith('http://')) {
+              final upgraded = request.url.replaceFirst('http://', 'https://');
+              debugPrint('[Browser] HTTPS-only: upgrading ${request.url} ? $upgraded');
+              tab.controller.loadRequest(Uri.parse(upgraded));
+              return NavigationDecision.prevent;
+            }
             if (_adBlocker.shouldBlock(request.url)) {
               debugPrint('[AdBlocker] Blocked: ${request.url}');
               return NavigationDecision.prevent;
@@ -965,7 +978,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (!_quitPersisted && _tabs.isNotEmpty) {
       try {
         _tabManager.saveTabs();
-      } catch (_) {}
+      } catch (e, st) {
+        Logger('browser_screen').warning('[browser_screen] operation failed', e, st);
+      }
     }
     // Clean up ALL per-tab state maps
     for (final tab in _tabs) {
@@ -1313,7 +1328,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                 await t.controller.enableZoom(
                   settings.desktopMode || settings.pinchToZoom,
                 );
-              } catch (_) {}
+              } catch (e, st) {
+                Logger('browser_screen').warning('[browser_screen] operation failed', e, st);
+              }
             }),
           );
           for (final t in _tabs) {
@@ -2235,7 +2252,8 @@ ${script.code}
         if (rawHtml.startsWith('"') && rawHtml.endsWith('"')) {
           try {
             rawHtml = jsonDecode(rawHtml) as String;
-          } catch (_) {
+          } catch (e, st) {
+            Logger('browser_screen').warning('[browser_screen] operation failed', e, st);
             if (rawHtml.length > 2) {
               rawHtml = rawHtml.substring(1, rawHtml.length - 1);
             }
@@ -4562,7 +4580,9 @@ ${script.code}
     for (final tab in _tabs) {
       try {
         tab.progressNotifier.dispose();
-      } catch (_) {}
+      } catch (e, st) {
+        Logger('browser_screen').warning('[browser_screen] operation failed', e, st);
+      }
     }
     _tabs.clear();
     _currentTabIndex = 0;

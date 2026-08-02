@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:logging/logging.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -96,6 +97,37 @@ class _SettingsScreenState extends State<SettingsScreen>
               ),
             ),
         child: child,
+      ),
+    );
+  }
+
+  void _maybeConfirmBypassSSL(
+    BuildContext context,
+    SettingsProvider settings,
+  ) {
+    if (!settings.pendingBypassSSLConfirmation) return;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(L10n.of(dialogContext, 'bypass_ssl_dialog_title')),
+        content: Text(L10n.of(dialogContext, 'bypass_ssl_dialog_body')),
+        actions: [
+          TextButton(
+            onPressed: () {
+              settings.setBypassSSL(false);
+              Navigator.pop(dialogContext);
+            },
+            child: Text(L10n.of(dialogContext, 'cancel_btn')),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () {
+              settings.confirmBypassSSL();
+              Navigator.pop(dialogContext);
+            },
+            child: Text(L10n.of(dialogContext, 'bypass_ssl_dialog_confirm')),
+          ),
+        ],
       ),
     );
   }
@@ -852,6 +884,20 @@ class _SettingsScreenState extends State<SettingsScreen>
                           value: settings.bypassSSL,
                           onChanged: (val) {
                             settings.setBypassSSL(val);
+                            triggerHaptic(settings);
+                            _maybeConfirmBypassSSL(context, settings);
+                          },
+                        ),
+                        _Divider(isDark: isDark),
+                        _SwitchTile(
+                          accentColor: isDark
+                              ? AppTheme.neonBlue
+                              : AppTheme.lightNeonBlue,
+                          title: L10n.of(context, 'settings_https_only'),
+                          subtitle: L10n.of(context, 'settings_https_only_sub'),
+                          value: settings.httpsOnly,
+                          onChanged: (val) {
+                            settings.setHttpsOnly(val);
                             triggerHaptic(settings);
                           },
                         ),
@@ -3116,7 +3162,9 @@ abstract final class _BackupHelper {
           }
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      Logger('settings_screen').warning('[settings_screen] operation failed', e, st);
+    }
     String? password = '';
     if (isEncrypted) {
       if (!context.mounted) return;

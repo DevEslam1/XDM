@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:dmx/core/services/logging_service.dart';
 import 'package:path/path.dart' as p;
 
 const List<String> videoExtensions = [
@@ -121,11 +122,18 @@ int scanFolderBytesSync(String path) {
       if (entity is File) {
         try {
           total += entity.lengthSync();
-        } catch (_) {}
+        } catch (e) {
+          LoggingService.logger('FileUtils').info(
+            '[FileUtils] per-file length read skipped (best-effort scan): $e',
+          );
+        }
       }
     }
     return total;
-  } catch (_) {
+  } catch (e) {
+    LoggingService.logger('FileUtils').info(
+      '[FileUtils] folder scan skipped (best-effort, returning 0): $e',
+    );
     return 0;
   }
 }
@@ -161,7 +169,11 @@ int scanFolderBytesSync(String path) {
             downloaded = length;
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        LoggingService.logger('FileUtils').info(
+          '[FileUtils] per-file disk size read skipped (best-effort scan): $e',
+        );
+      }
     }
     copy['downloadedBytes'] = downloaded;
     copy['progressSource'] = 'disk-scan';
@@ -187,9 +199,17 @@ Future<void> deleteDownloadParts(String tempFilePath) async {
         if (isMainTemp || isPart || isState || isJournal) {
           try {
             await entity.delete();
-          } catch (_) {}
+          } catch (e) {
+            LoggingService.logger('FileUtils').info(
+              '[FileUtils] deleting download part failed (may already be gone): $e',
+            );
+          }
         }
       }
     }
-  } catch (_) {}
+  } catch (e) {
+    LoggingService.logger('FileUtils').info(
+      '[FileUtils] download parts cleanup skipped: $e',
+    );
+  }
 }

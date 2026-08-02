@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'file_utils.dart';
+import 'package:dmx/core/services/logging_service.dart';
 
 bool isHttpUrl(String value) {
   final uri = Uri.tryParse(value.trim());
@@ -65,7 +66,11 @@ bool isTorrentUrl(String url, {String? fileName}) {
   try {
     final uri = Uri.parse(urlLower);
     if (uri.path.toLowerCase().endsWith('.torrent')) return true;
-  } catch (_) {}
+  } catch (e) {
+    LoggingService.logger('UrlUtils').info(
+      '[UrlUtils] URL parse skipped, treating as non-torrent: $e',
+    );
+  }
 
   return false;
 }
@@ -100,7 +105,10 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
     if (RegExp(r'^[A-Z2-7]{32}$').hasMatch(clean)) {
       try {
         return _base32ToHex(clean);
-      } catch (_) {
+      } catch (e) {
+        LoggingService.logger('UrlUtils').info(
+          '[UrlUtils] base32-to-hex conversion failed, keeping raw hash: $e',
+        );
         return clean;
       }
     }
@@ -125,7 +133,10 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
       result['name'] = Uri.decodeComponent(
         dnMatch.group(1)!.replaceAll('+', ' '),
       );
-    } catch (_) {
+    } catch (e) {
+      LoggingService.logger('UrlUtils').info(
+        '[UrlUtils] display name decode failed, using raw value: $e',
+      );
       result['name'] = dnMatch.group(1)!.replaceAll('+', ' ');
     }
   }
@@ -152,12 +163,18 @@ Map<String, String> parseMagnetUrl(String magnetUrl) {
           result['name'] = Uri.decodeComponent(
             dnList.first.replaceAll('+', ' '),
           );
-        } catch (_) {
+        } catch (e) {
+          LoggingService.logger('UrlUtils').info(
+            '[UrlUtils] display name decode failed, using raw value: $e',
+          );
           result['name'] = dnList.first.replaceAll('+', ' ');
         }
       }
     }
-  } catch (_) {
+  } catch (e) {
+    LoggingService.logger('UrlUtils').info(
+      '[UrlUtils] magnet URI parse failed, keeping regex-extracted values: $e',
+    );
     // Keep whatever regex was able to parse
   }
 
@@ -200,7 +217,10 @@ String fileNameFromUrl(String url) {
   if (segments.isEmpty) return fallback;
   try {
     return safeFileName(Uri.decodeComponent(segments.last));
-  } catch (_) {
+  } catch (e) {
+    LoggingService.logger('UrlUtils').info(
+      '[UrlUtils] URL segment decode failed, using raw segment: $e',
+    );
     return safeFileName(segments.last);
   }
 }
@@ -217,7 +237,10 @@ String? fileNameFromContentDisposition(Headers headers) {
   if (utf8Match != null) {
     try {
       return safeFileName(Uri.decodeComponent(utf8Match.group(1)!));
-    } catch (_) {
+    } catch (e) {
+      LoggingService.logger('UrlUtils').info(
+        '[UrlUtils] filename decode failed, using raw value: $e',
+      );
       return safeFileName(utf8Match.group(1)!);
     }
   }
@@ -241,7 +264,11 @@ String convertIdnToPunycode(String urlStr) {
     if (host.isEmpty) return urlStr;
     try {
       host = Uri.decodeComponent(host);
-    } catch (_) {}
+    } catch (e) {
+      LoggingService.logger('UrlUtils').info(
+        '[UrlUtils] host decode skipped, using raw host: $e',
+      );
+    }
 
     final parts = host.split('.');
     var isEncoded = false;
@@ -251,7 +278,10 @@ String convertIdnToPunycode(String urlStr) {
           final encoded = _punycodeEncode(part);
           isEncoded = true;
           return 'xn--$encoded';
-        } catch (_) {
+        } catch (e) {
+          LoggingService.logger('UrlUtils').info(
+            '[UrlUtils] punycode encode skipped for part, keeping raw: $e',
+          );
           return part;
         }
       }
@@ -262,7 +292,10 @@ String convertIdnToPunycode(String urlStr) {
 
     final newHost = punyParts.join('.');
     return uri.replace(host: newHost).toString();
-  } catch (_) {
+  } catch (e) {
+    LoggingService.logger('UrlUtils').info(
+      '[UrlUtils] IDN conversion skipped, returning original URL: $e',
+    );
     return urlStr;
   }
 }

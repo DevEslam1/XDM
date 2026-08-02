@@ -17,7 +17,10 @@ class MagnetCacheService {
       try {
         final appDir = await getApplicationSupportDirectory();
         _basePath = p.join(appDir.path, _cacheDir);
-      } catch (_) {
+      } catch (e) {
+        _log.info(
+          '[MagnetCacheService] app support dir unavailable, falling back to system temp: $e',
+        );
         _basePath = p.join(Directory.systemTemp.path, _cacheDir);
       }
     }

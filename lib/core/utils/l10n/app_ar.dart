@@ -158,6 +158,13 @@ const Map<String, String> arTranslations = {
   'settings_proxy_address': 'عنوان البروكسي (IP:PORT)',
   'settings_bypass_ssl': 'الوثوق بجميع شهادات SSL',
   'settings_bypass_ssl_sub': 'تجاوز التحقق من الشهادات (تحذير: عرضة للاختراق)',
+  'bypass_ssl_dialog_title': 'تعطيل التحقق من SSL؟',
+  'bypass_ssl_dialog_body':
+      'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). '
+      'قم بتمكينه فقط على الشبكات الموثوقة.',
+  'bypass_ssl_dialog_confirm': 'أتفهم المخاطر',
+  'settings_https_only': 'وضع HTTPS فقط',
+  'settings_https_only_sub': 'ترقية كل روابط http:// إلى https:// عند الإمكان',
   'settings_reduce_visuals': 'تقليل التأثيرات البصرية',
   'settings_reduce_visuals_sub': 'تعطيل تأثيرات التمويه والتوهج لتحسين الأداء',
   'settings_classic_ui': 'المظهر الكلاسيكي',

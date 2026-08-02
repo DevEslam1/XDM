@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:logging/logging.dart';
 
 class Bookmark {
   final String id;
@@ -21,7 +22,8 @@ class Bookmark {
       var host = Uri.parse(url).host;
       if (host.startsWith('www.')) host = host.substring(4);
       return host.isEmpty ? url : host;
-    } catch (_) {
+    } catch (e, st) {
+      Logger('bookmark').warning('[bookmark] operation failed', e, st);
       return url;
     }
   }

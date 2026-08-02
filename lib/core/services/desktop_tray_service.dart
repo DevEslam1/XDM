@@ -72,6 +72,8 @@ class DesktopTrayService with TrayListener {
     if (!_initialized) return;
     try {
       await trayManager.setToolTip('XDM — $active active ($speed)');
-    } catch (_) {}
+    } catch (e, st) {
+      Logger('desktop_tray_service').warning('[desktop_tray_service] operation failed', e, st);
+    }
   }
 }

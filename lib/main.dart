@@ -48,6 +48,14 @@ Future<void> main(List<String> args) async {
     LoggingService.init();
     CrashReportingService.captureFlutterErrors();
 
+    // ── Crash reporting: NoOp unless SENTRY_DSN is provided via
+    //    --dart-define=SENTRY_DSN=... (see crash_reporting_service.dart) ──
+    try {
+      await CrashReportingService.init();
+    } catch (e) {
+      debugPrint('Crash reporting init failed: $e');
+    }
+
     WidgetsFlutterBinding.ensureInitialized();
 
     // ── Image cache sizing ──
@@ -110,7 +118,7 @@ Future<void> main(List<String> args) async {
           error,
           stack,
           hint: 'PlatformDispatcher',
-        ).catchError((e) {}),
+        ).catchError((e, st) { Logger('main').warning('[main] operation failed', e, st); }),
       );
       return false;
     };
@@ -129,6 +137,10 @@ Future<void> main(List<String> args) async {
       final settingsProvider = SettingsProvider.instance;
       await settingsProvider.load();
       XdmBackendClient().refreshConfig();
+
+      // ── Crash reporting: initializes Sentry when SENTRY_DSN is set ──
+      // No-op otherwise; errors before this point go to the console logger.
+      await CrashReportingService.init();
 
       // ── PHASE 4: Build providers (no blocking I/O) and show UI immediately ──
       final databaseService = DatabaseService();
@@ -155,7 +167,9 @@ Future<void> main(List<String> args) async {
               initialUrl = extracted;
             }
           }
-        } catch (_) {}
+        } catch (e, st) {
+          Logger('main').warning('[main] operation failed', e, st);
+        }
       }
 
       runApp(
@@ -201,7 +215,7 @@ Future<void> main(List<String> args) async {
           _initNonCriticalServices(
             downloadProvider,
             notificationService,
-          ).catchError((e) {}),
+          ).catchError((e, st) { Logger('main').warning('[main] operation failed', e, st); }),
         );
       });
     } catch (e, stack) {
@@ -392,4 +406,3 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
     }
   }
 }
-

@@ -24,6 +24,7 @@ import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../widgets/media_quality_sheet.dart';
 import '../widgets/youtube_playlist_sheet.dart';
+import 'package:logging/logging.dart';
 
 class AddDownloadDialog extends StatefulWidget {
   final String? prefilledUrl;
@@ -500,7 +501,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (url.toLowerCase().startsWith('file://')) {
         try {
           localFilePath = Uri.parse(url).toFilePath();
-        } catch (_) {
+        } catch (e, st) {
+          Logger('add_download_dialog').warning('[add_download_dialog] operation failed', e, st);
           localFilePath = url.replaceFirst(
             RegExp(r'^file://', caseSensitive: false),
             '',
