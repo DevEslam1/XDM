@@ -161,18 +161,26 @@ class PositionalFileWriter {
     if (buffer.isEmpty) return;
 
     final bytes = buffer.takeBytes();
+    int attempts = 0;
 
-    try {
-      await _flushLock.synchronized(() async {
-        await _file.setPosition(_bufferFilePositions[threadIndex]);
-        await _file.writeFrom(bytes);
-      });
+    while (true) {
+      attempts++;
+      try {
+        await _flushLock.synchronized(() async {
+          await _file.setPosition(_bufferFilePositions[threadIndex]);
+          await _file.writeFrom(bytes);
+        });
 
-      _bufferFilePositions[threadIndex] += bytes.length;
-    } catch (e) {
-      // Preserve unwritten bytes in buffer if disk write fails
-      buffer.add(bytes);
-      rethrow;
+        _bufferFilePositions[threadIndex] += bytes.length;
+        break;
+      } catch (e) {
+        if (attempts >= 3) {
+          // Preserve unwritten bytes in buffer if all retries fail
+          buffer.add(bytes);
+          rethrow;
+        }
+        await Future.delayed(Duration(milliseconds: 100 * attempts));
+      }
     }
   }
 
