@@ -552,7 +552,7 @@ class DownloadProvider extends ChangeNotifier
 
     for (final task in toDelete) {
       await _databaseService.deleteTask(task.id);
-      await _cleanupPartFiles(task);
+      await cleanupPartFiles(task);
     }
 
     await _databaseService.saveTasks(_tasks);
@@ -582,7 +582,7 @@ class DownloadProvider extends ChangeNotifier
     // user-paused, scheduled, or Wi-Fi-waiting tasks) and pump the queue so queued
     // downloads start immediately.
     if (_settingsProvider.autoStart) {
-      final autoResumeTasks = _tasks
+      final pausedCandidates = _tasks
           .where(
             (t) =>
                 t.status == DownloadStatus.paused &&
@@ -591,33 +591,42 @@ class DownloadProvider extends ChangeNotifier
                 (t.scheduledAt == null ||
                     t.scheduledAt!.isBefore(DateTime.now())),
           )
-          .map((t) {
-            _cancelTokens.remove(t.id);
-
-            return t.copyWith(
-              status: DownloadStatus.queued,
-              speed: 0,
-              clearEta: true,
-              clearError: true,
-            );
-          })
           .toList();
 
-      for (final task in autoResumeTasks) {
-        final idx = _tasks.indexWhere((t) => t.id == task.id);
+      for (final candidate in pausedCandidates) {
+        _cancelTokens.remove(candidate.id);
+
+        final videoBytes = await _readDmxStateBytes(candidate.tempFilePath);
+        var audioBytes = 0;
+        if (candidate.mergedAudioUrl != null && candidate.mergedAudioUrl!.isNotEmpty) {
+          audioBytes = await _readDmxStateBytes('${candidate.tempFilePath}.audio');
+        }
+
+        final realBytesOnDisk = videoBytes + audioBytes;
+        final hasState = await File('${candidate.tempFilePath}.dmxstate').exists();
+        final chunks = hasState
+            ? candidate.chunks
+            : List<double>.filled(candidate.threadCount, 0.0);
+
+        final updatedTask = candidate.copyWith(
+          status: DownloadStatus.queued,
+          downloadedBytes: realBytesOnDisk,
+          chunks: chunks,
+          speed: 0,
+          clearEta: true,
+          clearError: true,
+        );
+
+        final idx = _tasks.indexWhere((t) => t.id == candidate.id);
         if (idx != -1) {
-          _tasks[idx] = task;
-          await _databaseService.saveTask(task);
+          _tasks[idx] = updatedTask;
+          await _databaseService.saveTask(updatedTask);
         }
       }
 
-      if (autoResumeTasks.isNotEmpty) {
+      if (pausedCandidates.isNotEmpty) {
         notifyListeners();
       }
-
-      // Re-apply the Wi-Fi-only constraint so auto-resumed tasks that should
-      // wait for Wi-Fi are not started on mobile data.
-      await _networkMonitor.checkNetworkConnectivity(skipPump: true);
     }
 
     // Always pump the queue so queued-downloads (including newly
@@ -1267,7 +1276,7 @@ class DownloadProvider extends ChangeNotifier
 
     // Remove temporary state files so a fresh download won't try to resume
     // from stale progress data.
-    await _cleanupPartFiles(task);
+    await cleanupPartFiles(task);
 
     await _setTask(
       task.copyWith(
@@ -1293,25 +1302,29 @@ class DownloadProvider extends ChangeNotifier
 
     _retryCounts.remove(id);
 
-    // Don't reset downloadedBytes/chunks to 0 — the `.dmxstate` sidecar
-    // and final file contents still reflect resume progress.
-    // The onProgress callback will pick up the real numbers from the next
-    // chunk that arrives.
-    final tempFile = File(task.tempFilePath);
-    final audioFile = task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty
-        ? File('${task.tempFilePath}.audio')
-        : null;
-    final tempLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
-    final audioLen = audioFile != null && audioFile.existsSync() ? audioFile.lengthSync() : 0;
-    final actualBytesOnDisk = tempLen + audioLen;
+    // ── Read ACTUAL progress from .dmxstate, never from pre-allocated file length ──
+    final videoBytes = await _readDmxStateBytes(task.tempFilePath);
+    var audioBytes = 0;
+    if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+    }
+
+    final realBytesOnDisk = videoBytes + audioBytes;
+
+    // If no .dmxstate exists, engine will start fresh → reset chunks
+    final hasState = await File('${task.tempFilePath}.dmxstate').exists();
+    final chunks = hasState
+        ? task.chunks
+        : List<double>.filled(task.threadCount, 0.0);
 
     await _setTask(
       task.copyWith(
         status: DownloadStatus.queued,
-        downloadedBytes: actualBytesOnDisk > 0 ? actualBytesOnDisk : task.downloadedBytes,
-        audioProgress: task.audioSize > 0 && audioLen > 0
-            ? (audioLen / task.audioSize).clamp(0.0, 1.0)
-            : task.audioProgress,
+        downloadedBytes: realBytesOnDisk,
+        chunks: chunks,
+        audioProgress: task.audioSize > 0 && audioBytes > 0
+            ? (audioBytes / task.audioSize).clamp(0.0, 1.0)
+            : 0.0,
         speed: 0,
         clearEta: true,
         clearError: true,
@@ -1322,6 +1335,25 @@ class DownloadProvider extends ChangeNotifier
 
     pumpQueue();
     _updateTelemetryWidget();
+    notifyListeners();
+  }
+
+  /// Reads the sum of chunk progress from a `.dmxstate` sidecar file.
+  /// Returns 0 when the file is missing, corrupt, or empty.
+  static Future<int> _readDmxStateBytes(String tempFilePath) async {
+    final stateFile = File('$tempFilePath.dmxstate');
+    if (!await stateFile.exists()) return 0;
+    try {
+      final content = await stateFile.readAsString();
+      final decoded = jsonDecode(content);
+      if (decoded is Map && decoded['progress'] is List) {
+        return (decoded['progress'] as List)
+            .fold<int>(0, (sum, chunk) => sum + ((chunk as num).toInt()));
+      }
+    } catch (_) {
+      // Corrupt state → treat as fresh start
+    }
+    return 0;
   }
 
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
@@ -1377,7 +1409,7 @@ class DownloadProvider extends ChangeNotifier
 
     if (task != null) {
       if (deleteFiles) {
-        await _cleanupPartFiles(task);
+        await cleanupPartFiles(task);
 
         try {
           final localFile = File(task.localFilePath);
@@ -1559,7 +1591,8 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
-  Future<void> _cleanupPartFiles(DownloadTask task) async {
+  @override
+  Future<void> cleanupPartFiles(DownloadTask task) async {
     await cleanupAllArtifacts(task);
   }
 
@@ -1614,11 +1647,9 @@ class DownloadProvider extends ChangeNotifier
   /// structural update (status change, URL edit, metadata save) carries
   /// stale progress values captured before the update was enqueued.
   DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
-    // If the incoming update has MORE progress, use it (e.g. completion).
-    // Otherwise, keep the live progress which is more recent.
     final useIncomingProgress =
-        incoming.downloadedBytes > live.downloadedBytes ||
-        incoming.status == DownloadStatus.completed;
+        incoming.downloadedBytes >= live.downloadedBytes ||
+        incoming.status != live.status;
 
     return incoming.copyWith(
       downloadedBytes:
@@ -1985,7 +2016,7 @@ class DownloadProvider extends ChangeNotifier
     if (task.downloadedBytes > 0) {
       try {
         // Clean up temp file, state file, journal, and legacy part files.
-        await _cleanupPartFiles(task);
+        await cleanupPartFiles(task);
       } catch (e) {
         debugPrint('Error deleting segment files: $e');
       }
@@ -2055,7 +2086,7 @@ class DownloadProvider extends ChangeNotifier
         _torrentIds.remove(taskId);
       }
 
-      await _cleanupPartFiles(task);
+      await cleanupPartFiles(task);
 
       DownloadMetadata? metadata;
 
@@ -2184,7 +2215,7 @@ class DownloadProvider extends ChangeNotifier
     }
 
     if (sizeChanged) {
-      await _cleanupPartFiles(task);
+      await cleanupPartFiles(task);
     }
 
     final updatedTask = task.copyWith(
@@ -2291,7 +2322,7 @@ class DownloadProvider extends ChangeNotifier
       _torrentIds.remove(id);
     }
 
-    await _cleanupPartFiles(task);
+    await cleanupPartFiles(task);
 
     try {
       final localFile = File(task.localFilePath);

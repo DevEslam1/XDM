@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  ffmpeg_kit_flutter_new_min
   flutter_secure_storage_linux
   screen_retriever_linux
   sentry_flutter

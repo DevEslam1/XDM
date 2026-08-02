@@ -92,6 +92,7 @@ abstract class DownloadOrchestratorHost {
   List<Map<String, dynamic>> markTorrentFilesCompleted(
     List<Map<String, dynamic>> files,
   );
+  Future<void> cleanupPartFiles(DownloadTask task);
 }
 
 /// Owns the download start/execute/merge/finalize lifecycle.
@@ -1572,6 +1573,11 @@ class DownloadOrchestrator {
 
               _host.retryCounts.remove(task.id);
               _recordDownloadFailure(task.id, realError);
+              try {
+                await _host.cleanupPartFiles(current);
+              } catch (e) {
+                debugPrint('Failed to clean up temp files on non-retryable error: $e');
+              }
               await _host.setTaskState(
                 current.copyWith(
                   status: DownloadStatus.failed,

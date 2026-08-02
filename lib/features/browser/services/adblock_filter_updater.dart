@@ -44,14 +44,21 @@ class AdBlockFilterUpdater {
   static const _maxDomains = 50000;
   static const _maxLineLength = 500;
 
+  static const _patternsKey = 'adblock_url_patterns';
+  static const _cosmeticKey = 'adblock_cosmetic_rules';
+
   bool _initialized = false;
   Set<String> _downloadedDomains = {};
   Set<String> _downloadedTrackingDomains = {};
+  final Set<String> _urlPatterns = {};
+  final Set<String> _cosmeticRules = {};
 
   Set<String> get allBlockedDomains => _downloadedDomains;
   Set<String> get allTrackingDomains => _downloadedTrackingDomains;
   int get downloadedDomainCount => _downloadedDomains.length;
   int get downloadedTrackingCount => _downloadedTrackingDomains.length;
+  Set<String> get cosmeticRules => _cosmeticRules;
+  Set<String> get urlPatterns => _urlPatterns;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -60,8 +67,13 @@ class AdBlockFilterUpdater {
     final prefs = await SharedPreferences.getInstance();
     final cachedAds = prefs.getStringList('${_domainsKey}_ads') ?? [];
     final cachedTracking = prefs.getStringList('${_domainsKey}_tracking') ?? [];
+    final cachedPatterns = prefs.getStringList(_patternsKey) ?? [];
+    final cachedCosmetics = prefs.getStringList(_cosmeticKey) ?? [];
+
     _downloadedDomains = cachedAds.toSet();
     _downloadedTrackingDomains = cachedTracking.toSet();
+    _urlPatterns.addAll(cachedPatterns);
+    _cosmeticRules.addAll(cachedCosmetics);
   }
 
   Future<bool> updateIfNeeded({bool force = false}) async {
@@ -143,13 +155,15 @@ class AdBlockFilterUpdater {
       '${_domainsKey}_tracking',
       _downloadedTrackingDomains.take(_maxDomains).toList(),
     );
+    await prefs.setStringList(
+      _patternsKey,
+      _urlPatterns.take(5000).toList(),
+    );
+    await prefs.setStringList(
+      _cosmeticKey,
+      _cosmeticRules.take(5000).toList(),
+    );
   }
-
-  final Set<String> _urlPatterns = {};
-  final Set<String> _cosmeticRules = {};
-
-  Set<String> get cosmeticRules => _cosmeticRules;
-  Set<String> get urlPatterns => _urlPatterns;
 
   Future<Set<String>> _parseFilterFile(File file, FilterType type) async {
     final domains = <String>{};

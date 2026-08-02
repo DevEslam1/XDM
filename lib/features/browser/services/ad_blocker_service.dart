@@ -196,7 +196,12 @@ class AdBlockerService {
   // ─────────────────────────────────────────────────────────────────────
 
   /// CSS injected on every page load to hide known ad elements.
-  String get cssRules => _cssRules;
+  String get cssRules {
+    final dynamicRules = _updater.cosmeticRules;
+    if (dynamicRules.isEmpty) return _cssRules;
+    final selectors = dynamicRules.take(2000).join(', ');
+    return '$_cssRules\n$selectors { display: none !important; }';
+  }
 
   static const String _cssRules = '''
 /* ═══ GENERIC AD CONTAINERS ═══ */

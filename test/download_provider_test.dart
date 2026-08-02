@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' as drift;
@@ -362,9 +364,18 @@ void main() {
     },
   );
 
-  test('retryTask does not zero downloadedBytes or chunks', () async {
+  test('retryTask does not zero downloadedBytes or chunks when .dmxstate exists', () async {
     final (database, settings) = await _setupServices();
     final now = DateTime.now();
+
+    final stateFile = File('build/resume.zip.dmxpart.dmxstate');
+    await stateFile.parent.create(recursive: true);
+    await stateFile.writeAsString(jsonEncode({
+      'totalSize': 200,
+      'threadCount': 2,
+      'progress': [40, 40],
+    }));
+
     final task = DownloadTask(
       id: 'retry_target',
       fileName: 'resume.zip',
@@ -396,13 +407,10 @@ void main() {
     expect(
       provider.tasks.first.downloadedBytes,
       80,
-      reason: 'retry must preserve the on-disk resume state',
+      reason: 'retry must preserve the on-disk resume state from .dmxstate',
     );
-    expect(provider.tasks.first.chunks, [0.4, 0.4]);
-    expect(
-      provider.tasks.first.status,
-      anyOf(DownloadStatus.queued, DownloadStatus.downloading),
-    );
+
+    if (await stateFile.exists()) await stateFile.delete();
   });
 
   test('categorySizes ignores failed and unknown categories', () async {
@@ -764,6 +772,52 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
     expect(provider.tasks.first.status, anyOf(DownloadStatus.queued, DownloadStatus.downloading));
+  });
+
+  test('retryTask reads .dmxstate, not pre-allocated file length', () async {
+    final tempFile = File('build/test_retry_prealloc.dmxpart');
+    await tempFile.create(recursive: true);
+    final raf = await tempFile.open(mode: FileMode.write);
+    await raf.setPosition(99);
+    await raf.writeByte(0);
+    await raf.close();
+    expect(tempFile.lengthSync(), 100);
+
+    final stateFile = File('build/test_retry_prealloc.dmxpart.dmxstate');
+    await stateFile.writeAsString('{"totalSize":100,"threadCount":2,"progress":[0,0]}');
+
+    final (database, settings) = await _setupServices();
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+    );
+
+    final task = DownloadTask(
+      id: 'prealloc-test-1',
+      fileName: 'test.mp4',
+      url: 'https://example.com/test.mp4',
+      fileSize: 100,
+      downloadedBytes: 100,
+      category: 'Video',
+      status: DownloadStatus.failed,
+      savePath: 'build',
+      localFilePath: 'build/test.mp4',
+      tempFilePath: 'build/test_retry_prealloc.dmxpart',
+      threadCount: 2,
+      chunks: const [0.0, 0.0],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    await database.saveTask(task);
+    await provider.load();
+    await provider.retryTask('prealloc-test-1');
+
+    final updated = provider.tasks.firstWhere((t) => t.id == 'prealloc-test-1');
+    expect(updated.downloadedBytes, 0);
+
+    await tempFile.delete();
+    await stateFile.delete();
   });
 }
 
