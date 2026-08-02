@@ -13,8 +13,18 @@ import '../../features/settings/provider/settings_provider.dart';
 /// Pass `listen: true` from a `build` method to rebuild when the preference
 /// changes; keep the default `false` when reading outside of build
 /// (e.g. `initState`).
-bool modernAnimationsAllowed(BuildContext context, {bool listen = false}) {
+bool modernAnimationsAllowed(
+  BuildContext context, {
+  bool listen = false,
+  bool respectSystemMotion = true,
+}) {
   final settings = Provider.of<SettingsProvider>(context, listen: listen);
+  // Respect the system "reduce motion" accessibility setting. Pass
+  // `respectSystemMotion: false` when called from `initState`, where
+  // inherited-widget lookups are not allowed yet.
+  if (respectSystemMotion && (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+    return false;
+  }
   return !settings.effectiveClassicUi && !settings.reduceVisuals;
 }
 

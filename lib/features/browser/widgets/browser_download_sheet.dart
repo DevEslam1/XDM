@@ -12,6 +12,7 @@ import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../services/browser_detector.dart';
+import '../services/long_press_parser.dart';
 
 /// Signal-intercept console shown when the sniffer locks onto a downloadable
 /// resource. Corner-bracket targeting frame, pulsing lock indicator, and a
@@ -24,6 +25,10 @@ class BrowserDownloadSheet extends StatefulWidget {
   final VoidCallback? onQuality;
   final String? downloadPageUrl;
 
+  /// Additional discovered sources (alternative qualities/streams) for the
+  /// long-pressed media. Each is offered as its own download tile.
+  final List<MediaSourceItem> sources;
+
   const BrowserDownloadSheet({
     super.key,
     required this.url,
@@ -32,6 +37,7 @@ class BrowserDownloadSheet extends StatefulWidget {
     this.suggestedName,
     this.onQuality,
     this.downloadPageUrl,
+    this.sources = const [],
   });
 
   static Future<void> show(
@@ -42,6 +48,7 @@ class BrowserDownloadSheet extends StatefulWidget {
     String? suggestedName,
     VoidCallback? onQuality,
     String? downloadPageUrl,
+    List<MediaSourceItem> sources = const [],
   }) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     runHaptic(settings);
@@ -58,6 +65,7 @@ class BrowserDownloadSheet extends StatefulWidget {
         suggestedName: suggestedName,
         onQuality: onQuality,
         downloadPageUrl: downloadPageUrl,
+        sources: sources,
       ),
     );
   }
@@ -322,6 +330,30 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                       ),
                     ),
                     const SizedBox(height: 20),
+                    // ── Additional sources (long-press multi-source) ──
+                    if (widget.sources.isNotEmpty) ...[
+                      Text(
+                        isRtl ? 'Ø§Ù„Ù…ØµØ§Ø¯Ø±' : 'SOURCES',
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.5,
+                          color: muted,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...widget.sources.map(
+                        (source) => _SourceTile(
+                          source: source,
+                          accent: accent,
+                          isDark: isDark,
+                          onTap: () =>
+                              _startDownload(context, settings, source: source),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     // ── Actions ────────────────────────────────────
                     Row(
                       children: [
@@ -375,8 +407,9 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
 
   Future<void> _startDownload(
     BuildContext context,
-    SettingsProvider settingsProvider,
-  ) async {
+    SettingsProvider settingsProvider, {
+    MediaSourceItem? source,
+  }) async {
     if (_isSubmitting) return;
     _isSubmitting = true;
     try {
@@ -387,9 +420,14 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
       final isRtl = L10n.isRtl(context);
       final isDark = settingsProvider.isDarkMode;
 
+      // When downloading a specific source, prefer its URL/type over the
+      // sheet's defaults.
+      final targetUrl = source?.url ?? widget.url;
+      final targetType = source?.type ?? widget.type;
+
       // 1. Deduplicate by URL
       final existing = downloadProvider.tasks
-          .where((t) => t.url == widget.url)
+          .where((t) => t.url == targetUrl)
           .toList();
       if (existing.isNotEmpty) {
         final task = existing.first;
@@ -433,9 +471,9 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
       // 2. Resolve filename
       String finalFileName = widget.suggestedName ?? '';
       if (finalFileName.isEmpty) {
-        finalFileName = widget.url.startsWith('magnet:')
-            ? (parseMagnetUrl(widget.url)['name'] ?? 'Torrent Download')
-            : fileNameFromUrl(widget.url);
+        finalFileName = targetUrl.startsWith('magnet:')
+            ? (parseMagnetUrl(targetUrl)['name'] ?? 'Torrent Download')
+            : fileNameFromUrl(targetUrl);
       }
 
       // 3. Deduplicate name
@@ -452,11 +490,11 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
 
       // 4. Category
       String category;
-      if (widget.type == 'video') {
+      if (targetType == 'video') {
         category = 'Video';
-      } else if (widget.type == 'audio') {
+      } else if (targetType == 'audio') {
         category = 'Audio';
-      } else if (widget.type == 'image') {
+      } else if (targetType == 'image') {
         category = 'Image';
       } else {
         category = categoryFromFileName(finalFileName);
@@ -465,7 +503,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
       // 5. Fire
       await downloadProvider.addDownload(
         name: finalFileName,
-        url: widget.url,
+        url: targetUrl,
         size: 0,
         category: category,
         savePath: '',
@@ -597,7 +635,6 @@ class _SheetButton extends StatelessWidget {
     required this.accent,
     required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -636,6 +673,73 @@ class _SheetButton extends StatelessWidget {
                 letterSpacing: 1,
                 color: filled ? (isDark ? Colors.black : Colors.white) : accent,
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One downloadable source tile in the multi-source long-press sheet.
+class _SourceTile extends StatelessWidget {
+  final MediaSourceItem source;
+  final Color accent;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _SourceTile({
+    required this.source,
+    required this.accent,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textPrimary = isDark
+        ? AppTheme.textPrimary
+        : AppTheme.lightTextPrimary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg)
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark
+                    ? AppTheme.glassBorder
+                    : AppTheme.lightGlassBorder,
+                width: 0.6,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.link_rounded, color: accent, size: 15),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    source.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(Icons.download_rounded, color: accent, size: 15),
+              ],
             ),
           ),
         ),

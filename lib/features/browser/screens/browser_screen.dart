@@ -13,6 +13,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/user_script_manager.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -33,9 +34,11 @@ import '../services/browser_detector.dart';
 import '../services/ad_blocker_delegate.dart';
 import '../services/download_interceptor.dart';
 import '../services/history_manager.dart';
+import '../services/long_press_parser.dart';
 import '../services/media_sniffer.dart';
 import '../services/tab_manager.dart';
 import '../services/redirect_guard.dart';
+import '../screens/script_manager_screen.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
 import '../widgets/browser_history_sheet.dart';
@@ -400,6 +403,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     });
     _loadSnifferPref();
     _loadCustomJsCss();
+    UserScriptManager.instance.load();
     _dashboardScrollController.addListener(_onDashboardScroll);
     _adBlocker.init();
     _redirectGuard.init();
@@ -531,6 +535,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             _loadingTimeoutTimers[tab.id]?.cancel();
             _injectDesktopModeScript(tab, settings);
             _adBlocker.injectInto(tab);
+            _injectUserScripts(tab, url);
             if (mounted) {
               setState(() {
                 tab.isLoading = false;
@@ -812,14 +817,13 @@ class _BrowserScreenState extends State<BrowserScreen>
   ) {
     if (!mounted) return;
     try {
-      final raw = message.message;
-      final data = jsonDecode(raw) as Map<String, dynamic>;
-      final url = data['url'] as String? ?? '';
-      final type = data['type'] as String? ?? 'link';
-      if (url.isEmpty) return;
+      final payload = LongPressPayload.tryParse(message.message);
+      if (payload == null) return;
+      final url = payload.url;
+      final type = payload.type;
       final settings = Provider.of<SettingsProvider>(context, listen: false);
       triggerHaptic(settings);
-      _showLongPressSheet(context, url, type);
+      _showLongPressSheet(context, url, type, text: payload.text, tabId: tab.id);
     } catch (e) {
       debugPrint(
         '[DMX Browser] Failed to decode/handle long press message: $e',
@@ -1396,19 +1400,41 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
-  void _showLongPressSheet(BuildContext context, String url, String type) {
+  void _showLongPressSheet(
+    BuildContext context,
+    String url,
+    String type, {
+    String text = '',
+    String? tabId,
+  }) {
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
+    final tab = tabId == null
+        ? activeTab
+        : _tabs.firstWhere(
+            (t) => t.id == tabId,
+            orElse: () => activeTab,
+          );
     final hasMultipleQualities =
-        _detectedMediaSources[activeTab.id]?.isNotEmpty ?? false;
+        _detectedMediaSources[tab.id]?.isNotEmpty ?? false;
+
+    // Build the multi-source list: the long-pressed URL first, then the
+    // discovered alternative sources that belong to the same media.
+    final discovered = (_detectedMediaSources[tab.id] ?? [])
+        .map(MediaSourceItem.fromMap)
+        .toList();
+    final sources = filterSourcesForTarget(discovered, url, type);
+
     BrowserDownloadSheet.show(
       context,
       url,
       type: type,
-      downloadPageUrl: activeTab.isHome ? null : activeTab.url,
+      text: text,
+      downloadPageUrl: tab.isHome ? null : tab.url,
       onQuality: hasMultipleQualities
-          ? () => _showQualityPicker(activeTab.id, fallbackUrl: url)
+          ? () => _showQualityPicker(tab.id, fallbackUrl: url)
           : null,
+      sources: sources,
     );
   }
 
@@ -2146,6 +2172,51 @@ $_customJs
         await tab.controller.runJavaScript(cssScript);
       } catch (e) {
         debugPrint('[DMX Browser] Failed to inject custom CSS: $e');
+      }
+    }
+  }
+
+  Future<void> _injectUserScripts(BrowserTab tab, String url) async {
+    if (!mounted || tab.isHome || url.isEmpty) return;
+    final manager = UserScriptManager.instance;
+    if (manager.scripts.isEmpty) return;
+
+    final matches = manager.scriptsForUrl(url);
+    for (final script in matches) {
+      try {
+        if (script.isCss) {
+          final jsonCss = jsonEncode(script.code);
+          final cssScript =
+              """
+(function() {
+  var style = document.getElementById('xdm-user-css');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'xdm-user-css';
+    document.head.appendChild(style);
+  }
+  style.textContent = $jsonCss;
+})();
+""";
+          await tab.controller.runJavaScript(cssScript);
+        } else {
+          final marker =
+              'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
+          final jsWrapper =
+              """
+if (!window['$marker']) {
+  window['$marker'] = true;
+  (function() {
+${script.code}
+  })();
+}
+""";
+          await tab.controller.runJavaScript(jsWrapper);
+        }
+      } catch (e) {
+        debugPrint(
+          '[DMX Browser] Failed to inject user script "${script.name}": $e',
+        );
       }
     }
   }
@@ -2961,6 +3032,22 @@ $_customJs
                 color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                 settings: settings,
                 onTap: _openHistory,
+              ),
+              _buildShortcutCard(
+                context,
+                title: isRtl ? 'السكريبتات' : 'Scripts',
+                url: '',
+                icon: Icons.code_rounded,
+                color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                settings: settings,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ScriptManagerScreen(),
+                    ),
+                  );
+                },
               ),
               _buildShortcutCard(
                 context,
@@ -4762,7 +4849,7 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _allowed = modernAnimationsAllowed(context);
+    _allowed = modernAnimationsAllowed(context, respectSystemMotion: false);
     startPausableLoop();
   }
 
@@ -4856,7 +4943,7 @@ class _RadarSweepState extends State<_RadarSweep>
   void initState() {
     super.initState();
     _c = AnimationController(vsync: this, duration: const Duration(seconds: 3));
-    _allowed = modernAnimationsAllowed(context);
+    _allowed = modernAnimationsAllowed(context, respectSystemMotion: false);
     startPausableLoop();
   }
 
@@ -5136,7 +5223,7 @@ class _SignalFabState extends State<_SignalFab>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     );
-    _allowed = modernAnimationsAllowed(context);
+    _allowed = modernAnimationsAllowed(context, respectSystemMotion: false);
     startPausableLoop();
   }
 

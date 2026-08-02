@@ -567,9 +567,11 @@ void main() {
         // After compaction, the journal should only have init + checkpoint = 2 lines
         final rawLines = await file.readAsLines();
         expect(rawLines.length, 2);
-        final parsed = rawLines
-            .map((l) => jsonDecode(l) as Map<String, dynamic>)
-            .toList();
+        final parsed = rawLines.map((l) {
+          final outer = jsonDecode(l) as Map<String, dynamic>;
+          final payloadStr = outer.containsKey('d') ? outer['d'] as String : l;
+          return jsonDecode(payloadStr) as Map<String, dynamic>;
+        }).toList();
         expect(parsed[0]['t'], 'init');
         expect(parsed[0]['threads'], 4);
         expect(parsed[1]['t'], 'checkpoint');

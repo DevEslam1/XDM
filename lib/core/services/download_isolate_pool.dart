@@ -7,6 +7,8 @@
 // - robust job routing
 part of 'download_engine.dart';
 
+final _log = Logger('DownloadIsolatePool');
+
 /// A download job description sent to a worker isolate.
 class DownloadCommand {
   final String url;
@@ -74,13 +76,22 @@ class IsolateMessage {
 class DownloadIsolatePool {
   final int size;
   final List<_Worker> _workers = [];
-  int _nextWorker = 0;
+
+  /// Max concurrent jobs admitted to a single worker before jobs queue.
+  static const int _maxJobsPerWorker = 2;
+
+  /// Priority-aware job queue. Higher priority = processed first.
+  final List<_PendingJob> _pendingQueue = [];
+
+  Timer? _healthCheckTimer;
+  bool _draining = false;
 
   DownloadIsolatePool({this.size = 4});
 
   Future<void> init() async {
     for (int i = 0; i < size; i++) {
       final worker = _Worker(i);
+      worker.onJobCompleted = _onJobCompleted;
       try {
         await worker.spawn().timeout(
           const Duration(seconds: 30),
@@ -96,7 +107,7 @@ class DownloadIsolatePool {
     }
   }
 
-  DownloadJob submit(DownloadCommand command) {
+  DownloadJob submit(DownloadCommand command, {int priority = 0}) {
     final aliveWorkers = _workers.where((w) => w._isAlive).toList();
 
     if (aliveWorkers.isEmpty) {
@@ -105,10 +116,115 @@ class DownloadIsolatePool {
       );
     }
 
-    final worker = aliveWorkers[_nextWorker % aliveWorkers.length];
-    _nextWorker++;
+    // Prefer the least-busy worker that still has capacity.
+    _Worker? bestWorker;
+    var bestLoad = _maxJobsPerWorker;
+    for (final w in aliveWorkers) {
+      final load = w._jobs.length;
+      if (load < bestLoad) {
+        bestLoad = load;
+        bestWorker = w;
+        if (load == 0) break;
+      }
+    }
 
-    return worker.submit(command);
+    if (bestWorker != null) {
+      return bestWorker.submit(command);
+    }
+
+    // All workers at capacity — enqueue with priority.
+    final pending = _PendingJob(command: command, priority: priority);
+    _pendingQueue.add(pending);
+    _pendingQueue.sort((a, b) => b.priority.compareTo(a.priority));
+    return pending.job;
+  }
+
+  /// Dequeues the next pending job (highest priority first) and submits it to
+  /// the worker that just freed a slot.
+  void _onJobCompleted(int workerId) {
+    if (_draining || _pendingQueue.isEmpty) return;
+
+    final worker = _workers
+        .where((w) => w.id == workerId && w._isAlive)
+        .firstOrNull;
+    if (worker == null || worker._jobs.length >= _maxJobsPerWorker) return;
+
+    final next = _pendingQueue.removeAt(0);
+    worker.submitJob(next.command, next.job);
+  }
+
+  /// Starts periodic worker health checks (every 30 seconds).
+  void startHealthMonitor() {
+    _healthCheckTimer?.cancel();
+    _healthCheckTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_draining) return;
+      _checkWorkerHealth();
+    });
+  }
+
+  void _checkWorkerHealth() {
+    for (final worker in _workers) {
+      if (!worker._isAlive) {
+        _log.warning('[Pool] Worker ${worker.id} is dead. Respawning...');
+        worker.respawn();
+        continue;
+      }
+
+      // Check for stuck jobs (> 5 minutes with no progress).
+      final now = DateTime.now();
+      final stuckJobs = worker._jobs.entries.where((entry) {
+        return now.difference(entry.value.lastProgress) >
+            const Duration(minutes: 5);
+      }).toList();
+
+      for (final stuck in stuckJobs) {
+        _log.warning(
+          '[Pool] Worker ${worker.id} has stuck job ${stuck.key}. Cancelling.',
+        );
+        worker.cancelJob(stuck.key);
+      }
+    }
+  }
+
+  /// Graceful shutdown: stop accepting new jobs, wait for active jobs to
+  /// finish (bounded by [timeout]), then force-kill remaining workers.
+  Future<void> drain({Duration timeout = const Duration(seconds: 30)}) async {
+    _draining = true;
+    _healthCheckTimer?.cancel();
+    _healthCheckTimer = null;
+
+    // Cancel queued jobs so they are not silently dropped without an error.
+    for (final pending in _pendingQueue) {
+      pending.job.dispose();
+    }
+    _pendingQueue.clear();
+
+    final stopwatch = Stopwatch()..start();
+    while (stopwatch.elapsed < timeout) {
+      final activeCount = _workers.fold<int>(
+        0,
+        (sum, w) => sum + w._jobs.length,
+      );
+      if (activeCount == 0) break;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    await shutdown();
+    _draining = false;
+  }
+
+  /// Memory pressure callback — reduce pool size to a safe minimum (2 idle
+  /// workers remain).
+  void onMemoryPressure() {
+    _log.warning('[Pool] Memory pressure detected. Reducing pool size.');
+    final toKill = _workers
+        .where((w) => w._jobs.isEmpty && !w._shuttingDown)
+        .skip(2)
+        .toList();
+    for (final worker in toKill) {
+      worker.kill();
+      _workers.remove(worker);
+    }
   }
 
   void updateSpeedLimit(int bytesPerSecond, int activeCount) {
@@ -118,10 +234,16 @@ class DownloadIsolatePool {
   }
 
   Future<void> shutdown() async {
+    _draining = true;
+    _healthCheckTimer?.cancel();
+    _healthCheckTimer = null;
+    _pendingQueue.clear();
+
     for (final w in _workers) {
       await w.shutdown();
     }
     _workers.clear();
+    _draining = false;
   }
 }
 
@@ -139,6 +261,9 @@ class _Worker {
 
   bool _isAlive = false;
   bool _shuttingDown = false;
+
+  /// Invoked by the pool when a job finishes so pending jobs can be dequeued.
+  void Function(int workerId)? onJobCompleted;
 
   // FIX(N1): circuit breaker for worker respawns
   static const int _maxConsecutiveRespawnFailures = 5;
@@ -210,7 +335,11 @@ class _Worker {
         // (or a crash that was followed by a working respawn) does not
         // accumulate towards a permanent kill.
         if (_consecutiveSpawnFailures > 0) _consecutiveSpawnFailures = 0;
-        _jobs[message.jobId]?._controller.add(message);
+        final job = _jobs[message.jobId];
+        if (job != null) {
+          job.lastProgress = DateTime.now();
+          job._controller.add(message);
+        }
       }
     });
 
@@ -321,6 +450,70 @@ class _Worker {
     return job;
   }
 
+  /// Submits a job whose [DownloadJob] handle was created earlier (a queued
+  /// job). The handle is attached to this worker and sent to the isolate.
+  DownloadJob submitJob(DownloadCommand command, DownloadJob job) {
+    final jobId = _nextJobId++;
+    job._jobId = jobId;
+    job._worker = this;
+
+    _jobs[jobId] = job;
+    _send({'type': 'start', 'jobId': jobId, 'command': command});
+
+    return job;
+  }
+
+  /// Backstop respawn entry point used by the health monitor when a worker is
+  /// found dead outside the normal error-port flow.
+  void respawn() {
+    if (_shuttingDown) return;
+    if (_isAlive) return;
+    _scheduleRespawn();
+  }
+
+  /// Hard-kills the worker immediately (used when shrinking the pool).
+  void kill() {
+    _shuttingDown = true;
+    _respawnTimer?.cancel();
+    _respawnTimer = null;
+
+    for (final job in List<DownloadJob>.from(_jobs.values)) {
+      job.dispose();
+    }
+    _jobs.clear();
+
+    _receivePort?.close();
+    _receivePort = null;
+    _errorPort?.close();
+    _errorPort = null;
+
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
+    _commandPort = null;
+    _isAlive = false;
+  }
+
+  /// Cancels a job that has made no progress for too long.
+  void cancelJob(int jobId) {
+    final job = _jobs[jobId];
+    if (job == null) return;
+
+    _send({'type': 'cancel', 'jobId': jobId});
+    if (!job._controller.isClosed) {
+      job._controller.add(
+        IsolateMessage(
+          jobId,
+          'error',
+          {
+            'errorType': 'cancel',
+            'errorMessage':
+                'Job cancelled: no progress for over 5 minutes (stuck).',
+          },
+        ),
+      );
+    }
+  }
+
   void broadcastSpeedLimit(int bytesPerSecond, int activeCount) {
     if (_jobs.isEmpty) return;
 
@@ -380,27 +573,49 @@ class _Worker {
 
 /// Main-side handle for one submitted download job.
 class DownloadJob {
-  final int jobId;
-  final _Worker _worker;
+  int _jobId;
+  _Worker? _worker;
 
   final StreamController<IsolateMessage> _controller =
       StreamController<IsolateMessage>();
 
-  DownloadJob._(this.jobId, this._worker);
+  /// Last time a progress/status message arrived from the worker. Used by the
+  /// health monitor to detect stuck jobs.
+  DateTime lastProgress = DateTime.now();
+
+  DownloadJob._(this._jobId, this._worker);
+
+  int get jobId => _jobId;
+  bool get isClosed => _controller.isClosed;
 
   Stream<IsolateMessage> get messages => _controller.stream;
 
   void cancel() {
-    _worker._send({'type': 'cancel', 'jobId': jobId});
+    _worker?._send({'type': 'cancel', 'jobId': _jobId});
   }
 
   void dispose() {
-    _worker._jobs.remove(jobId);
+    final worker = _worker;
+    worker?._jobs.remove(_jobId);
 
     if (!_controller.isClosed) {
       _controller.close();
     }
+
+    if (worker != null && worker.onJobCompleted != null) {
+      worker.onJobCompleted!(worker.id);
+    }
   }
+}
+
+/// A job waiting in the pool's priority queue for a worker slot.
+class _PendingJob {
+  final DownloadCommand command;
+  final int priority;
+  final DownloadJob job;
+
+  _PendingJob({required this.command, required this.priority})
+    : job = DownloadJob._(0, null);
 }
 
 /// Worker-side mutable state for one running job.
@@ -512,32 +727,66 @@ Future<void> _runWorkerJob(
       );
     }
 
-    await engine._doHttpDownload(
-      url: command.url,
-      punyUrl: command.punyUrl,
-      tempFilePath: command.tempFilePath,
-      localFilePath: command.localFilePath,
-      knownFileSize: command.knownFileSize,
-      supportsResume: command.supportsResume,
-      threadCount: command.threadCount,
-      customUserAgent: command.customUserAgent,
-      referer: command.referer,
-      enableProxy: command.enableProxy,
-      proxyAddress: command.proxyAddress,
-      proxyHost: command.proxyHost,
-      proxyPort: command.proxyPort,
-      proxyUsername: command.proxyUsername,
-      proxyPassword: command.proxyPassword,
-      bypassSSL: command.bypassSSL,
-      cookies: command.cookies,
-      oauthToken: command.oauthToken,
-      isNameAutoGenerated: command.isNameAutoGenerated,
-      speedLimitBytesPerSecond: () => state.speedLimit,
-      activeDownloadCount: () => state.activeCount,
-      cancelToken: state.cancelToken,
-      onProgress: onProgress,
-    );
+    Future<void> runMirrorAttempt(String mirrorUrl) async {
+      await engine._doHttpDownload(
+        url: mirrorUrl,
+        punyUrl: convertIdnToPunycode(mirrorUrl),
+        tempFilePath: command.tempFilePath,
+        localFilePath: command.localFilePath,
+        knownFileSize: command.knownFileSize,
+        supportsResume: command.supportsResume,
+        threadCount: command.threadCount,
+        customUserAgent: command.customUserAgent,
+        referer: command.referer,
+        enableProxy: command.enableProxy,
+        proxyAddress: command.proxyAddress,
+        proxyHost: command.proxyHost,
+        proxyPort: command.proxyPort,
+        proxyUsername: command.proxyUsername,
+        proxyPassword: command.proxyPassword,
+        bypassSSL: command.bypassSSL,
+        cookies: command.cookies,
+        oauthToken: command.oauthToken,
+        isNameAutoGenerated: command.isNameAutoGenerated,
+        speedLimitBytesPerSecond: () => state.speedLimit,
+        activeDownloadCount: () => state.activeCount,
+        cancelToken: state.cancelToken,
+        onProgress: onProgress,
+      );
+    }
 
+    final mirrors = <String>[
+      command.url,
+      if (command.mirrorUrls != null) ...command.mirrorUrls!,
+    ];
+
+    if (mirrors.length <= 1) {
+      await runMirrorAttempt(command.url);
+      safeSend(IsolateMessage(jobId, 'done'));
+      return;
+    }
+
+    // Automatic in-loop mirror failover: when the primary mirror fails with a
+    // retryable error, the download is restarted (resuming from the shared
+    // state/journal) against the next-best mirror.
+    final failover = MirrorFailover(mirrors, primary: command.url);
+    Object? lastError;
+    final succeeded = await failover.run((mirrorUrl) async {
+      try {
+        await runMirrorAttempt(mirrorUrl);
+      } catch (e) {
+        lastError = e;
+        rethrow;
+      }
+    });
+
+    if (succeeded == null) {
+      final err = lastError;
+      if (err != null) {
+        Error.throwWithStackTrace(err, StackTrace.current);
+      }
+      throw StateError('All mirrors failed');
+    }
     safeSend(IsolateMessage(jobId, 'done'));
   } catch (e) {
     String errType = 'unknown';

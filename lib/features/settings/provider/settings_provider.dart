@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../../core/services/quiet_hours.dart';
 import '../../../core/services/xdm_backend_client.dart';
 
 class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
@@ -87,6 +88,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _batterySaverModeKey = 'batterySaverMode';
   static const _saveBrowserHistoryKey = 'saveBrowserHistory';
   static const _notificationsEnabledKey = 'notificationsEnabled';
+  static const _quietHoursEnabledKey = 'quietHoursEnabled';
+  static const _quietHoursStartKey = 'quietHoursStart';
+  static const _quietHoursEndKey = 'quietHoursEnd';
   static const _proxyHostKey = 'proxyHost';
   static const _proxyPortKey = 'proxyPort';
   static const _proxyUsernameKey = 'proxyUsername';
@@ -264,6 +268,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool saveBrowserHistory = true;
 
   bool notificationsEnabled = true;
+  bool quietHoursEnabled = false;
+  String quietHoursStart = '23:00';
+  String quietHoursEnd = '07:00';
   String proxyHost = '';
   int proxyPort = 8080;
   String proxyUsername = '';
@@ -379,6 +386,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     saveBrowserHistory =
         _prefs.getBool(_saveBrowserHistoryKey) ?? saveBrowserHistory;
     notificationsEnabled = _prefs.getBool(_notificationsEnabledKey) ?? true;
+    quietHoursEnabled =
+        _prefs.getBool(_quietHoursEnabledKey) ?? quietHoursEnabled;
+    quietHoursStart = _prefs.getString(_quietHoursStartKey) ?? quietHoursStart;
+    quietHoursEnd = _prefs.getString(_quietHoursEndKey) ?? quietHoursEnd;
     proxyHost = _prefs.getString(_proxyHostKey) ?? '';
     proxyPort = _prefs.getInt(_proxyPortKey) ?? 8080;
     proxyUsername = _prefs.getString(_proxyUsernameKey) ?? '';
@@ -731,6 +742,35 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<void> setQuietHoursEnabled(bool value) async {
+    quietHoursEnabled = value;
+    await _prefs.setBool(_quietHoursEnabledKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setQuietHoursStart(String value) async {
+    quietHoursStart = value;
+    await _prefs.setString(_quietHoursStartKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setQuietHoursEnd(String value) async {
+    quietHoursEnd = value;
+    await _prefs.setString(_quietHoursEndKey, value);
+    notifyListeners();
+  }
+
+  /// Whether the current time falls inside the configured quiet-hours window.
+  /// Always false when quiet hours are disabled.
+  bool isInQuietHoursNow([DateTime? now]) {
+    if (!quietHoursEnabled) return false;
+    return QuietHours.isInQuietHours(
+      start: quietHoursStart,
+      end: quietHoursEnd,
+      now: now,
+    );
+  }
+
   Future<void> setProxyHost(String value) async {
     // Validate host format
     final trimmed = value.trim();
@@ -949,6 +989,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     pinchToZoom = true;
     saveBrowserHistory = true;
     notificationsEnabled = true;
+    quietHoursEnabled = false;
+    quietHoursStart = '23:00';
+    quietHoursEnd = '07:00';
     proxyHost = '';
     proxyPort = 8080;
     proxyUsername = '';
@@ -1011,6 +1054,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _prefs.setBool(_pinchToZoomKey, pinchToZoom);
     await _prefs.setBool(_saveBrowserHistoryKey, saveBrowserHistory);
     await _prefs.setBool(_notificationsEnabledKey, notificationsEnabled);
+    await _prefs.setBool(_quietHoursEnabledKey, quietHoursEnabled);
+    await _prefs.setString(_quietHoursStartKey, quietHoursStart);
+    await _prefs.setString(_quietHoursEndKey, quietHoursEnd);
     await _prefs.setString(_proxyHostKey, proxyHost);
     await _prefs.setInt(_proxyPortKey, proxyPort);
     await _prefs.setString(_proxyUsernameKey, proxyUsername);

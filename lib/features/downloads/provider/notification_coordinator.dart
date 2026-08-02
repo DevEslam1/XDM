@@ -3,6 +3,7 @@ import 'dart:math';
 
 // ignore_for_file: prefer_initializing_formals
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:open_filex/open_filex.dart' as open_filex;
 
@@ -56,6 +57,12 @@ class NotificationCoordinator {
   StreamSubscription<Map<String, String>>? _actionSubscription;
   final Map<String, int> _notificationIds = {};
   int _nextNotificationId = 1;
+
+  // Android notification grouping: all per-task progress notifications share
+  // this group key and collapse under one summary entry.
+  static const String _groupKey = 'dmx_downloads';
+  static const int _groupSummaryId = 9001;
+  DateTime _lastSummaryPost = DateTime.fromMillisecondsSinceEpoch(0);
 
   // FIX(18): notification payloads carry an opaque handle instead of the raw
   // task id, so the OS-visible payload never leaks internal identifiers and a
@@ -155,15 +162,17 @@ class NotificationCoordinator {
   }
 
   /// Shows the completion notification for [task] (app updates get an
-  /// install action). No-op when notifications are disabled.
+  /// install action). No-op when notifications are disabled. During quiet
+  /// hours the notification is delivered silently (no sound / no alert).
   void showComplete(DownloadTask task, int notificationId) {
     if (!_settingsProvider.notificationsEnabled) return;
+    final quietHours = _settingsProvider.isInQuietHoursNow();
     if (task.isAppUpdate) {
       _notificationService.showDownloadComplete(
         notificationId: notificationId,
         title: 'Update ready',
         body: 'App update ${task.fileName} downloaded. Tap to install.',
-        playSound: _settingsProvider.soundNotification,
+        playSound: _settingsProvider.soundNotification && !quietHours,
         payload: opaqueHandleFor(task.id),
         actions: const [
           AndroidNotificationAction(
@@ -177,13 +186,13 @@ class NotificationCoordinator {
       _notificationService.showDownloadComplete(
         notificationId: notificationId,
         title: task.fileName,
-        playSound: _settingsProvider.soundNotification,
+        playSound: _settingsProvider.soundNotification && !quietHours,
       );
     }
   }
 
   /// Updates the per-task progress notification. No-op when notifications
-  /// are disabled.
+  /// are disabled. Multiple active downloads are grouped under one summary.
   void showProgress({
     required int notificationId,
     required String title,
@@ -193,6 +202,8 @@ class NotificationCoordinator {
     required String payload,
   }) {
     if (!_settingsProvider.notificationsEnabled) return;
+    final activeCount = _downloadingTasksCount();
+    final multiple = activeCount > 1;
     _notificationService.showDownloadProgress(
       notificationId: notificationId,
       title: title,
@@ -201,22 +212,44 @@ class NotificationCoordinator {
       eta: eta,
       languageCode: _settingsProvider.languageCode,
       payload: payload,
-      hasMultipleActive: _downloadingTasksCount() > 1,
+      hasMultipleActive: multiple,
+      groupKey: multiple ? _groupKey : null,
+    );
+    if (multiple) _postGroupSummary(activeCount);
+  }
+
+  /// Refreshes the collapsed group summary at most once every 3 seconds.
+  void _postGroupSummary(int activeCount) {
+    final now = DateTime.now();
+    if (now.difference(_lastSummaryPost) < const Duration(seconds: 3)) return;
+    _lastSummaryPost = now;
+    unawaited(
+      _notificationService
+          .showGroupSummary(
+            notificationId: _groupSummaryId,
+            activeCount: activeCount,
+            groupKey: _groupKey,
+          )
+          .catchError((Object e) {
+            debugPrint('[Notifications] Group summary failed: $e');
+          }),
     );
   }
 
   /// Shows the failure notification. No-op when notifications are disabled.
+  /// During quiet hours the notification is delivered silently.
   void showFailed({
     required int notificationId,
     required String title,
     required String error,
   }) {
     if (!_settingsProvider.notificationsEnabled) return;
+    final quietHours = _settingsProvider.isInQuietHoursNow();
     _notificationService.showDownloadFailed(
       notificationId: notificationId,
       title: title,
       error: error,
-      playSound: _settingsProvider.soundNotification,
+      playSound: _settingsProvider.soundNotification && !quietHours,
     );
   }
 

@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
+import 'circuit_breaker.dart';
+
 class ProfessionalRetryInterceptor extends Interceptor {
   final Dio _dio;
 
@@ -14,6 +16,14 @@ class ProfessionalRetryInterceptor extends Interceptor {
   static const int baseDelayMs = 1000;
   static const int maxDelayMs = 30000;
   static final _rng = math.Random();
+
+  /// Trip the retry loop after enough consecutive transient failures so a
+  /// failing host is not hammered. Shared per interceptor instance (per Dio),
+  /// so it applies across all requests on the same connection.
+  final CircuitBreaker _breaker = CircuitBreaker(
+    failureThreshold: 4,
+    openTimeout: const Duration(seconds: 20),
+  );
 
   final Expando<int> _retryCounts = Expando<int>();
   final Expando<int> _retryTimestamps = Expando<int>();
@@ -40,6 +50,17 @@ class ProfessionalRetryInterceptor extends Interceptor {
         'Permanent error (${err.type}, '
         '${err.response?.statusCode}), not retrying: '
         '${requestOptions.uri}',
+      );
+      _removeEntry(requestOptions);
+      handler.next(err);
+      return;
+    }
+
+    // Circuit breaker: skip retries while the host is cooling down.
+    if (!_breaker.allowRequest()) {
+      _log.warning(
+        'Circuit breaker open for ${requestOptions.uri} '
+        '(${_breaker.state.name}); skipping retry.',
       );
       _removeEntry(requestOptions);
       handler.next(err);
@@ -76,9 +97,11 @@ class ProfessionalRetryInterceptor extends Interceptor {
       // detect and break infinite retry loops.
       requestOptions.headers['X-Retry-Count'] = (count + 1).toString();
       final response = await _dio.fetch(requestOptions);
+      _breaker.recordSuccess();
       _removeEntry(requestOptions);
       handler.resolve(response);
     } catch (retryErr) {
+      _breaker.recordFailure();
       _log.fine('Retry attempt failed: $retryErr');
       handler.next(err);
     }

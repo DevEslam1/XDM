@@ -421,4 +421,17 @@ const Map<String, String> arTranslations = {
   'browser_save_btn': 'حفظ',
   'browser_quit': 'إنهاء المتصفح',
   'browser_tabs_restored': 'تمت استعادة التبويبات السابقة',
+
+  // Browser – user scripts
+  'browser_scripts': 'السكريبتات',
+  'browser_add_script': 'إضافة سكريبت',
+  'browser_edit_script': 'تعديل سكريبت',
+  'browser_no_scripts': 'لا توجد سكريبتات بعد',
+  'browser_no_scripts_desc': 'أضف JS أو CSS يعمل على الصفحات المتطابقة',
+  'browser_script_name': 'الاسم',
+  'browser_script_url_pattern': 'نمط الرابط (مثال: *://*.example.com/*)',
+  'browser_script_code': 'الكود',
+  'browser_script_type': 'النوع',
+  'browser_script_js': 'JS',
+  'browser_script_css': 'CSS',
 };

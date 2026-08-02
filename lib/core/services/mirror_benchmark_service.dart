@@ -1,0 +1,133 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:logging/logging.dart';
+
+/// Benchmarks mirror speeds with a small HEAD + partial GET request.
+/// Results are cached for 1 hour per mirror.
+class MirrorBenchmarkService {
+  static final _log = Logger('MirrorBenchmark');
+  static final Map<String, _BenchmarkResult> _results = {};
+  static const _cacheTtl = Duration(hours: 1);
+  static const _benchmarkBytes = 64 * 1024; // 64 KB sample
+
+  /// Benchmarks all mirrors and returns them ranked fastest-first by
+  /// time-to-first-byte. Failures sort last with a high latency marker.
+  static Future<List<MirrorBenchmarkResult>> benchmarkAll(
+    List<String> urls,
+  ) async {
+    final results = await Future.wait(
+      urls.map((url) async {
+        try {
+          return await _benchmarkSingle(url);
+        } catch (e) {
+          _log.warning('[Benchmark] Failed for $url: $e');
+          return MirrorBenchmarkResult(
+            url: url,
+            latencyMs: 99999,
+            speedBps: 0,
+            success: false,
+          );
+        }
+      }),
+    );
+
+    final ranked = List<MirrorBenchmarkResult>.of(results)
+      ..sort((a, b) {
+        // Successful mirrors first (by latency), then failures.
+        if (a.success != b.success) return a.success ? -1 : 1;
+        return a.latencyMs.compareTo(b.latencyMs);
+      });
+    return ranked;
+  }
+
+  /// Clears the in-memory benchmark cache (used in tests and on settings
+  /// changes where a fresh benchmark is desirable).
+  static void clearCache() => _results.clear();
+
+  static Future<MirrorBenchmarkResult> _benchmarkSingle(String url) async {
+    final cached = _results[url];
+    if (cached != null && !cached.isExpired) {
+      return cached.toResult(url);
+    }
+
+    final stopwatch = Stopwatch()..start();
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 5),
+        receiveTimeout: const Duration(seconds: 10),
+      ),
+    );
+
+    try {
+      // Phase 1: TTFB via HEAD.
+      await dio.head(url, options: Options(validateStatus: (_) => true));
+      final ttfb = stopwatch.elapsedMilliseconds;
+
+      // Phase 2: download a small sample.
+      stopwatch.reset();
+      final response = await dio.get<List<int>>(
+        url,
+        options: Options(
+          headers: {'Range': 'bytes=0-${_benchmarkBytes - 1}'},
+          responseType: ResponseType.bytes,
+          validateStatus: (_) => true,
+        ),
+      );
+      final downloadMs = stopwatch.elapsedMilliseconds;
+      final bytesReceived = response.data?.length ?? 0;
+      final speedBps = downloadMs > 0
+          ? (bytesReceived * 1000.0 / downloadMs)
+          : 0.0;
+
+      final result = _BenchmarkResult(
+        ttfbMs: ttfb,
+        downloadMs: downloadMs,
+        speedBps: speedBps,
+        timestamp: DateTime.now(),
+      );
+      _results[url] = result;
+      return result.toResult(url);
+    } finally {
+      dio.close();
+    }
+  }
+}
+
+class MirrorBenchmarkResult {
+  final String url;
+  final int latencyMs;
+  final double speedBps;
+  final bool success;
+
+  const MirrorBenchmarkResult({
+    required this.url,
+    required this.latencyMs,
+    required this.speedBps,
+    required this.success,
+  });
+}
+
+class _BenchmarkResult {
+  final int ttfbMs;
+  final int downloadMs;
+  final double speedBps;
+  final DateTime timestamp;
+
+  _BenchmarkResult({
+    required this.ttfbMs,
+    required this.downloadMs,
+    required this.speedBps,
+    required this.timestamp,
+  });
+
+  bool get isExpired =>
+      DateTime.now().difference(timestamp) > MirrorBenchmarkService._cacheTtl;
+
+  MirrorBenchmarkResult toResult(String url) => MirrorBenchmarkResult(
+    url: url,
+    latencyMs: ttfbMs,
+    speedBps: speedBps,
+    success: true,
+  );
+}

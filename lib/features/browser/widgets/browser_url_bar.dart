@@ -246,7 +246,7 @@ class _IndeterminateScanlineState extends State<_IndeterminateScanline>
   @override
   void initState() {
     super.initState();
-    _allowed = modernAnimationsAllowed(context);
+    _allowed = modernAnimationsAllowed(context, respectSystemMotion: false);
     startPausableLoop();
   }
 

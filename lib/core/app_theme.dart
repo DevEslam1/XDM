@@ -62,6 +62,14 @@ class AppTheme {
   static const Color lightTextSecondary = Color(0xFF475467);
   static const Color lightTextMuted = Color(0xFF8A94A6);
 
+  // ── Accessibility: focus & contrast ──
+  /// High-visibility focus ring (keyboard / screen-reader focus).
+  static const Color focusRing = Color(0xFF60A5FA);
+  static const Color lightFocusRing = Color(0xFF1D4ED8);
+  /// 3:1+ contrast fill used behind a focused widget in high-contrast mode.
+  static const Color focusFill = Color(0x33008FE0);
+  static const Color lightFocusFill = Color(0x33008FE0);
+
   static const String fontDisplay = 'Space Grotesk';
   static const String fontBody = 'Inter';
 

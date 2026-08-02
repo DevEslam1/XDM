@@ -14,14 +14,17 @@ import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/checksum_service.dart';
 import '../../../core/services/database_service.dart';
+import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart';
 import '../../../core/services/download_metrics.dart';
+import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/ffmpeg_mux_service.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
+import '../../../shared/accessibility/xdm_announcer.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 import 'network_monitor.dart';
@@ -103,6 +106,19 @@ class DownloadOrchestrator {
   final DownloadOrchestratorHost _host;
 
   static const _mediaChannel = MethodChannel('com.dmx.app/media');
+
+  /// Records a classified, bounded diagnostic entry for [taskId]'s failure.
+  void _recordDownloadFailure(String taskId, Object error) {
+    final classification = ErrorTaxonomy.classify(error);
+    DiagnosticService.instance.record(
+      'download',
+      classification.message,
+      error: error,
+      details: 'task=$taskId family=${classification.family.name} '
+          'status=${classification.httpStatus ?? '-'} '
+          'retryable=${classification.retryable}',
+    );
+  }
 
   final Set<String> _startingTaskIds = {};
   final Map<String, ({String cookie, DateTime timestamp})> _cookieCache = {};
@@ -511,6 +527,8 @@ class DownloadOrchestrator {
     if (_host.providerSettingsProvider.vibration) {
       HapticFeedback.vibrate();
     }
+
+    XdmAnnouncer.announce('${current.fileName} download complete');
 
     final finalPath = p.join(current.savePath, current.fileName);
     if (Platform.isAndroid && finalPath.isNotEmpty) {
@@ -1553,6 +1571,7 @@ class DownloadOrchestrator {
               }
 
               _host.retryCounts.remove(task.id);
+              _recordDownloadFailure(task.id, realError);
               await _host.setTaskState(
                 current.copyWith(
                   status: DownloadStatus.failed,

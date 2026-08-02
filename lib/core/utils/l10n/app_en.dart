@@ -434,4 +434,17 @@ const Map<String, String> enTranslations = {
   'browser_save_btn': 'SAVE',
   'browser_quit': 'Quit browser',
   'browser_tabs_restored': 'Previous tabs restored',
+
+  // Browser – user scripts
+  'browser_scripts': 'SCRIPTS',
+  'browser_add_script': 'Add script',
+  'browser_edit_script': 'Edit script',
+  'browser_no_scripts': 'No scripts yet',
+  'browser_no_scripts_desc': 'Add JS or CSS that runs on matching pages',
+  'browser_script_name': 'Name',
+  'browser_script_url_pattern': 'URL pattern (e.g. *://*.example.com/*)',
+  'browser_script_code': 'Code',
+  'browser_script_type': 'Type',
+  'browser_script_js': 'JS',
+  'browser_script_css': 'CSS',
 };

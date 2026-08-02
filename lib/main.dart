@@ -15,9 +15,11 @@ import 'package:logging/logging.dart';
 import 'core/app_theme.dart';
 import 'core/services/crash_reporting_service.dart';
 import 'core/services/logging_service.dart';
+import 'core/services/mirror_health_store.dart';
 import 'core/services/background_service.dart';
 import 'core/services/database_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/performance_monitor.dart';
 import 'core/services/single_instance_service.dart';
 import 'core/services/xdm_backend_client.dart';
 import 'core/services/youtube_service.dart';
@@ -37,6 +39,18 @@ Future<void> main(List<String> args) async {
     CrashReportingService.captureFlutterErrors();
 
     WidgetsFlutterBinding.ensureInitialized();
+
+    // ── Image cache sizing ──
+    // Bound the decoded-image cache so large thumbnails/artwork don't consume
+    // all available memory on low-end devices. Defaults are ~100 MB / 1000
+    // images; we keep a slightly conservative budget and rely on Flutter's
+    // built-in memory-pressure clearing for the rest.
+    PaintingBinding.instance.imageCache
+      ..maximumSizeBytes = 80 * 1024 * 1024
+      ..maximumSize = 1000;
+
+    // ── Frame performance monitoring (UI-jank diagnostics) ──
+    PerformanceMonitor.instance.start();
 
     // Custom error widget builder for better UX
     ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
@@ -187,6 +201,12 @@ Future<void> _initNonCriticalServices(
   DownloadProvider downloadProvider,
   NotificationService notificationService,
 ) async {
+  try {
+    await MirrorHealthStore.init();
+  } catch (e) {
+    debugPrint('Mirror health store init failed: $e');
+  }
+
   try {
     await XdmBackendClient.loadApiKey();
   } catch (e) {

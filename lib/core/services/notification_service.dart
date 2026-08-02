@@ -315,6 +315,7 @@ class NotificationService {
     required String payload,
     bool isPaused = false,
     bool hasMultipleActive = false,
+    String? groupKey,
   }) async {
     if (!_initialized) return;
 
@@ -361,6 +362,10 @@ class NotificationService {
       ongoing: !isPaused,
       autoCancel: false,
       actions: actions,
+      groupKey: groupKey,
+      groupAlertBehavior: groupKey == null
+          ? GroupAlertBehavior.all
+          : GroupAlertBehavior.children,
     );
     final iosDetails = DarwinNotificationDetails(
       presentAlert: !isPaused,
@@ -378,6 +383,44 @@ class NotificationService {
           : (eta.isNotEmpty ? '$speed | $eta' : speed),
       notificationDetails: details,
       payload: payload,
+    );
+  }
+
+  /// Posts a collapsed group summary for multiple active downloads, so the
+  /// tray shows one entry instead of N per-task notifications.
+  Future<void> showGroupSummary({
+    required int notificationId,
+    required int activeCount,
+    String? groupKey,
+  }) async {
+    if (!_initialized || groupKey == null) return;
+    final androidDetails = AndroidNotificationDetails(
+      _downloadChannelId,
+      _downloadChannelName,
+      channelDescription: _downloadChannelDesc,
+      importance: Importance.low,
+      priority: Priority.low,
+      showProgress: true,
+      maxProgress: activeCount,
+      progress: activeCount,
+      ongoing: true,
+      autoCancel: false,
+      setAsGroupSummary: true,
+      groupKey: groupKey,
+      groupAlertBehavior: GroupAlertBehavior.children,
+    );
+    final details = NotificationDetails(
+      android: androidDetails,
+      iOS: const DarwinNotificationDetails(
+        presentAlert: false,
+        interruptionLevel: InterruptionLevel.passive,
+      ),
+    );
+    await _plugin.show(
+      id: notificationId,
+      title: '$activeCount active downloads',
+      body: 'Tap to manage active transfers',
+      notificationDetails: details,
     );
   }
 
