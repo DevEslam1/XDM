@@ -1,0 +1,102 @@
+import 'package:flutter/material.dart';
+import '../../../core/app_theme.dart';
+import '../../../core/services/torrent_models.dart';
+import '../../downloads/models/download_task.dart';
+
+class TorrentStatsDashboard extends StatelessWidget {
+  final DownloadTask task;
+  final TorrentUpdateInfo? stats;
+  final bool isDark;
+
+  const TorrentStatsDashboard({
+    super.key,
+    required this.task,
+    required this.stats,
+    required this.isDark,
+  });
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    final kb = bytes / 1024;
+    if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+    final mb = kb / 1024;
+    if (mb < 1024) return '${mb.toStringAsFixed(1)} MB';
+    return '${(mb / 1024).toStringAsFixed(2)} GB';
+  }
+
+  String _formatDuration(Duration duration) {
+    if (duration.inSeconds <= 0) return '0s';
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    if (hours > 0) return '${hours}h ${minutes}m';
+    return '${minutes}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDownloaded = stats?.totalPayloadDownload ?? task.downloadedBytes;
+    final totalUploaded = stats?.totalPayloadUpload ?? 0;
+    final ratio = totalDownloaded > 0 ? totalUploaded / totalDownloaded : 0.0;
+    final seedingDuration = task.completedAt != null
+        ? DateTime.now().difference(task.completedAt!)
+        : Duration.zero;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: (isDark ? AppTheme.surface : Colors.white).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.15),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'LIFETIME STATISTICS',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStat('Downloaded', _formatBytes(totalDownloaded)),
+              _buildStat('Uploaded', _formatBytes(totalUploaded)),
+              _buildStat('Ratio', ratio.toStringAsFixed(2)),
+              _buildStat('Seeding', _formatDuration(seedingDuration)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStat(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+          ),
+        ),
+      ],
+    );
+  }
+}

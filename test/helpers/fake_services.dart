@@ -21,7 +21,6 @@ class FakeWebViewPlatform extends WebViewPlatform {
     return FakePlatformWebViewWidget(params);
   }
 
-  @override
   PlatformWebViewCookieManager createPlatformWebViewCookieManager(
     PlatformWebViewCookieManagerCreationParams params,
   ) {

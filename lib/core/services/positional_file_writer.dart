@@ -175,4 +175,22 @@ class PositionalFileWriter {
       rethrow;
     }
   }
+
+  /// Direct positional read used for verification and repair.
+  Future<Uint8List> readRange(int start, int length) async {
+    await flushAll();
+    return await _flushLock.synchronized(() async {
+      await _file.setPosition(start);
+      return await _file.read(length);
+    });
+  }
+
+  /// Direct positional write used for chunk repair.
+  Future<void> writeAt(int start, List<int> data) async {
+    await flushAll();
+    await _flushLock.synchronized(() async {
+      await _file.setPosition(start);
+      await _file.writeFrom(data);
+    });
+  }
 }

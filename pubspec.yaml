@@ -44,6 +44,7 @@ dependencies:
 
   # WebView
   webview_flutter: ^4.14.1
+  webview_flutter_platform_interface: ^2.10.0
   webview_cookie_manager:
     path: packages/webview_cookie_manager
 
