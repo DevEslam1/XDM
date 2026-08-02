@@ -33,13 +33,23 @@ class DownloadCard extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    if (task.isTorrent) {
-      return _TorrentCard(task: task, compact: compact);
-    }
-    if (task.youtubeQualityPreset != null || task.mergedAudioUrl != null) {
-      return _MediaCard(task: task, compact: compact);
-    }
-    return _FileCard(task: task, compact: compact);
+    final statusLabel = task.status.name;
+    final semanticLabel = '${task.fileName}, status: $statusLabel, '
+        '${(task.progress * 100).toStringAsFixed(0)}% downloaded, '
+        '${task.speedFormatted}';
+
+    final Widget cardWidget = task.isTorrent
+        ? _TorrentCard(task: task, compact: compact)
+        : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
+            ? _MediaCard(task: task, compact: compact)
+            : _FileCard(task: task, compact: compact);
+
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      hint: 'Double tap to view details',
+      child: cardWidget,
+    );
   }
 }
 

@@ -68,3 +68,50 @@ class TorrentUpdateInfo {
   })  : fileProgress = List.unmodifiable(fileProgress),
         filePriorities = List.unmodifiable(filePriorities);
 }
+
+enum TrackerStatus {
+  working,
+  updating,
+  notWorking,
+  disabled,
+}
+
+class TorrentTrackerInfo {
+  final String url;
+  final TrackerStatus status;
+  final int seeds;
+  final int peers;
+  final int downloaded;
+  final String message;
+  final int nextAnnounceSeconds;
+
+  TorrentTrackerInfo({
+    required this.url,
+    this.status = TrackerStatus.working,
+    this.seeds = 0,
+    this.peers = 0,
+    this.downloaded = 0,
+    this.message = '',
+    this.nextAnnounceSeconds = 0,
+  });
+
+  TorrentTrackerInfo copyWith({
+    String? url,
+    TrackerStatus? status,
+    int? seeds,
+    int? peers,
+    int? downloaded,
+    String? message,
+    int? nextAnnounceSeconds,
+  }) {
+    return TorrentTrackerInfo(
+      url: url ?? this.url,
+      status: status ?? this.status,
+      seeds: seeds ?? this.seeds,
+      peers: peers ?? this.peers,
+      downloaded: downloaded ?? this.downloaded,
+      message: message ?? this.message,
+      nextAnnounceSeconds: nextAnnounceSeconds ?? this.nextAnnounceSeconds,
+    );
+  }
+}

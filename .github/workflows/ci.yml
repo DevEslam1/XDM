@@ -42,6 +42,21 @@ jobs:
       - name: Pubspec resolution check
         run: flutter pub get --dry-run 2>&1 | tail -5
 
+      - name: Run Tests with Coverage
+        run: flutter test --coverage
+
+      - name: Check coverage threshold (>= 50%)
+        run: |
+          sudo apt-get install -y lcov
+          COVERAGE=$(lcov --summary coverage/lcov.info 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
+          echo "Current coverage: ${COVERAGE}%"
+          THRESHOLD=50
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "❌ Coverage ${COVERAGE}% is below ${THRESHOLD}% threshold"
+            exit 1
+          fi
+          echo "✅ Coverage ${COVERAGE}% meets ${THRESHOLD}% threshold"
+
       - name: Secret scan — diff against base
         run: |
           BASE="${GITHUB_BASE_SHA:-${GITHUB_EVENT_BEFORE:-HEAD~1}}"

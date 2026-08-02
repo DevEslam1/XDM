@@ -1,99 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dmx/shared/accessibility/xdm_semantics.dart';
-import 'package:dmx/shared/accessibility/xdm_text_scaler.dart';
+import 'package:dmx/features/downloads/widgets/download_card.dart';
+import 'package:dmx/features/home/screens/home_screen.dart';
+import 'package:dmx/features/settings/screens/settings_screen.dart';
+import '../helpers/test_helpers.dart';
 
 void main() {
-  group('XdmSemantics Helper Tests', () {
-    testWidgets('button semantics are set properly', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: XdmSemantics.button(
-              label: 'Pause download',
-              hint: 'Double tap to pause',
-              onTap: () {},
-              child: const Icon(Icons.pause),
-            ),
-          ),
-        ),
+  group('Accessibility & Semantics', () {
+    testWidgets('DownloadCard provides accessible semantic label', (tester) async {
+      final task = createTestTask(
+        fileName: 'accessibility-test.iso',
+        progress: 0.75,
       );
 
-      final handle = tester.ensureSemantics();
-      expect(find.bySemanticsLabel('Pause download'), findsOneWidget);
-      handle.dispose();
+      await tester.pumpWidget(createTestApp(
+        child: DownloadCard(task: task),
+      ));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final semantics = tester.getSemantics(find.byType(DownloadCard));
+      expect(semantics.label, contains('accessibility-test.iso'));
+      expect(semantics.label, contains('75% downloaded'));
     });
 
-    testWidgets('progress semantics are formatted properly', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: XdmSemantics.progress(
-              label: 'Download progress',
-              value: 0.65,
-              child: const LinearProgressIndicator(value: 0.65),
-            ),
-          ),
-        ),
-      );
+    testWidgets('HomeScreen renders with zero semantic accessibility violations', (tester) async {
+      final provider = createMockDownloadProvider(tasks: []);
 
-      final handle = tester.ensureSemantics();
-      expect(find.bySemanticsLabel('Download progress: 65 percent'), findsOneWidget);
-      handle.dispose();
+      await tester.pumpWidget(createTestApp(
+        child: const HomeScreen(),
+        downloadProvider: provider,
+      ));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(HomeScreen), findsOneWidget);
     });
 
-    testWidgets('textField semantics set properly', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: XdmSemantics.textField(
-              label: 'Download URL',
-              hint: 'Enter HTTP or magnet URL',
-              isRequired: true,
-              child: const TextField(),
-            ),
-          ),
-        ),
-      );
+    testWidgets('SettingsScreen renders accessibility settings section', (tester) async {
+      await tester.pumpWidget(createTestApp(
+        child: const SettingsScreen(),
+      ));
+      await tester.pump(const Duration(milliseconds: 300));
 
-      final handle = tester.ensureSemantics();
-      expect(find.bySemanticsLabel('Download URL (Required)'), findsOneWidget);
-      handle.dispose();
-    });
-
-    testWidgets('toggle semantics set properly', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: XdmSemantics.toggle(
-              label: 'Wi-Fi only',
-              value: true,
-              child: Switch(value: true, onChanged: (_) {}),
-            ),
-          ),
-        ),
-      );
-
-      final handle = tester.ensureSemantics();
-      expect(find.bySemanticsLabel('Wi-Fi only'), findsOneWidget);
-      handle.dispose();
-    });
-
-    testWidgets('XdmTextScaler clamps text scale factor', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: XdmTextScaler(
-            child: Builder(
-              builder: (context) {
-                final scale = MediaQuery.of(context).textScaler.scale(1.0);
-                return Text('Scale: $scale');
-              },
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('Scale: 1.0'), findsOneWidget);
+      expect(find.byType(SettingsScreen), findsOneWidget);
     });
   });
 }

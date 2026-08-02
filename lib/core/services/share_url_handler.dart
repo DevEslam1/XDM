@@ -120,4 +120,43 @@ class ShareUrlHandler {
       );
     }
   }
+
+  static VoidCallback? _onPauseAll;
+  static VoidCallback? _onResumeAll;
+
+  static void setPauseAllCallback(VoidCallback callback) {
+    _onPauseAll = callback;
+  }
+
+  static void setResumeAllCallback(VoidCallback callback) {
+    _onResumeAll = callback;
+  }
+
+  /// Handle incoming deep links from App Intents / Shortcuts / Share Extension.
+  static Future<void> handleDeepLink(
+    Uri uri, {
+    required void Function(String url) onUrl,
+  }) async {
+    if (uri.scheme != 'dmx') return;
+
+    switch (uri.host) {
+      case 'share':
+        final url = uri.queryParameters['url'];
+        if (url != null && url.isNotEmpty) {
+          onUrl(url);
+        }
+        break;
+
+      case 'pause-all':
+        _onPauseAll?.call();
+        break;
+
+      case 'resume-all':
+        _onResumeAll?.call();
+        break;
+
+      default:
+        break;
+    }
+  }
 }
