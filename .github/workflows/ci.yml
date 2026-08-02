@@ -48,7 +48,8 @@ jobs:
       - name: Check coverage threshold (>= 50%)
         run: |
           sudo apt-get install -y lcov
-          COVERAGE=$(lcov --summary coverage/lcov.info 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
+          lcov --remove coverage/lcov.info '*.g.dart' '*.freezed.dart' 'lib/generated/*' -o coverage/lcov.cleaned.info
+          COVERAGE=$(lcov --summary coverage/lcov.cleaned.info 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
           echo "Current coverage: ${COVERAGE}%"
           THRESHOLD=50
           if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then

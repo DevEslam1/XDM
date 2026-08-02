@@ -91,4 +91,21 @@ class ReaderModeService {
 </html>
 ''';
   }
+
+  /// Extracts article content and displays it in a clean modal view.
+  static Future<bool> activateReaderMode(
+    PlatformWebViewController controller,
+    void Function(String htmlUrl) onLoadReaderUrl,
+  ) async {
+    final article = await extract(controller);
+    if (article == null || article.content.isEmpty) return false;
+    final htmlContent = buildReaderHtml(article);
+    final dataUri = Uri.dataFromString(
+      htmlContent,
+      mimeType: 'text/html',
+      encoding: Encoding.getByName('utf-8'),
+    ).toString();
+    onLoadReaderUrl(dataUri);
+    return true;
+  }
 }

@@ -40,25 +40,30 @@ class HttpDownloadEngine {
     });
   }
 
+  double _emaSpeed = 0.0;
+
   void _evaluateThreadAdjustment(DownloadTask task) {
     final currentSpeed = task.speed;
+    if (_emaSpeed == 0.0) {
+      _emaSpeed = currentSpeed;
+    } else {
+      _emaSpeed = 0.3 * currentSpeed + 0.7 * _emaSpeed;
+    }
     _throughputHistory.add(currentSpeed);
-    if (_throughputHistory.length > 6) _throughputHistory.removeAt(0);
-    if (_throughputHistory.length < 3) return;
+    if (_throughputHistory.length > 8) _throughputHistory.removeAt(0);
+    if (_throughputHistory.length < 4) return;
 
-    final recent = _throughputHistory.sublist(_throughputHistory.length - 3);
-    final older = _throughputHistory.sublist(0, _throughputHistory.length - 3);
-    final recentAvg = recent.reduce((a, b) => a + b) / recent.length;
-    final olderAvg = older.isEmpty ? recentAvg : older.reduce((a, b) => a + b) / older.length;
-
+    final recentAvg = _emaSpeed;
+    final olderAvg = _throughputHistory.first;
     final trend = olderAvg > 0 ? (recentAvg - olderAvg) / olderAvg : 0.0;
 
+    // 15% hysteresis barrier to prevent oscillation
     if (trend < -0.15 && _currentThreads > 2) {
       _currentThreads--;
-      _log.info('[AdaptiveThreads] Reducing threads to $_currentThreads (trend: ${(trend * 100).toStringAsFixed(1)}%)');
-    } else if (trend > -0.05 && _currentThreads < task.threadCount && _currentThreads < 16) {
+      _log.info('[AdaptiveThreads] Reducing threads to $_currentThreads (EMA trend: ${(trend * 100).toStringAsFixed(1)}%)');
+    } else if (trend > 0.15 && _currentThreads < task.threadCount && _currentThreads < 16) {
       _currentThreads++;
-      _log.info('[AdaptiveThreads] Increasing threads to $_currentThreads (trend: ${(trend * 100).toStringAsFixed(1)}%)');
+      _log.info('[AdaptiveThreads] Increasing threads to $_currentThreads (EMA trend: ${(trend * 100).toStringAsFixed(1)}%)');
     }
   }
 

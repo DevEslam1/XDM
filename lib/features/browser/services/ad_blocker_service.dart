@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'adblock_filter_updater.dart';
 
 /// Centralised ad-blocking engine for the XDM browser.
 ///
@@ -17,6 +19,7 @@ class AdBlockerService {
 
   static const String _prefKey = 'adBlockerEnabled';
   bool _enabled = true;
+  final AdBlockFilterUpdater _updater = AdBlockFilterUpdater();
 
   bool get isEnabled => _enabled;
 
@@ -24,6 +27,8 @@ class AdBlockerService {
     try {
       final prefs = await SharedPreferences.getInstance();
       _enabled = prefs.getBool(_prefKey) ?? true;
+      await _updater.init();
+      unawaited(_updater.updateIfNeeded());
     } catch (e) {
       debugPrint('[AdBlocker] init error: $e');
     }
@@ -71,6 +76,13 @@ class AdBlockerService {
     for (final domain in _blockedDomains) {
       if (host == domain || host.endsWith('.$domain')) return true;
     }
+
+    // Check dynamically updated domains from AdBlockFilterUpdater
+    if (_updater.allBlockedDomains.contains(host) ||
+        _updater.allTrackingDomains.contains(host)) {
+      return true;
+    }
+
     return false;
   }
 
