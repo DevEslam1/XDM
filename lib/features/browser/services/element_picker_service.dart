@@ -1,65 +1,58 @@
-import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
-
 class ElementPickerService {
-  static const _pickerJs = '''
+  static const String pickerScript = r'''
 (function() {
-  if (window.__xdmPickerActive) return;
-  window.__xdmPickerActive = true;
+  if (window.__xdmPicker) return;
+  window.__xdmPicker = true;
 
-  let overlay = document.createElement('div');
-  overlay.id = '__xdm_picker_overlay';
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483647;cursor:crosshair;';
-  document.body.appendChild(overlay);
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;cursor:crosshair;';
+  const hl = document.createElement('div');
+  hl.style.cssText = 'position:absolute;border:2px solid #3B82F6;background:rgba(59,130,246,.2);pointer-events:none;z-index:2147483647;display:none;';
+  document.body.append(overlay, hl);
 
-  let highlight = document.createElement('div');
-  highlight.id = '__xdm_picker_highlight';
-  highlight.style.cssText = 'position:absolute;border:2px solid #3B82F6;background:rgba(59,130,246,0.2);pointer-events:none;z-index:2147483647;display:none;';
-  document.body.appendChild(highlight);
-
-  overlay.addEventListener('mousemove', function(e) {
+  overlay.addEventListener('mousemove', e => {
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (el && el !== overlay && el !== highlight) {
-      const rect = el.getBoundingClientRect();
-      highlight.style.display = 'block';
-      highlight.style.top = rect.top + 'px';
-      highlight.style.left = rect.left + 'px';
-      highlight.style.width = rect.width + 'px';
-      highlight.style.height = rect.height + 'px';
-    }
+    if (!el || el === overlay || el === hl) return;
+    const r = el.getBoundingClientRect();
+    hl.style.cssText += `display:block;top:${r.top}px;left:${r.left}px;width:${r.width}px;height:${r.height}px;`;
   });
 
-  overlay.addEventListener('click', function(e) {
+  overlay.addEventListener('click', e => {
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (el && el !== overlay && el !== highlight) {
-      const selector = generateSelector(el);
-      cleanup();
+    if (el && el !== overlay && el !== hl) {
+      const selector = selectorFor(el);
+      if (window.XdmPickerChannel) {
+        window.XdmPickerChannel.postMessage(JSON.stringify({ selector: selector }));
+      }
     }
+    cleanup();
   });
 
-  function generateSelector(el) {
-    if (el.id) return '#' + el.id;
-    let path = el.tagName.toLowerCase();
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cleanup(); });
+
+  function selectorFor(el) {
+    if (el.id) return '#' + CSS.escape(el.id);
+    let s = el.tagName.toLowerCase();
     if (el.className && typeof el.className === 'string') {
-      path += '.' + el.className.trim().split(/\\s+/).join('.');
+      const classes = el.className.trim().split(/\s+/).filter(Boolean);
+      if (classes.length > 0) {
+        s += '.' + classes.map(c => CSS.escape(c)).join('.');
+      }
     }
-    return path;
+    return s;
   }
 
   function cleanup() {
     overlay.remove();
-    highlight.remove();
-    window.__xdmPickerActive = false;
+    hl.remove();
+    window.__xdmPicker = false;
   }
 })();
 ''';
 
-  static Future<void> activate(PlatformWebViewController controller) async {
-    await controller.runJavaScript(_pickerJs);
-  }
-
-  static String generateBlockRule(Map<String, dynamic> result) {
-    final selector = result['selector'] as String? ?? '';
-    if (selector.isEmpty) return '';
-    return '$selector { display: none !important; }';
+  /// Generates a site-scoped CSS rule hiding the targeted selector.
+  static String blockRule(String selector) {
+    final clean = selector.trim();
+    return '$clean { display: none !important; }';
   }
 }
