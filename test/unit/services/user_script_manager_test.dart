@@ -10,22 +10,21 @@ void main() {
     UserScriptManager.resetInstance();
   });
 
-  UserScript _script({
+  UserScript script0({
     String id = 's1',
     String name = 'Test',
     String pattern = '*://*.example.com/*',
     String code = 'console.log("hi");',
     bool isCss = false,
     bool enabled = true,
-  }) =>
-      UserScript(
-        id: id,
-        name: name,
-        urlPattern: pattern,
-        code: code,
-        isCss: isCss,
-        enabled: enabled,
-      );
+  }) => UserScript(
+    id: id,
+    name: name,
+    urlPattern: pattern,
+    code: code,
+    isCss: isCss,
+    enabled: enabled,
+  );
 
   test('url matching: wildcard pattern matches host and full url', () {
     expect(
@@ -36,10 +35,7 @@ void main() {
       isTrue,
     );
     expect(
-      UserScriptManager.matchesPattern(
-        'example.com/*',
-        'https://example.com/',
-      ),
+      UserScriptManager.matchesPattern('example.com/*', 'https://example.com/'),
       isTrue,
     );
     expect(
@@ -50,10 +46,7 @@ void main() {
       isTrue,
     );
     expect(
-      UserScriptManager.matchesPattern(
-        'example.com',
-        'https://example.org/',
-      ),
+      UserScriptManager.matchesPattern('example.com', 'https://example.org/'),
       isFalse,
     );
   });
@@ -73,13 +66,13 @@ void main() {
     // Force a reload to pick up the fresh mock prefs.
     await manager.load();
 
-    await manager.add(_script());
+    await manager.add(script0());
     expect(manager.scripts.length, 1);
 
     await manager.toggle('s1', false);
     expect(manager.scripts.first.enabled, isFalse);
 
-    await manager.update(_script(name: 'Renamed'));
+    await manager.update(script0(name: 'Renamed'));
     expect(manager.scripts.first.name, 'Renamed');
 
     await manager.remove('s1');
@@ -92,12 +85,12 @@ void main() {
     final manager = UserScriptManager.instance;
     await manager.load();
 
-    await manager.add(_script(id: 'match', pattern: 'example.com/*'));
+    await manager.add(script0(id: 'match', pattern: 'example.com/*'));
     await manager.add(
-      _script(id: 'disabled', pattern: 'example.com/*', enabled: false),
+      script0(id: 'disabled', pattern: 'example.com/*', enabled: false),
     );
     await manager.add(
-      _script(id: 'other', pattern: 'other.org/*', isCss: true),
+      script0(id: 'other', pattern: 'other.org/*', isCss: true),
     );
 
     final matches = manager.scriptsForUrl('https://example.com/foo');
@@ -107,18 +100,21 @@ void main() {
     await manager.clear();
   });
 
-  test('scripts persist across manager instances via SharedPreferences', () async {
-    final manager = UserScriptManager();
-    await manager.load();
-    await manager.add(_script());
+  test(
+    'scripts persist across manager instances via SharedPreferences',
+    () async {
+      final manager = UserScriptManager();
+      await manager.load();
+      await manager.add(script0());
 
-    final fresh = UserScriptManager();
-    await fresh.load();
-    expect(fresh.scripts.length, 1);
-    expect(fresh.scripts.first.name, 'Test');
+      final fresh = UserScriptManager();
+      await fresh.load();
+      expect(fresh.scripts.length, 1);
+      expect(fresh.scripts.first.name, 'Test');
 
-    await fresh.clear();
-  });
+      await fresh.clear();
+    },
+  );
 
   test('UserScript serialization round-trip', () {
     const script = UserScript(

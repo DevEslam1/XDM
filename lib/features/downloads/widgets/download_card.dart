@@ -11,10 +11,12 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/file_opener.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../shared/accessibility/xdm_semantics.dart';
+import '../../../core/services/protocol_cache.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../details/screens/details_screen.dart';
+import 'channel_progress_painter.dart';
 
 /// Adaptive download card. Detects the download kind and renders a
 /// purpose-built variant:
@@ -268,6 +270,32 @@ class _TelemetryStrip extends StatelessWidget {
                 icon: Icons.percent,
                 label: '${(task.progress * 100).toInt()}%',
               ),
+              const Spacer(),
+              Builder(
+                builder: (context) {
+                  final proto = ProtocolCache.get(task.url);
+                  final label = switch (proto) {
+                    ProtocolSupport.http3 => 'H3',
+                    ProtocolSupport.http2 => 'H2',
+                    _ => 'H1.1',
+                  };
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ],
@@ -296,23 +324,12 @@ class _ChunkedProgressBar extends StatelessWidget {
     final chunks = task.chunks;
     final Widget bar;
     if (chunks.length <= 1) {
-      bar = ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: Stack(
-          children: [
-            Container(
-              height: 8,
-              decoration: AppTheme.progressTrack(isDark: isDark),
-            ),
-            FractionallySizedBox(
-              widthFactor: task.progress.clamp(0.0, 1.0),
-              child: Container(
-                height: 8,
-                decoration: AppTheme.progressFill(color),
-              ),
-            ),
-          ],
-        ),
+      final provider = context.read<DownloadProvider>();
+      bar = IsolatedProgressBar(
+        progress: provider.progressNotifier(task.id),
+        isDark: isDark,
+        isTorrent: task.isTorrent,
+        height: 8,
       );
     } else {
       bar = Row(

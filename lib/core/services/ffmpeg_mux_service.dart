@@ -1,37 +1,196 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_session.dart';
+import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min/return_code.dart';
 import 'package:logging/logging.dart';
-import 'package:synchronized/synchronized.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+
+class Semaphore {
+  final int maxCount;
+  int _currentCount = 0;
+  final List<Completer<void>> _waiters = [];
+
+  Semaphore(this.maxCount);
+
+  Future<void> acquire() async {
+    if (_currentCount < maxCount) {
+      _currentCount++;
+      return;
+    }
+    final completer = Completer<void>();
+    _waiters.add(completer);
+    await completer.future;
+  }
+
+  void release() {
+    if (_waiters.isNotEmpty) {
+      final next = _waiters.removeAt(0);
+      next.complete();
+    } else {
+      _currentCount--;
+      if (_currentCount < 0) _currentCount = 0;
+    }
+  }
+}
+
+enum MergeStrategy { streamCopy, hwReencode, swFallback }
 
 class FFmpegMuxService {
   static final _log = Logger('FFmpegMuxService');
 
-  /// Serializes muxing across the whole app. FFmpegKit's timeout path can only
-  /// fall back to the global `FFmpegKit.cancel()` because the per-session id is
-  /// not available until the execute future resolves. Running merges one at a
-  /// time guarantees that global cancel only ever kills the single active
-  /// session, so a timeout in one download cannot abort another download's
-  /// native mux.
-  static final Lock _muxLock = Lock();
+  /// Semaphore allows up to 2 concurrent merges safely while avoiding CPU thrashing.
+  static final Semaphore _mergeSemaphore = Semaphore(2);
+
+  /// Checks if temporary input files exist and can be remuxed without re-downloading.
+  static Future<bool> canResumeMerge(String videoPath, String? audioPath) async {
+    final video = File(videoPath);
+    final audio = audioPath != null ? File(audioPath) : null;
+    return await video.exists() && (audio == null || await audio.exists());
+  }
 
   static Future<bool> mergeVideoAudio(
     String videoPath,
     String audioPath,
     String outputPath, {
     bool deleteInputsIfTemp = true,
-  }) {
-    return _muxLock.synchronized(
-      () => _mergeLocked(
+    ValueChanged<double>? onProgress,
+    Duration? totalDuration,
+  }) async {
+    await _mergeSemaphore.acquire();
+    try {
+      await WakelockPlus.enable();
+    } catch (_) {}
+
+    try {
+      return await _mergeLocked(
         videoPath,
         audioPath,
         outputPath,
         deleteInputsIfTemp: deleteInputsIfTemp,
-      ),
-    );
+        onProgress: onProgress,
+        totalDuration: totalDuration,
+      );
+    } finally {
+      try {
+        await WakelockPlus.disable();
+      } catch (_) {}
+      _mergeSemaphore.release();
+    }
+  }
+
+  static List<String> _buildArgs({
+    required String videoPath,
+    required String audioPath,
+    required String outputPath,
+    required MergeStrategy strategy,
+  }) {
+    switch (strategy) {
+      case MergeStrategy.streamCopy:
+        return [
+          '-i',
+          videoPath,
+          '-i',
+          audioPath,
+          '-c:v',
+          'copy',
+          '-c:a',
+          'copy',
+          '-map',
+          '0:v:0',
+          '-map',
+          '1:a:0',
+          '-movflags',
+          '+faststart',
+          '-shortest',
+          '-y',
+          outputPath,
+        ];
+
+      case MergeStrategy.hwReencode:
+        final videoCodec =
+            Platform.isAndroid ? 'h264_mediacodec' : 'h264_videotoolbox';
+        return [
+          '-i',
+          videoPath,
+          '-i',
+          audioPath,
+          '-c:v',
+          videoCodec,
+          '-b:v',
+          '5M',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-af',
+          'loudnorm=I=-16:TP=-1.5:LRA=11',
+          '-map',
+          '0:v:0',
+          '-map',
+          '1:a:0',
+          '-movflags',
+          '+faststart',
+          '-shortest',
+          '-y',
+          outputPath,
+        ];
+
+      case MergeStrategy.swFallback:
+        return [
+          '-i',
+          videoPath,
+          '-i',
+          audioPath,
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-crf',
+          '23',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-af',
+          'loudnorm=I=-16:TP=-1.5:LRA=11',
+          '-map',
+          '0:v:0',
+          '-map',
+          '1:a:0',
+          '-movflags',
+          '+faststart',
+          '-shortest',
+          '-y',
+          outputPath,
+        ];
+    }
+  }
+
+  static Future<bool> _validateOutput(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return false;
+    final size = await file.length();
+    if (size < 1024) return false;
+
+    try {
+      final session = await FFprobeKit.execute(
+        '-v error -show_entries format=duration -of default=noprint_wrappers=1 "$path"',
+      );
+      final logs = await session.getLogsAsString();
+      final match = RegExp(r'duration=([\d.]+)').firstMatch(logs);
+      final dur = double.tryParse(match?.group(1) ?? '');
+      if (dur == null || dur <= 0) {
+        _log.severe('[Merge] Output validation failed: duration=$dur for $path');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      _log.warning('[Merge] FFprobe validation exception: $e');
+      return true; // Fallback: allow valid file size if ffprobe fails
+    }
   }
 
   static Future<bool> _mergeLocked(
@@ -39,6 +198,8 @@ class FFmpegMuxService {
     String audioPath,
     String outputPath, {
     bool deleteInputsIfTemp = true,
+    ValueChanged<double>? onProgress,
+    Duration? totalDuration,
   }) async {
     bool isTempFile(String path) {
       final name = p.basename(path).toLowerCase();
@@ -70,243 +231,73 @@ class FFmpegMuxService {
       }
     }
 
-    FFmpegSession? activeSession;
-
-    /// Cancels the specific active FFmpeg session and re-throws [error].
-    Future<Never> cancelAndRethrow(
-      Object error,
-      StackTrace stack,
-      int? sessionId,
-    ) async {
-      try {
-        if (sessionId != null) {
-          await FFmpegKit.cancel(sessionId);
-        } else {
-          await FFmpegKit.cancel(); // global cancel as safety net
-        }
-      } catch (cancelErr) {
-        _log.warning('FFmpeg cancel on timeout failed: $cancelErr');
-      }
-      Error.throwWithStackTrace(error, stack);
+    if (!await videoFile.exists() || !await audioFile.exists()) {
+      _log.severe('Input video or audio file missing.');
+      return false;
     }
 
-    try {
-      _log.info(
-        'Starting merge:\nVideo: $videoPath\nAudio: $audioPath\nOutput: $outputPath',
+    final videoSize = await videoFile.length();
+    final audioSize = await audioFile.length();
+    if (videoSize == 0 || audioSize == 0) {
+      _log.severe('Input file is empty.');
+      return false;
+    }
+
+    final outputDir = File(outputPath).parent;
+    if (!await outputDir.exists()) {
+      await outputDir.create(recursive: true);
+    }
+
+    for (final strategy in [
+      MergeStrategy.streamCopy,
+      MergeStrategy.hwReencode,
+      MergeStrategy.swFallback,
+    ]) {
+      final args = _buildArgs(
+        videoPath: videoPath,
+        audioPath: audioPath,
+        outputPath: outputPath,
+        strategy: strategy,
       );
 
-      if (!await videoFile.exists()) {
-        _log.severe('Video file does not exist: $videoPath');
-        return false;
-      }
-      final videoSize = await videoFile.length();
-      _log.info('Video file size: $videoSize bytes');
+      _log.info('Running merge strategy $strategy with args: $args');
 
-      if (!await audioFile.exists()) {
-        _log.severe('Audio file does not exist: $audioPath');
-        return false;
-      }
-      final audioSize = await audioFile.length();
-      _log.info('Audio file size: $audioSize bytes');
-
-      if (videoSize == 0 || audioSize == 0) {
-        _log.severe('Input file is empty.');
-        return false;
-      }
-
-      final outputDir = File(outputPath).parent;
-      if (!await outputDir.exists()) {
-        await outputDir.create(recursive: true);
-        _log.info('Created output directory: ${outputDir.path}');
-      }
-
-      final arguments = [
-        '-i',
-        videoPath,
-        '-i',
-        audioPath,
-        '-c',
-        'copy',
-        '-map',
-        '0:v:0',
-        '-map',
-        '1:a:0',
-        '-shortest',
-        '-y',
-        outputPath,
-      ];
-
-      final int totalInputBytes = videoSize + audioSize;
-      // FIX(17): `-c copy` is a remux (no re-encoding) and is much faster than
-      // the old 50 MB/min assumption, which over-triggered timeouts on large
-      // files. 250 MB/min is a conservative remux rate.
-      final calculatedMinutes =
-          (totalInputBytes / (250 * 1024 * 1024)).ceil() + 15;
-      final timeoutDuration = Duration(
-        minutes: calculatedMinutes.clamp(15, 300),
-      );
-
-      _log.info(
-        'FFmpeg arguments: $arguments (Timeout: ${timeoutDuration.inMinutes} mins)',
-      );
-
-      // Primary attempt -------------------------------------------------------
-      FFmpegSession? session;
-      try {
-        final future = FFmpegKit.executeWithArguments(arguments);
-        future.then((s) => activeSession = s).catchError((Object e) => throw e);
-        session = await future.timeout(
-          timeoutDuration,
-          onTimeout: () {
-            throw TimeoutException(
-              'FFmpeg primary merge timed out after ${timeoutDuration.inMinutes} min',
-            );
-          },
-        );
-        activeSession = session;
-      } on TimeoutException {
-        // Session was never assigned (timeout threw before assignment completed).
-        // Use global cancel to kill ALL native FFmpeg sessions.
-        try {
-          await FFmpegKit.cancel();
-        } catch (cancelErr) {
-          _log.warning(
-            'FFmpeg global cancel on primary timeout failed: $cancelErr',
-          );
-        }
-        rethrow;
-      }
-      final returnCode = await session.getReturnCode().timeout(
-        const Duration(seconds: 30),
-      );
-
-      if (ReturnCode.isSuccess(returnCode)) {
-        final outputFile = File(outputPath);
-        if (await outputFile.exists()) {
-          final outputSize = await outputFile.length();
-          _log.info('Merge successful: $outputPath ($outputSize bytes)');
-          await cleanUpInputs();
-          return true;
-        } else {
-          _log.warning(
-            'Merge reported success but output file not found: $outputPath',
-          );
-          return false;
-        }
-      } else {
+      final session = await FFmpegKit.executeWithArguments(args);
+      final pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+        if (onProgress == null || totalDuration == null || totalDuration.inSeconds == 0) return;
         final logs = await session.getLogsAsString();
-        _log.severe('Merge failed with return code $returnCode.\nLogs:\n$logs');
-
-        // Fallback attempt: re-encode audio to AAC --------------------------
-        _log.info('Retrying merge with AAC audio encoding...');
-        final fallbackArguments = [
-          '-i',
-          videoPath,
-          '-i',
-          audioPath,
-          '-c:v',
-          'copy',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '192k',
-          '-map',
-          '0:v:0',
-          '-map',
-          '1:a:0',
-          '-shortest',
-          '-y',
-          outputPath,
-        ];
-
-        // Re-encode is ~10× slower than stream copy.
-        final reencodeMinutes =
-            (totalInputBytes / (5 * 1024 * 1024)).ceil() + 30;
-        final reencodeTimeout = Duration(
-          minutes: reencodeMinutes.clamp(30, 600),
-        );
-
-        FFmpegSession? fallbackSession;
-        try {
-          final future = FFmpegKit.executeWithArguments(fallbackArguments);
-          future
-              .then((s) => activeSession = s)
-              .catchError((Object e) => throw e);
-          fallbackSession = await future.timeout(
-            reencodeTimeout,
-            onTimeout: () {
-              throw TimeoutException(
-                'FFmpeg fallback merge timed out after ${reencodeTimeout.inMinutes} min',
-              );
-            },
-          );
-          activeSession = fallbackSession;
-        } on TimeoutException {
-          try {
-            await FFmpegKit.cancel();
-          } catch (cancelErr) {
-            _log.warning(
-              'FFmpeg global cancel on fallback timeout failed: $cancelErr',
-            );
-          }
-          rethrow;
+        final match = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)').allMatches(logs).lastOrNull;
+        if (match != null) {
+          final secs = int.parse(match.group(1)!) * 3600 +
+              int.parse(match.group(2)!) * 60 +
+              int.parse(match.group(3)!);
+          onProgress((secs / totalDuration.inSeconds).clamp(0.0, 1.0));
         }
-        final fallbackReturnCode = await fallbackSession
-            .getReturnCode()
-            .timeout(const Duration(seconds: 30));
+      });
 
-        if (ReturnCode.isSuccess(fallbackReturnCode)) {
-          final outputFile = File(outputPath);
-          if (await outputFile.exists()) {
-            final outputSize = await outputFile.length();
-            _log.info(
-              'Fallback merge successful: $outputPath ($outputSize bytes)',
-            );
+      try {
+        final returnCode = await session.getReturnCode();
+        pollTimer.cancel();
+
+        if (ReturnCode.isSuccess(returnCode)) {
+          if (await _validateOutput(outputPath)) {
+            _log.info('Merge strategy $strategy succeeded: $outputPath');
             await cleanUpInputs();
             return true;
           }
         }
-
-        final fallbackLogs = await fallbackSession.getLogsAsString();
-        _log.severe(
-          'Fallback merge failed with return code $fallbackReturnCode.\nLogs:\n$fallbackLogs',
-        );
-
-        try {
-          final outputFile = File(outputPath);
-          if (await outputFile.exists()) await outputFile.delete();
-        } catch (e) {
-          _log.warning('Failed to delete failed output file: $e');
-        }
-        return false;
+      } catch (e) {
+        pollTimer.cancel();
+        _log.warning('Merge strategy $strategy failed: $e');
       }
-    } on TimeoutException catch (e, stack) {
-      // Cancel any lingering native sessions then propagate.
-      _log.severe('FFmpeg timed out: $e — cancelling native sessions');
-      // Delete the partial output file to avoid leaving corrupted data.
-      try {
-        final outFile = File(outputPath);
-        if (await outFile.exists()) {
-          await outFile.delete();
-          _log.info('Deleted partial output file after timeout: $outputPath');
-        }
-      } catch (deleteErr) {
-        _log.warning('Failed to delete partial output file: $deleteErr');
-      }
-      await cleanUpInputs();
-      await cancelAndRethrow(e, stack, activeSession?.getSessionId());
-    } catch (e, stackTrace) {
-      _log.severe('Exception during FFmpeg merge: $e\n$stackTrace');
-      try {
-        final sid = activeSession?.getSessionId();
-        if (sid != null) {
-          await FFmpegKit.cancel(sid);
-        } else {
-          await FFmpegKit.cancel();
-        }
-      } catch (_) {}
-      await cleanUpInputs();
-      rethrow;
     }
+
+    // Clean up partial output if all strategies fail
+    try {
+      final outFile = File(outputPath);
+      if (await outFile.exists()) await outFile.delete();
+    } catch (_) {}
+
+    return false;
   }
 }

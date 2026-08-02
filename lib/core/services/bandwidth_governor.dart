@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:synchronized/synchronized.dart';
+import 'power_monitor.dart';
 
 /// A token-bucket bandwidth governor.
 ///
@@ -40,7 +41,8 @@ class BandwidthGovernor {
 
   int get perConsumerBytesPerSecond {
     if (_globalBytesPerSecond <= 0 || _activeConsumers <= 0) return 0;
-    return _globalBytesPerSecond ~/ _activeConsumers;
+    final baseShare = _globalBytesPerSecond ~/ _activeConsumers;
+    return (baseShare * PowerMonitor.throttleFactor).round();
   }
 
   /// Updates the global limit at runtime.

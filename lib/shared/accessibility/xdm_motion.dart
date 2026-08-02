@@ -1,16 +1,17 @@
 import 'package:flutter/widgets.dart';
+import '../../core/services/power_monitor.dart';
 
 /// Motion-reduction helpers.
 ///
 /// Respects the platform "reduce motion" accessibility setting via
-/// `MediaQuery.disableAnimationsOf`. When enabled, animations are removed or
-/// shortened rather than played in full.
+/// `MediaQuery.disableAnimationsOf`, as well as low battery levels (< 15%).
 class XdmMotion {
   XdmMotion._();
 
-  /// Whether the user has requested reduced motion on this device.
+  /// Whether the user has requested reduced motion on this device or low battery.
   static bool reducedMotionEnabled(BuildContext context) {
-    return MediaQuery.disableAnimationsOf(context);
+    return MediaQuery.disableAnimationsOf(context) ||
+        (!PowerMonitor.isCharging && PowerMonitor.batteryLevel < 15);
   }
 
   /// Returns [full] when motion is enabled, otherwise [reduced] (defaults to

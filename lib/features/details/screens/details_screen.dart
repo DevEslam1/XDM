@@ -30,6 +30,7 @@ class _DetailsScreenState extends State<DetailsScreen>
     with HapticHelper, TickerProviderStateMixin {
   late AnimationController _reveal;
   late AnimationController _pulse;
+  final bool _graphExpanded = true;
 
   @override
   void initState() {
@@ -246,7 +247,14 @@ class _DetailsScreenState extends State<DetailsScreen>
                       const SizedBox(height: 14),
                       _stagger(
                         0.4,
-                        _SpeedGraphPanel(task: task, provider: provider),
+                        Visibility(
+                          visible: _graphExpanded,
+                          maintainState: false,
+                          child: _SpeedGraphPanel(
+                            task: task,
+                            provider: provider,
+                          ),
+                        ),
                       ),
                       if (task.isTorrent) const SizedBox(height: 14),
                       _stagger(

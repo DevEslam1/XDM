@@ -248,5 +248,22 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.dmx.app/thermal").setMethodCallHandler { call, result ->
+            if (call.method == "getThermalStatus") {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    when (pm.currentThermalStatus) {
+                        PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                        PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                        PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                        PowerManager.THERMAL_STATUS_LIGHT -> "fair"
+                        else -> "none"
+                    }
+                } else "none"
+                result.success(status)
+            } else {
+                result.notImplemented()
+            }
+        }
     }
 }

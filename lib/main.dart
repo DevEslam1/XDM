@@ -31,6 +31,16 @@ import 'features/onboarding/screens/permission_request_screen.dart';
 import 'shared/widgets/main_navigation_container.dart';
 import 'shared/widgets/share_intent_screen.dart';
 import 'shared/accessibility/xdm_text_scaler.dart';
+import 'core/services/frame_watchdog.dart';
+import 'core/services/power_monitor.dart';
+import 'core/services/protocol_cache.dart';
+
+class _ScreenObserver with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    PowerMonitor.setScreenOn(state == AppLifecycleState.resumed);
+  }
+}
 
 Future<void> main(List<String> args) async {
   CrashReportingService.runWithErrorCapture(() async {
@@ -51,6 +61,10 @@ Future<void> main(List<String> args) async {
 
     // ── Frame performance monitoring (UI-jank diagnostics) ──
     PerformanceMonitor.instance.start();
+    FrameWatchdog.start();
+    await PowerMonitor.init();
+    await ProtocolCache.init();
+    WidgetsBinding.instance.addObserver(_ScreenObserver());
 
     // Custom error widget builder for better UX
     ErrorWidget.builder = (FlutterErrorDetails errorDetails) {

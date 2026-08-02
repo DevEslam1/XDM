@@ -152,6 +152,21 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Future<void>> _dbSaveQueues = {};
 
+  /// Per-task progress and speed ValueNotifiers for isolated repainting.
+  final Map<String, ValueNotifier<double>> _progressNotifiers = {};
+  final Map<String, ValueNotifier<double>> _speedNotifiers = {};
+
+  ValueNotifier<double> progressNotifier(String taskId) =>
+      _progressNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
+
+  ValueNotifier<double> speedNotifier(String taskId) =>
+      _speedNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
+
+  void _pushTick(String taskId, double progress, double speed) {
+    progressNotifier(taskId).value = progress;
+    speedNotifier(taskId).value = speed;
+  }
+
   /// FIX(R2): Surfaces the most recent DB-save failure without crashing the zone.
   /// Callers (e.g. UI snackbars) can listen to this to warn the user.
   final ValueNotifier<String?> lastSaveError = ValueNotifier<String?>(null);
@@ -1643,6 +1658,8 @@ class DownloadProvider extends ChangeNotifier
     }
 
     updateActualTorrentUploadLimit();
+
+    _pushTick(updated.id, updated.progress, updated.speed.toDouble());
 
     // Progress-only changes (speed, bytes, eta, chunks) skip the immediate
     // DB save and notifyListeners. The timer-based batch save persists
