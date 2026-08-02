@@ -111,9 +111,8 @@ class YoutubeService {
       }
 
       if (allCookies.isNotEmpty) {
-        final cookieStr = allCookies.entries
-            .map((e) => '${e.key}=${e.value}')
-            .join('; ');
+        final cookieStr =
+            allCookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
         await signIn(cookieStr);
       }
     } catch (e) {
@@ -194,8 +193,7 @@ class YoutubeService {
     }
 
     final host = uri.host.toLowerCase();
-    final isKnownMediaHost =
-        _isYouTubeHost(host) ||
+    final isKnownMediaHost = _isYouTubeHost(host) ||
         _isYouTubeShortHost(host) ||
         host.contains('vimeo.com') ||
         host.contains('dailymotion.com') ||
@@ -243,9 +241,10 @@ class YoutubeService {
     final idRegex = RegExp(r'^(PL|UU|FL|LL|RD|OLAK5uy_)[a-zA-Z0-9_-]{9,80}$');
     if (idRegex.hasMatch(clean)) return true;
 
-    final normalized = clean.startsWith('http://') || clean.startsWith('https://')
-        ? clean
-        : 'https://$clean';
+    final normalized =
+        clean.startsWith('http://') || clean.startsWith('https://')
+            ? clean
+            : 'https://$clean';
 
     try {
       final uri = Uri.parse(normalized);
@@ -269,9 +268,10 @@ class YoutubeService {
   static String? extractVideoId(String url) {
     try {
       final clean = url.trim();
-      final normalized = clean.startsWith('http://') || clean.startsWith('https://')
-          ? clean
-          : 'https://$clean';
+      final normalized =
+          clean.startsWith('http://') || clean.startsWith('https://')
+              ? clean
+              : 'https://$clean';
       final uri = Uri.parse(normalized);
       final host = uri.host.toLowerCase();
       final isYoutubeHost = _isYouTubeHost(host) || _isYouTubeShortHost(host);
@@ -309,7 +309,8 @@ class YoutubeService {
     final clean = url.trim();
     if (clean.isEmpty) return null;
 
-    final listMatch = RegExp(r'[&?]list=([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(clean);
+    final listMatch = RegExp(r'[&?]list=([a-zA-Z0-9_-]+)', caseSensitive: false)
+        .firstMatch(clean);
     if (listMatch != null) {
       return listMatch.group(1);
     }
@@ -320,9 +321,10 @@ class YoutubeService {
     }
 
     try {
-      final normalized = clean.startsWith('http://') || clean.startsWith('https://')
-          ? clean
-          : 'https://$clean';
+      final normalized =
+          clean.startsWith('http://') || clean.startsWith('https://')
+              ? clean
+              : 'https://$clean';
       final uri = Uri.parse(normalized);
       if (uri.queryParameters.containsKey('list')) {
         final listId = uri.queryParameters['list'];
@@ -350,6 +352,37 @@ class YoutubeService {
   static String videoUrl(String videoId) =>
       'https://www.youtube.com/watch?v=$videoId';
 
+  static bool _isPlaceholderYouTubeUrl(String? value) {
+    if (value == null || value.trim().isEmpty) return true;
+
+    final uri = Uri.tryParse(value.trim());
+    if (uri == null) return false;
+
+    final host = uri.host.toLowerCase();
+    final isYouTubeHost = host == 'youtube.com' ||
+        host == 'www.youtube.com' ||
+        host == 'm.youtube.com' ||
+        host.endsWith('.youtube.com') ||
+        host == 'youtu.be' ||
+        host.endsWith('.youtu.be');
+    if (!isYouTubeHost) return false;
+
+    final path = uri.path.toLowerCase();
+    return path == '/watch' ||
+        path == '/shorts' ||
+        path == '/playlist' ||
+        path == '/embed' ||
+        path.isEmpty ||
+        uri.queryParameters.containsKey('v') ||
+        uri.queryParameters.containsKey('list');
+  }
+
+  static String? _sanitizeStreamUrl(String? value) {
+    final trimmed = value?.toString().trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return _isPlaceholderYouTubeUrl(trimmed) ? null : trimmed;
+  }
+
   static void close() {
     if (!_authStateController.isClosed) {
       _authStateController.close();
@@ -357,12 +390,86 @@ class YoutubeService {
     resetClient();
   }
 
+  static Map<String, dynamic> normalizeStreamEntry(
+    Map<String, dynamic> map, {
+    String? title,
+    String? thumbnailUrl,
+  }) {
+    final rawType = (map['type'] as String?)?.toLowerCase().trim() ?? '';
+    final directUrl = _sanitizeStreamUrl(
+      map['direct_url']?.toString() ??
+          map['url']?.toString() ??
+          map['src']?.toString(),
+    );
+    final audioUrl = _sanitizeStreamUrl(
+      map['audioSrc']?.toString() ??
+          map['audio_url']?.toString() ??
+          map['audioUrl']?.toString() ??
+          map['audio_source']?.toString(),
+    );
+
+    String appType;
+    if (rawType == 'video_audio' || rawType == 'videoaudio') {
+      appType = 'muxed';
+    } else if (rawType == 'video_only' || rawType == 'video') {
+      appType = 'video_only';
+    } else if (rawType == 'audio_only' || rawType == 'audio') {
+      appType = 'audio';
+    } else if (rawType == 'combined') {
+      appType = 'combined';
+    } else {
+      appType = rawType;
+    }
+
+    final ext = (map['ext'] as String?) ?? 'mp4';
+    final quality = (map['quality'] as String?) ?? 'Unknown';
+    final qualityLabel = quality.isEmpty ? 'Unknown' : quality;
+    final filesizeValue =
+        map['filesize'] ?? map['size'] ?? map['filesize_approx'] ?? 0;
+    final filesize = filesizeValue is num
+        ? filesizeValue.toInt()
+        : int.tryParse(filesizeValue.toString()) ?? 0;
+
+    final videoSizeValue =
+        map['videoSize'] ?? map['video_size'] ?? map['video_size_bytes'] ?? 0;
+    final audioSizeValue =
+        map['audioSize'] ?? map['audio_size'] ?? map['audio_size_bytes'] ?? 0;
+
+    final normalized = <String, dynamic>{
+      'type': appType,
+      'quality': qualityLabel,
+      'label': appType == 'audio'
+          ? 'Audio Only ${ext.toUpperCase()}'
+          : '$qualityLabel ${ext.toUpperCase()}',
+      'src': directUrl,
+      'audioSrc': audioUrl,
+      'videoSize': videoSizeValue is num
+          ? videoSizeValue.toInt()
+          : int.tryParse(videoSizeValue.toString()) ?? 0,
+      'audioSize': audioSizeValue is num
+          ? audioSizeValue.toInt()
+          : int.tryParse(audioSizeValue.toString()) ?? 0,
+      'size': filesize,
+      'ext': ext,
+      'title': title ?? 'Untitled',
+      'thumbnailUrl': thumbnailUrl,
+      if (map.containsKey('itag')) 'itag': map['itag'],
+      if (map.containsKey('format_id')) 'format_id': map['format_id'],
+      if (map.containsKey('format')) 'format': map['format'],
+    };
+
+    if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
+      normalized['audioSrc'] = map['audioSrc'].toString();
+    }
+
+    return normalized;
+  }
+
   static List<Map<String, dynamic>> _parseStreams(
     Map<String, dynamic> backendRes,
   ) {
     final title = (backendRes['title'] as String?) ?? 'Untitled';
-    final thumbnailUrl =
-        (backendRes['thumbnail'] as String?) ??
+    final thumbnailUrl = (backendRes['thumbnail'] as String?) ??
         (backendRes['thumbnailUrl'] as String?);
     final rawStreams =
         (backendRes['streams'] as List?) ?? (backendRes['formats'] as List?);
@@ -374,66 +481,29 @@ class YoutubeService {
 
     for (final s in rawStreams) {
       final map = Map<String, dynamic>.from(s as Map);
+      final normalized = normalizeStreamEntry(
+        map,
+        title: title,
+        thumbnailUrl: thumbnailUrl,
+      );
 
-      final url = (map['direct_url'] as String?) ?? (map['url'] as String?);
-      if (url != null && !seenUrls.add(url)) continue;
+      final url = normalized['src']?.toString();
+      if (url == null || url.isEmpty) continue;
+      if (!seenUrls.add(url)) continue;
 
-      if (map.containsKey('direct_url')) {
-        final rawType = map['type'] as String? ?? '';
-        final ext = map['ext'] as String? ?? 'mp4';
-        final quality = map['quality'] as String? ?? 'Unknown';
-        final filesize = (map['filesize'] as num?)?.toInt() ?? 0;
-        final directUrl = map['direct_url'] as String?;
-
-        String appType;
-        if (rawType == 'video_audio') {
-          appType = 'muxed';
-        } else if (rawType == 'video_only') {
-          appType = 'video_only';
-        } else if (rawType == 'audio_only') {
-          appType = 'audio';
-        } else {
-          appType = rawType;
-        }
-
-        results.add({
-          'type': appType,
-          'quality': quality,
-          'label': appType == 'audio'
-              ? 'Audio Only ${ext.toUpperCase()}'
-              : '$quality ${ext.toUpperCase()}',
-          'src': directUrl,
-          'audioSrc': map.containsKey('audioSrc')
-              ? map['audioSrc']?.toString()
-              : null,
-          'videoSize': map['videoSize'] as int? ?? 0,
-          'audioSize': map['audioSize'] as int? ?? 0,
-          'size': filesize,
-          'ext': ext,
-          'title': title,
-          'thumbnailUrl': thumbnailUrl,
-          if (map.containsKey('itag')) 'itag': map['itag'],
-          if (map.containsKey('format_id')) 'format_id': map['format_id'],
-        });
-      } else {
-        if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
-          map['audioSrc'] = map['audioSrc'].toString();
-        } else {
-          map['audioSrc'] = null;
-        }
-        map['title'] = title;
-        if (thumbnailUrl != null) map['thumbnailUrl'] = thumbnailUrl;
-        results.add(map);
+      final resultEntry = Map<String, dynamic>.from(normalized);
+      if (map.containsKey('audioSrc') && map['audioSrc'] != null) {
+        resultEntry['audioSrc'] = map['audioSrc'].toString();
       }
+      results.add(resultEntry);
     }
     return results;
   }
 
   static Future<List<Map<String, dynamic>>> getStreams(String url) async {
     final videoId = extractVideoId(url) ?? (url.length == 11 ? url : null);
-    final targetUrl = videoId != null
-        ? 'https://www.youtube.com/watch?v=$videoId'
-        : url;
+    final targetUrl =
+        videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
 
     final settings = SettingsProvider.instance;
     if (!settings.useRemoteBackend) {
@@ -449,14 +519,12 @@ class YoutubeService {
       final results = _parseStreams(backendRes);
       if (results.isNotEmpty) {
         if (kDebugMode) {
-          final combinedCount = results
-              .where((s) => s['type'] == 'combined')
-              .length;
+          final combinedCount =
+              results.where((s) => s['type'] == 'combined').length;
           final muxedCount = results.where((s) => s['type'] == 'muxed').length;
           final audioCount = results.where((s) => s['type'] == 'audio').length;
-          final videoOnlyCount = results
-              .where((s) => s['type'] == 'video_only')
-              .length;
+          final videoOnlyCount =
+              results.where((s) => s['type'] == 'video_only').length;
           debugPrint(
             '[YoutubeService] Parsed ${results.length} streams (combined: $combinedCount, muxed: $muxedCount, audio: $audioCount, video_only: $videoOnlyCount)',
           );
@@ -480,9 +548,8 @@ class YoutubeService {
     final isYouTubeHost = _isYouTubeHost(host) || _isYouTubeShortHost(host);
 
     final videoId = extractVideoId(url);
-    final targetUrl = videoId != null
-        ? 'https://www.youtube.com/watch?v=$videoId'
-        : url;
+    final targetUrl =
+        videoId != null ? 'https://www.youtube.com/watch?v=$videoId' : url;
 
     try {
       final settings = SettingsProvider.instance;
@@ -522,83 +589,74 @@ class YoutubeService {
       final preset = (qualityPreset ?? 'best_combined').toLowerCase().trim();
 
       if (preset == 'audio_only') {
-        final audioStreams = streams
-            .where((s) => s['type'] == 'audio')
-            .toList();
+        final audioStreams =
+            streams.where((s) => s['type'] == 'audio').toList();
         if (audioStreams.isNotEmpty) return audioStreams.first;
         return streams.isNotEmpty ? streams.first : null;
       }
 
       if (preset == 'best_muxed') {
-        final muxedStreams = streams
-            .where((s) => s['type'] == 'muxed')
-            .toList();
+        final muxedStreams =
+            streams.where((s) => s['type'] == 'muxed').toList();
         if (muxedStreams.isNotEmpty) return muxedStreams.first;
-        final combinedStreams = streams
-            .where((s) => s['type'] == 'combined')
-            .toList();
+        final combinedStreams =
+            streams.where((s) => s['type'] == 'combined').toList();
         if (combinedStreams.isNotEmpty) return combinedStreams.first;
         return streams.isNotEmpty ? streams.first : null;
       }
 
       if (preset == 'best_combined' || preset == 'best') {
-        final combinedStreams = streams
-            .where((s) => s['type'] == 'combined')
-            .toList();
+        final combinedStreams =
+            streams.where((s) => s['type'] == 'combined').toList();
         if (combinedStreams.isNotEmpty) return combinedStreams.first;
-        final muxedStreams = streams
-            .where((s) => s['type'] == 'muxed')
-            .toList();
+        final muxedStreams =
+            streams.where((s) => s['type'] == 'muxed').toList();
         if (muxedStreams.isNotEmpty) return muxedStreams.first;
         return streams.isNotEmpty ? streams.first : null;
       }
 
       final reqHeight = parseQualityHeight(preset);
       if (reqHeight > 0) {
-        final combinedStreams = streams
-            .where((s) => s['type'] == 'combined')
-            .toList();
+        final combinedStreams =
+            streams.where((s) => s['type'] == 'combined').toList();
         final exactCombined = combinedStreams.where(
           (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
         );
         if (exactCombined.isNotEmpty) return exactCombined.first;
 
-        final muxedStreams = streams
-            .where((s) => s['type'] == 'muxed')
-            .toList();
+        final muxedStreams =
+            streams.where((s) => s['type'] == 'muxed').toList();
         final exactMuxed = muxedStreams.where(
           (s) => parseQualityHeight(s['quality'] as String? ?? '') == reqHeight,
         );
         if (exactMuxed.isNotEmpty) return exactMuxed.first;
 
-        final lowerCombined =
-            combinedStreams
-                .where(
-                  (s) =>
-                      parseQualityHeight(s['quality'] as String? ?? '') <=
-                      reqHeight,
-                )
-                .toList()
-              ..sort(
-                (a, b) => parseQualityHeight(
-                  b['quality'] as String? ?? '',
-                ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
-              );
+        final lowerCombined = combinedStreams
+            .where(
+              (s) =>
+                  parseQualityHeight(s['quality'] as String? ?? '') <=
+                  reqHeight,
+            )
+            .toList()
+          ..sort(
+            (a, b) => parseQualityHeight(
+              b['quality'] as String? ?? '',
+            ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
+          );
         if (lowerCombined.isNotEmpty) return lowerCombined.first;
 
-        final lowerMuxed =
-            muxedStreams
-                .where(
-                  (s) =>
-                      parseQualityHeight(s['quality'] as String? ?? '') <=
-                      reqHeight,
-                )
-                .toList()
-              ..sort(
-                (a, b) => parseQualityHeight(
-                  b['quality'] as String? ?? '',
-                ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
-              );
+        final lowerMuxed = muxedStreams
+            .where(
+              (s) =>
+                  parseQualityHeight(s['quality'] as String? ?? '') <=
+                  reqHeight,
+            )
+            .toList()
+          ..sort(
+            (a, b) => parseQualityHeight(
+              b['quality'] as String? ?? '',
+            ).compareTo(parseQualityHeight(a['quality'] as String? ?? '')),
+          );
         if (lowerMuxed.isNotEmpty) return lowerMuxed.first;
 
         if (combinedStreams.isNotEmpty) return combinedStreams.last;
@@ -641,13 +699,19 @@ class YoutubeService {
         final videoList = rawVideos.map((e) {
           final map = Map<String, dynamic>.from(e as Map);
           final videoId = map['id'] as String?;
-          final thumb = map['thumbnailUrl'] ?? map['thumbnail'] ?? map['thumbnail_url'];
-          if ((thumb == null || thumb.toString().isEmpty) && videoId != null && videoId.isNotEmpty) {
-            map['thumbnailUrl'] = 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+          final thumb =
+              map['thumbnailUrl'] ?? map['thumbnail'] ?? map['thumbnail_url'];
+          if ((thumb == null || thumb.toString().isEmpty) &&
+              videoId != null &&
+              videoId.isNotEmpty) {
+            map['thumbnailUrl'] =
+                'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
           } else if (thumb != null) {
             map['thumbnailUrl'] = thumb.toString();
           }
-          if ((map['url'] == null || map['url'].toString().isEmpty) && videoId != null && videoId.isNotEmpty) {
+          if ((map['url'] == null || map['url'].toString().isEmpty) &&
+              videoId != null &&
+              videoId.isNotEmpty) {
             map['url'] = 'https://www.youtube.com/watch?v=$videoId';
           }
           return map;
@@ -718,8 +782,7 @@ class YoutubeService {
     // is a valid input here too (getStreamForVideo passes ids around, not
     // just full URLs), so don't bail out just because extractVideoId — which
     // only understands full URLs — returns null for it.
-    final videoId =
-        extractVideoId(downloadPageUrl) ??
+    final videoId = extractVideoId(downloadPageUrl) ??
         (downloadPageUrl.length == 11 ? downloadPageUrl : null);
     if (videoId == null) return null;
 
@@ -760,16 +823,14 @@ class YoutubeService {
           };
         }
 
-        final oldQuality =
-            oldUri?.queryParameters['quality'] ??
+        final oldQuality = oldUri?.queryParameters['quality'] ??
             oldUri?.queryParameters['height'];
 
         Map<String, dynamic>? bestMatch;
         for (final s in streams) {
           final sUrl = s['src']?.toString() ?? '';
           final sUri = Uri.tryParse(sUrl);
-          final sQuality =
-              s['quality']?.toString() ??
+          final sQuality = s['quality']?.toString() ??
               sUri?.queryParameters['quality'] ??
               sUri?.queryParameters['height'];
 
@@ -829,8 +890,7 @@ class YoutubeService {
   static Future<Map<String, String?>?> getFreshStreams(
     String downloadPageUrl,
   ) async {
-    final videoId =
-        extractVideoId(downloadPageUrl) ??
+    final videoId = extractVideoId(downloadPageUrl) ??
         (downloadPageUrl.length == 11 ? downloadPageUrl : null);
     if (videoId == null) return null;
 

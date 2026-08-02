@@ -56,7 +56,7 @@ class FakeDownloadEngine extends DownloadEngine {
     );
   }
 
-@override
+  @override
   Future<void> download({
     required String url,
     required String tempFilePath,
@@ -132,25 +132,25 @@ void main() {
     // Register mock handlers for platform channels
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('com.example.dmx/widget'),
-          (methodCall) async => null,
-        );
+      const MethodChannel('com.example.dmx/widget'),
+      (methodCall) async => null,
+    );
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-          const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
-          (methodCall) async {
-            switch (methodCall.method) {
-              case 'read':
-                return null;
-              case 'write':
-              case 'delete':
-              case 'containsKey':
-              case 'readAll':
-              default:
-                return null;
-            }
-          },
-        );
+      const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+      (methodCall) async {
+        switch (methodCall.method) {
+          case 'read':
+            return null;
+          case 'write':
+          case 'delete':
+          case 'containsKey':
+          case 'readAll':
+          default:
+            return null;
+        }
+      },
+    );
   });
 
   tearDown(() async {
@@ -227,6 +227,43 @@ void main() {
     expect(provider.downloadingTasksCount, 1);
     expect(provider.queuedTasksCount, 1);
     expect(engine.startedUrls, ['https://example.com/one.zip']);
+  });
+
+  test('addDownloadsBatch enqueues multiple tasks in one call', () async {
+    final (database, settings) = await _setupServices();
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+      downloadEngine: FakeDownloadEngine(),
+      permissionService: FakePermissionService(),
+    );
+    await provider.load();
+
+    final ids = await provider.addDownloadsBatch([
+      DownloadAddSpec(
+        name: 'one.zip',
+        url: 'https://example.com/one.zip',
+        size: 0,
+        category: 'Archive',
+        savePath: '',
+      ),
+      DownloadAddSpec(
+        name: 'two.zip',
+        url: 'https://example.com/two.zip',
+        size: 0,
+        category: 'Archive',
+        savePath: '',
+      ),
+    ]);
+
+    expect(ids.length, 2);
+    expect(provider.tasks.length, 2);
+    expect(
+        provider.tasks.map((task) => task.url),
+        containsAll([
+          'https://example.com/one.zip',
+          'https://example.com/two.zip',
+        ]));
   });
 
   test(
@@ -364,7 +401,9 @@ void main() {
     },
   );
 
-  test('retryTask does not zero downloadedBytes or chunks when .dmxstate exists', () async {
+  test(
+      'retryTask does not zero downloadedBytes or chunks when .dmxstate exists',
+      () async {
     final (database, settings) = await _setupServices();
     final now = DateTime.now();
 
@@ -681,7 +720,7 @@ void main() {
 
   test('pauseAllTasks pauses all non-completed/non-failed tasks', () async {
     final (database, settings) = await _setupServices();
-    
+
     final t1 = DownloadTask(
       id: 'task_running',
       fileName: 'run.zip',
@@ -727,17 +766,22 @@ void main() {
     );
     await provider.load();
 
-    expect(provider.tasks[0].status, anyOf(DownloadStatus.paused, DownloadStatus.downloading, DownloadStatus.queued));
-    
+    expect(
+        provider.tasks[0].status,
+        anyOf(DownloadStatus.paused, DownloadStatus.downloading,
+            DownloadStatus.queued));
+
     await provider.pauseAllTasks();
 
-    expect(provider.tasks.firstWhere((t) => t.id == 'task_running').status, DownloadStatus.paused);
-    expect(provider.tasks.firstWhere((t) => t.id == 'task_queued').status, DownloadStatus.paused);
+    expect(provider.tasks.firstWhere((t) => t.id == 'task_running').status,
+        DownloadStatus.paused);
+    expect(provider.tasks.firstWhere((t) => t.id == 'task_queued').status,
+        DownloadStatus.paused);
   });
 
   test('resumeAllTasks resumes paused tasks', () async {
     final (database, settings) = await _setupServices();
-    
+
     final t1 = DownloadTask(
       id: 'paused_1',
       fileName: 'p1.zip',
@@ -767,11 +811,12 @@ void main() {
     await provider.load();
 
     expect(provider.tasks.first.status, DownloadStatus.paused);
-    
+
     await provider.resumeAllTasks();
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
-    expect(provider.tasks.first.status, anyOf(DownloadStatus.queued, DownloadStatus.downloading));
+    expect(provider.tasks.first.status,
+        anyOf(DownloadStatus.queued, DownloadStatus.downloading));
   });
 
   test('retryTask reads .dmxstate, not pre-allocated file length', () async {
@@ -784,7 +829,8 @@ void main() {
     expect(tempFile.lengthSync(), 100);
 
     final stateFile = File('build/test_retry_prealloc.dmxpart.dmxstate');
-    await stateFile.writeAsString('{"totalSize":100,"threadCount":2,"progress":[0,0]}');
+    await stateFile
+        .writeAsString('{"totalSize":100,"threadCount":2,"progress":[0,0]}');
 
     final (database, settings) = await _setupServices();
     final provider = DownloadProvider(
@@ -820,7 +866,6 @@ void main() {
     await stateFile.delete();
   });
 }
-
 
 class FakeDownloadEngine403 extends DownloadEngine {
   final Response response;

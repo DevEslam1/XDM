@@ -246,6 +246,40 @@ void main() {
       expect(best['type'], 'muxed');
       expect(best['quality'], '720p');
     });
+
+    test(
+        'normalizeStreamEntry supports backend responses using url instead of direct_url',
+        () {
+      final normalized = YoutubeService.normalizeStreamEntry({
+        'type': 'video_audio',
+        'quality': '1080p',
+        'url': 'https://googlevideo.com/stream1080',
+        'audio_url': 'https://googlevideo.com/audio1080',
+        'size': 12345678,
+        'ext': 'mp4',
+        'title': 'Test Video Title',
+      });
+
+      expect(normalized['src'], 'https://googlevideo.com/stream1080');
+      expect(normalized['audioSrc'], 'https://googlevideo.com/audio1080');
+      expect(normalized['type'], 'muxed');
+      expect(normalized['size'], 12345678);
+    });
+
+    test('normalizeStreamEntry ignores placeholder page URLs', () {
+      final normalized = YoutubeService.normalizeStreamEntry({
+        'type': 'video_audio',
+        'quality': '1080p',
+        'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        'audio_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        'size': 12345678,
+        'ext': 'mp4',
+        'title': 'Test Video Title',
+      });
+
+      expect(normalized['src'], isNull);
+      expect(normalized['audioSrc'], isNull);
+    });
   });
 
   group('YoutubeService Playlist Mapping & Duplicate Detection Tests', () {
@@ -277,8 +311,8 @@ void main() {
       };
 
       final info = playlistDetails['info'] as Map<String, dynamic>;
-      final videos = (playlistDetails['videos'] as List)
-          .cast<Map<String, dynamic>>();
+      final videos =
+          (playlistDetails['videos'] as List).cast<Map<String, dynamic>>();
 
       expect(info['title'], 'Test Playlist');
       expect(info['videoCount'], 2);

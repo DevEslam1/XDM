@@ -240,8 +240,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final isDark = settings.isDarkMode;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
 
-    final playlistId =
-        YoutubeService.extractPlaylistId(widget.playlistUrl) ??
+    final playlistId = YoutubeService.extractPlaylistId(widget.playlistUrl) ??
         widget.playlistUrl;
     final playlistTitle = _playlistInfo?['title'] as String? ?? 'Playlist';
 
@@ -249,6 +248,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     int failed = 0;
     int consecutiveErrors = 0;
     final enqueuedVideos = <Map<String, dynamic>>[];
+    final batchSpecs = <DownloadAddSpec>[];
 
     for (int i = 0; i < selectedVideos.length; i++) {
       if (!mounted) break;
@@ -257,7 +257,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       final video = selectedVideos[i];
       final videoId = video['id'] as String;
       final videoTitle = video['title'] as String? ?? 'YouTube Video';
-      final rawThumb = video['thumbnailUrl'] ?? video['thumbnail'] ?? video['thumbnail_url'];
+      final rawThumb =
+          video['thumbnailUrl'] ?? video['thumbnail'] ?? video['thumbnail_url'];
       final videoThumbnail = rawThumb != null && rawThumb.toString().isNotEmpty
           ? rawThumb.toString()
           : 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
@@ -272,17 +273,19 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
         final fileName = '$videoTitle [$displayQuality].$ext';
 
-        await provider.addDownload(
-          name: fileName,
-          url: videoUrl,
-          size: 0,
-          category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
-          savePath: savePath,
-          downloadPageUrl: videoUrl,
-          youtubeQualityPreset: _qualityPreset,
-          playlistId: playlistId,
-          playlistTitle: playlistTitle,
-          thumbnailUrl: videoThumbnail,
+        batchSpecs.add(
+          DownloadAddSpec(
+            name: fileName,
+            url: videoUrl,
+            size: 0,
+            category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
+            savePath: savePath,
+            downloadPageUrl: videoUrl,
+            youtubeQualityPreset: _qualityPreset,
+            playlistId: playlistId,
+            playlistTitle: playlistTitle,
+            thumbnailUrl: videoThumbnail,
+          ),
         );
         enqueuedVideos.add(video);
         completed++;
@@ -318,10 +321,13 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         });
       }
 
-      // Small delay between enqueues to avoid YouTube API rate limiting
       if (i < selectedVideos.length - 1) {
-        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await Future<void>.delayed(const Duration(milliseconds: 250));
       }
+    }
+
+    if (batchSpecs.isNotEmpty) {
+      await provider.addDownloadsBatch(batchSpecs);
     }
 
     if (mounted) {
@@ -357,15 +363,13 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final glassBorder = isDark
-        ? AppTheme.glassBorder
-        : AppTheme.lightGlassBorder;
+    final glassBorder =
+        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
 
     return DraggableScrollableSheet(
       expand: false,
@@ -429,7 +433,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                             children: [
                               Text(
                                 L10n.of(context, 'yt_playlist'),
-                                style: Theme.of(context).textTheme.titleMedium
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
                                     ?.copyWith(
                                       color: accent,
                                       fontWeight: FontWeight.bold,
@@ -583,12 +589,14 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           decoration: BoxDecoration(
                             color: isDark
                                 ? AppTheme.neonAmber.withValues(alpha: 0.15)
-                                : AppTheme.lightNeonAmber.withValues(alpha: 0.15),
+                                : AppTheme.lightNeonAmber
+                                    .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
                               color: isDark
                                   ? AppTheme.neonAmber.withValues(alpha: 0.4)
-                                  : AppTheme.lightNeonAmber.withValues(alpha: 0.4),
+                                  : AppTheme.lightNeonAmber
+                                      .withValues(alpha: 0.4),
                             ),
                           ),
                           child: Row(
@@ -705,11 +713,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 )
                               : null,
                           filled: true,
-                          fillColor:
-                              (isDark
-                                      ? AppTheme.surface
-                                      : AppTheme.lightSurface)
-                                  .withValues(alpha: 0.6),
+                          fillColor: (isDark
+                                  ? AppTheme.surface
+                                  : AppTheme.lightSurface)
+                              .withValues(alpha: 0.6),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 8,
@@ -737,8 +744,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        itemCount:
-                            _filteredVideos.length +
+                        itemCount: _filteredVideos.length +
                             (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (index == _filteredVideos.length) {
@@ -811,8 +817,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                             ),
                                             onChanged: (val) {
                                               if (val != null) {
-                                                final originalIndex = _videos
-                                                    .indexOf(video);
+                                                final originalIndex =
+                                                    _videos.indexOf(video);
                                                 if (originalIndex != -1) {
                                                   setState(() {
                                                     _videos[originalIndex] = {
@@ -835,72 +841,68 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                           child: SizedBox(
                                             width: 72,
                                             height: 42,
-                                            child:
-                                                thumbnailUrl != null &&
+                                            child: thumbnailUrl != null &&
                                                     thumbnailUrl.isNotEmpty
                                                 ? CachedNetworkImage(
-                                                    imageUrl:
-                                                        thumbnailUrl.startsWith(
-                                                          '//',
-                                                        )
+                                                    imageUrl: thumbnailUrl
+                                                            .startsWith(
+                                                      '//',
+                                                    )
                                                         ? 'https:$thumbnailUrl'
                                                         : thumbnailUrl,
                                                     fit: BoxFit.cover,
                                                     memCacheWidth: 144,
-                                                    placeholder:
-                                                        (
-                                                          context,
-                                                          url,
-                                                        ) => Container(
-                                                          color:
-                                                              (isDark
-                                                                      ? AppTheme
-                                                                            .background
-                                                                      : AppTheme
-                                                                            .lightBackground)
-                                                                  .withValues(
-                                                                    alpha: 0.6,
-                                                                  ),
-                                                          child: Icon(
-                                                            Icons
-                                                                .play_circle_outline,
-                                                            color: mutedClr,
-                                                            size: 24,
-                                                          ),
-                                                        ),
-                                                    errorWidget:
-                                                        (
-                                                          context,
-                                                          url,
-                                                          error,
-                                                        ) => Container(
-                                                          color:
-                                                              (isDark
-                                                                      ? AppTheme
-                                                                            .background
-                                                                      : AppTheme
-                                                                            .lightBackground)
-                                                                  .withValues(
-                                                                    alpha: 0.6,
-                                                                  ),
-                                                          child: Icon(
-                                                            Icons
-                                                                .play_circle_outline,
-                                                            color: mutedClr,
-                                                            size: 24,
-                                                          ),
-                                                        ),
+                                                    placeholder: (
+                                                      context,
+                                                      url,
+                                                    ) =>
+                                                        Container(
+                                                      color: (isDark
+                                                              ? AppTheme
+                                                                  .background
+                                                              : AppTheme
+                                                                  .lightBackground)
+                                                          .withValues(
+                                                        alpha: 0.6,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .play_circle_outline,
+                                                        color: mutedClr,
+                                                        size: 24,
+                                                      ),
+                                                    ),
+                                                    errorWidget: (
+                                                      context,
+                                                      url,
+                                                      error,
+                                                    ) =>
+                                                        Container(
+                                                      color: (isDark
+                                                              ? AppTheme
+                                                                  .background
+                                                              : AppTheme
+                                                                  .lightBackground)
+                                                          .withValues(
+                                                        alpha: 0.6,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .play_circle_outline,
+                                                        color: mutedClr,
+                                                        size: 24,
+                                                      ),
+                                                    ),
                                                   )
                                                 : Container(
-                                                    color:
-                                                        (isDark
-                                                                ? AppTheme
-                                                                      .background
-                                                                : AppTheme
-                                                                      .lightBackground)
-                                                            .withValues(
-                                                              alpha: 0.6,
-                                                            ),
+                                                    color: (isDark
+                                                            ? AppTheme
+                                                                .background
+                                                            : AppTheme
+                                                                .lightBackground)
+                                                        .withValues(
+                                                      alpha: 0.6,
+                                                    ),
                                                     child: Icon(
                                                       Icons.play_circle_outline,
                                                       color: mutedClr,
@@ -928,7 +930,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                                   decoration: isSelected
                                                       ? null
                                                       : TextDecoration
-                                                            .lineThrough,
+                                                          .lineThrough,
                                                 ),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
@@ -958,7 +960,8 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                                   ),
                                                   const SizedBox(width: 3),
                                                   Text(
-                                                    YoutubeService.formatDuration(
+                                                    YoutubeService
+                                                        .formatDuration(
                                                       duration,
                                                     ),
                                                     style: TextStyle(
@@ -1027,11 +1030,10 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                       horizontal: 12,
                                     ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          (isDark
-                                                  ? AppTheme.background
-                                                  : AppTheme.lightBackground)
-                                              .withValues(alpha: 0.6),
+                                      color: (isDark
+                                              ? AppTheme.background
+                                              : AppTheme.lightBackground)
+                                          .withValues(alpha: 0.6),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: glassBorder,
@@ -1097,11 +1099,11 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                       child: Text(
                                         _qualityPreset == 'best_combined'
                                             ? (L10n.isRtl(context)
-                                                  ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.'
-                                                  : 'Note: Best video and audio will be auto-merged.')
+                                                ? 'ملاحظة: سيتم دمج أفضل جودة صوت وصورة تلقائياً.'
+                                                : 'Note: Best video and audio will be auto-merged.')
                                             : (L10n.isRtl(context)
-                                                  ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).'
-                                                  : 'Note: Best merged quality will be downloaded (usually 360p).'),
+                                                ? 'ملاحظة: سيتم تحميل أفضل جودة مدمجة (غالباً 360p).'
+                                                : 'Note: Best merged quality will be downloaded (usually 360p).'),
                                         style: TextStyle(
                                           color: isDark
                                               ? AppTheme.neonAmber

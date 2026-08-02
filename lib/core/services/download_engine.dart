@@ -105,7 +105,7 @@ class DownloadEngine {
   bool _closed = false;
 
   DownloadEngine({Dio? dio, bool enableCleanupTimer = true})
-    : _sharedDio = dio ?? Dio() {
+      : _sharedDio = dio ?? Dio() {
     if (enableCleanupTimer) {
       _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
         if (_closed) return;
@@ -118,9 +118,8 @@ class DownloadEngine {
               activeDownloads != null && activeDownloads.isNotEmpty;
 
           final createdAt = _dioClientCreationTimes[client];
-          final age = createdAt != null
-              ? now.difference(createdAt)
-              : Duration.zero;
+          final age =
+              createdAt != null ? now.difference(createdAt) : Duration.zero;
 
           if (isReserved) {
             if (!hasActiveDownloads && age > const Duration(minutes: 10)) {
@@ -182,6 +181,13 @@ class DownloadEngine {
     }();
   }
 
+  @visibleForTesting
+  bool isLikelyHtmlResponse(String? contentType) {
+    final normalized = (contentType ?? '').toLowerCase();
+    return normalized.contains('text/html') ||
+        normalized.contains('application/xhtml');
+  }
+
   Dio _buildIsolatedClient({
     String? url,
     String? customUserAgent,
@@ -206,8 +212,7 @@ class DownloadEngine {
     final uri = url != null ? Uri.tryParse(url) : null;
     final host = uri?.host.toLowerCase() ?? '';
 
-    final isYoutubeUrl =
-        host.contains('youtube.com') ||
+    final isYoutubeUrl = host.contains('youtube.com') ||
         host == 'youtu.be' ||
         host.endsWith('.googlevideo.com');
 
@@ -215,8 +220,8 @@ class DownloadEngine {
       client.options.headers['Origin'] = 'https://www.youtube.com';
       client.options.headers['Referer'] =
           (referer != null && referer.isNotEmpty)
-          ? referer
-          : 'https://www.youtube.com/';
+              ? referer
+              : 'https://www.youtube.com/';
       client.options.headers['User-Agent'] =
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
           '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -245,18 +250,19 @@ class DownloadEngine {
     if (client.httpClientAdapter is IOHttpClientAdapter) {
       final adapter = client.httpClientAdapter as IOHttpClientAdapter;
 
-      final String proxyHostResolved =
-          (enableProxy && proxyHost != null && proxyHost.trim().isNotEmpty)
+      final String proxyHostResolved = (enableProxy &&
+              proxyHost != null &&
+              proxyHost.trim().isNotEmpty)
           ? proxyHost.trim()
           : (enableProxy && proxyAddress != null && proxyAddress.contains(':')
-                ? proxyAddress.split(':')[0].trim()
-                : (enableProxy ? proxyAddress?.trim() ?? '' : ''));
+              ? proxyAddress.split(':')[0].trim()
+              : (enableProxy ? proxyAddress?.trim() ?? '' : ''));
 
       final int port = (enableProxy && proxyPort != null && proxyPort > 0)
           ? proxyPort
           : (enableProxy && proxyAddress != null && proxyAddress.contains(':')
-                ? int.tryParse(proxyAddress.split(':')[1]) ?? 8080
-                : 8080);
+              ? int.tryParse(proxyAddress.split(':')[1]) ?? 8080
+              : 8080);
 
       final downloadUri = url != null ? Uri.tryParse(url) : null;
       final downloadHost = downloadUri?.host;
@@ -426,8 +432,8 @@ class DownloadEngine {
         final resolvedName = requestedFileName?.trim().isNotEmpty == true
             ? safeFileName(requestedFileName!.trim())
             : (magnetName != null && magnetName.trim().isNotEmpty
-                  ? safeFileName(magnetName.trim())
-                  : 'torrent_download.zip');
+                ? safeFileName(magnetName.trim())
+                : 'torrent_download.zip');
 
         String tempDir = '';
 
@@ -611,8 +617,7 @@ class DownloadEngine {
     final uri = Uri.tryParse(punyUrl);
     final host = uri?.host.toLowerCase() ?? '';
 
-    final isYoutube =
-        host.contains('youtube.com') ||
+    final isYoutube = host.contains('youtube.com') ||
         host == 'youtu.be' ||
         host.endsWith('.googlevideo.com');
 
@@ -648,9 +653,8 @@ class DownloadEngine {
       final length = response.headers.value(Headers.contentLengthHeader);
       fileSize = int.tryParse(length ?? '') ?? 0;
 
-      final acceptRanges = response.headers
-          .value('accept-ranges')
-          ?.toLowerCase();
+      final acceptRanges =
+          response.headers.value('accept-ranges')?.toLowerCase();
 
       if (acceptRanges != null) {
         supportsResume = acceptRanges == 'bytes';
@@ -699,8 +703,7 @@ class DownloadEngine {
               fileSize = int.tryParse(getLen ?? '') ?? 0;
             }
 
-            supportsResume =
-                isYoutube ||
+            supportsResume = isYoutube ||
                 getResponse.statusCode == 206 ||
                 getResponse.headers.value('accept-ranges') == 'bytes';
 
@@ -1144,7 +1147,7 @@ class DownloadEngine {
 
       final resumeData =
           await TorrentResumeStore.loadResumeDataForSource(url) ??
-          await TorrentResumeStore.loadResumeData(id);
+              await TorrentResumeStore.loadResumeData(id);
       final nativeResumeLoaded =
           resumeData != null && TorrentService.loadResumeData(id, resumeData);
       if (!nativeResumeLoaded) {
@@ -1214,34 +1217,32 @@ class DownloadEngine {
       }
     });
 
-    cancelToken.whenCancel
-        .then((_) async {
-          await sub?.cancel();
-          timer?.cancel();
+    cancelToken.whenCancel.then((_) async {
+      await sub?.cancel();
+      timer?.cancel();
 
-          if (!completer.isCompleted) {
-            try {
-              TorrentService.removeTorrent(id);
-            } catch (e, st) {
-              Logger(
-                'download_engine',
-              ).warning('[download_engine] operation failed', e, st);
-            }
-
-            completer.completeError(
-              DioException(
-                requestOptions: RequestOptions(path: url),
-                type: DioExceptionType.cancel,
-                error: 'cancelled',
-              ),
-            );
-          }
-        })
-        .catchError((e, st) {
+      if (!completer.isCompleted) {
+        try {
+          TorrentService.removeTorrent(id);
+        } catch (e, st) {
           Logger(
             'download_engine',
           ).warning('[download_engine] operation failed', e, st);
-        });
+        }
+
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+            error: 'cancelled',
+          ),
+        );
+      }
+    }).catchError((e, st) {
+      Logger(
+        'download_engine',
+      ).warning('[download_engine] operation failed', e, st);
+    });
 
     int metadataElapsed = 0;
 
@@ -1353,12 +1354,11 @@ class DownloadEngine {
           final existingFiles = getTorrentFiles?.call() ?? [];
 
           resolvedFiles = files.map((f) {
-            final existing = existingFiles
-                .cast<Map<String, dynamic>?>()
-                .firstWhere(
-                  (e) => (e?['name'] as String?) == f.name,
-                  orElse: () => null,
-                );
+            final existing =
+                existingFiles.cast<Map<String, dynamic>?>().firstWhere(
+                      (e) => (e?['name'] as String?) == f.name,
+                      orElse: () => null,
+                    );
 
             int resolvedBytes;
             if (f.downloadedBytes >= 0) {
@@ -1387,19 +1387,17 @@ class DownloadEngine {
 
       final int calculatedTotalSize =
           (resolvedFiles != null && resolvedFiles.isNotEmpty)
-          ? resolvedFiles
-                .where((f) => f['selected'] == true)
-                .fold<int>(
-                  0,
-                  (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0),
-                )
-          : 0;
+              ? resolvedFiles.where((f) => f['selected'] == true).fold<int>(
+                    0,
+                    (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0),
+                  )
+              : 0;
 
       final totalSize = torrent.totalWanted > 0
           ? torrent.totalWanted
           : (calculatedTotalSize > 0
-                ? calculatedTotalSize
-                : (knownFileSize > 0 ? knownFileSize : 0));
+              ? calculatedTotalSize
+              : (knownFileSize > 0 ? knownFileSize : 0));
 
       final downloadedBytes = torrent.totalWantedDone > 0
           ? torrent.totalWantedDone
@@ -1407,14 +1405,12 @@ class DownloadEngine {
 
       // FIX(2): Only estimate when we don't have true per-file progress.
       // When progressEstimated is false from the file mapping, we have real data.
-      final bool hasTruePerFileProgress =
-          resolvedFiles != null &&
+      final bool hasTruePerFileProgress = resolvedFiles != null &&
           resolvedFiles.isNotEmpty &&
           resolvedFiles.any(
             (f) => (f['progressEstimated'] as bool? ?? true) == false,
           );
-      final bool needsEstimation =
-          resolvedFiles != null &&
+      final bool needsEstimation = resolvedFiles != null &&
           resolvedFiles.isNotEmpty &&
           !hasTruePerFileProgress &&
           (!TorrentService.fileProgressSupported || downloadedBytes > 0);
@@ -1434,8 +1430,7 @@ class DownloadEngine {
         }
       }
 
-      final isCheckingOrMetadata =
-          stateLabel.contains('checking') ||
+      final isCheckingOrMetadata = stateLabel.contains('checking') ||
           stateLabel.contains('metadata') ||
           stateLabel.contains('allocating');
 
@@ -1462,8 +1457,7 @@ class DownloadEngine {
 
       final isFullyDownloaded = totalSize > 0 && downloadedBytes >= totalSize;
 
-      final isStableFinished =
-          stateLabel == 'seeding' ||
+      final isStableFinished = stateLabel == 'seeding' ||
           stateLabel == 'completed' ||
           stateLabel == 'finished';
 
@@ -1476,9 +1470,8 @@ class DownloadEngine {
 
       final speed = torrent.downloadRate.toDouble();
 
-      final remaining = totalSize > downloadedBytes
-          ? totalSize - downloadedBytes
-          : 0;
+      final remaining =
+          totalSize > downloadedBytes ? totalSize - downloadedBytes : 0;
 
       final eta = speed.isFinite && speed > 0 && remaining > 0
           ? (remaining / speed).round().clamp(0, 86400 * 365)
@@ -1523,26 +1516,24 @@ class DownloadEngine {
       }
     });
 
-    cancelToken.whenCancel
-        .then((_) async {
-          await sub?.cancel();
-          TorrentService.pauseTorrent(id);
+    cancelToken.whenCancel.then((_) async {
+      await sub?.cancel();
+      TorrentService.pauseTorrent(id);
 
-          if (!completer.isCompleted) {
-            completer.completeError(
-              DioException(
-                requestOptions: RequestOptions(path: url),
-                type: DioExceptionType.cancel,
-                message: 'Torrent download cancelled by user.',
-              ),
-            );
-          }
-        })
-        .catchError((e, st) {
-          Logger(
-            'download_engine',
-          ).warning('[download_engine] operation failed', e, st);
-        });
+      if (!completer.isCompleted) {
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: url),
+            type: DioExceptionType.cancel,
+            message: 'Torrent download cancelled by user.',
+          ),
+        );
+      }
+    }).catchError((e, st) {
+      Logger(
+        'download_engine',
+      ).warning('[download_engine] operation failed', e, st);
+    });
 
     try {
       await completer.future;
@@ -1982,9 +1973,8 @@ class DownloadEngine {
 
       for (int i = 0; i < threadCount; i++) {
         final start = i * partSize;
-        final end = (i == threadCount - 1)
-            ? (totalSize - 1)
-            : (start + partSize - 1);
+        final end =
+            (i == threadCount - 1) ? (totalSize - 1) : (start + partSize - 1);
         final size = end - start + 1;
 
         chunkSizes[i] = size;
@@ -2049,8 +2039,7 @@ class DownloadEngine {
 
           final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
 
-          final shouldReport =
-              isCompleted ||
+          final shouldReport = isCompleted ||
               nowMs - lastReportTime >= _progressReportIntervalMs;
 
           final shouldSave =
@@ -2076,9 +2065,8 @@ class DownloadEngine {
             }
           }
 
-          final remaining = totalSize > downloadedTotal
-              ? totalSize - downloadedTotal
-              : 0;
+          final remaining =
+              totalSize > downloadedTotal ? totalSize - downloadedTotal : 0;
 
           final rawEta = speed.isFinite && speed > 0 && remaining > 0
               ? (remaining / speed).round().clamp(0, 86400 * 365)
@@ -2217,6 +2205,20 @@ class DownloadEngine {
                   );
                 }
 
+                final chunkContentType = chunkResponse.headers
+                        .value('content-type')
+                        ?.toLowerCase() ??
+                    '';
+                if (isLikelyHtmlResponse(chunkContentType)) {
+                  throw DioException(
+                    requestOptions: RequestOptions(path: punyUrl),
+                    type: DioExceptionType.badResponse,
+                    response: chunkResponse,
+                    message:
+                        'Server returned HTML instead of media. The stream URL is likely expired. Please retry the download.',
+                  );
+                }
+
                 await progressLock.synchronized(() {
                   savedEtag ??= chunkResponse.headers.value('etag');
                   savedLastModified ??= chunkResponse.headers.value(
@@ -2287,20 +2289,19 @@ class DownloadEngine {
                       () => journal.recordChunkProgress(idx, updatedProgress),
                     );
 
-                    final checkpointSnapshot = await progressLock
-                        .synchronized<List<int>?>(() {
-                          final now = DateTime.now();
+                    final checkpointSnapshot =
+                        await progressLock.synchronized<List<int>?>(() {
+                      final now = DateTime.now();
 
-                          if (now.difference(lastCheckpointTime).inSeconds >=
-                                  5 ||
-                              bytesSinceLastCheckpoint >= 1024 * 1024) {
-                            lastCheckpointTime = now;
-                            bytesSinceLastCheckpoint = 0;
-                            return List<int>.from(chunkProgress);
-                          }
+                      if (now.difference(lastCheckpointTime).inSeconds >= 5 ||
+                          bytesSinceLastCheckpoint >= 1024 * 1024) {
+                        lastCheckpointTime = now;
+                        bytesSinceLastCheckpoint = 0;
+                        return List<int>.from(chunkProgress);
+                      }
 
-                          return null;
-                        });
+                      return null;
+                    });
 
                     if (checkpointSnapshot != null) {
                       await journalLock.synchronized(
@@ -2592,6 +2593,18 @@ class DownloadEngine {
       );
     }
 
+    final contentType =
+        response.headers.value('content-type')?.toLowerCase() ?? '';
+    if (isLikelyHtmlResponse(contentType)) {
+      throw DioException(
+        requestOptions: RequestOptions(path: punyUrl),
+        type: DioExceptionType.badResponse,
+        response: response,
+        message:
+            'Server returned HTML instead of media. The stream URL is likely expired. Please retry the download.',
+      );
+    }
+
     final isPartialResponse = response.statusCode == 206;
 
     if (actualResumeFrom > 0 && !isPartialResponse) {
@@ -2630,8 +2643,7 @@ class DownloadEngine {
 
     var totalSize = knownFileSize;
 
-    final contentLength =
-        int.tryParse(
+    final contentLength = int.tryParse(
           response.headers.value(Headers.contentLengthHeader) ?? '',
         ) ??
         0;
@@ -2988,8 +3000,7 @@ class DownloadEngine {
       throw DioException(
         requestOptions: RequestOptions(path: punyUrl),
         type: DioExceptionType.badResponse,
-        message:
-            'Malformed Content-Range response during resume: $value. '
+        message: 'Malformed Content-Range response during resume: $value. '
             'Expected start: $expectedStart, expected end: $expectedEnd.',
       );
     }
@@ -2998,9 +3009,8 @@ class DownloadEngine {
     final end = int.tryParse(match.group(2) ?? '');
 
     final totalText = match.group(3);
-    final total = totalText == null || totalText == '*'
-        ? null
-        : int.tryParse(totalText);
+    final total =
+        totalText == null || totalText == '*' ? null : int.tryParse(totalText);
 
     if (start != expectedStart ||
         (expectedEnd >= 0 && end != expectedEnd) ||
@@ -3008,8 +3018,7 @@ class DownloadEngine {
       throw DioException(
         requestOptions: RequestOptions(path: punyUrl),
         type: DioExceptionType.badResponse,
-        message:
-            'Invalid Content-Range response: $value. '
+        message: 'Invalid Content-Range response: $value. '
             'Expected start: $expectedStart, got start: $start. '
             'Got end: $end, expected end: $expectedEnd. '
             'Got total: $total, expected total: $expectedTotal.',
@@ -3268,8 +3277,7 @@ class _ProgressReport {
 
 class _FileChangedOnServerException implements Exception {
   @override
-  String toString() =>
-      'FileChangedOnServerException: '
+  String toString() => 'FileChangedOnServerException: '
       'Server file changed during resume. Restart required.';
 }
 

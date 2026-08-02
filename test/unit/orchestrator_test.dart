@@ -103,6 +103,13 @@ void main() {
       expect(orchestrator.youtubeMimeCompatible(old, new_), isTrue);
     });
 
+    test('only video_only streams require muxing', () {
+      expect(orchestrator.youtubeStreamRequiresMuxing('video_only'), isTrue);
+      expect(orchestrator.youtubeStreamRequiresMuxing('combined'), isFalse);
+      expect(orchestrator.youtubeStreamRequiresMuxing('muxed'), isFalse);
+      expect(orchestrator.youtubeStreamRequiresMuxing('audio'), isFalse);
+    });
+
     test('different MIME types are NOT compatible', () {
       const old = 'https://rr1.googlevideo.com/videoplayback?mime=video%2Fmp4';
       const new_ =
@@ -120,6 +127,31 @@ void main() {
       const old = 'https://example.com/a';
       const new_ = 'https://example.com/b';
       expect(orchestrator.youtubeMimeCompatible(old, new_), isTrue);
+    });
+  });
+
+  group('html and stream URL guards', () {
+    test('rejects YouTube page URLs as resolved stream URLs', () {
+      expect(
+        orchestrator.shouldRejectResolvedYoutubeUrl(
+          'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        ),
+        isTrue,
+      );
+      expect(
+        orchestrator.shouldRejectResolvedYoutubeUrl(
+          'https://rr1---sn-abc.googlevideo.com/videoplayback?expire=123',
+        ),
+        isFalse,
+      );
+    });
+
+    test('detects HTML content-type responses', () {
+      final engine = DownloadEngine(dio: Dio());
+      expect(engine.isLikelyHtmlResponse('text/html; charset=utf-8'), isTrue);
+      expect(engine.isLikelyHtmlResponse('application/xhtml+xml'), isTrue);
+      expect(engine.isLikelyHtmlResponse('application/octet-stream'), isFalse);
+      expect(engine.isLikelyHtmlResponse(null), isFalse);
     });
   });
 

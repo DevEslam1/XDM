@@ -115,8 +115,7 @@ class DownloadOrchestrator {
       'download',
       classification.message,
       error: error,
-      details:
-          'task=$taskId family=${classification.family.name} '
+      details: 'task=$taskId family=${classification.family.name} '
           'status=${classification.httpStatus ?? '-'} '
           'retryable=${classification.retryable}',
     );
@@ -189,17 +188,23 @@ class DownloadOrchestrator {
             final type = streamInfo['type'] as String? ?? 'muxed';
             final ext = streamInfo['ext'] as String? ?? 'mp4';
             final title = streamInfo['title'] as String? ?? '';
+            final requiresMuxing = youtubeStreamRequiresMuxing(type);
+            final resolvedUrl = streamInfo['src']?.toString() ?? '';
+
+            if (resolvedUrl.isEmpty) {
+              throw Exception('Stream URL is empty');
+            }
+
+            if (shouldRejectResolvedYoutubeUrl(resolvedUrl)) {
+              throw Exception(
+                'Backend returned a page URL instead of a stream URL: $resolvedUrl',
+              );
+            }
 
             String resolvedFileName;
-            if (type == 'combined') {
-              final qLabel = streamInfo['quality'] as String? ?? 'HD';
-              resolvedFileName = title.isNotEmpty
-                  ? '$title [$qLabel].$ext'
-                  : task.fileName;
-            } else if (type == 'audio') {
-              resolvedFileName = title.isNotEmpty
-                  ? '$title.$ext'
-                  : task.fileName;
+            if (type == 'audio') {
+              resolvedFileName =
+                  title.isNotEmpty ? '$title.$ext' : task.fileName;
             } else {
               final qLabel = streamInfo['quality'] as String? ?? '';
               resolvedFileName = title.isNotEmpty && qLabel.isNotEmpty
@@ -221,26 +226,29 @@ class DownloadOrchestrator {
                     resolvedFileName,
                   );
 
-            if (type == 'combined') {
+            if (requiresMuxing) {
               final videoSize = streamInfo['videoSize'] as int? ?? 0;
               final audioSize = streamInfo['audioSize'] as int? ?? 0;
               final totalSize = (videoSize + audioSize) > 0
                   ? videoSize + audioSize
                   : (streamInfo['size'] as int? ?? 0);
               task = task.copyWith(
-                url: streamInfo['src'] as String,
-                mergedAudioUrl: streamInfo['audioSrc'] as String,
+                url: resolvedUrl,
+                mergedAudioUrl: streamInfo['audioSrc']?.toString(),
                 fileSize: totalSize,
                 audioSize: audioSize,
-                fileName: task.fileName.isNotEmpty ? task.fileName : resolvedFileName,
+                fileName:
+                    task.fileName.isNotEmpty ? task.fileName : resolvedFileName,
                 localFilePath: resolvedLocalPath,
                 tempFilePath: resolvedTempPath,
               );
             } else {
               task = task.copyWith(
-                url: streamInfo['src'] as String,
+                url: resolvedUrl,
+                mergedAudioUrl: null,
                 fileSize: streamInfo['size'] as int? ?? 0,
-                fileName: task.fileName.isNotEmpty ? task.fileName : resolvedFileName,
+                fileName:
+                    task.fileName.isNotEmpty ? task.fileName : resolvedFileName,
                 localFilePath: resolvedLocalPath,
                 tempFilePath: resolvedTempPath,
               );
@@ -264,8 +272,8 @@ class DownloadOrchestrator {
           final isRetryable = isRetryableError(e);
           final maxRetries =
               _host.providerSettingsProvider.autoRetryEnabled && isRetryable
-              ? _host.providerSettingsProvider.maxRetries
-              : 0;
+                  ? _host.providerSettingsProvider.maxRetries
+                  : 0;
           final currentRetry = _host.retryCounts[task.id] ?? 0;
 
           if (currentRetry < maxRetries) {
@@ -324,8 +332,7 @@ class DownloadOrchestrator {
     final current = _host.findTaskById(taskId);
     if (current == null) return false;
 
-    final hasAudio =
-        !current.isTorrent &&
+    final hasAudio = !current.isTorrent &&
         current.mergedAudioUrl != null &&
         current.mergedAudioUrl!.isNotEmpty;
     if (!hasAudio) return false;
@@ -461,9 +468,8 @@ class DownloadOrchestrator {
       await _host.setTaskState(
         current.copyWith(
           status: DownloadStatus.completed,
-          downloadedBytes: current.fileSize > 0
-              ? current.fileSize
-              : current.downloadedBytes,
+          downloadedBytes:
+              current.fileSize > 0 ? current.fileSize : current.downloadedBytes,
           speed: 0,
           clearEta: true,
           statusMessage: DownloadStatusMessages.mergeFailedVideoOnly,
@@ -516,6 +522,24 @@ class DownloadOrchestrator {
         ? current.fileSize
         : (current.downloadedBytes > 0 ? current.downloadedBytes : 0);
 
+    if (!current.isTorrent &&
+        (current.category == 'Video' || current.category == 'Audio')) {
+      final file = File(current.localFilePath);
+      if (await file.exists()) {
+        final size = await file.length();
+        if (size < 100 * 1024) {
+          await _host.setTaskState(
+            current.copyWith(
+              status: DownloadStatus.failed,
+              errorMessage:
+                  'Downloaded file is only $size bytes — likely an error page, not valid media. Stream URL may have expired. Please retry.',
+            ),
+          );
+          return;
+        }
+      }
+    }
+
     if (current.expectedSha256 != null && current.expectedSha256!.isNotEmpty) {
       try {
         final file = File(current.localFilePath);
@@ -555,8 +579,7 @@ class DownloadOrchestrator {
       metrics.checksumPassed = current.status != DownloadStatus.failed;
     }
 
-    final hasAudio =
-        !current.isTorrent &&
+    final hasAudio = !current.isTorrent &&
         current.mergedAudioUrl != null &&
         current.mergedAudioUrl!.isNotEmpty;
 
@@ -636,7 +659,8 @@ class DownloadOrchestrator {
           final saveDir = Directory(current.savePath);
           if (saveDir.existsSync()) {
             await for (final entity in saveDir.list(recursive: false)) {
-              if (entity is File && p.extension(entity.path) == p.extension(finalPath)) {
+              if (entity is File &&
+                  p.extension(entity.path) == p.extension(finalPath)) {
                 actualFilePath = entity.path;
                 actualFileName = p.basename(entity.path);
                 break;
@@ -710,9 +734,8 @@ class DownloadOrchestrator {
     int? ttfbTimestamp;
 
     final tempFile = File(task.tempFilePath);
-    final audioFile = hasAudio && audioTempPath != null
-        ? File(audioTempPath)
-        : null;
+    final audioFile =
+        hasAudio && audioTempPath != null ? File(audioTempPath) : null;
     final tempLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
     final audioLen = audioFile != null && audioFile.existsSync()
         ? audioFile.lengthSync()
@@ -720,14 +743,16 @@ class DownloadOrchestrator {
 
     int audioBytesSoFar = hasAudio && task.audioSize > 0
         ? (task.audioProgress >= 1.0
-              ? task.audioSize
-              : max((task.audioProgress * task.audioSize).round(), audioLen))
+            ? task.audioSize
+            : max((task.audioProgress * task.audioSize).round(), audioLen))
         : audioLen;
     int videoBytesSoFar = (task.downloadedBytes - audioBytesSoFar).clamp(
       0,
       task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
     );
-    if (videoBytesSoFar == 0 && tempLen > 0 && (task.fileSize <= 0 || tempLen < task.fileSize)) {
+    if (videoBytesSoFar == 0 &&
+        tempLen > 0 &&
+        (task.fileSize <= 0 || tempLen < task.fileSize)) {
       videoBytesSoFar = tempLen;
     }
     double audioSpeedNow = 0.0;
@@ -749,12 +774,10 @@ class DownloadOrchestrator {
       final base = _host.providerTasks[index];
       if (base.status != DownloadStatus.downloading) return;
 
-      final audioContribution = hasAudio
-          ? (base.audioSize > 0 ? base.audioSize : 0)
-          : 0;
-      final effectiveVideoSize = videoSizeSoFar > 0
-          ? videoSizeSoFar
-          : videoTransferSize;
+      final audioContribution =
+          hasAudio ? (base.audioSize > 0 ? base.audioSize : 0) : 0;
+      final effectiveVideoSize =
+          videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
       final totalSize = effectiveVideoSize + audioContribution;
       final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
       final instantSpeed = audioSpeedNow + videoSpeedNow;
@@ -855,8 +878,7 @@ class DownloadOrchestrator {
           Future<void> runAudio() async {
             final liveAudioTask = _host.findTaskById(task.id);
             if (liveAudioTask == null) return;
-            final liveHasAudio =
-                !liveAudioTask.isTorrent &&
+            final liveHasAudio = !liveAudioTask.isTorrent &&
                 liveAudioTask.mergedAudioUrl != null &&
                 liveAudioTask.mergedAudioUrl!.isNotEmpty;
             if (!liveHasAudio) return;
@@ -871,8 +893,7 @@ class DownloadOrchestrator {
             // 1. audioProgress is at 1.0 (exact stream completion), OR
             // 2. audio exists on disk AND size is known AND downloaded bytes >= expected size.
             // The 0.99 heuristic is REMOVED because it can merge truncated audio.
-            final isAudioComplete =
-                liveAudioTask.audioProgress >= 1.0 ||
+            final isAudioComplete = liveAudioTask.audioProgress >= 1.0 ||
                 (audioExists &&
                     audioLen > 0 &&
                     liveAudioSize > 0 &&
@@ -936,7 +957,7 @@ class DownloadOrchestrator {
                 return _host.effectiveSpeedLimit();
               },
               activeDownloadCount: () => _host.downloadingTasksCount,
-              threadCount: streamThreadCount,
+              threadCount: max(1, min(2, runtimeThreadCount)),
               customUserAgent: _host.providerSettingsProvider.customUserAgent,
               referer: isYoutube
                   ? (task.downloadPageUrl ?? 'https://www.youtube.com/')
@@ -963,9 +984,8 @@ class DownloadOrchestrator {
             if (downloadedAudioLen == 0) {
               throw Exception('Audio file is empty: $audioTempPath');
             }
-            audioBytesSoFar = task.audioSize > 0
-                ? task.audioSize
-                : downloadedAudioLen;
+            audioBytesSoFar =
+                task.audioSize > 0 ? task.audioSize : downloadedAudioLen;
             audioSpeedNow = 0.0;
             final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
             if (idx != -1) {
@@ -978,13 +998,11 @@ class DownloadOrchestrator {
 
           Future<void> runVideo() async {
             final liveVideoTask = _host.findTaskById(task.id);
-            final liveHasAudio =
-                liveVideoTask != null &&
+            final liveHasAudio = liveVideoTask != null &&
                 !liveVideoTask.isTorrent &&
                 liveVideoTask.mergedAudioUrl != null &&
                 liveVideoTask.mergedAudioUrl!.isNotEmpty;
-            final liveVideoTransferSize =
-                liveHasAudio &&
+            final liveVideoTransferSize = liveHasAudio &&
                     liveVideoTask.audioSize > 0 &&
                     liveVideoTask.fileSize > liveVideoTask.audioSize
                 ? liveVideoTask.fileSize - liveVideoTask.audioSize
@@ -1084,8 +1102,8 @@ class DownloadOrchestrator {
                   _host.ytLowSpeedCounts[task.id] = 0;
                 }
 
-                final speedQueue = _host.speedHistories[task.id] ??=
-                    Queue<double>();
+                final speedQueue =
+                    _host.speedHistories[task.id] ??= Queue<double>();
                 speedQueue.add(progress.speed);
                 if (speedQueue.length > 20) speedQueue.removeFirst();
 
@@ -1112,8 +1130,8 @@ class DownloadOrchestrator {
                     : base.tempFilePath;
                 final newCategory =
                     newFileName != base.fileName && base.category == 'Other'
-                    ? categoryFromFileName(newFileName)
-                    : base.category;
+                        ? categoryFromFileName(newFileName)
+                        : base.category;
 
                 List<Map<String, dynamic>>? diskVerifiedFiles;
                 // Only use disk scan as initial seed data BEFORE the engine has
@@ -1124,12 +1142,12 @@ class DownloadOrchestrator {
                 // FIX(4): Treat "has data" as "real bytes OR an explicit estimate" so disk scans don't clobber engine data
                 final engineHasActualPerFileProgress =
                     progress.torrentFiles != null &&
-                    progress.torrentFiles!.isNotEmpty &&
-                    progress.torrentFiles!.any(
-                      (f) =>
-                          f['progressEstimated'] == false ||
-                          ((f['downloadedBytes'] as int?) ?? 0) > 0,
-                    );
+                        progress.torrentFiles!.isNotEmpty &&
+                        progress.torrentFiles!.any(
+                          (f) =>
+                              f['progressEstimated'] == false ||
+                              ((f['downloadedBytes'] as int?) ?? 0) > 0,
+                        );
                 if (task.isTorrent &&
                     !engineHasActualPerFileProgress &&
                     progress.torrentFiles != null &&
@@ -1151,8 +1169,7 @@ class DownloadOrchestrator {
                 }
 
                 pushCombinedProgress(
-                  chunksOverride:
-                      progress.chunks ??
+                  chunksOverride: progress.chunks ??
                       _host.buildChunks(
                         streamThreadCount,
                         videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize,
@@ -1205,8 +1222,7 @@ class DownloadOrchestrator {
           if (!videoCancelToken.isCancelled) videoCancelToken.cancel();
           if (!audioCancelToken.isCancelled) audioCancelToken.cancel();
 
-          final isYoutubeDownload =
-              (task.downloadPageUrl != null &&
+          final isYoutubeDownload = (task.downloadPageUrl != null &&
                   YoutubeService.extractVideoId(task.downloadPageUrl!) !=
                       null) ||
               task.url.contains('.googlevideo.com/') ||
@@ -1214,9 +1230,50 @@ class DownloadOrchestrator {
           bool shouldRefreshYoutube = false;
           if (isYoutubeDownload) {
             final errStr = error.toString();
-            final statusCode = error is DioException
-                ? error.response?.statusCode
-                : null;
+            final msg = error is DioException ? error.message ?? '' : '';
+            final statusCode =
+                error is DioException ? error.response?.statusCode : null;
+            final htmlError = errStr.contains('HTML instead of media') ||
+                msg.contains('HTML instead of media');
+
+            if (htmlError) {
+              try {
+                final pageUrl = (task.downloadPageUrl != null &&
+                        task.downloadPageUrl!.isNotEmpty)
+                    ? task.downloadPageUrl!
+                    : task.url;
+                final fresh = await YoutubeService.refreshStreamUrl(
+                  pageUrl,
+                  task.url,
+                );
+                final refreshedUrl = fresh?['url']?.toString();
+                if (refreshedUrl != null && refreshedUrl.isNotEmpty) {
+                  final refreshedAudioUrl = fresh?['audioUrl']?.toString();
+                  task = task.copyWith(
+                    url: refreshedUrl,
+                    mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
+                  );
+                  final idx = _host.providerTasks.indexWhere(
+                    (x) => x.id == task.id,
+                  );
+                  if (idx != -1) {
+                    _host.providerTasks[idx] =
+                        _host.providerTasks[idx].copyWith(
+                      url: refreshedUrl,
+                      mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
+                    );
+                    await _host.providerDatabaseService.saveTask(
+                      _host.providerTasks[idx],
+                    );
+                  }
+                  await _host.setTaskState(task);
+                  continue;
+                }
+              } catch (e) {
+                debugPrint('[DMX] HTML refresh retry failed: $e');
+              }
+            }
+
             if (statusCode == 403 ||
                 statusCode == 410 ||
                 errStr.contains('403') ||
@@ -1232,8 +1289,7 @@ class DownloadOrchestrator {
             }
             try {
               YoutubeService.resetClient();
-              final pageUrl =
-                  (task.downloadPageUrl != null &&
+              final pageUrl = (task.downloadPageUrl != null &&
                       task.downloadPageUrl!.isNotEmpty)
                   ? task.downloadPageUrl!
                   : task.url;
@@ -1421,8 +1477,8 @@ class DownloadOrchestrator {
     );
 
     // Wire DownloadMetrics for this task
-    _host.downloadMetrics[task
-        .id] = DownloadMetrics(taskId: task.id, url: task.url)
+    _host.downloadMetrics[task.id] = DownloadMetrics(
+        taskId: task.id, url: task.url)
       ..requestedThreads = runtimeThreadCount
       ..resumed = realTotalDownloaded > 0
       ..resumeBytesSaved = realTotalDownloaded > 0 ? realTotalDownloaded : 0;
@@ -1431,22 +1487,19 @@ class DownloadOrchestrator {
     // Torrents always reconcile: the guessed name (magnet `dn`) may differ from
     // the real torrent name reported after metadata, and the task's paths must
     // point at the folder libtorrent actually uses so resume stays consistent.
-    final isAutoName =
-        task.isTorrent ||
+    final isAutoName = task.isTorrent ||
         task.fileName == 'torrent_download.zip' ||
         task.fileName.isEmpty ||
         task.fileName == fileNameFromUrl(task.url) ||
         task.fileName.startsWith('download_');
 
-    final hasAudio =
-        !task.isTorrent &&
+    final hasAudio = !task.isTorrent &&
         task.mergedAudioUrl != null &&
         task.mergedAudioUrl!.isNotEmpty;
     final audioTempPath = hasAudio ? '${task.tempFilePath}.audio' : null;
 
     // Detect YouTube early so we can skip CDN HEAD probes that trigger 429s.
-    final isYoutube =
-        task.downloadPageUrl != null &&
+    final isYoutube = task.downloadPageUrl != null &&
         (task.downloadPageUrl!.contains('youtube.com/') ||
             task.downloadPageUrl!.contains('youtu.be/'));
 
@@ -1542,158 +1595,153 @@ class DownloadOrchestrator {
 
     // Run video and audio in PARALLEL — each gets the full configured
     // thread count (streamThreadCount), not split between them.
-    final downloadFuture =
-        _executeDownload(
-              task,
-              runtimeThreadCount,
-              cookieString,
-              notificationId,
-              isAutoName,
-              hasAudio,
-              audioTempPath,
-              isYoutube,
-              videoTransferSize,
-              torrentId,
-              cancelToken,
-            )
-            .then((_) async {
-              if (hasAudio) {
-                await _mergeAudioVideo(task.id, audioTempPath!);
-              }
-              await _finalizeDownload(task.id, notificationId);
-            })
-            .catchError((Object error, StackTrace stackTrace) async {
-              final realError = error;
+    final downloadFuture = _executeDownload(
+      task,
+      runtimeThreadCount,
+      cookieString,
+      notificationId,
+      isAutoName,
+      hasAudio,
+      audioTempPath,
+      isYoutube,
+      videoTransferSize,
+      torrentId,
+      cancelToken,
+    ).then((_) async {
+      if (hasAudio) {
+        await _mergeAudioVideo(task.id, audioTempPath!);
+      }
+      await _finalizeDownload(task.id, notificationId);
+    }).catchError((Object error, StackTrace stackTrace) async {
+      final realError = error;
 
-              debugPrint('================= DOWNLOAD ERROR =================');
-              debugPrint('Task ID: ${task.id}');
-              debugPrint('URL: ${task.url}');
-              debugPrint('Error: $realError');
-              if (realError is DioException) {
-                debugPrint('DioException Type: ${realError.type}');
-                debugPrint('DioException Message: ${realError.message}');
-                debugPrint(
-                  'DioException Response: ${realError.response?.data}',
-                );
-                debugPrint(
-                  'DioException Status: ${realError.response?.statusCode}',
-                );
-              }
-              debugPrint('Stacktrace: $stackTrace');
-              debugPrint('==================================================');
+      debugPrint('================= DOWNLOAD ERROR =================');
+      debugPrint('Task ID: ${task.id}');
+      debugPrint('URL: ${task.url}');
+      debugPrint('Error: $realError');
+      if (realError is DioException) {
+        debugPrint('DioException Type: ${realError.type}');
+        debugPrint('DioException Message: ${realError.message}');
+        debugPrint(
+          'DioException Response: ${realError.response?.data}',
+        );
+        debugPrint(
+          'DioException Status: ${realError.response?.statusCode}',
+        );
+      }
+      debugPrint('Stacktrace: $stackTrace');
+      debugPrint('==================================================');
 
-              await _host.flushPendingProgress(task.id);
-              final current = _host.findTaskById(task.id);
-              if (current == null) return;
+      await _host.flushPendingProgress(task.id);
+      final current = _host.findTaskById(task.id);
+      if (current == null) return;
 
-              if (realError is DioException &&
-                  realError.type == DioExceptionType.cancel) {
-                _host.retryCounts.remove(task.id);
-                if (current.status == DownloadStatus.downloading) {
-                  await _host.setTaskState(
-                    current.copyWith(speed: 0, clearEta: true),
-                  );
-                }
-                _host.notifications.cancelNotification(notificationId);
-                return;
-              }
+      if (realError is DioException &&
+          realError.type == DioExceptionType.cancel) {
+        _host.retryCounts.remove(task.id);
+        if (current.status == DownloadStatus.downloading) {
+          await _host.setTaskState(
+            current.copyWith(speed: 0, clearEta: true),
+          );
+        }
+        _host.notifications.cancelNotification(notificationId);
+        return;
+      }
 
-              // Clean up transient audio sidecar files on failure if present, while preserving main partial file for resume
-              try {
-                if (hasAudio && audioTempPath != null) {
-                  final audioFile = File(audioTempPath);
-                  if (await audioFile.exists()) await audioFile.delete();
-                }
-              } catch (e, st) {
-                Logger(
-                  'download_orchestrator',
-                ).warning('[download_orchestrator] operation failed', e, st);
-              }
+      // Clean up transient audio sidecar files on failure if present, while preserving main partial file for resume
+      try {
+        if (hasAudio && audioTempPath != null) {
+          final audioFile = File(audioTempPath);
+          if (await audioFile.exists()) await audioFile.delete();
+        }
+      } catch (e, st) {
+        Logger(
+          'download_orchestrator',
+        ).warning('[download_orchestrator] operation failed', e, st);
+      }
 
-              final isRetryable = isRetryableError(realError);
-              final maxRetries =
-                  _host.providerSettingsProvider.autoRetryEnabled && isRetryable
-                  ? _host.providerSettingsProvider.maxRetries
-                  : 0;
-              final currentRetry = _host.retryCounts[task.id] ?? 0;
+      final isRetryable = isRetryableError(realError);
+      final maxRetries =
+          _host.providerSettingsProvider.autoRetryEnabled && isRetryable
+              ? _host.providerSettingsProvider.maxRetries
+              : 0;
+      final currentRetry = _host.retryCounts[task.id] ?? 0;
 
-              if (currentRetry < maxRetries) {
-                _host.retryCounts[task.id] = currentRetry + 1;
-                final delaySeconds =
-                    _host.providerSettingsProvider.retryDelaySeconds;
-                debugPrint(
-                  'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
-                );
+      if (currentRetry < maxRetries) {
+        _host.retryCounts[task.id] = currentRetry + 1;
+        final delaySeconds = _host.providerSettingsProvider.retryDelaySeconds;
+        debugPrint(
+          'Transient error for task ${task.id}. Retrying (${currentRetry + 1}/$maxRetries) in $delaySeconds seconds...',
+        );
 
-                await _host.setTaskState(
-                  current.copyWith(
-                    status: DownloadStatus.queued,
-                    speed: 0,
-                    errorMessage:
-                        'Retrying in $delaySeconds seconds: ${errorMessage(realError)}',
-                  ),
-                );
+        await _host.setTaskState(
+          current.copyWith(
+            status: DownloadStatus.queued,
+            speed: 0,
+            errorMessage:
+                'Retrying in $delaySeconds seconds: ${errorMessage(realError)}',
+          ),
+        );
 
-                _host.retryTimers[task.id]?.cancel();
-                _host.retryTimers[task.id] = Timer(
-                  Duration(seconds: delaySeconds),
-                  () {
-                    _host.retryTimers.remove(task.id);
-                    if (_host.providerDisposed) return;
-                    final checkedTask = _host.findTaskById(task.id);
-                    if (checkedTask != null &&
-                        checkedTask.status == DownloadStatus.queued) {
-                      _host.pumpQueue();
-                    }
-                  },
-                );
-                return;
-              }
+        _host.retryTimers[task.id]?.cancel();
+        _host.retryTimers[task.id] = Timer(
+          Duration(seconds: delaySeconds),
+          () {
+            _host.retryTimers.remove(task.id);
+            if (_host.providerDisposed) return;
+            final checkedTask = _host.findTaskById(task.id);
+            if (checkedTask != null &&
+                checkedTask.status == DownloadStatus.queued) {
+              _host.pumpQueue();
+            }
+          },
+        );
+        return;
+      }
 
-              _host.retryCounts.remove(task.id);
-              _recordDownloadFailure(task.id, realError);
-              try {
-                await _host.cleanupPartFiles(current);
-                await cleanupTempFiles(current);
-              } catch (e) {
-                debugPrint(
-                  'Failed to clean up temp files on non-retryable error: $e',
-                );
-              }
-              await _host.setTaskState(
-                current.copyWith(
-                  status: DownloadStatus.failed,
-                  speed: 0,
-                  clearEta: true,
-                  clearStatusMessage: true,
-                  errorMessage: errorMessage(realError),
-                ),
-              );
-              _host.notifications.showFailed(
-                notificationId: notificationId,
-                title: task.fileName,
-                error: errorMessage(realError),
-              );
-            })
-            .whenComplete(() {
-              _host.cancelTokens.remove(task.id);
-              _host.activeFutures.remove(task.id);
-              // Don't pumpQueue here if this task was set to queued (retry
-              // scheduled by catchError). The retry timer will restart it after
-              // the configured delay — immediate pumpQueue would defeat the delay
-              // and create a fast fail loop.
-              final status = _host.findTaskById(task.id)?.status;
-              if (status != DownloadStatus.queued) {
-                _host.pumpQueue();
-              }
-              if (_host.activeOrSeedingCount == 0) {
-                BackgroundService.stop();
-                _host.providerStopWidgetTimer();
-              } else {
-                _host.notifications.updateBackgroundNotification();
-              }
-              _host.updateTelemetryWidget();
-            });
+      _host.retryCounts.remove(task.id);
+      _recordDownloadFailure(task.id, realError);
+      try {
+        await _host.cleanupPartFiles(current);
+        await cleanupTempFiles(current);
+      } catch (e) {
+        debugPrint(
+          'Failed to clean up temp files on non-retryable error: $e',
+        );
+      }
+      await _host.setTaskState(
+        current.copyWith(
+          status: DownloadStatus.failed,
+          speed: 0,
+          clearEta: true,
+          clearStatusMessage: true,
+          errorMessage: errorMessage(realError),
+        ),
+      );
+      _host.notifications.showFailed(
+        notificationId: notificationId,
+        title: task.fileName,
+        error: errorMessage(realError),
+      );
+    }).whenComplete(() {
+      _host.cancelTokens.remove(task.id);
+      _host.activeFutures.remove(task.id);
+      // Don't pumpQueue here if this task was set to queued (retry
+      // scheduled by catchError). The retry timer will restart it after
+      // the configured delay — immediate pumpQueue would defeat the delay
+      // and create a fast fail loop.
+      final status = _host.findTaskById(task.id)?.status;
+      if (status != DownloadStatus.queued) {
+        _host.pumpQueue();
+      }
+      if (_host.activeOrSeedingCount == 0) {
+        BackgroundService.stop();
+        _host.providerStopWidgetTimer();
+      } else {
+        _host.notifications.updateBackgroundNotification();
+      }
+      _host.updateTelemetryWidget();
+    });
     earlyReturnCompleter.complete();
     _host.activeFutures[task.id] = downloadFuture;
   }
@@ -1724,6 +1772,37 @@ class DownloadOrchestrator {
     )?.queryParameters['mime']?.split('/').first;
     if (oldMime == null || newMime == null) return true;
     return oldMime == newMime;
+  }
+
+  @visibleForTesting
+  bool youtubeStreamRequiresMuxing(String? streamType) {
+    final normalized = (streamType ?? '').toLowerCase().trim();
+    return normalized == 'video_only' || normalized == 'video';
+  }
+
+  @visibleForTesting
+  bool shouldRejectResolvedYoutubeUrl(String? resolvedUrl) {
+    if (resolvedUrl == null || resolvedUrl.trim().isEmpty) return true;
+
+    final uri = Uri.tryParse(resolvedUrl.trim());
+    if (uri == null) return false;
+
+    final host = uri.host.toLowerCase();
+    final isYouTubeHost = host == 'youtube.com' ||
+        host == 'www.youtube.com' ||
+        host == 'm.youtube.com' ||
+        host.endsWith('.youtube.com') ||
+        host == 'youtu.be' ||
+        host.endsWith('.youtu.be');
+
+    if (isYouTubeHost) return true;
+
+    final path = uri.path.toLowerCase();
+    return path == '/watch' ||
+        path == '/playlist' ||
+        path == '/shorts' ||
+        path.endsWith('.html') ||
+        path.endsWith('.htm');
   }
 
   Future<Map<String, dynamic>?> _refreshYoutubeStreamUrlSafe(
