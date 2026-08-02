@@ -505,7 +505,6 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
     final provider = context.read<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -526,8 +525,8 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
             color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
             filled: true,
             tooltip: task.status == DownloadStatus.queued
-                ? (isRtl ? 'بدء' : 'Start')
-                : (isRtl ? 'استئناف' : 'Resume'),
+                ? L10n.of(context, 'start_btn')
+                : L10n.of(context, 'resume_btn'),
             onPressed: () {
               triggerHaptic(settings);
               provider.resumeTask(task.id);
@@ -538,7 +537,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
             icon: Icons.refresh_rounded,
             color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
             filled: true,
-            tooltip: isRtl ? 'إعادة' : 'Retry',
+            tooltip: L10n.of(context, 'retry_label'),
             onPressed: () {
               triggerHaptic(settings);
               provider.retryTask(task.id);
@@ -549,7 +548,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
             icon: Icons.folder_open_rounded,
             color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             filled: true,
-            tooltip: isRtl ? 'فتح الملف' : 'Open',
+            tooltip: L10n.of(context, 'open_file_btn'),
             onPressed: () async {
               triggerHaptic(settings);
               final path = task.localFilePath;
@@ -560,9 +559,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
                 if (context.mounted) {
                   ThemedSnackbar.show(
                     context,
-                    message: isRtl
-                        ? 'تعذر العثور على الملف، تم نقله إلى قائمة الإخفاق'
-                        : 'File missing on disk, moved to Failed tab',
+                    message: L10n.of(context, 'file_missing_msg'),
                     color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                     icon: Icons.error_outline,
                     isDarkMode: isDark,
@@ -592,7 +589,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
               if (context.mounted) {
                 ThemedSnackbar.show(
                   context,
-                  message: isRtl ? 'تم حذف التحميل بنجاح' : 'Download deleted',
+                  message: L10n.of(context, 'delete_success'),
                   color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                   icon: Icons.delete_outline,
                   isDarkMode: isDark,

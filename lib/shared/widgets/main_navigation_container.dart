@@ -88,16 +88,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           showMandatoryUpdateDialog(context, update, provider);
         } else {
           final isDark = settings.isDarkMode;
-          final isRtl = L10n.isRtl(context);
           ThemedSnackbar.show(
             context,
-            message: isRtl
-                ? 'New update available v${update.latestVersion}'
-                : 'New update available v${update.latestVersion}',
+            message: '${L10n.of(context, 'new_update_available')}${update.latestVersion}',
             color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: Icons.system_update_rounded,
             isDarkMode: isDark,
-            actionLabel: isRtl ? 'تنزيل' : 'Update',
+            actionLabel: L10n.of(context, 'download_action'),
             onAction: () =>
                 showUpdateInfoDialog(context, update, provider, settings),
           );
@@ -153,19 +150,16 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   void _showClipboardSnackbar(String url) {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
     if (settings.vibration) HapticFeedback.mediumImpact();
     final preview = url.length > 40 ? '${url.substring(0, 40)}…' : url;
     ThemedSnackbar.show(
       context,
-      message: isRtl
-          ? 'تم اكتشاف رابط في الحافظة'
-          : 'Link detected in clipboard',
+      message: L10n.of(context, 'clipboard_link_detected'),
       subtitle: preview,
       color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
       icon: Icons.content_paste_go_rounded,
       isDarkMode: isDark,
-      actionLabel: isRtl ? 'تحميل' : 'Download',
+      actionLabel: L10n.of(context, 'download_action'),
       onAction: () {
         final provider = context.read<DownloadProvider>();
         provider.openUrlInBrowser(url);

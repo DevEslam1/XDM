@@ -283,7 +283,7 @@ class _HomeScreenState extends State<HomeScreen>
                 ? Icons.pie_chart_rounded
                 : Icons.pie_chart_outline_rounded,
             color: _showAnalytics ? accentClr : textClr,
-            tooltip: isRtl ? 'تحليل التخزين' : 'Storage Analytics',
+            tooltip: L10n.of(context, 'storage_analytics'),
             onPressed: () {
               triggerHaptic(context.read<SettingsProvider>());
               setState(() => _showAnalytics = !_showAnalytics);
@@ -401,14 +401,14 @@ class _HomeScreenState extends State<HomeScreen>
                 _buildSegment(
                   context,
                   0,
-                  isRtl ? 'النشطة' : 'Active',
+                  L10n.of(context, 'active_tab'),
                   activeCount,
                   isDark,
                 ),
                 _buildSegment(
                   context,
                   1,
-                  isRtl ? 'المكتملة' : 'Completed',
+                  L10n.of(context, 'completed_tab'),
                   historyCount,
                   isDark,
                 ),
@@ -525,8 +525,8 @@ class _HomeScreenState extends State<HomeScreen>
                     children: [
                       Text(
                         _selectedTab == 0
-                            ? (isRtl ? 'التنزيلات النشطة' : 'ACTIVE DOWNLOADS')
-                            : (isRtl ? 'سجل التنزيلات' : 'HISTORY / COMPLETED'),
+                            ? L10n.of(context, 'active_transmissions_header')
+                            : L10n.of(context, 'completed_transmissions_header'),
                         style: TextStyle(
                           color: textClr,
                           fontSize: 13,
@@ -559,7 +559,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$count ${isRtl ? 'عنصر' : 'items'}',
+                    '$count ${L10n.of(context, 'items_count')}',
                     style: TextStyle(
                       color: mutedClr,
                       fontSize: 10,
@@ -855,7 +855,7 @@ class _HomeScreenState extends State<HomeScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    isRtl ? 'مسح السجل' : 'Clear History',
+                    L10n.of(context, 'clear_history'),
                     style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
                       color: redClr,
                       fontWeight: FontWeight.bold,
@@ -895,7 +895,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
                 child: Text(
-                  isRtl ? 'مسح الكل' : 'Clear All',
+                  L10n.of(context, 'clear_all'),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 onPressed: () async {
@@ -1068,7 +1068,7 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                isRtl ? 'تحليل التخزين' : 'STORAGE ANALYTICS',
+                L10n.of(context, 'storage_analytics'),
                 style: TextStyle(
                   color: mutedClr,
                   fontSize: 10,
@@ -1163,7 +1163,7 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Text(
-                            isRtl ? 'لا توجد بيانات' : 'No data available',
+                            L10n.of(context, 'no_data_available'),
                             style: TextStyle(
                               color: mutedClr,
                               fontSize: 11,
@@ -1494,7 +1494,7 @@ class _EmptyState extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                isRtl ? 'لا نتائج لـ "$query"' : 'No results for "$query"',
+                '${L10n.of(context, 'no_results_for')} "$query"',
                 style: TextStyle(
                   color: isDark
                       ? AppTheme.textPrimary
@@ -1507,7 +1507,7 @@ class _EmptyState extends StatelessWidget {
               TextButton.icon(
                 onPressed: () => provider.setSearchQuery(''),
                 icon: const Icon(Icons.clear_rounded, size: 16),
-                label: Text(isRtl ? 'مسح البحث' : 'Clear Search'),
+                label: Text(L10n.of(context, 'clear_search')),
                 style: TextButton.styleFrom(foregroundColor: accentClr),
               ),
             ],
@@ -1615,7 +1615,7 @@ class _EmptyState extends StatelessWidget {
                     builder: (context) => const AddDownloadDialog(),
                   );
                 },
-                text: isRtl ? 'إضافة تنزيل جديد' : 'ADD NEW TRANSMISSION',
+                text: L10n.of(context, 'add_new_transmission'),
                 icon: Icons.add_rounded,
                 isFilled: true,
                 color: accentClr,

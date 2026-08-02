@@ -25,8 +25,6 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
         final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
         final dividerClr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
 
-        final isRtl = L10n.isRtl(context);
-
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(18),
@@ -83,8 +81,8 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                             color: Colors.transparent,
                             child: Tooltip(
                               message: data.hasActive
-                                  ? (isRtl ? 'إيقاف مؤقت للكل' : 'PAUSE ALL')
-                                  : (isRtl ? 'استئناف الكل' : 'RESUME ALL'),
+                                  ? L10n.of(context, 'pause_all')
+                                  : L10n.of(context, 'resume_all'),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(14),
                                 onTap: () {
