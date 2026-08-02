@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:dmx/core/app_theme.dart';
 
 /// Repaints in isolation — the parent widget never rebuilds on progress ticks.
-/// Pass a ValueListenable<double> and only the paint() call re-executes.
+/// Pass a `ValueListenable<double>` and only the paint() call re-executes.
 class ChannelProgressPainter extends CustomPainter {
   final ValueListenable<double> progress;
   final bool isDark;

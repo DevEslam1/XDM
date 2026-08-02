@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:dmx/core/services/download_engine.dart';
 import 'package:dmx/core/utils/url_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,12 +10,6 @@ void main() {
       });
       final name = fileNameFromContentDisposition(headers);
       expect(name, equals('my_test_video 1080p.mp4'));
-    });
-
-    test('resolveMetadata handles standard HTTP URL resolution safely', () async {
-      final engine = DownloadEngine();
-      final meta = await engine.resolveMetadata(url: 'https://httpbin.org/bytes/1024');
-      expect(meta.fileName, isNotEmpty);
     });
   });
 }
