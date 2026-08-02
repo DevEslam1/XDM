@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -67,7 +68,8 @@ class TorrentResumeStore {
       // FIX(C5): Atomic write via temp file + rename to prevent corruption
       // if the app crashes mid-write. Handle Windows overwrite limitation.
       final targetPath = _pathFor(torrentId);
-      final tmpPath = '$targetPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
+      final tmpPath =
+          '$targetPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
       final tmpFile = File(tmpPath);
       try {
         await tmpFile.writeAsString(data, flush: true);
@@ -140,12 +142,22 @@ class TorrentResumeStore {
   static String _binaryPathFor(int torrentId) =>
       p.join(_basePath!, 'resume_${torrentId}_fast.bin');
 
+  /// Stable key for a torrent source. Native torrent IDs are process-local and
+  /// change after restart, so fast-resume data must also be addressable by the
+  /// magnet URI or torrent-file source.
+  static String stableSourceKey(String source) =>
+      sha256.convert(utf8.encode(source.trim())).toString();
+
+  static String _binaryPathForSource(String source) =>
+      p.join(_basePath!, 'resume_source_${stableSourceKey(source)}_fast.bin');
+
   /// Saves native fast-resume binary data for a torrent using atomic temp write.
   static Future<void> saveResumeData(int torrentId, Uint8List data) async {
     await _ensureBasePath();
     try {
       final targetPath = _binaryPathFor(torrentId);
-      final tmpPath = '$targetPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
+      final tmpPath =
+          '$targetPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
       final tmpFile = File(tmpPath);
       try {
         await tmpFile.writeAsBytes(data, flush: true);
@@ -178,6 +190,58 @@ class TorrentResumeStore {
     }
   }
 
+  /// Saves native fast-resume data using a stable torrent source key.
+  static Future<void> saveResumeDataForSource(
+    String source,
+    Uint8List data,
+  ) async {
+    await _ensureBasePath();
+    try {
+      final targetPath = _binaryPathForSource(source);
+      final tmpPath =
+          '$targetPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
+      final tmpFile = File(tmpPath);
+      try {
+        await tmpFile.writeAsBytes(data, flush: true);
+        final targetFile = File(targetPath);
+        if (await targetFile.exists()) await targetFile.delete();
+        try {
+          await tmpFile.rename(targetPath);
+        } catch (_) {
+          await tmpFile.copy(targetPath);
+          await tmpFile.delete();
+        }
+      } finally {
+        if (await tmpFile.exists()) await tmpFile.delete();
+      }
+    } catch (e) {
+      _log.warning('saveResumeDataForSource failed', e);
+    }
+  }
+
+  /// Loads fast-resume data using a stable torrent source key.
+  static Future<Uint8List?> loadResumeDataForSource(String source) async {
+    await _ensureBasePath();
+    try {
+      final file = File(_binaryPathForSource(source));
+      if (!await file.exists()) return null;
+      return await file.readAsBytes();
+    } catch (e) {
+      _log.warning('loadResumeDataForSource failed', e);
+      return null;
+    }
+  }
+
+  static Future<void> deleteResumeDataForSource(String source) async {
+    await _ensureBasePath();
+    try {
+      final file = File(_binaryPathForSource(source));
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      _log.warning('deleteResumeDataForSource failed', e);
+    }
+  }
+
   /// Loads native fast-resume binary data for a torrent.
   /// Returns null if no data was saved or if loading fails.
   static Future<Uint8List?> loadResumeData(int torrentId) async {
@@ -204,12 +268,16 @@ class TorrentResumeStore {
     for (var i = 0; i < idList.length; i += 10) {
       final end = (i + 10).clamp(0, idList.length);
       final batch = idList.sublist(i, end);
-      await Future.wait(batch.map((id) => save(
-        id,
-        progress: progressForId(id),
-        torrentFiles: filesForId != null ? filesForId(id) : null,
-        seedingEnabled: seedingForId != null ? seedingForId(id) : false,
-      )));
+      await Future.wait(
+        batch.map(
+          (id) => save(
+            id,
+            progress: progressForId(id),
+            torrentFiles: filesForId != null ? filesForId(id) : null,
+            seedingEnabled: seedingForId != null ? seedingForId(id) : false,
+          ),
+        ),
+      );
     }
   }
 }

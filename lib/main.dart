@@ -118,7 +118,9 @@ Future<void> main(List<String> args) async {
           error,
           stack,
           hint: 'PlatformDispatcher',
-        ).catchError((e, st) { Logger('main').warning('[main] operation failed', e, st); }),
+        ).catchError((e, st) {
+          Logger('main').warning('[main] operation failed', e, st);
+        }),
       );
       return false;
     };
@@ -215,7 +217,9 @@ Future<void> main(List<String> args) async {
           _initNonCriticalServices(
             downloadProvider,
             notificationService,
-          ).catchError((e, st) { Logger('main').warning('[main] operation failed', e, st); }),
+          ).catchError((e, st) {
+            Logger('main').warning('[main] operation failed', e, st);
+          }),
         );
       });
     } catch (e, stack) {
@@ -386,23 +390,61 @@ class DmxApp extends StatelessWidget {
 }
 
 class _AppLifecycleObserver with WidgetsBindingObserver {
+  static const _iosTorrentChannel = MethodChannel(
+    'com.dmx.app/torrent_background',
+  );
+  static bool _transitionInProgress = false;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!TorrentService.isSupported) return;
+
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
-        if (TorrentService.isSupported) {
-          unawaited(
-            TorrentService.saveAllResumeData().catchError((e) {
-              debugPrint('Failed to save torrent BG state: $e');
-            }),
-          );
-        }
+        unawaited(_saveTorrentState());
         break;
       case AppLifecycleState.resumed:
+        unawaited(_resumeTorrents());
         break;
       default:
         break;
+    }
+  }
+
+  Future<void> _saveTorrentState() async {
+    if (_transitionInProgress) return;
+    _transitionInProgress = true;
+    try {
+      final ids = TorrentService.activeTorrentIds.toList();
+      if (Platform.isIOS) {
+        await _iosTorrentChannel.invokeMethod<void>('setActiveTorrentIds', {
+          'ids': ids,
+        });
+      }
+      await TorrentService.saveAllResumeData();
+      await TorrentResumeStore.saveAll(
+        TorrentService.activeTorrentIds,
+        TorrentService.progressFor,
+      );
+    } catch (e) {
+      debugPrint('Failed to save torrent background state: $e');
+    } finally {
+      _transitionInProgress = false;
+    }
+  }
+
+  Future<void> _resumeTorrents() async {
+    if (_transitionInProgress) return;
+    _transitionInProgress = true;
+    try {
+      for (final id in TorrentService.activeTorrentIds.toList()) {
+        TorrentService.resumeTorrent(id);
+      }
+    } catch (e) {
+      debugPrint('Failed to resume torrents after foregrounding: $e');
+    } finally {
+      _transitionInProgress = false;
     }
   }
 }

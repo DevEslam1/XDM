@@ -50,7 +50,11 @@ mixin DownloadTorrentMixin {
         if (task.url.startsWith('file://')) {
           filePath = Uri.parse(task.url).toFilePath();
         }
-        torrentId = TorrentService.addTorrentFile(filePath, saveDir);
+        torrentId = TorrentService.addTorrentFile(
+          filePath,
+          saveDir,
+          sourceKey: task.url,
+        );
       }
       if (torrentId < 0) return;
       providerTorrentIds[task.id] = torrentId;
@@ -59,13 +63,11 @@ mixin DownloadTorrentMixin {
       if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
         final fileCount = TorrentService.getFileCount(torrentId);
         if (fileCount == task.torrentFiles!.length) {
-          final priorities = task.torrentFiles!
-              .map((f) {
-                final selected = f['selected'] as bool? ?? true;
-                if (!selected) return 0;
-                return f['priority'] as int? ?? 4;
-              })
-              .toList();
+          final priorities = task.torrentFiles!.map((f) {
+            final selected = f['selected'] as bool? ?? true;
+            if (!selected) return 0;
+            return f['priority'] as int? ?? 4;
+          }).toList();
           TorrentService.setFilePriorities(torrentId, priorities);
         } else {
           debugPrint(
@@ -183,12 +185,15 @@ mixin DownloadTorrentMixin {
       final files = TorrentService.getFiles(torrentId);
       return files.map((f) => f.downloadedBytes).toList();
     } catch (e, st) {
-      Logger('download_torrent_mixin').warning('[download_torrent_mixin] operation failed', e, st);
+      Logger(
+        'download_torrent_mixin',
+      ).warning('[download_torrent_mixin] operation failed', e, st);
       return task.torrentFiles!
           .map((f) => (f['downloadedBytes'] as int?) ?? 0)
           .toList();
     }
   }
+
   void updateActualTorrentUploadLimit() {
     if (!TorrentService.isSupported || !TorrentService.isInitialized) return;
 
@@ -224,7 +229,7 @@ mixin DownloadTorrentMixin {
       } else if (providerSettingsProvider.globalTorrentSeedingLimited) {
         final limitBytes =
             (providerSettingsProvider.globalTorrentSeedingLimitKbps * 1000) ~/
-                8;
+            8;
         TorrentService.setUploadLimit(limitBytes > 0 ? limitBytes : 0);
       } else {
         TorrentService.setUploadLimit(0); // Unlimited
@@ -262,8 +267,9 @@ mixin DownloadTorrentMixin {
           bool shouldStopSeeding = false;
 
           if (maxMinutes > 0) {
-            final seedingDuration =
-                DateTime.now().difference(task.completedAt!);
+            final seedingDuration = DateTime.now().difference(
+              task.completedAt!,
+            );
             if (seedingDuration.inMinutes >= maxMinutes) {
               shouldStopSeeding = true;
             }
@@ -281,8 +287,7 @@ mixin DownloadTorrentMixin {
             changed = true;
           }
         }
-      } else if (task.speed > 0 &&
-          task.status == DownloadStatus.completed) {
+      } else if (task.speed > 0 && task.status == DownloadStatus.completed) {
         providerTasks[i] = task.copyWith(speed: 0);
         changed = true;
       }
@@ -370,7 +375,9 @@ mixin DownloadTorrentMixin {
     String updatedCategory = task.category;
     if (task.category == 'Other' || task.category.isEmpty) {
       final selectedFiles = files.where((f) => f['selected'] == true).toList();
-      final sample = selectedFiles.isNotEmpty ? selectedFiles.first : (files.isNotEmpty ? files.first : null);
+      final sample = selectedFiles.isNotEmpty
+          ? selectedFiles.first
+          : (files.isNotEmpty ? files.first : null);
       if (sample != null) {
         final fileName = (sample['name'] as String? ?? '').replaceAll('+', ' ');
         final cat = categoryFromFileName(fileName);
@@ -460,14 +467,12 @@ mixin DownloadTorrentMixin {
         )
         .toList();
 
-    final activeDownloads =
-        activeTorrents
-            .where((t) => t.status == DownloadStatus.downloading)
-            .length;
-    final activeSeeds =
-        activeTorrents
-            .where((t) => t.status == DownloadStatus.completed && t.seedingEnabled)
-            .length;
+    final activeDownloads = activeTorrents
+        .where((t) => t.status == DownloadStatus.downloading)
+        .length;
+    final activeSeeds = activeTorrents
+        .where((t) => t.status == DownloadStatus.completed && t.seedingEnabled)
+        .length;
 
     if (activeDownloads > settings.maxActiveDownloads) {
       final toPause = activeTorrents
@@ -481,7 +486,9 @@ mixin DownloadTorrentMixin {
 
     if (activeSeeds > settings.maxActiveSeeds) {
       final toStopSeed = activeTorrents
-          .where((t) => t.status == DownloadStatus.completed && t.seedingEnabled)
+          .where(
+            (t) => t.status == DownloadStatus.completed && t.seedingEnabled,
+          )
           .skip(settings.maxActiveSeeds);
       for (final task in toStopSeed) {
         updateTaskSeeding(task.id, enabled: false);

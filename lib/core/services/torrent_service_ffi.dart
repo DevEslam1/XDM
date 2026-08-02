@@ -97,6 +97,7 @@ class TorrentService {
   static bool fileProgressSupported = true;
   static bool filePrioritiesSupported = true;
   static final Map<int, double> _latestProgress = {};
+  static final Map<int, String> _torrentSources = {};
 
   static bool get isSupported => true;
   static bool get isInitialized => _state == TorrentSessionState.ready;
@@ -195,7 +196,8 @@ class TorrentService {
             // Remove IDs that libtorrent no longer knows about, but keep
             // freshly-added IDs that haven't been reported by native yet.
             _activeTorrentIds.retainWhere(
-              (id) => nativeIds.contains(id) || !_latestProgress.containsKey(id),
+              (id) =>
+                  nativeIds.contains(id) || !_latestProgress.containsKey(id),
             );
             final mapped = torrents.map((key, value) {
               _latestProgress[value.id] = value.progress;
@@ -294,6 +296,11 @@ class TorrentService {
     try {
       final data = LibtorrentFlutter.instance.trySaveResumeData(torrentId);
       if (data != null) {
+        final source = _torrentSources[torrentId];
+        if (source != null) {
+          await TorrentResumeStore.saveResumeDataForSource(source, data);
+        }
+        // Keep the ID-keyed file for backward compatibility with existing installs.
         await TorrentResumeStore.saveResumeData(torrentId, data);
       }
     } catch (e) {
@@ -365,6 +372,7 @@ class TorrentService {
     await _updateController?.close();
     _updateController = null;
     _activeTorrentIds.clear();
+    _torrentSources.clear();
     _latestProgress.clear();
 
     try {
@@ -384,6 +392,7 @@ class TorrentService {
       final id = LibtorrentFlutter.instance.addMagnet(magnetUri, savePath);
       if (id >= 0) {
         _activeTorrentIds.add(id);
+        _torrentSources[id] = magnetUri;
       }
       return id;
     } catch (e) {
@@ -392,13 +401,18 @@ class TorrentService {
     }
   }
 
-  static int addTorrentFile(String filePath, String savePath) {
+  static int addTorrentFile(
+    String filePath,
+    String savePath, {
+    String? sourceKey,
+  }) {
     if (!isInitialized) return -1;
     _startTrackingUpdates();
     try {
       final id = LibtorrentFlutter.instance.addTorrentFile(filePath, savePath);
       if (id >= 0) {
         _activeTorrentIds.add(id);
+        _torrentSources[id] = sourceKey ?? filePath;
       }
       return id;
     } catch (e) {
@@ -412,7 +426,11 @@ class TorrentService {
     if (id >= 0) {
       try {
         LibtorrentFlutter.instance.removeTorrent(id, deleteFiles: deleteFiles);
-        TorrentResumeStore.delete(id);
+        unawaited(TorrentResumeStore.delete(id));
+        final source = _torrentSources.remove(id);
+        if (source != null) {
+          unawaited(TorrentResumeStore.deleteResumeDataForSource(source));
+        }
         _latestProgress.remove(id);
         _activeTorrentIds.remove(id);
       } catch (e) {
@@ -428,7 +446,7 @@ class TorrentService {
     if (id >= 0) {
       try {
         final progress = _latestProgress[id] ?? 0.0;
-        TorrentResumeStore.save(id, progress: progress);
+        await TorrentResumeStore.save(id, progress: progress);
         // Save native fast-resume data before pausing
         try {
           await saveResumeData(id);
@@ -581,7 +599,9 @@ class TorrentService {
     if (!isInitialized || torrentId < 0) return [];
     try {
       // ignore: avoid_dynamic_calls
-      final raw = (LibtorrentFlutter.instance as dynamic).getTrackers(torrentId) as List<dynamic>?;
+      final raw =
+          (LibtorrentFlutter.instance as dynamic).getTrackers(torrentId)
+              as List<dynamic>?;
       if (raw == null) return [];
       return raw.map((t) {
         final map = t as Map<String, dynamic>;
@@ -604,7 +624,11 @@ class TorrentService {
     if (!isInitialized || torrentId < 0) return;
     try {
       // ignore: avoid_dynamic_calls
-      (LibtorrentFlutter.instance as dynamic).addTracker(torrentId, trackerUrl, tier);
+      (LibtorrentFlutter.instance as dynamic).addTracker(
+        torrentId,
+        trackerUrl,
+        tier,
+      );
     } catch (e) {
       _log.warning('addTracker failed: $e');
     }
@@ -614,7 +638,10 @@ class TorrentService {
     if (!isInitialized || torrentId < 0) return;
     try {
       // ignore: avoid_dynamic_calls
-      (LibtorrentFlutter.instance as dynamic).removeTracker(torrentId, trackerUrl);
+      (LibtorrentFlutter.instance as dynamic).removeTracker(
+        torrentId,
+        trackerUrl,
+      );
     } catch (e) {
       _log.warning('removeTracker failed: $e');
     }

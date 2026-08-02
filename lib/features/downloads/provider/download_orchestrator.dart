@@ -115,7 +115,8 @@ class DownloadOrchestrator {
       'download',
       classification.message,
       error: error,
-      details: 'task=$taskId family=${classification.family.name} '
+      details:
+          'task=$taskId family=${classification.family.name} '
           'status=${classification.httpStatus ?? '-'} '
           'retryable=${classification.retryable}',
     );
@@ -389,7 +390,9 @@ class DownloadOrchestrator {
           try {
             await targetFile.delete();
           } catch (e, st) {
-            Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+            Logger(
+              'download_orchestrator',
+            ).warning('[download_orchestrator] operation failed', e, st);
           }
         }
         try {
@@ -408,13 +411,17 @@ class DownloadOrchestrator {
           try {
             await videoFile.delete();
           } catch (e, st) {
-            Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+            Logger(
+              'download_orchestrator',
+            ).warning('[download_orchestrator] operation failed', e, st);
           }
         }
         try {
           await audioFile.delete();
         } catch (e, st) {
-          Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+          Logger(
+            'download_orchestrator',
+          ).warning('[download_orchestrator] operation failed', e, st);
         }
       } else {
         throw Exception('Merged output file not found after FFmpeg success');
@@ -582,7 +589,9 @@ class DownloadOrchestrator {
             if (mediaResult == null) {
               try {
                 unawaited(
-                  _mediaChannel.invokeMethod('scanMedia', {'path': entity.path}),
+                  _mediaChannel.invokeMethod('scanMedia', {
+                    'path': entity.path,
+                  }),
                 );
               } catch (e) {
                 debugPrint('Failed to scan media: $e');
@@ -673,14 +682,18 @@ class DownloadOrchestrator {
     int? ttfbTimestamp;
 
     final tempFile = File(task.tempFilePath);
-    final audioFile = hasAudio && audioTempPath != null ? File(audioTempPath) : null;
+    final audioFile = hasAudio && audioTempPath != null
+        ? File(audioTempPath)
+        : null;
     final tempLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
-    final audioLen = audioFile != null && audioFile.existsSync() ? audioFile.lengthSync() : 0;
+    final audioLen = audioFile != null && audioFile.existsSync()
+        ? audioFile.lengthSync()
+        : 0;
 
     int audioBytesSoFar = hasAudio && task.audioSize > 0
         ? (task.audioProgress >= 1.0
-            ? task.audioSize
-            : max((task.audioProgress * task.audioSize).round(), audioLen))
+              ? task.audioSize
+              : max((task.audioProgress * task.audioSize).round(), audioLen))
         : audioLen;
     int videoBytesSoFar = tempLen > 0
         ? tempLen
@@ -1331,7 +1344,11 @@ class DownloadOrchestrator {
             if (task.url.startsWith('file://')) {
               filePath = Uri.parse(task.url).toFilePath();
             }
-            torrentId = TorrentService.addTorrentFile(filePath, saveDir);
+            torrentId = TorrentService.addTorrentFile(
+              filePath,
+              saveDir,
+              sourceKey: task.url,
+            );
           }
           if (torrentId < 0) {
             throw Exception('Torrent engine rejected the torrent.');
@@ -1562,7 +1579,9 @@ class DownloadOrchestrator {
                   if (await audioFile.exists()) await audioFile.delete();
                 }
               } catch (e, st) {
-                Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+                Logger(
+                  'download_orchestrator',
+                ).warning('[download_orchestrator] operation failed', e, st);
               }
 
               final isRetryable = isRetryableError(realError);
@@ -1611,7 +1630,9 @@ class DownloadOrchestrator {
                 await _host.cleanupPartFiles(current);
                 await cleanupTempFiles(current);
               } catch (e) {
-                debugPrint('Failed to clean up temp files on non-retryable error: $e');
+                debugPrint(
+                  'Failed to clean up temp files on non-retryable error: $e',
+                );
               }
               await _host.setTaskState(
                 current.copyWith(
@@ -1658,7 +1679,9 @@ class DownloadOrchestrator {
     try {
       return TorrentService.isTorrentAlive(id);
     } catch (e, st) {
-      Logger('download_orchestrator').warning('[download_orchestrator] operation failed', e, st);
+      Logger(
+        'download_orchestrator',
+      ).warning('[download_orchestrator] operation failed', e, st);
       return false;
     }
   }
@@ -1853,7 +1876,11 @@ class DownloadOrchestrator {
         final f = File(p);
         if (await f.exists()) await f.delete();
       } catch (e, st) {
-        Logger('download_orchestrator').warning('[download_orchestrator] cleanupTempFiles failed for $p', e, st);
+        Logger('download_orchestrator').warning(
+          '[download_orchestrator] cleanupTempFiles failed for $p',
+          e,
+          st,
+        );
       }
     }
   }

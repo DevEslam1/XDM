@@ -17,7 +17,11 @@ class TorrentService {
   static Future<void> saveAllResumeData() async {}
   static Future<void> dispose() async {}
   static int addMagnet(String magnetUri, String savePath) => -1;
-  static int addTorrentFile(String filePath, String savePath) => -1;
+  static int addTorrentFile(
+    String filePath,
+    String savePath, {
+    String? sourceKey,
+  }) => -1;
   static void removeTorrent(int id, {bool deleteFiles = false}) {}
   static void pauseTorrent(int id) {}
   static void resumeTorrent(int id) {}

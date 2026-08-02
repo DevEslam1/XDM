@@ -338,7 +338,9 @@ class DownloadEngine {
 
       return requestedThreads;
     } catch (e, st) {
-      Logger('download_engine').warning('[download_engine] operation failed', e, st);
+      Logger(
+        'download_engine',
+      ).warning('[download_engine] operation failed', e, st);
       return requestedThreads;
     }
   }
@@ -367,7 +369,9 @@ class DownloadEngine {
           try {
             await f.delete();
           } catch (e) {
-            debugPrint('[DownloadEngine] Failed to delete orphan file ${f.path}: $e');
+            debugPrint(
+              '[DownloadEngine] Failed to delete orphan file ${f.path}: $e',
+            );
           }
         }
       }
@@ -379,7 +383,9 @@ class DownloadEngine {
           try {
             await entity.delete();
           } catch (e, st) {
-            Logger('download_engine').warning('[download_engine] operation failed', e, st);
+            Logger(
+              'download_engine',
+            ).warning('[download_engine] operation failed', e, st);
           }
         }
       }
@@ -1087,7 +1093,11 @@ class DownloadEngine {
           try {
             await torrentDio.download(url, tempTorrentPath);
             filePath = tempTorrentPath;
-            id = TorrentService.addTorrentFile(filePath, saveDir);
+            id = TorrentService.addTorrentFile(
+              filePath,
+              saveDir,
+              sourceKey: url,
+            );
           } finally {
             _reservedDioClients.remove(torrentDio);
             _activeDioClients.remove(torrentDio);
@@ -1099,11 +1109,13 @@ class DownloadEngine {
                 await tempTorrentFile.delete();
               }
             } catch (e, st) {
-              Logger('download_engine').warning('[download_engine] operation failed', e, st);
+              Logger(
+                'download_engine',
+              ).warning('[download_engine] operation failed', e, st);
             }
           }
         } else {
-          id = TorrentService.addTorrentFile(filePath, saveDir);
+          id = TorrentService.addTorrentFile(filePath, saveDir, sourceKey: url);
         }
       }
     }
@@ -1128,8 +1140,12 @@ class DownloadEngine {
       // FIX(16): use the async API so the UI thread isn't blocked by the
       // filesystem call.
       if (await Directory(saveDir).exists()) {
-        final resumeData = await TorrentResumeStore.loadResumeData(id);
-        if (resumeData == null) {
+        final resumeData =
+            await TorrentResumeStore.loadResumeDataForSource(url) ??
+            await TorrentResumeStore.loadResumeData(id);
+        final nativeResumeLoaded =
+            resumeData != null && TorrentService.loadResumeData(id, resumeData);
+        if (!nativeResumeLoaded) {
           TorrentService.recheckTorrent(id);
 
           await _waitForState(
@@ -1204,7 +1220,9 @@ class DownloadEngine {
             try {
               TorrentService.removeTorrent(id);
             } catch (e, st) {
-              Logger('download_engine').warning('[download_engine] operation failed', e, st);
+              Logger(
+                'download_engine',
+              ).warning('[download_engine] operation failed', e, st);
             }
 
             completer.completeError(
@@ -1216,7 +1234,11 @@ class DownloadEngine {
             );
           }
         })
-        .catchError((e, st) { Logger('download_engine').warning('[download_engine] operation failed', e, st); });
+        .catchError((e, st) {
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
+        });
 
     int metadataElapsed = 0;
 
@@ -1250,7 +1272,9 @@ class DownloadEngine {
         try {
           TorrentService.removeTorrent(id);
         } catch (e, st) {
-          Logger('download_engine').warning('[download_engine] operation failed', e, st);
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
         }
       }
 
@@ -1445,8 +1469,8 @@ class DownloadEngine {
       // accepting `progress >= 0.999`. The old shortcut could fire while
       // libtorrent was still running its final hash verification (a transient
       // `downloading` tick right before it flips to `checking`).
-      final isCompleted = isFullyDownloaded && !isCheckingOrMetadata &&
-          isStableFinished;
+      final isCompleted =
+          isFullyDownloaded && !isCheckingOrMetadata && isStableFinished;
 
       final speed = torrent.downloadRate.toDouble();
 
@@ -1512,7 +1536,11 @@ class DownloadEngine {
             );
           }
         })
-        .catchError((e, st) { Logger('download_engine').warning('[download_engine] operation failed', e, st); });
+        .catchError((e, st) {
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
+        });
 
     try {
       await completer.future;
@@ -1579,7 +1607,9 @@ class DownloadEngine {
       try {
         await response.data?.stream.listen((_) {}).cancel();
       } catch (e, st) {
-        Logger('download_engine').warning('[download_engine] operation failed', e, st);
+        Logger(
+          'download_engine',
+        ).warning('[download_engine] operation failed', e, st);
       }
 
       sw.stop();
@@ -1916,7 +1946,9 @@ class DownloadEngine {
         try {
           await writer.close();
         } catch (e, st) {
-          Logger('download_engine').warning('[download_engine] operation failed', e, st);
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
         }
       }
 
@@ -1927,7 +1959,9 @@ class DownloadEngine {
         try {
           await journalLock.synchronized(() => journal.close());
         } catch (e, st) {
-          Logger('download_engine').warning('[download_engine] operation failed', e, st);
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
         }
       }
 
@@ -1938,7 +1972,9 @@ class DownloadEngine {
         try {
           governor.unregisterConsumer();
         } catch (e, st) {
-          Logger('download_engine').warning('[download_engine] operation failed', e, st);
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
         }
       }
 
@@ -2279,7 +2315,9 @@ class DownloadEngine {
                   try {
                     await writer.flush(idx);
                   } catch (e, st) {
-                    Logger('download_engine').warning('[download_engine] operation failed', e, st);
+                    Logger(
+                      'download_engine',
+                    ).warning('[download_engine] operation failed', e, st);
                   }
 
                   rethrow;
@@ -2325,7 +2363,9 @@ class DownloadEngine {
         try {
           await journalLock.synchronized(() => journal.delete());
         } catch (e, st) {
-          Logger('download_engine').warning('[download_engine] operation failed', e, st);
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
         }
 
         journalClosed = true;
@@ -2812,7 +2852,9 @@ class DownloadEngine {
           try {
             await File(localFilePath).delete();
           } catch (e, st) {
-            Logger('download_engine').warning('[download_engine] operation failed', e, st);
+            Logger(
+              'download_engine',
+            ).warning('[download_engine] operation failed', e, st);
           }
 
           throw Exception('File copy verification failed on fallback rename.');
@@ -2877,7 +2919,9 @@ class DownloadEngine {
         try {
           TorrentService.pauseTorrent(id);
         } catch (e, st) {
-          Logger('download_engine').warning('[download_engine] operation failed', e, st);
+          Logger(
+            'download_engine',
+          ).warning('[download_engine] operation failed', e, st);
         }
         completer.completeError(
           DioException(
@@ -2891,7 +2935,14 @@ class DownloadEngine {
     });
 
     cancelToken.whenCancel.then((_) {
-      if (!completer.isCompleted) completer.completeError(DioException(requestOptions: RequestOptions(path: 'torrent:$id'), type: DioExceptionType.cancel, error: 'cancelled'));
+      if (!completer.isCompleted)
+        completer.completeError(
+          DioException(
+            requestOptions: RequestOptions(path: 'torrent:$id'),
+            type: DioExceptionType.cancel,
+            error: 'cancelled',
+          ),
+        );
     });
 
     try {
@@ -3006,7 +3057,9 @@ class DownloadEngine {
       try {
         TorrentService.pauseTorrent(id);
       } catch (e, st) {
-        Logger('download_engine').warning('[download_engine] operation failed', e, st);
+        Logger(
+          'download_engine',
+        ).warning('[download_engine] operation failed', e, st);
       }
     }
 
@@ -3270,14 +3323,24 @@ Future<void> _cancelAndAwaitFutures(
       try {
         token.cancel();
       } catch (e, st) {
-        Logger('download_engine').warning('[download_engine] operation failed', e, st);
+        Logger(
+          'download_engine',
+        ).warning('[download_engine] operation failed', e, st);
       }
     }
   }
 
   if (futures.isEmpty) return;
 
-  await Future.wait(futures.map((f) => f.catchError((e, st) { Logger('download_engine').warning('[download_engine] operation failed', e, st); })));
+  await Future.wait(
+    futures.map(
+      (f) => f.catchError((e, st) {
+        Logger(
+          'download_engine',
+        ).warning('[download_engine] operation failed', e, st);
+      }),
+    ),
+  );
 }
 
 Future<void> _deleteFileIfExists(File file) async {
@@ -3286,7 +3349,9 @@ Future<void> _deleteFileIfExists(File file) async {
       await file.delete();
     }
   } catch (e, st) {
-    Logger('download_engine').warning('[download_engine] operation failed', e, st);
+    Logger(
+      'download_engine',
+    ).warning('[download_engine] operation failed', e, st);
   }
 }
 

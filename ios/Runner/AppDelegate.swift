@@ -53,6 +53,25 @@ import UserNotifications
             )
             result(data != nil ? FlutterStandardTypedData(bytes: data!) : nil)
 
+          case "setActiveTorrentIds":
+            guard let args = call.arguments as? [String: Any],
+                  let ids = args["ids"] as? [Int] else {
+              result(false)
+              return
+            }
+            XDMTorrentBackgroundManager.shared.setActiveTorrentIds(ids)
+            result(true)
+
+          case "appDidEnterBackground":
+            XDMTorrentBackgroundManager.shared.appDidEnterBackground(
+              activeTorrentIds: XDMTorrentBackgroundManager.shared.getActiveTorrentIds()
+            )
+            result(true)
+
+          case "appWillEnterForeground":
+            XDMTorrentBackgroundManager.shared.appWillEnterForeground()
+            result(true)
+
           case "getActiveTorrentIds":
             let ids = XDMTorrentBackgroundManager.shared.getActiveTorrentIds()
             result(ids)

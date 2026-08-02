@@ -38,6 +38,11 @@ public class XDMTorrentBackgroundManager: NSObject {
         }
     }
 
+    /// Updates the live torrent IDs supplied by the Flutter service.
+    public func setActiveTorrentIds(_ ids: [Int]) {
+        UserDefaults.standard.set(ids, forKey: activeTorrentsKey)
+    }
+
     /// Called when app enters background. Saves all torrent state.
     public func appDidEnterBackground(activeTorrentIds: [Int]) {
         // Save active torrent IDs
