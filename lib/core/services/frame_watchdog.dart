@@ -1,16 +1,46 @@
+import 'dart:ui';
 import 'package:flutter/scheduler.dart';
 import 'package:logging/logging.dart';
 
-/// Silent jank monitor. Logs when >5% of frames miss the 16ms budget.
+/// Silent jank monitor. Logs when >5% of frames miss the adaptive frame budget.
 class FrameWatchdog {
   static final _log = Logger('FrameWatchdog');
   static int _dropped = 0;
   static int _total = 0;
   static DateTime _windowStart = DateTime.now();
   static const _window = Duration(seconds: 30);
-  static const _budgetMs = 16;
+  
+  static double _refreshRate = 60.0;
+  static double get frameBudgetMs => 1000.0 / _refreshRate;
+  
+  static double get _budgetMs => frameBudgetMs;
   static const _alertThreshold = 0.05;
   static bool _isRunning = false;
+
+  /// Call once at app startup to detect the display refresh rate.
+  static Future<void> detectRefreshRate() async {
+    try {
+      final display = await getDisplayRefreshRate();
+      if (display > 0) {
+        _refreshRate = display;
+        _log.info('[FrameWatchdog] Detected refresh rate: ${display}Hz '
+            '(frame budget: ${frameBudgetMs.toStringAsFixed(2)}ms)');
+      }
+    } catch (e) {
+      _refreshRate = 60.0; // Fallback
+    }
+  }
+
+  static Future<double> getDisplayRefreshRate() async {
+    try {
+      final displays = PlatformDispatcher.instance.displays;
+      if (displays.isNotEmpty) {
+        final rate = displays.first.refreshRate;
+        if (rate > 0) return rate;
+      }
+    } catch (_) {}
+    return 60.0;
+  }
 
   static void start() {
     if (_isRunning) return;

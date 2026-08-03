@@ -293,6 +293,9 @@ void main() {
       expect(provider.tasks.first.threadCount, 2);
       expect(provider.tasks.first.chunks.length, 2);
 
+      await provider.pauseTask(taskId);
+      await Future.delayed(const Duration(milliseconds: 50));
+
       await provider.updateTaskThreadCount(taskId, 5);
       expect(provider.tasks.first.threadCount, 5);
       expect(provider.tasks.first.chunks.length, 5);

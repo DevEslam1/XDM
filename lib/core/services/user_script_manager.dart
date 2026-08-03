@@ -152,6 +152,41 @@ class UserScriptManager extends ChangeNotifier {
         .toList();
   }
 
+  /// Batches all matching JS and CSS scripts for [url] into a single JS block.
+  Future<String> getJsForUrl(String url) async {
+    final matches = scriptsForUrl(url);
+    if (matches.isEmpty) return '';
+    final sb = StringBuffer();
+    for (final script in matches) {
+      if (script.isCss) {
+        final jsonCss = jsonEncode(script.code);
+        sb.writeln('''
+(function() {
+  var style = document.getElementById('xdm-user-css');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'xdm-user-css';
+    document.head.appendChild(style);
+  }
+  style.textContent = $jsonCss;
+})();
+''');
+      } else {
+        final marker =
+            'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
+        sb.writeln('''
+if (!window['$marker']) {
+  window['$marker'] = true;
+  (function() {
+${script.code}
+  })();
+}
+''');
+      }
+    }
+    return sb.toString();
+  }
+
   /// Case-insensitive glob matcher. '*' matches any run of characters and '?'
   /// matches a single character. The pattern is matched against the full URL
   /// as well as the bare host (e.g. `example.com/*` and `example.com`).

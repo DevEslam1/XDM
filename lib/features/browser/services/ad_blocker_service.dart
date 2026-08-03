@@ -21,6 +21,31 @@ class AdBlockerService {
   AdBlockerService._();
   static final AdBlockerService instance = AdBlockerService._();
 
+  static String get intervalCleanupJs => _intervalCleanupJs;
+  static String get scrollUnblockJs => _scrollUnblockJs;
+
+  static const String _intervalCleanupJs = '''
+(function() {
+  if (window.__xdmScrollFixInterval) { clearInterval(window.__xdmScrollFixInterval); window.__xdmScrollFixInterval = null; }
+  if (window.__xdmYtAdInterval) { clearInterval(window.__xdmYtAdInterval); window.__xdmYtAdInterval = null; }
+  if (window.__xdmYtAdSkip) { delete window.__xdmYtAdSkip; }
+  if (window.__xdmMediaObserver) { try { window.__xdmMediaObserver.disconnect(); } catch(e) {} window.__xdmMediaObserver = null; }
+})();
+''';
+
+  static const String _scrollUnblockJs = '''
+(function() {
+  if (window.__xdmScrollFixInterval) clearInterval(window.__xdmScrollFixInterval);
+  window.__xdmScrollFixInterval = setInterval(function() {
+    try {
+      if (document.body && window.getComputedStyle(document.body).overflow === 'hidden') {
+        document.body.style.setProperty('overflow-y', 'auto', 'important');
+      }
+    } catch(e) {}
+  }, 5000);
+})();
+''';
+
   List<ContentBlocker> get contentBlockers {
     final blockers = <ContentBlocker>[];
     if (!_enabled) return blockers;
@@ -682,7 +707,7 @@ body {
 
   static const String _youtubeJs = '''
 (function() {
-  if (window.__xdmYtAdSkip) return;
+  if (window.__xdmYtAdInterval) clearInterval(window.__xdmYtAdInterval);
   window.__xdmYtAdSkip = true;
 
   function trySkip() {
@@ -712,17 +737,16 @@ body {
     if (close) close.click();
   }
 
-  /* Poll every 500 ms while an ad is playing */
-  var adCheck = setInterval(function() {
-    try {
-      var adState = document.querySelector('.ad-showing, .ad-interrupting');
-      if (adState) trySkip();
-    } catch(e) {}
-  }, 500);
+  trySkip();
+  window.__xdmYtAdInterval = setInterval(trySkip, 1500);
 
   /* Also react to DOM changes */
   try {
-    new MutationObserver(trySkip).observe(document.body, {
+    if (window.__xdmMediaObserver) {
+      try { window.__xdmMediaObserver.disconnect(); } catch(e) {}
+    }
+    window.__xdmMediaObserver = new MutationObserver(trySkip);
+    window.__xdmMediaObserver.observe(document.body, {
       childList: true, subtree: true
     });
   } catch(e) {}
@@ -752,14 +776,14 @@ body {
     document.documentElement.style.setProperty('overflow-y', 'auto', 'important');
   } catch(e) {}
 
-  // Run periodically since YouTube dynamically changes overflow
-  var scrollFixInterval = setInterval(function() {
+  if (window.__xdmScrollFixInterval) clearInterval(window.__xdmScrollFixInterval);
+  window.__xdmScrollFixInterval = setInterval(function() {
     try {
       if (document.body && window.getComputedStyle(document.body).overflow === 'hidden') {
-        document.body.style.setProperty('overflow', 'auto', 'important');
+        document.body.style.setProperty('overflow-y', 'auto', 'important');
       }
     } catch(e) {}
-  }, 3000);
+  }, 5000);
 })();
 ''';
 

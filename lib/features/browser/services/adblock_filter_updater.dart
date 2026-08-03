@@ -48,6 +48,11 @@ class AdBlockFilterUpdater {
           'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=nohtml&showintro=0&startdate%5Bday%5D=&startdate%5Bmonth%5D=&startdate%5Byear%5D=&mimetype=plaintext',
       type: FilterType.ads,
     ),
+    _FilterSource(
+      name: 'AdGuardDNS',
+      url: 'https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/Filters/adguard_dns_filter.txt',
+      type: FilterType.ads,
+    ),
   ];
 
   static const _lastUpdateKey = 'adblock_last_update_ms';

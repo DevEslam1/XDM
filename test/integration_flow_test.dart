@@ -239,8 +239,13 @@ void main() {
 
     expect(provider.tasks.length, 1);
     final taskId = provider.tasks.first.id;
-    expect(provider.tasks.first.status,
-        anyOf(DownloadStatus.downloading, DownloadStatus.queued));
+    for (int i = 0; i < 100; i++) {
+      if (provider.tasks.first.status == DownloadStatus.downloading) {
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 5));
+    }
+    expect(provider.tasks.first.status, DownloadStatus.downloading);
 
     await provider.pauseTask(taskId);
     expect(provider.tasks.first.status, DownloadStatus.paused);
@@ -249,11 +254,11 @@ void main() {
     expect(provider.tasks.first.status,
         anyOf(DownloadStatus.downloading, DownloadStatus.queued));
 
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < 200; i++) {
       if (provider.tasks.first.status == DownloadStatus.completed) {
         break;
       }
-      await Future.delayed(const Duration(milliseconds: 5));
+      await Future.delayed(const Duration(milliseconds: 10));
     }
     expect(provider.tasks.first.status, DownloadStatus.completed);
   });

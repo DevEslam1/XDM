@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'frame_watchdog.dart';
 
 /// Collects lightweight UI-frame statistics (build/raster durations, jank
 /// ratio) via [SchedulerBinding.addTimingsCallback]. Used for the performance
@@ -10,7 +11,8 @@ class PerformanceMonitor {
   static final PerformanceMonitor instance = PerformanceMonitor();
 
   /// A build/raster time above this counts as a janky frame.
-  static const Duration jankThreshold = Duration(milliseconds: 16);
+  static Duration get jankThreshold =>
+      Duration(microseconds: (FrameWatchdog.frameBudgetMs * 1000).round());
 
   /// Bounded sample window (4 seconds @ 60fps).
   static const int maxSamples = 240;

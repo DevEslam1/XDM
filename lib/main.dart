@@ -70,6 +70,7 @@ Future<void> main(List<String> args) async {
       ..maximumSize = 1000;
 
     // ── Frame performance monitoring (UI-jank diagnostics) ──
+    await FrameWatchdog.detectRefreshRate();
     PerformanceMonitor.instance.start();
     FrameWatchdog.start();
     await PowerMonitor.init();
@@ -158,14 +159,33 @@ Future<void> main(List<String> args) async {
         }
       }
 
-      runApp(
-        DmxApp(
-          databaseService: databaseService,
-          settingsProvider: settingsProvider,
-          downloadProvider: downloadProvider,
-          initialUrl: initialUrl,
-        ),
-      );
+      if (kDebugMode) {
+        runApp(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Stack(
+              children: [
+                DmxApp(
+                  databaseService: databaseService,
+                  settingsProvider: settingsProvider,
+                  downloadProvider: downloadProvider,
+                  initialUrl: initialUrl,
+                ),
+                const _FpsOverlay(),
+              ],
+            ),
+          ),
+        );
+      } else {
+        runApp(
+          DmxApp(
+            databaseService: databaseService,
+            settingsProvider: settingsProvider,
+            downloadProvider: downloadProvider,
+            initialUrl: initialUrl,
+          ),
+        );
+      }
       WidgetsBinding.instance.addObserver(_AppLifecycleObserver());
 
       // Widget deep links (dmx://) — must be registered after runApp so the
@@ -622,3 +642,66 @@ class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
     );
   }
 }
+
+class _FpsOverlay extends StatefulWidget {
+  const _FpsOverlay();
+
+  @override
+  _FpsOverlayState createState() => _FpsOverlayState();
+}
+
+class _FpsOverlayState extends State<_FpsOverlay> {
+  int _frameCount = 0;
+  double _fps = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPersistentFrameCallback((_) {
+      _frameCount++;
+    });
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _fps = _frameCount.toDouble();
+          _frameCount = 0;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 40,
+      right: 8,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '${_fps.round()} fps',
+            style: const TextStyle(
+              color: Colors.greenAccent,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+

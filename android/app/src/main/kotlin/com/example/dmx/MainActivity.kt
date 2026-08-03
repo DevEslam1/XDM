@@ -49,9 +49,47 @@ class MainActivity : FlutterActivity() {
         // For share intents, the manifest already sets TranslucentShareTheme
         // so no splash/white flash is shown.
         super.onCreate(savedInstanceState)
-        // Request maximum refresh rate on supported devices (Android 11+)
+        // Request maximum refresh rate on supported devices
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            window?.attributes?.preferredRefreshRate = 120f
+            window?.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
+            val display = windowManager?.defaultDisplay
+            val modes = display?.supportedModes
+            val maxMode = modes?.maxByOrNull { it.refreshRate }
+            if (maxMode != null) {
+                val attrs = window?.attributes
+                if (attrs != null) {
+                    attrs.preferredDisplayModeId = maxMode.modeId
+                    window.attributes = attrs
+                }
+            }
+            window?.decorView?.post {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    try {
+                        val viewRoot = window?.decorView?.viewRootImpl
+                        val surfaceControlField = viewRoot?.javaClass?.getMethod("getSurfaceControl")
+                        val surfaceControl = surfaceControlField?.invoke(viewRoot)
+                        val surfaceField = surfaceControl?.javaClass?.getMethod("getSurface")
+                        val surface = surfaceField?.invoke(surfaceControl) as? android.view.Surface
+                        if (surface != null && surface.isValid) {
+                            surface.setFrameRate(
+                                120f,
+                                android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+                                android.view.Surface.CHANGE_FRAME_RATE_ALWAYS
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Failed to set Surface frame rate: " + e.message)
+                    }
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val display = windowManager?.defaultDisplay
+            val maxRefreshRate = display?.supportedModes?.maxOfOrNull { it.refreshRate } ?: 60f
+            val attrs = window?.attributes
+            if (attrs != null) {
+                attrs.preferredRefreshRate = maxRefreshRate
+                window.attributes = attrs
+            }
         }
         // Smart launcher widget deep link (cold start)
         handleDeepLink(intent)

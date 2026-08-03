@@ -349,9 +349,11 @@ class _TelemetryHero extends StatelessWidget {
             child: Row(
               children: [
                 // Progress ring
-                AnimatedBuilder(
-                  animation: pulse,
-                  builder: (context, _) {
+                RepaintBoundary(
+                  key: const ValueKey('details_pulse_ring'),
+                  child: AnimatedBuilder(
+                    animation: pulse,
+                    builder: (context, _) {
                     return SizedBox(
                       width: 110,
                       height: 110,
@@ -395,6 +397,7 @@ class _TelemetryHero extends StatelessWidget {
                       ),
                     );
                   },
+                ),
                 ),
                 const SizedBox(width: 20),
                 // Readouts

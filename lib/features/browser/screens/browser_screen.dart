@@ -35,6 +35,7 @@ import '../models/bookmark.dart';
 import '../models/browser_tab.dart';
 import '../services/browser_detector.dart';
 import '../services/ad_blocker_delegate.dart';
+import '../services/ad_blocker_service.dart';
 import '../services/download_interceptor.dart';
 import '../services/element_picker_service.dart';
 import '../services/history_manager.dart';
@@ -85,7 +86,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   final TextEditingController _urlController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isFocused = false;
-  bool _showBars = true;
+  final ValueNotifier<bool> _showBarsNotifier = ValueNotifier<bool>(true);
   double _lastScrollY = 0;
 
   String _customJs = '';
@@ -150,6 +151,24 @@ class _BrowserScreenState extends State<BrowserScreen>
   static const String _longPressChannel = 'XDM_LongPress';
   static const String _popupsChannel = 'XDM_Popups';
   static const String _pickerChannel = 'XdmPickerChannel';
+
+  static const String _fingerprintHideJs = r'''
+(function() {
+  try {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    delete window.WebViewJavascriptBridge;
+    delete window.flutter_inappwebview;
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [
+        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+        { name: 'Native Client', filename: 'internal-nacl-plugin' },
+      ],
+    });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+  } catch(e) {}
+})();
+''';
 
   static const String _kTimerSpeedScript = '''
 (function() {
@@ -336,6 +355,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
     if (newIndex >= 0 && newIndex < _tabs.length) {
       final newTab = _tabs[newIndex];
+      if (newTab.isSuspended) {
+        _resumeTab(newTab);
+      }
       if (!newTab.isHome &&
           newTab.url.isNotEmpty &&
           newTab.url != 'about:blank') {
@@ -377,11 +399,12 @@ class _BrowserScreenState extends State<BrowserScreen>
           _currentTabIndex < _tabs.length) {
         final tab = _tabs[_currentTabIndex];
         _urlController.text = tab.isHome ? '' : tab.url;
-        _showBars = true;
+        _showBarsNotifier.value = true;
       }
     });
     _onTabSwitched(oldIndex, newIndex);
     _saveTabs();
+    _suspendBackgroundTabs();
   }
 
   Future<void> _restoreTabs() async {
@@ -620,7 +643,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         if (url != 'about:blank') {
           tab.isHome = false;
         }
-        _showBars = true;
+        _showBarsNotifier.value = true;
         _lastScrollY = 0;
         if (_currentTabIndex >= 0 &&
             _currentTabIndex < _tabs.length &&
@@ -634,6 +657,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       });
       downloadProvider.setNavbarVisible(true);
     }
+    tab.controller?.evaluateJavascript(source: AdBlockerService.intervalCleanupJs).catchError((_) {});
     _injectTimerSpeedScript(tab);
     _adBlocker.injectAntiDetect(tab);
     _adBlocker.injectEarly(tab);
@@ -648,35 +672,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _onPageStop(BrowserTab tab, String url) {
     _loadingTimeoutTimers[tab.id]?.cancel();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    _injectDesktopModeScript(tab, settings);
-    _adBlocker.injectInto(tab);
-    _injectUserScripts(tab, url);
-    
-    // Inject scroll fix for all pages
-    tab.controller?.evaluateJavascript(source: '''
-      (function() {
-        try {
-          // Fix any overflow:hidden that blocks scrolling
-          var body = document.body;
-          var html = document.documentElement;
-          if (body && window.getComputedStyle(body).overflow === 'hidden') {
-            body.style.setProperty('overflow-y', 'auto', 'important');
-          }
-          if (html && window.getComputedStyle(html).overflow === 'hidden') {
-            html.style.setProperty('overflow-y', 'auto', 'important');
-          }
-          // Fix position:fixed overlays that block scroll
-          var fixed = document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]');
-          for (var i = 0; i < fixed.length; i++) {
-            var el = fixed[i];
-            if (el.offsetWidth >= window.innerWidth * 0.9 && 
-                el.offsetHeight >= window.innerHeight * 0.9) {
-              el.style.setProperty('pointer-events', 'none', 'important');
-            }
-          }
-        } catch(e) {}
-      })();
-    ''').catchError((e) => debugPrint('[Browser] Scroll-fix failed: \$e'));
+    unawaited(_injectAllScripts(tab, url));
     if (mounted) {
       setState(() {
         tab.isLoading = false;
@@ -685,7 +681,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         _detectedMediaSources.remove(tab.id);
       });
       tab.controller?.getTitle().then((t) {
-        if (t != null && t.isNotEmpty && mounted) {
+        if (t != null && t.isNotEmpty && mounted && t != tab.title) {
           setState(() {
             tab.title = t;
           });
@@ -742,14 +738,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     _updateNavState();
     _delayed(const Duration(milliseconds: 500), _updateNavState);
     _delayed(const Duration(milliseconds: 1200), _updateNavState);
-    _mediaScanTimers[tab.id]?.cancel();
     if (!_isYoutubeHost(tab.url)) {
-      _mediaScanTimers[tab.id] = Timer(
-        const Duration(milliseconds: 1500),
-        () {
-          _scanPageMedia(tab);
-        },
-      );
+      _scheduleMediaScan(tab);
     }
   }
 
@@ -771,14 +761,8 @@ class _BrowserScreenState extends State<BrowserScreen>
       _detectedPlaylistUrls.remove(tab.id);
       _detectedMediaSources.remove(tab.id);
       _ytDetectionFailed.remove(tab.url);
-      _mediaScanTimers[tab.id]?.cancel();
       if (!_isYoutubeHost(tab.url)) {
-        _mediaScanTimers[tab.id] = Timer(
-          const Duration(milliseconds: 1500),
-          () {
-            _scanPageMedia(tab);
-          },
-        );
+        _scheduleMediaScan(tab);
       }
       _delayed(const Duration(milliseconds: 1000), () {
         if (mounted) {
@@ -852,9 +836,141 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
+  Timer? _mediaScanDebounce;
+
+  void _scheduleMediaScan(BrowserTab tab) {
+    _mediaScanDebounce?.cancel();
+    _mediaScanDebounce = Timer(const Duration(seconds: 3), () {
+      if (mounted && !tab.isSuspended && !tab.isTimedOut) {
+        _scanPageMedia(tab);
+      }
+    });
+  }
+
+  void _suspendBackgroundTabs() {
+    for (var i = 0; i < _tabs.length; i++) {
+      if (i == _currentTabIndex) continue;
+      final tab = _tabs[i];
+      if (tab.isHome || tab.isSuspended) continue;
+
+      try {
+        tab.controller?.evaluateJavascript(source: '''
+          try { window.stop(); } catch(e) {}
+          var media = document.querySelectorAll('video, audio');
+          for (var m = 0; m < media.length; m++) {
+            try { media[m].pause(); } catch(e) {}
+          }
+          if (window.__xdmScrollFixInterval) { clearInterval(window.__xdmScrollFixInterval); window.__xdmScrollFixInterval = null; }
+          if (window.__xdmYtAdInterval) { clearInterval(window.__xdmYtAdInterval); window.__xdmYtAdInterval = null; }
+        ''');
+      } catch (_) {}
+
+      tab.isSuspended = true;
+    }
+  }
+
+  void _resumeTab(BrowserTab tab) {
+    if (!tab.isSuspended) return;
+    tab.isSuspended = false;
+    try {
+      tab.controller?.reload();
+    } catch (_) {}
+  }
+
+  Future<String> _getCustomJsForUrl(String url) async {
+    final sb = StringBuffer();
+    if (_customJs.isNotEmpty) {
+      sb.writeln('''
+if (!window._xdmCustomJsInjected) {
+  window._xdmCustomJsInjected = true;
+  (function() {
+$_customJs
+  })();
+}
+''');
+    }
+    if (_customCss.isNotEmpty) {
+      final jsonCss = jsonEncode(_customCss);
+      sb.writeln('''
+(function() {
+  var style = document.getElementById('xdm-custom-css');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'xdm-custom-css';
+    document.head.appendChild(style);
+  }
+  style.textContent = $jsonCss;
+})();
+''');
+    }
+    return sb.toString();
+  }
+
+  Future<void> _injectAllScripts(BrowserTab tab, String url) async {
+    final controller = tab.controller;
+    if (controller == null) return;
+
+    final scripts = <String>[];
+
+    // 1. Always clean up previous intervals first
+    scripts.add(AdBlockerService.intervalCleanupJs);
+
+    // 2. Scroll unblock (all pages)
+    scripts.add(AdBlockerService.scrollUnblockJs);
+
+    // 3. YouTube-specific ad skip
+    if (YoutubeService.isYoutubeUrl(url)) {
+      scripts.add(AdBlockerService.instance.youtubeJs);
+    }
+
+    // 4. Ad blocker CSS injection
+    final css = _adBlocker.cssRulesForUrl(url);
+    if (css.isNotEmpty) {
+      scripts.add('var s=document.createElement("style");s.textContent=${jsonEncode(css)};document.head.appendChild(s);');
+    }
+
+    // Desktop mode script
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    if (settings.desktopMode) {
+      scripts.add(_kDesktopModeScript);
+    }
+
+    // 5. Custom JS/CSS for this site
+    final customJs = await _getCustomJsForUrl(url);
+    if (customJs.isNotEmpty) scripts.add(customJs);
+
+    // 6. User scripts
+    final userJs = await UserScriptManager.instance.getJsForUrl(url);
+    if (userJs.isNotEmpty) scripts.add(userJs);
+
+    // 7. Fingerprint hiding
+    scripts.add(_fingerprintHideJs);
+
+    // 8. Long-press handler
+    if (_isMediaDomain(url)) {
+      scripts.add(_kLongPressScript);
+    }
+
+    if (scripts.isEmpty) return;
+
+    // Single batched call
+    try {
+      await controller.evaluateJavascript(source: scripts.join('\\n;\\n'));
+    } catch (e) {
+      debugPrint('[Browser] Batched script injection failed: $e');
+    }
+  }
+
   /// Removes all per-tab state when a tab is closed or navigated away.
   /// Call this from every tab-close path to prevent unbounded map growth.
-  void _cleanupTabState(String tabId) => _sniffer.cleanupTab(tabId);
+  void _cleanupTabState(String tabId) {
+    _sniffer.cleanupTab(tabId);
+    _detectedDownloadUrls.remove(tabId);
+    _detectedMediaSources.remove(tabId);
+    _mediaScanFailed.remove(tabId);
+    _loadingTimeoutTimers[tabId]?.cancel();
+    _loadingTimeoutTimers.remove(tabId);
+  }
 
   static const _desktopUserAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
@@ -943,7 +1059,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       _tabs.add(newTab);
       _currentTabIndex = _tabs.length - 1;
       _urlController.text = url;
-      _showBars = true;
+      _showBarsNotifier.value = true;
     });
     _saveTabs();
   }
@@ -1047,7 +1163,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (switchToTab) {
         _currentTabIndex = _tabs.length - 1;
         _urlController.text = url;
-        _showBars = true;
+        _showBarsNotifier.value = true;
       }
     });
     _saveTabs();
@@ -1109,26 +1225,20 @@ class _BrowserScreenState extends State<BrowserScreen>
       listen: false,
     );
     if (y <= 0) {
-      if (!_showBars) {
-        setState(() {
-          _showBars = true;
-        });
+      if (!_showBarsNotifier.value) {
+        _showBarsNotifier.value = true;
         downloadProvider.setNavbarVisible(true);
       }
       _lastScrollY = y;
     } else if (y - _lastScrollY > 40) {
-      if (_showBars) {
-        setState(() {
-          _showBars = false;
-        });
+      if (_showBarsNotifier.value) {
+        _showBarsNotifier.value = false;
         downloadProvider.setNavbarVisible(false);
       }
       _lastScrollY = y;
     } else if (_lastScrollY - y > 40) {
-      if (!_showBars) {
-        setState(() {
-          _showBars = true;
-        });
+      if (!_showBarsNotifier.value) {
+        _showBarsNotifier.value = true;
         downloadProvider.setNavbarVisible(true);
       }
       _lastScrollY = y;
@@ -1140,6 +1250,8 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   @override
   void dispose() {
+    _mediaScanDebounce?.cancel();
+    _showBarsNotifier.dispose();
     _adBlocker.removeListener(_updateAdBlockSettings);
     _inactivityTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -2359,25 +2471,8 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   Future<void> _hideWebViewFingerprints(BrowserTab tab) async {
-    const js = r'''
-(function() {
-  try {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    delete window.WebViewJavascriptBridge;
-    delete window.flutter_inappwebview;
-    Object.defineProperty(navigator, 'plugins', {
-      get: () => [
-        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
-        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
-        { name: 'Native Client', filename: 'internal-nacl-plugin' },
-      ],
-    });
-    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-  } catch(e) {}
-})();
-''';
     try {
-      await tab.controller?.evaluateJavascript(source: js);
+      await tab.controller?.evaluateJavascript(source: _fingerprintHideJs);
     } catch (e) {
       debugPrint('Failed to inject anti-detection JS: $e');
     }
@@ -2421,48 +2516,7 @@ $_customJs
     }
   }
 
-  Future<void> _injectUserScripts(BrowserTab tab, String url) async {
-    if (!mounted || tab.isHome || url.isEmpty) return;
-    final manager = UserScriptManager.instance;
-    if (manager.scripts.isEmpty) return;
 
-    final matches = manager.scriptsForUrl(url);
-    for (final script in matches) {
-      try {
-        if (script.isCss) {
-          final jsonCss = jsonEncode(script.code);
-          final cssScript = """
-(function() {
-  var style = document.getElementById('xdm-user-css');
-  if (!style) {
-    style = document.createElement('style');
-    style.id = 'xdm-user-css';
-    document.head.appendChild(style);
-  }
-  style.textContent = $jsonCss;
-})();
-""";
-          await tab.controller?.evaluateJavascript(source: cssScript);
-        } else {
-          final marker =
-              'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
-          final jsWrapper = """
-if (!window['$marker']) {
-  window['$marker'] = true;
-  (function() {
-${script.code}
-  })();
-}
-""";
-          await tab.controller?.evaluateJavascript(source: jsWrapper);
-        }
-      } catch (e) {
-        debugPrint(
-          '[DMX Browser] Failed to inject user script "${script.name}": $e',
-        );
-      }
-    }
-  }
 
   Future<void> _savePageOffline(BrowserTab tab) async {
     if (tab.isHome) return;
@@ -2600,7 +2654,7 @@ ${script.code}
                       _tabs.add(tab);
                       _currentTabIndex = _tabs.length - 1;
                       _urlController.text = '';
-                      _showBars = true;
+                      _showBarsNotifier.value = true;
                     });
                     _saveTabs();
                   });
@@ -2627,7 +2681,7 @@ ${script.code}
                     _tabs.add(newTab);
                     _currentTabIndex = 1;
                     _urlController.text = '';
-                    _showBars = true;
+                    _showBarsNotifier.value = true;
                   });
                   _saveTabs();
                 });
@@ -2771,7 +2825,7 @@ ${script.code}
                                         _tabs.add(tab);
                                         _currentTabIndex = _tabs.length - 1;
                                         _urlController.text = '';
-                                        _showBars = true;
+                                        _showBarsNotifier.value = true;
                                         _updateLruOrder();
                                       });
                                       _onTabSwitched(oldIdx, _currentTabIndex);
@@ -2803,7 +2857,7 @@ ${script.code}
                                         _tabs.add(tab);
                                         _currentTabIndex = _tabs.length - 1;
                                         _urlController.text = '';
-                                        _showBars = true;
+                                        _showBarsNotifier.value = true;
                                         _updateLruOrder();
                                       });
                                       _onTabSwitched(oldIdx, _currentTabIndex);
@@ -3511,13 +3565,28 @@ ${script.code}
             body: Column(
               children: [
                 // ── Cockpit URL Bar ──
-                RepaintBoundary(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
-                    height: _showBars ? (kToolbarHeight + statusBarHeight) : 0,
-                    clipBehavior: Clip.hardEdge,
-                    decoration: const BoxDecoration(),
+                ValueListenableBuilder<bool>(
+                  valueListenable: _showBarsNotifier,
+                  builder: (context, showBars, child) {
+                    return AnimatedSlide(
+                      offset: showBars ? Offset.zero : const Offset(0, -1.2),
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut,
+                      child: AnimatedOpacity(
+                        opacity: showBars ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 150),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                          height: showBars ? (kToolbarHeight + statusBarHeight) : 0,
+                          clipBehavior: Clip.hardEdge,
+                          decoration: const BoxDecoration(),
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: RepaintBoundary(
                     child: DmxBackdropFilter(
                       sigmaX: 12,
                       sigmaY: 12,
@@ -4117,6 +4186,7 @@ ${script.code}
                                           width: double.infinity,
                                           height: double.infinity,
                                           child: RepaintBoundary(
+                                            key: ValueKey('webview_${tab.id}'),
                                             child: RefreshIndicator(
                                               color: isDark
                                                   ? AppTheme.neonBlue
