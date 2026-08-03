@@ -148,6 +148,7 @@ class DownloadTasks extends Table {
   TextColumn get thumbnailUrl => text().nullable()();
   BoolColumn get isAppUpdate => boolean().withDefault(const Constant(false))();
   IntColumn get priority => integer().withDefault(const Constant(0))();
+  IntColumn get queueOrder => integer().withDefault(const Constant(0))(); // FIX(13)
   TextColumn get expectedSha256 => text().nullable()();
   TextColumn get mirrorUrls => text()
       .map(const NullAwareTypeConverter.wrap(StringListConverter()))
@@ -212,7 +213,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -552,6 +553,16 @@ class AppDatabase extends _$AppDatabase {
             // Migration 11 -> 12: Add mirrorUrls column
             await customStatement(
               'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT',
+            );
+          }
+          if (from < 13) {
+            // Migration 12 -> 13: Add queueOrder column
+            await customStatement(
+              'ALTER TABLE download_tasks ADD COLUMN queue_order INTEGER NOT NULL DEFAULT 0',
+            );
+            // Backfill: assign order based on created_at
+            await customStatement(
+              'UPDATE download_tasks SET queue_order = (SELECT COUNT(*) FROM download_tasks t2 WHERE t2.created_at < download_tasks.created_at)',
             );
           }
         },

@@ -190,6 +190,11 @@ class NotificationCoordinator {
     _notificationService.cancelNotification(notificationId);
   }
 
+  /// FIX(14): Cancels the group summary notification.
+  void cancelGroupSummary() {
+    _notificationService.cancelNotification(_groupSummaryId);
+  }
+
   Future<void> cancelAll() => _notificationService.cancelAll();
 
   Future<void> _handleNotificationAction(Map<String, String> event) async {
@@ -287,9 +292,13 @@ class NotificationCoordinator {
       languageCode: _settingsProvider.languageCode,
       payload: payload,
       hasMultipleActive: multiple,
-      groupKey: multiple ? _groupKey : null,
+      groupKey: _groupKey, // FIX(14): always use group key for consistent threadIdentifier
     );
-    if (multiple) _postGroupSummary(activeCount);
+    if (multiple) {
+      _postGroupSummary(activeCount);
+    } else {
+      cancelGroupSummary(); // FIX(14): only one active, no summary needed
+    }
   }
 
   /// Refreshes the collapsed group summary at most once every 3 seconds.

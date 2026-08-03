@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../../models/download_task.dart';
+import '../../../../core/services/database_service.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 
 /// Mixin that encapsulates download queue concurrency management — the pump
@@ -24,6 +25,9 @@ mixin DownloadQueueMixin {
   Future<void> pauseTask(String id);
   Future<void> resumeTask(String id);
   int get queuedTasksCount;
+  DatabaseService get providerDatabaseService; // FIX(13)
+  set filteredTasksDirty(bool value); // FIX(13)
+  void notifyListeners(); // FIX(13)
 
   // ---------------------------------------------------------------------------
   // State
@@ -69,6 +73,32 @@ mixin DownloadQueueMixin {
     _needsNotify = true;
   }
 
+  /// Reorders tasks by their new index positions.
+  /// Called from a ReorderableListView's onReorder callback.
+  Future<void> reorderTasks(List<DownloadTask> visibleTasks, int oldIndex, int newIndex) async {
+    // 1. Adjust newIndex if moving downward (Flutter quirk)
+    if (oldIndex < newIndex) newIndex -= 1;
+    // 2. Remove item at oldIndex, insert at newIndex
+    final list = List<DownloadTask>.from(visibleTasks);
+    final moved = list.removeAt(oldIndex);
+    list.insert(newIndex, moved);
+    // 3. Reassign queueOrder sequentially
+    final updates = <DownloadTask>[];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].queueOrder != i) {
+        updates.add(list[i].copyWith(queueOrder: i));
+      }
+    }
+    // 4. Persist and notify
+    for (final t in updates) {
+      final idx = providerTasks.indexWhere((x) => x.id == t.id);
+      if (idx != -1) providerTasks[idx] = t;
+    }
+    filteredTasksDirty = true;
+    await providerDatabaseService.saveTasks(updates);
+    notifyListeners();
+  }
+
   // ---------------------------------------------------------------------------
   // Queue pump
   // ---------------------------------------------------------------------------
@@ -101,6 +131,8 @@ mixin DownloadQueueMixin {
 
       queued.sort((a, b) {
         if (a.isAppUpdate != b.isAppUpdate) return b.isAppUpdate ? 1 : -1;
+        final orderCmp = a.queueOrder.compareTo(b.queueOrder);
+        if (orderCmp != 0) return orderCmp;
         final prioCmp = b.priority.compareTo(a.priority);
         if (prioCmp != 0) return prioCmp;
         return a.createdAt.compareTo(b.createdAt);

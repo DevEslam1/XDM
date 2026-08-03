@@ -18,7 +18,7 @@ abstract final class DownloadStatusMessages {
 
 enum DownloadStatus { queued, downloading, paused, completed, failed }
 
-enum SortOption { dateAdded, fileSize, fileName, status }
+enum SortOption { dateAdded, fileSize, fileName, status, manual } // FIX(13)
 
 class DownloadTask {
   final String id;
@@ -57,6 +57,7 @@ class DownloadTask {
   final String? notes;
   final bool isAppUpdate;
   final int priority; // 0 = normal, 1 = high, 2 = urgent
+  final int queueOrder; // FIX(13): Lower values = higher priority
   final String? playlistId; // groups playlist videos into one card
   final String? playlistTitle;
   final String? thumbnailUrl;
@@ -99,6 +100,7 @@ class DownloadTask {
     this.notes,
     this.isAppUpdate = false,
     this.priority = 0,
+    this.queueOrder = 0, // FIX(13)
     this.playlistId,
     this.playlistTitle,
     this.thumbnailUrl,
@@ -274,10 +276,10 @@ class DownloadTask {
     String? notes,
     bool? isAppUpdate,
     int? priority,
+    int? queueOrder,
+    String? playlistId,
     String? playlistTitle,
-    bool clearPlaylist = false,
     String? thumbnailUrl,
-    bool clearThumbnail = false,
     String? expectedSha256,
     List<String>? mirrorUrls,
   }) {
@@ -288,57 +290,50 @@ class DownloadTask {
       fileSize: fileSize ?? this.fileSize,
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
       speed: speed ?? this.speed,
-      eta: clearEta ? null : eta ?? this.eta,
+      eta: clearEta ? null : (eta ?? this.eta),
       category: category ?? this.category,
       status: status ?? this.status,
       savePath: savePath ?? this.savePath,
       localFilePath: localFilePath ?? this.localFilePath,
       tempFilePath: tempFilePath ?? this.tempFilePath,
-      errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       statusMessage:
-          clearStatusMessage ? null : statusMessage ?? this.statusMessage,
+          clearStatusMessage ? null : (statusMessage ?? this.statusMessage),
       threadCount: threadCount ?? this.threadCount,
-      chunks: chunks != null ? List.of(chunks) : List.of(this.chunks),
+      chunks: chunks ?? this.chunks,
       createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
-      completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
-      scheduledAt: clearScheduledAt ? null : scheduledAt ?? this.scheduledAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
+      scheduledAt: clearScheduledAt ? null : (scheduledAt ?? this.scheduledAt),
       supportsResume: supportsResume ?? this.supportsResume,
       speedLimitKbps: speedLimitKbps ?? this.speedLimitKbps,
       seedingEnabled: seedingEnabled ?? this.seedingEnabled,
       seedingLimited: seedingLimited ?? this.seedingLimited,
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
-      torrentFiles: torrentFiles != null
-          ? [for (final m in torrentFiles) Map<String, dynamic>.from(m)]
-          : this
-              .torrentFiles
-              ?.map((m) => Map<String, dynamic>.from(m))
-              .toList(),
-      downloadPageUrl:
-          clearDownloadPageUrl ? null : downloadPageUrl ?? this.downloadPageUrl,
+      torrentFiles: torrentFiles ?? this.torrentFiles,
+      downloadPageUrl: clearDownloadPageUrl
+          ? null
+          : (downloadPageUrl ?? this.downloadPageUrl),
       mergedAudioUrl:
-          clearMergedAudioUrl ? null : mergedAudioUrl ?? this.mergedAudioUrl,
+          clearMergedAudioUrl ? null : (mergedAudioUrl ?? this.mergedAudioUrl),
       audioSize: audioSize ?? this.audioSize,
       audioProgress: audioProgress ?? this.audioProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
       youtubeQualityPreset: clearYoutubeQualityPreset
           ? null
-          : youtubeQualityPreset ?? this.youtubeQualityPreset,
+          : (youtubeQualityPreset ?? this.youtubeQualityPreset),
       notes: notes ?? this.notes,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       priority: priority ?? this.priority,
-      // ignore: unnecessary_this
-      playlistId: clearPlaylist ? null : playlistId ?? this.playlistId,
-      playlistTitle: clearPlaylist ? null : playlistTitle ?? this.playlistTitle,
-      thumbnailUrl: clearThumbnail ? null : thumbnailUrl ?? this.thumbnailUrl,
+      queueOrder: queueOrder ?? this.queueOrder,
+      playlistId: playlistId ?? this.playlistId,
+      playlistTitle: playlistTitle ?? this.playlistTitle,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
       mirrorUrls: mirrorUrls ?? this.mirrorUrls,
     );
   }
 
-  /// ⚠️ These methods are used for backup export/import and inter-isolate messaging.
-  /// The Drift companion in `app_database.dart` is the source of truth for persistence.
-  /// Any new field MUST be added to BOTH paths.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -357,10 +352,10 @@ class DownloadTask {
       'statusMessage': statusMessage,
       'threadCount': threadCount,
       'chunks': chunks,
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': updatedAt.toIso8601String(),
-      'completedAt': completedAt?.toIso8601String(),
-      'scheduledAt': scheduledAt?.toIso8601String(),
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'updatedAt': updatedAt.millisecondsSinceEpoch,
+      'completedAt': completedAt?.millisecondsSinceEpoch,
+      'scheduledAt': scheduledAt?.millisecondsSinceEpoch,
       'supportsResume': supportsResume,
       'speedLimitKbps': speedLimitKbps,
       'seedingEnabled': seedingEnabled,
@@ -376,6 +371,7 @@ class DownloadTask {
       'notes': notes,
       'isAppUpdate': isAppUpdate,
       'priority': priority,
+      'queueOrder': queueOrder,
       'playlistId': playlistId,
       'playlistTitle': playlistTitle,
       'thumbnailUrl': thumbnailUrl,
@@ -412,15 +408,15 @@ class DownloadTask {
     final statusName = map['status'] as String? ?? 'paused';
     final matched = DownloadStatus.values.where((v) => v.name == statusName);
     final status = matched.isNotEmpty ? matched.first : DownloadStatus.paused;
+
     final rawChunks =
         (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
             .map((value) => (value as num?)?.toDouble().clamp(0.0, 1.0) ?? 0.0)
             .toList();
+
     final threadCount =
         (map['threadCount'] as num?)?.toInt() ?? rawChunks.length;
-    // Validate chunks length matches threadCount — resize if mismatched.
-    // When truncating, preserve overall progress by redistributing across
-    // the new count.
+
     List<double> chunks;
     if (rawChunks.length == threadCount) {
       chunks = rawChunks;
@@ -437,73 +433,22 @@ class DownloadTask {
         );
       }
     } else {
-      final existingSum = rawChunks.fold<double>(0.0, (s, c) => s + c);
       final remaining = threadCount - rawChunks.length;
       chunks = [...rawChunks, ...List.filled(remaining, 0.0)];
       if (kDebugMode) {
         debugPrint(
           'DownloadTask.fromMap: chunk count mismatch for task ${map['id']}: '
           'stored ${rawChunks.length} chunks but threadCount=$threadCount. '
-          'Padding with $remaining zero chunks (existing progress: ${existingSum.toStringAsFixed(2)}).',
+          'Padding with $remaining zero chunks.',
         );
       }
     }
-    if (matched.isEmpty) {
-      final task = DownloadTask(
-        id: map['id'] as String? ?? '',
-        fileName: map['fileName'] as String? ?? '',
-        url: map['url'] as String? ?? '',
-        fileSize: (map['fileSize'] as num?)?.toInt() ?? 0,
-        downloadedBytes: (map['downloadedBytes'] as num?)?.toInt() ?? 0,
-        speed: (map['speed'] as num?)?.toDouble() ?? 0.0,
-        eta: (map['eta'] as num?)?.toInt(),
-        category: map['category'] as String? ?? 'Other',
-        status: status,
-        savePath: map['savePath'] as String? ?? '',
-        localFilePath: map['localFilePath'] as String? ?? '',
-        tempFilePath: map['tempFilePath'] as String? ?? '',
-        errorMessage: 'Unknown status "$statusName" (recovered as paused)',
-        statusMessage: map['statusMessage'] as String?,
-        threadCount: threadCount,
-        chunks: chunks,
-        createdAt: _parseFlexDate(map['createdAt']),
-        updatedAt: _parseFlexDate(map['updatedAt']),
-        completedAt: _parseNullableFlexDate(map['completedAt']),
-        scheduledAt: _parseNullableFlexDate(map['scheduledAt']),
-        supportsResume: map['supportsResume'] as bool? ?? false,
-        speedLimitKbps: (map['speedLimitKbps'] as num?)?.toInt() ?? 0,
-        seedingEnabled: map['seedingEnabled'] as bool? ?? false,
-        seedingLimited: map['seedingLimited'] as bool? ?? false,
-        seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
-        torrentFiles: map['torrentFiles'] is List
-            ? (map['torrentFiles'] as List)
-                .map(
-                  (f) => f is Map
-                      ? Map<String, dynamic>.from(f)
-                      : <String, dynamic>{},
-                )
-                .toList()
-            : null,
-        downloadPageUrl: map['downloadPageUrl'] as String?,
-        mergedAudioUrl:
-            map['mergedAudioUrl'] as String? ?? map['audioUrl'] as String?,
-        audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
-        audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
-        pausedByUser: map['pausedByUser'] as bool? ?? false,
-        youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
-        notes: map['notes'] as String?,
-        isAppUpdate: map['isAppUpdate'] as bool? ?? false,
-        priority: map['priority'] as int? ?? 0,
-        playlistId: map['playlistId'] as String?,
-        playlistTitle: map['playlistTitle'] as String?,
-        thumbnailUrl: map['thumbnailUrl'] as String?,
-        expectedSha256: map['expectedSha256'] as String?,
-        mirrorUrls: map['mirrorUrls'] is List
-            ? (map['mirrorUrls'] as List).map((e) => e.toString()).toList()
-            : null,
-      );
-      return task;
+
+    String? errorMessage = map['errorMessage'] as String?;
+    if (matched.isEmpty && errorMessage == null) {
+      errorMessage = 'Unknown status "$statusName" (recovered as paused)';
     }
+
     return DownloadTask(
       id: map['id'] as String? ?? '',
       fileName: map['fileName'] as String? ?? '',
@@ -517,7 +462,7 @@ class DownloadTask {
       savePath: map['savePath'] as String? ?? '',
       localFilePath: map['localFilePath'] as String? ?? '',
       tempFilePath: map['tempFilePath'] as String? ?? '',
-      errorMessage: map['errorMessage'] as String?,
+      errorMessage: errorMessage,
       statusMessage: map['statusMessage'] as String?,
       threadCount: threadCount,
       chunks: chunks,
@@ -530,25 +475,19 @@ class DownloadTask {
       seedingEnabled: map['seedingEnabled'] as bool? ?? false,
       seedingLimited: map['seedingLimited'] as bool? ?? false,
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
-      torrentFiles: map['torrentFiles'] is List
-          ? (map['torrentFiles'] as List)
-              .map(
-                (f) => f is Map
-                    ? Map<String, dynamic>.from(f)
-                    : <String, dynamic>{},
-              )
-              .toList()
-          : null,
+      torrentFiles: (map['torrentFiles'] as List?)
+          ?.map((e) => e as Map<String, dynamic>)
+          .toList(),
       downloadPageUrl: map['downloadPageUrl'] as String?,
-      mergedAudioUrl:
-          map['mergedAudioUrl'] as String? ?? map['audioUrl'] as String?,
+      mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       pausedByUser: map['pausedByUser'] as bool? ?? false,
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
       notes: map['notes'] as String?,
       isAppUpdate: map['isAppUpdate'] as bool? ?? false,
-      priority: map['priority'] as int? ?? 0,
+      priority: (map['priority'] as num?)?.toInt() ?? 0,
+      queueOrder: (map['queueOrder'] as num?)?.toInt() ?? 0,
       playlistId: map['playlistId'] as String?,
       playlistTitle: map['playlistTitle'] as String?,
       thumbnailUrl: map['thumbnailUrl'] as String?,

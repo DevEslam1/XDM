@@ -1,0 +1,23 @@
+name: Golden Tests
+on:
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'assets/fonts/**'
+jobs:
+  golden:
+    runs-on: macos-latest  # Stable font rendering
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter test test/goldens/ --update-goldens
+      - run: flutter test test/goldens/
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: golden-failures
+          path: test/goldens/failures/

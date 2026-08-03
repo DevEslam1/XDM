@@ -1,19 +1,7 @@
-import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
+import '../goldens/golden_config.dart';
 
-/// Skips golden tests on Linux CI where font rendering may differ.
-bool get skipGoldenTests => Platform.isLinux;
+// FIX(16): Exporting from config to maintain backward compatibility with helper imports
+export '../goldens/golden_config.dart' show shouldRunGoldenTests, expectGolden;
 
-/// Standard golden test wrapper.
-Future<void> expectGolden(
-  WidgetTester tester,
-  String goldenName, {
-  bool skip = false,
-}) async {
-  if (skip || skipGoldenTests) return;
-  await expectLater(
-    find.byType(MaterialApp),
-    matchesGoldenFile('goldens/$goldenName.png'),
-  );
-}
+/// FIX(16): Getter kept for legacy test code, now backed by centralized config
+bool get skipGoldenTests => !shouldRunGoldenTests;

@@ -7,6 +7,8 @@ import '../helpers/golden_helpers.dart';
 
 void main() {
   group('Golden Tests', () {
+    // FIX(16): all tests now use centralized platform-detection logic in expectGolden
+    
     testWidgets('DownloadCard downloading state', (tester) async {
       final task = createTestTask(
         status: DownloadStatus.downloading,
@@ -21,7 +23,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await expectGolden(tester, 'download_card_downloading', skip: true);
+      await expectGolden(tester, 'download_card_downloading');
     });
 
     testWidgets('DownloadCard completed state', (tester) async {
@@ -35,7 +37,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await expectGolden(tester, 'download_card_completed', skip: true);
+      await expectGolden(tester, 'download_card_completed');
     });
 
     testWidgets('DownloadCard torrent state', (tester) async {
@@ -55,7 +57,30 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await expectGolden(tester, 'download_card_torrent', skip: true);
+      await expectGolden(tester, 'download_card_torrent');
+    });
+
+    // FIX(16): Added new golden tests for missed states
+    
+    testWidgets('DownloadCard paused state', (tester) async {
+      final task = createTestTask(status: DownloadStatus.paused);
+      await tester.pumpWidget(createTestApp(
+        child: SizedBox(width: 400, child: DownloadCard(task: task)),
+      ));
+      await tester.pumpAndSettle();
+      await expectGolden(tester, 'download_card_paused');
+    });
+
+    testWidgets('DownloadCard error state', (tester) async {
+      final task = createTestTask(
+        status: DownloadStatus.failed,
+        errorMessage: 'Connection timeout',
+      );
+      await tester.pumpWidget(createTestApp(
+        child: SizedBox(width: 400, child: DownloadCard(task: task)),
+      ));
+      await tester.pumpAndSettle();
+      await expectGolden(tester, 'download_card_error');
     });
   });
 }

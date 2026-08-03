@@ -31,8 +31,16 @@ import 'channel_progress_painter.dart';
 class DownloadCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+  final bool showDragHandle; // FIX(13)
+  final int? index; // FIX(13)
 
-  const DownloadCard({super.key, required this.task, this.compact = false});
+  const DownloadCard({
+    super.key,
+    required this.task,
+    this.compact = false,
+    this.showDragHandle = false, // FIX(13)
+    this.index, // FIX(13)
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -42,10 +50,25 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         '${task.speedFormatted}';
 
     final Widget cardWidget = task.isTorrent
-        ? _TorrentCard(task: task, compact: compact)
+        ? _TorrentCard(
+            task: task,
+            compact: compact,
+            showDragHandle: showDragHandle, // FIX(13)
+            index: index, // FIX(13)
+          )
         : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
-            ? _MediaCard(task: task, compact: compact)
-            : _FileCard(task: task, compact: compact);
+            ? _MediaCard(
+                task: task,
+                compact: compact,
+                showDragHandle: showDragHandle, // FIX(13)
+                index: index, // FIX(13)
+              )
+            : _FileCard(
+                task: task,
+                compact: compact,
+                showDragHandle: showDragHandle, // FIX(13)
+                index: index, // FIX(13)
+              );
 
     return Semantics(
       container: true,
@@ -664,8 +687,15 @@ class _NoticeRow extends StatelessWidget {
 class _FileCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+  final bool showDragHandle; // FIX(13)
+  final int? index; // FIX(13)
 
-  const _FileCard({required this.task, required this.compact});
+  const _FileCard({
+    required this.task,
+    required this.compact,
+    this.showDragHandle = false, // FIX(13)
+    this.index, // FIX(13)
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -693,6 +723,15 @@ class _FileCard extends StatelessWidget with HapticHelper {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (showDragHandle && index != null) ...[
+                  ReorderableDragStartListener(
+                    index: index!,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8.0, top: 12),
+                      child: Icon(Icons.drag_handle, size: 20, color: mutedClr),
+                    ),
+                  ),
+                ],
                 Container(
                   width: compact ? 38 : 44,
                   height: compact ? 38 : 44,
@@ -800,8 +839,15 @@ class _FileCard extends StatelessWidget with HapticHelper {
 class _MediaCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
+  final bool showDragHandle; // FIX(13)
+  final int? index; // FIX(13)
 
-  const _MediaCard({required this.task, required this.compact});
+  const _MediaCard({
+    required this.task,
+    required this.compact,
+    this.showDragHandle = false, // FIX(13)
+    this.index, // FIX(13)
+  });
 
   String get _qualityLabel {
     final preset = task.youtubeQualityPreset ?? '';
@@ -845,6 +891,15 @@ class _MediaCard extends StatelessWidget with HapticHelper {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (showDragHandle && index != null) ...[
+                  ReorderableDragStartListener(
+                    index: index!,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8.0, top: 10),
+                      child: Icon(Icons.drag_handle, size: 20, color: mutedClr),
+                    ),
+                  ),
+                ],
                 Container(
                   width: compact ? 46 : 56,
                   height: compact ? 34 : 40,
@@ -980,8 +1035,15 @@ class _MediaCard extends StatelessWidget with HapticHelper {
 class _TorrentCard extends StatefulWidget {
   final DownloadTask task;
   final bool compact;
+  final bool showDragHandle; // FIX(13)
+  final int? index; // FIX(13)
 
-  const _TorrentCard({required this.task, required this.compact});
+  const _TorrentCard({
+    required this.task,
+    required this.compact,
+    this.showDragHandle = false, // FIX(13)
+    this.index, // FIX(13)
+  });
 
   @override
   State<_TorrentCard> createState() => _TorrentCardState();
@@ -1037,6 +1099,16 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.showDragHandle && widget.index != null) ...[
+                      ReorderableDragStartListener(
+                        index: widget.index!,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8.0, top: 12),
+                          child:
+                              Icon(Icons.drag_handle, size: 20, color: mutedClr),
+                        ),
+                      ),
+                    ],
                     Container(
                       width: widget.compact ? 38 : 44,
                       height: widget.compact ? 38 : 44,

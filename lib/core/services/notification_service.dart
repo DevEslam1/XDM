@@ -477,6 +477,7 @@ class NotificationService {
     final iosDetails = DarwinNotificationDetails(
       presentAlert: !isPaused,
       interruptionLevel: InterruptionLevel.passive,
+      threadIdentifier: groupKey ?? 'dmx_downloads', // FIX(14)
     );
     final details = NotificationDetails(
       android: androidDetails,
@@ -516,12 +517,15 @@ class NotificationService {
       groupKey: groupKey,
       groupAlertBehavior: GroupAlertBehavior.children,
     );
+    final iosDetails = DarwinNotificationDetails(
+      presentAlert: false,
+      interruptionLevel: InterruptionLevel.passive,
+      threadIdentifier: groupKey,
+      subtitle: '$activeCount active', // FIX(14)
+    );
     final details = NotificationDetails(
       android: androidDetails,
-      iOS: const DarwinNotificationDetails(
-        presentAlert: false,
-        interruptionLevel: InterruptionLevel.passive,
-      ),
+      iOS: iosDetails,
     );
     await _plugin.show(
       id: notificationId,
@@ -558,6 +562,7 @@ class NotificationService {
       interruptionLevel: playSound
           ? InterruptionLevel.timeSensitive
           : InterruptionLevel.passive,
+      threadIdentifier: 'dmx_downloads', // FIX(14)
     );
     final details = NotificationDetails(
       android: androidDetails,
@@ -594,6 +599,7 @@ class NotificationService {
     final iosDetails = const DarwinNotificationDetails(
       presentAlert: true,
       interruptionLevel: InterruptionLevel.timeSensitive,
+      threadIdentifier: 'dmx_downloads', // FIX(14)
     );
     final details = NotificationDetails(
       android: androidDetails,

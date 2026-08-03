@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,27 @@ import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
 import 'fake_services.dart';
+
+void setupTestPluginMocks() {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+    (methodCall) async => null,
+  );
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+    (methodCall) async {
+      if (methodCall.method == 'check') return ['none'];
+      return null;
+    },
+  );
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('dev.fluttercommunity.plus/connectivity_status'),
+    (methodCall) async => null,
+  );
+}
 
 /// Wraps a widget with required providers for testing.
 Widget createTestApp({
@@ -65,6 +87,7 @@ DownloadProvider createMockDownloadProvider({
 
 /// Creates a SettingsProvider with test defaults.
 SettingsProvider createMockSettingsProvider() {
+  setupTestPluginMocks();
   SharedPreferences.setMockInitialValues({
     'isDarkMode': true,
     'autoStart': true,

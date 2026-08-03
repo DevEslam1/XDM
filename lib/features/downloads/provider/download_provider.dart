@@ -1268,6 +1268,11 @@ class DownloadProvider extends ChangeNotifier
     final effectiveThreadCount =
         (threadCount ?? _settingsProvider.defaultThreadCount).clamp(1, 32);
 
+    // FIX(13): Calculate max existing queue order
+    final maxOrder = _tasks.isEmpty
+        ? -1
+        : _tasks.map((t) => t.queueOrder).reduce(max);
+
     final task = DownloadTask(
       id: '${now.microsecondsSinceEpoch}_${Random.secure().nextInt(1000000000)}',
       fileName: fileName,
@@ -1285,6 +1290,7 @@ class DownloadProvider extends ChangeNotifier
       updatedAt: now,
       scheduledAt: scheduledAt,
       supportsResume: supportsResume,
+      queueOrder: maxOrder + 1, // FIX(13)
       seedingEnabled: _settingsProvider.globalTorrentSeeding,
       seedingLimited: _settingsProvider.globalTorrentSeedingLimited,
       seedingLimitKbps: _settingsProvider.globalTorrentSeedingLimitKbps,

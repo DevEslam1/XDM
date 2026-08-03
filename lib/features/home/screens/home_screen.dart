@@ -623,6 +623,12 @@ class _HomeScreenState extends State<HomeScreen>
                     sortState,
                     isDark,
                   ),
+                  _sortMenuItem(
+                    SortOption.manual,
+                    isRtl ? 'ترتيب يدوي' : 'Manual Order',
+                    sortState,
+                    isDark,
+                  ),
                 ],
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -1440,11 +1446,16 @@ class _DownloadTaskList extends StatelessWidget {
           }
         }
 
-        // Build a mixed list preserving order: playlists first-seen, then singles
+        final provider = context.read<DownloadProvider>();
+        final canReorder =
+            provider.statusFilter == 'All' || provider.statusFilter == 'Queued';
+
+        // Build a mixed list preserving order: playlists first-seen, then singles.
+        // FIX(13): Disable grouping when reordering is allowed to support granular task movement.
         final renderItems = <_RenderItem>[];
         final seenPlaylists = <String>{};
         for (final t in displayTasks) {
-          if (t.isPlaylistItem) {
+          if (t.isPlaylistItem && !canReorder) {
             if (seenPlaylists.contains(t.playlistId)) continue;
             seenPlaylists.add(t.playlistId!);
             renderItems.add(
@@ -1489,38 +1500,124 @@ class _DownloadTaskList extends StatelessWidget {
               );
             }
           },
-          child: ListView.separated(
-            padding: EdgeInsets.symmetric(
-              horizontal: screenPadding(context).left,
-            ),
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            itemCount: renderItems.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              final item = renderItems[index];
-              final Widget card;
-              if (item.isPlaylist) {
-                card = PlaylistGroupCard(
-                  key: ValueKey('playlist_${item.playlistId}'),
-                  playlistId: item.playlistId!,
-                  title: item.title!,
-                  items: item.items!,
-                );
-              } else {
-                card = DownloadCard(
-                  key: ValueKey(item.task!.id),
-                  task: item.task!,
-                  compact: true,
-                );
-              }
-              return RepaintBoundary(child: card);
-            },
-          ),
+          child: _buildTaskList(context, renderItems, fullList),
         );
       },
     );
+  }
+
+  Widget _buildTaskList(BuildContext context, List<_RenderItem> renderItems, List<DownloadTask> fullList) {
+    final provider = context.read<DownloadProvider>();
+    final canReorder = provider.statusFilter == 'All' || provider.statusFilter == 'Queued';
+
+    if (canReorder) {
+      return ReorderableListView.builder(
+        padding: EdgeInsets.symmetric(
+          horizontal: screenPadding(context).left,
+        ),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        itemCount: renderItems.length,
+        proxyDecorator: (child, index, animation) {
+          return AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) {
+              return Material(
+                elevation: 8,
+                color: Colors.transparent,
+                child: child,
+              );
+            },
+            child: child,
+          );
+        },
+        onReorderItem: (oldIndex, newIndex) {
+          // Reordering is only applicable for singles and playlists at the top level
+          // Extract the underlying task list for reorder
+          provider.reorderTasks(
+            displayTasksFromRenderItems(renderItems),
+            oldIndex,
+            oldIndex < newIndex ? newIndex + 1 : newIndex,
+          );
+        },
+        itemBuilder: (context, index) {
+          final item = renderItems[index];
+          final Widget card;
+          if (item.isPlaylist) {
+            card = PlaylistGroupCard(
+              key: ValueKey('playlist_${item.playlistId}'),
+              playlistId: item.playlistId!,
+              title: item.title!,
+              items: item.items!,
+            );
+          } else {
+            card = DownloadCard(
+              key: ValueKey(item.task!.id),
+              task: item.task!,
+              compact: true,
+              showDragHandle: canReorder, // FIX(13)
+              index: index, // FIX(13)
+            );
+          }
+          return Padding(
+            key: ValueKey(item.isPlaylist ? 'group_${item.playlistId}' : item.task!.id),
+            padding: const EdgeInsets.only(bottom: 10),
+            child: RepaintBoundary(child: card),
+          );
+        },
+      );
+    }
+
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(
+        horizontal: screenPadding(context).left,
+      ),
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      itemCount: renderItems.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final item = renderItems[index];
+        final Widget card;
+        if (item.isPlaylist) {
+          card = PlaylistGroupCard(
+            key: ValueKey('playlist_${item.playlistId}'),
+            playlistId: item.playlistId!,
+            title: item.title!,
+            items: item.items!,
+          );
+        } else {
+          card = DownloadCard(
+            key: ValueKey(item.task!.id),
+            task: item.task!,
+            compact: true,
+          );
+        }
+        return RepaintBoundary(child: card);
+      },
+    );
+  }
+
+  List<DownloadTask> displayTasksFromRenderItems(List<_RenderItem> items) {
+    final list = <DownloadTask>[];
+    for (final item in items) {
+      if (item.isPlaylist) {
+        // For reordering, we treat the whole playlist as one entry if it's collapsed?
+        // Actually, the prompt says "reorder queued downloads".
+        // If it's a playlist, it might be complex. 
+        // Let's just pass the first item of the playlist as a proxy if we must, 
+        // but the prompt implementation of reorderTasks expects List<DownloadTask>.
+        // This is a bit ambiguous with playlists.
+        if (item.items != null && item.items!.isNotEmpty) {
+          list.add(item.items!.first);
+        }
+      } else if (item.task != null) {
+        list.add(item.task!);
+      }
+    }
+    return list;
   }
 }
 

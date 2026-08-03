@@ -176,6 +176,9 @@ mixin DownloadFilterMixin {
         case SortOption.status:
           comparison = a.status.name.compareTo(b.status.name);
           break;
+        case SortOption.manual: // FIX(13)
+          comparison = a.queueOrder.compareTo(b.queueOrder);
+          break;
       }
       return _sortAscending ? comparison : -comparison;
     });
