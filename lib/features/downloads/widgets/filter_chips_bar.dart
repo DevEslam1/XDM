@@ -33,7 +33,9 @@ class FilterChipsBar extends StatelessWidget {
             for (final task in p.tasks) {
               if (isHistory &&
                   task.status != DownloadStatus.completed &&
-                  task.status != DownloadStatus.failed) continue;
+                  task.status != DownloadStatus.failed) {
+                continue;
+              }
               final cat = task.category.toLowerCase();
               counts[cat] = (counts[cat] ?? 0) + 1;
             }

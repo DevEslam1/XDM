@@ -12,7 +12,7 @@ import 'package:logging/logging.dart';
 /// Signature matching the screen's `_createNewTab` factory — building a tab
 /// (WebViewController + NavigationDelegate) stays on the screen.
 typedef CreateTabCallback = BrowserTab Function(
-    {String initialUrl, bool isIncognito, String? id});
+    {String initialUrl, bool isIncognito, String? id, bool autoLoad});
 
 /// Owns the open-tab list, the active index, tab persistence/restore, and
 /// the screen's pending-timer bookkeeping (REFACTOR B extraction from
@@ -167,7 +167,8 @@ class TabManager {
               debugPrint('[Browser] Skipping unsafe restored URL: $url');
               continue;
             }
-            final tab = createTab(initialUrl: url, isIncognito: false, id: id);
+            final tab = createTab(
+                initialUrl: url, isIncognito: false, id: id, autoLoad: false);
             tab.title = title;
             loadedTabs.add(tab);
           }
@@ -225,7 +226,8 @@ class TabManager {
     for (var i = 0; i < saved.length; i++) {
       final row = saved[i];
       final isBlank = row.url.isEmpty || row.url == 'about:blank';
-      final tab = createTab(initialUrl: isBlank ? 'about:blank' : row.url);
+      final tab = createTab(
+          initialUrl: isBlank ? 'about:blank' : row.url, autoLoad: false);
       if (row.title.isNotEmpty) tab.title = row.title;
       newTabs.add(tab);
       if (row.isActive) activeIdx = i;

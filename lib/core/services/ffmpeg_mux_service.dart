@@ -272,7 +272,9 @@ class FFmpegMuxService {
       final pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
         if (onProgress == null ||
             totalDuration == null ||
-            totalDuration.inSeconds == 0) return;
+            totalDuration.inSeconds == 0) {
+          return;
+        }
         final logs = await session.getLogsAsString();
         final match = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)')
             .allMatches(logs)

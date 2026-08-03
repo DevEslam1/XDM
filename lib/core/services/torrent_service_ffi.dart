@@ -299,7 +299,9 @@ class TorrentService {
   ///   void loadResumeData(int torrentId, Uint8List data);
   static Future<void> saveResumeData(int torrentId) async {
     if (_state == TorrentSessionState.uninitialized ||
-        _state == TorrentSessionState.initializing) return;
+        _state == TorrentSessionState.initializing) {
+      return;
+    }
     try {
       final data = LibtorrentFlutter.instance.trySaveResumeData(torrentId);
       if (data != null) {

@@ -413,11 +413,72 @@ class _BrowserScreenState extends State<BrowserScreen>
     _dashboardScrollController.addListener(_onDashboardScroll);
     _adBlocker.init();
     _redirectGuard.init();
+    _resetInactivityTimer();
+  }
+
+  static const Duration _kInactivityDuration = Duration(minutes: 5);
+  Timer? _inactivityTimer;
+  bool _isHibernating = false;
+
+  void _resetInactivityTimer() {
+    _inactivityTimer?.cancel();
+    if (_isHibernating) {
+      _isHibernating = false;
+      debugPrint('[BrowserWatchdog] Browser active — resuming inactivity watchdog.');
+    }
+    if (!mounted) return;
+    _inactivityTimer = Timer(_kInactivityDuration, _onInactivityTimeout);
+  }
+
+  void _onInactivityTimeout() {
+    if (!mounted || _isHibernating) return;
+    _isHibernating = true;
+    debugPrint(
+      '[BrowserWatchdog] 5 minutes of inactivity reached. Cleaning up browser services & background tab resources to save RAM and battery.',
+    );
+
+    for (final tab in _tabs) {
+      _pauseTabMedia(tab);
+    }
+
+    for (var i = 0; i < _tabs.length; i++) {
+      if (i != _currentTabIndex) {
+        final tab = _tabs[i];
+        if (!tab.isHome) {
+          try {
+            tab.controller.runJavaScript('try { window.stop(); } catch(e){}');
+          } catch (_) {}
+        }
+      }
+    }
+
+    _sniffer.cancelAllScanTimers();
+
+    for (final timer in _loadingTimeoutTimers.values) {
+      timer.cancel();
+    }
+    _loadingTimeoutTimers.clear();
+
+    _saveTabs();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _resetInactivityTimer();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      for (final tab in _tabs) {
+        _pauseTabMedia(tab);
+      }
+    }
   }
 
   @override
   void didHaveMemoryPressure() {
     super.didHaveMemoryPressure();
+    _onInactivityTimeout();
     if (mounted && _tabs.isNotEmpty) {
       setState(() {
         if (_currentTabIndex >= 0 && _currentTabIndex < _tabs.length) {
@@ -434,6 +495,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     String initialUrl = 'about:blank',
     bool isIncognito = false,
     String? id,
+    bool autoLoad = true,
   }) {
     final cleanInitialUrl = (initialUrl.isEmpty || initialUrl == 'about:blank')
         ? 'about:blank'
@@ -719,6 +781,9 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
       });
 
+    if (autoLoad && cleanInitialUrl != 'about:blank') {
+      controller.loadRequest(Uri.parse(cleanInitialUrl));
+    }
     return tab;
   }
 
@@ -3241,7 +3306,13 @@ ${script.code}
         tab.controller.enableZoom(settings.pinchToZoom);
       }
     }
-    return PopScope(
+    return Listener(
+
+      onPointerDown: (_) => _resetInactivityTimer(),
+
+      onPointerMove: (_) => _resetInactivityTimer(),
+
+      child: PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) {
@@ -4132,9 +4203,9 @@ ${script.code}
           ),
         ),
       ),
+      ),
     );
   }
-
   Future<void> _handleYouTubeGrab(
     BrowserTab activeTab,
     SettingsProvider settings,

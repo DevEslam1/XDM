@@ -88,6 +88,14 @@ class MediaSniffer {
     );
   }
 
+  /// Cancels all scheduled media scan timers.
+  void cancelAllScanTimers() {
+    for (final timer in mediaScanTimers.values) {
+      timer.cancel();
+    }
+    mediaScanTimers.clear();
+  }
+
   /// Cancels all pending scan timers and clears detection state.
   void dispose() {
     for (final timer in mediaScanTimers.values) {
