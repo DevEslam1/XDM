@@ -417,7 +417,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final qualityPreset =
             streamType == 'audio' ? 'audio_only' : stream['quality'] as String?;
         final category = streamType == 'audio' ? 'Audio' : 'Video';
-        final fileName = '$title.$ext';
+        final fileName = safeFileName('$title.$ext');
         final provider = context.read<DownloadProvider>();
         final settings = context.read<SettingsProvider>();
         final savePath = _pathController.text.trim().isNotEmpty

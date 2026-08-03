@@ -89,8 +89,17 @@ const _windowsReserved = {
 
 String safeFileName(String value) {
   var sanitized = value
-      .replaceAll(RegExp(r'[<>:"/\|?*\x00-\x1F]'), '_')
+      // Step 1: strip null bytes and ASCII control characters (U+0000–U+001F)
+      .replaceAll(RegExp('[\x00-\x1f]'), '')
+      // Step 2: replace every form of path separator (forward + back slash)
+      // and Windows-forbidden chars with an underscore
+      .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+      // Step 3: collapse '..' traversal sequences (e.g. "foo..bar", "../../")
+      // Replace any run of two-or-more dots with a single dot
+      .replaceAll(RegExp(r'\.{2,}'), '.')
+      // Step 4: normalise whitespace
       .replaceAll(RegExp(r'\s+'), ' ')
+      // Step 5: strip leading/trailing dots (hides files on Unix, ugly on all)
       .replaceAll(RegExp(r'^\.+|\.+$'), '')
       .trim();
   if (sanitized.isEmpty) return 'download.bin';

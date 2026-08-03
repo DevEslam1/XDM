@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
+import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
@@ -236,7 +237,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
       final ext = _qualityPreset == 'audio_only' ? 'm4a' : 'mp4';
       final displayQuality =
           _qualityPreset == 'audio_only' ? 'Audio' : _qualityPreset;
-      final fileName = '$videoTitle [$displayQuality].$ext';
+      final fileName = safeFileName('$videoTitle [$displayQuality].$ext');
 
       batchTasks.add(DownloadTask(
         id: '${now.microsecondsSinceEpoch}_$i',

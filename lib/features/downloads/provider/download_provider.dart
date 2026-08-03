@@ -923,13 +923,43 @@ class DownloadProvider extends ChangeNotifier
   }) async {
     if (tasks.isEmpty) return;
 
-    // 1. Add all tasks to the in-memory list first (no pump yet).
-    _tasks.addAll(tasks);
+    // Defense-in-depth: validate that every task's file paths stay inside
+    // the declared savePath. Because this method accepts pre-built
+    // DownloadTask objects that bypass _addSingleDownload's sanitization,
+    // it is the last line of defense before a path reaches the filesystem.
+    // p.canonicalize is used (not resolveSymbolicLinksSync) so this works
+    // even when the target directory does not yet exist.
+    final canonicalSave = p.canonicalize(savePath);
+    final safeTasks = tasks.where((task) {
+      bool pathOk(String filePath) {
+        if (filePath.isEmpty) return true;
+        final canonical = p.canonicalize(filePath);
+        return p.isWithin(canonicalSave, canonical) ||
+            canonical == canonicalSave;
+      }
+
+      final ok = pathOk(task.localFilePath) && pathOk(task.tempFilePath);
+      if (!ok) {
+        _log.warning(
+          '[Security] addBatchDownloads: rejecting task "${task.fileName}" '
+          '— path escapes savePath.\n'
+          '  localFilePath : ${task.localFilePath}\n'
+          '  tempFilePath  : ${task.tempFilePath}\n'
+          '  savePath      : $canonicalSave',
+        );
+      }
+      return ok;
+    }).toList();
+
+    if (safeTasks.isEmpty) return;
+
+    // 1. Add validated tasks to the in-memory list first (no pump yet).
+    _tasks.addAll(safeTasks);
     filteredTasksDirty = true;
 
     // 2. Persist in a single batch write.
     try {
-      await _databaseService.saveTasks(tasks);
+      await _databaseService.saveTasks(safeTasks);
     } catch (e) {
       debugPrint('[DMX] batch save failed: $e');
     }
@@ -938,7 +968,7 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
 
     // 4. Pump once with the full batch size as the concurrency ceiling.
-    pumpQueue(maxConcurrentOverride: tasks.length);
+    pumpQueue(maxConcurrentOverride: safeTasks.length);
   }
 
   Future<void> addDownload({

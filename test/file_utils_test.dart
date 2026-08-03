@@ -11,6 +11,82 @@ void main() {
       expect(safeFileName(''), 'download.bin');
     });
 
+    // ── Path traversal regression tests (TASK 1) ──────────────────────────
+    group('safeFileName — path traversal protection', () {
+      const savePath = '/downloads/videos';
+
+      /// Asserts that a file constructed from [savePath] + safeFileName([input])
+      /// always stays inside [savePath].
+      void assertNoTraversal(String input) {
+        final safe = safeFileName(input);
+
+        // 1. The result must not contain raw path separators.
+        expect(
+          safe.contains('/') || safe.contains('\\'),
+          isFalse,
+          reason: 'safeFileName("$input") → "$safe" still contains a slash',
+        );
+
+        // 2. The canonical joined path must be inside savePath.
+        final joined = p.canonicalize(p.join(savePath, safe));
+        expect(
+          p.isWithin(savePath, joined) || joined == p.canonicalize(savePath),
+          isTrue,
+          reason:
+              'safeFileName("$input") → "$safe" escapes savePath.\n'
+              '  joined canonical: $joined\n'
+              '  savePath        : $savePath',
+        );
+      }
+
+      test('forward slash is replaced', () {
+        assertNoTraversal('../../etc/passwd');
+        assertNoTraversal('foo/bar/baz.mp4');
+        assertNoTraversal('/absolute/path.mp4');
+      });
+
+      test('backslash is replaced', () {
+        assertNoTraversal(r'..\..\ windows\system32\evil');
+        assertNoTraversal(r'folder\file.mp4');
+      });
+
+      test('mixed slash and dot-dot is replaced', () {
+        assertNoTraversal('../../evil [1080p].mp4');
+        assertNoTraversal('../sibling/file.mp4');
+        assertNoTraversal('a/b/../../secret.mp4');
+      });
+
+      test('null bytes are stripped', () {
+        final result = safeFileName('evil\x00name.mp4');
+        expect(result.contains('\x00'), isFalse);
+      });
+
+      test('consecutive dots are collapsed to single dot', () {
+        // '../../..' should not survive as path traversal
+        final result = safeFileName('../../..');
+        expect(result.contains('..'), isFalse,
+            reason: 'Expected no ".." in "$result"');
+      });
+
+      test('playlist-style video title with traversal is safe', () {
+        // Simulates TASK 1: '$videoTitle [$displayQuality].$ext'
+        const maliciousTitle = '../../secret/video';
+        const qualityExt = '[1080p].mp4';
+        final fileName =
+            safeFileName('$maliciousTitle $qualityExt');
+        assertNoTraversal(maliciousTitle);
+        // fileName itself must not escape
+        final joined =
+            p.canonicalize(p.join(savePath, fileName));
+        expect(
+          p.isWithin(savePath, joined) ||
+              joined == p.canonicalize(savePath),
+          isTrue,
+          reason: 'Playlist fileName "$fileName" escapes savePath',
+        );
+      });
+    });
+
     test('getUniqueFilePath creates non-colliding filename when file exists',
         () async {
       final tempDir =
