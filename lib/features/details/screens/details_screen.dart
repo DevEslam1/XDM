@@ -635,7 +635,7 @@ class _ActionRail extends StatelessWidget with HapticHelper {
             settings,
           );
           if (deleteFiles != null) {
-            provider.deleteTask(task.id, deleteFiles: deleteFiles);
+            unawaited(provider.deleteTask(task.id, deleteFiles: deleteFiles));
             if (context.mounted) {
               ThemedSnackbar.show(
                 context,

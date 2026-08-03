@@ -1647,23 +1647,34 @@ class DownloadProvider extends ChangeNotifier
     final task = _findTask(id);
     if (task == null) return;
 
-    final activeFuture = _activeFutures[id];
-
-    try {
-      _cancelTokens[id]?.cancel('deleted');
-    } catch (e) {
-      // Ignore
-    }
-
-    if (activeFuture != null) {
+    // 1. Cancel the token IMMEDIATELY
+    final token = _cancelTokens[id];
+    if (token != null && !token.isCancelled) {
       try {
-        await activeFuture;
-        // ignore: avoid_catches_without_on_clauses
+        token.cancel('deleted');
       } catch (e) {
-        debugPrint('[DMX] activeFuture error in save: $e');
+        // Ignore
       }
     }
 
+    // 2. For torrents, pause + remove from session IMMEDIATELY
+    if (task.isTorrent) {
+      final torrentId = _torrentIds[id];
+      if (torrentId != null) {
+        try {
+          TorrentService.pauseTorrent(torrentId);
+          TorrentService.removeTorrent(torrentId, deleteFiles: false);
+        } catch (e) {
+          _log.warning('[deleteTask] Torrent cleanup failed: $e');
+        }
+        _torrentIds.remove(id);
+        providerTorrentIds.remove(id);
+      }
+    }
+
+    // 3. Remove from UI IMMEDIATELY (optimistic update)
+    _tasks.removeWhere((t) => t.id == id);
+    filteredTasksDirty = true;
     _cancelTokens.remove(id);
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
@@ -1684,73 +1695,23 @@ class DownloadProvider extends ChangeNotifier
     _dbRetryTimers[id]?.cancel();
     _dbRetryTimers.remove(id);
 
+    notifyListeners();
+
+    // 4. Remove notification IMMEDIATELY
     final savedNotificationId = _notifications.removeId(id);
-
-    _activeFutures.remove(id);
-
-    // Permanent delete → full cleanup, no preservation
-    await cleanupPartFiles(task, preserveParts: false);
-
-    _tasks.removeWhere((task) => task.id == id);
-    filteredTasksDirty = true;
-
-    final torrentId = _torrentIds[id];
-    if (torrentId != null) {
-      TorrentService.removeTorrent(torrentId, deleteFiles: deleteFiles);
-      _torrentIds.remove(id);
-    }
-
-    if (deleteFiles) {
-      try {
-        final localFile = File(task.localFilePath);
-        if (await localFile.exists()) {
-          await localFile.delete();
-        }
-      } catch (e) {
-        debugPrint('Failed to delete completed file: $e');
-      }
-
-      if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
-        final root = p.normalize(task.savePath);
-
-        for (final f in task.torrentFiles!) {
-          final relPath = f['name'] as String?;
-
-          if (relPath != null && relPath.isNotEmpty) {
-            try {
-              final fullPath = p.normalize(p.join(root, relPath));
-
-              // Prevent path traversal and prevent deleting the root folder itself.
-              if (fullPath == root || !p.isWithin(root, fullPath)) {
-                debugPrint(
-                  '[DMX] Blocked unsafe torrent file path: $relPath',
-                );
-                continue;
-              }
-
-              final file = File(fullPath);
-              if (await file.exists()) {
-                await file.delete();
-              }
-            } catch (e) {
-              debugPrint(
-                'Failed to delete torrent file segment $relPath: $e',
-              );
-            }
-          }
-        }
-      }
-    }
-
-    await _databaseService.deleteTask(id);
-
     if (savedNotificationId != null) {
       _notifications.cancelNotification(savedNotificationId);
     }
 
-    updateActualTorrentUploadLimit();
+    // 5. Delete from DB (fire and forget — don't block UI)
+    unawaited(_databaseService.deleteTask(id).catchError((e) {
+      _log.warning('[deleteTask] DB delete failed for $id: $e');
+    }));
 
-    notifyListeners();
+    // 6. Heavy cleanup in BACKGROUND
+    unawaited(_backgroundDeleteCleanup(task, deleteFiles));
+
+    updateActualTorrentUploadLimit();
     pumpQueue();
 
     if (activeOrSeedingCount == 0) {
@@ -1759,6 +1720,81 @@ class DownloadProvider extends ChangeNotifier
     }
 
     _updateTelemetryWidget(force: true);
+  }
+
+  /// Runs file cleanup without blocking the UI thread.
+  Future<void> _backgroundDeleteCleanup(
+      DownloadTask task, bool deleteFiles) async {
+    try {
+      // Wait for the active future with a HARD 5-second timeout
+      final future = _activeFutures[task.id];
+      if (future != null) {
+        await Future.any([
+          future.catchError((_) {}),
+          Future.delayed(const Duration(seconds: 5)),
+        ]);
+      }
+      _activeFutures.remove(task.id);
+
+      // Clean up temp/state/journal files ALWAYS
+      await cleanupPartFiles(task, preserveParts: false);
+
+      // Delete the actual file only if user requested
+      if (deleteFiles) {
+        await _deleteTaskOutputFiles(task);
+      }
+    } catch (e) {
+      _log.warning('[deleteTask] Background cleanup failed for ${task.id}: $e');
+    }
+  }
+
+  /// Deletes the final output file(s). Large files are deleted in a background isolate.
+  Future<void> _deleteTaskOutputFiles(DownloadTask task) async {
+    try {
+      final localFile = File(task.localFilePath);
+      if (await localFile.exists()) {
+        final size = await localFile.length();
+        if (size > 512 * 1024 * 1024) {
+          // > 512 MB: use isolate
+          await Isolate.run(() => File(task.localFilePath).delete());
+        } else {
+          await localFile.delete();
+        }
+      }
+    } catch (e) {
+      _log.warning('[deleteTask] Completed file deletion failed: $e');
+    }
+
+    if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+      final root = p.normalize(task.savePath);
+
+      for (final f in task.torrentFiles!) {
+        final relPath = f['name'] as String?;
+
+        if (relPath != null && relPath.isNotEmpty) {
+          try {
+            final fullPath = p.normalize(p.join(root, relPath));
+
+            // Prevent path traversal and prevent deleting the root folder itself.
+            if (fullPath == root || !p.isWithin(root, fullPath)) {
+              debugPrint(
+                '[DMX] Blocked unsafe torrent file path: $relPath',
+              );
+              continue;
+            }
+
+            final file = File(fullPath);
+            if (await file.exists()) {
+              await file.delete();
+            }
+          } catch (e) {
+            debugPrint(
+              'Failed to delete torrent file segment $relPath: $e',
+            );
+          }
+        }
+      }
+    }
   }
 
   Future<void> clearHistoryTasks(List<String> ids) async {

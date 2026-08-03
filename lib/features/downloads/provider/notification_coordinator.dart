@@ -71,6 +71,10 @@ class NotificationCoordinator {
   // ignore: prefer_collection_literals
   final Map<String, String> _opaqueHandles = LinkedHashMap<String, String>();
   final Map<String, String> _taskToHandle = {};
+  // Notification actions may wake a killed Android process before the async
+  // handle map has finished loading. Keep the action path behind this future
+  // so a valid pause/cancel action is not dropped during cold start.
+  Future<void>? _handlesLoadFuture;
   static final Random _handleRandom = Random.secure();
   static const int _maxOpaqueHandles = 512;
   static const String _handleMapKey = 'dmx_opaque_handle_map';
@@ -145,7 +149,7 @@ class NotificationCoordinator {
   }
 
   void init() {
-    unawaited(_loadPersistedHandles());
+    _handlesLoadFuture ??= _loadPersistedHandles();
     _actionSubscription?.cancel();
     _actionSubscription = _notificationService.onActionTapped.listen(
       _handleNotificationAction,
@@ -188,7 +192,13 @@ class NotificationCoordinator {
 
   Future<void> cancelAll() => _notificationService.cancelAll();
 
-  void _handleNotificationAction(Map<String, String> event) {
+  Future<void> _handleNotificationAction(Map<String, String> event) async {
+    // On Android/ColorOS this is commonly a cold-start path: the notification
+    // callback is replayed immediately while the provider is still loading.
+    // Awaiting the map restore makes opaque handles resolvable after process
+    // death instead of silently ignoring the user's action.
+    await _handlesLoadFuture;
+
     final action = event['action'];
     // FIX(18): the payload is an opaque handle; resolve it to the real task
     // id. Unknown/unresolvable handles are ignored (e.g. after restart).

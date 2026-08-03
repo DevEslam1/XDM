@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -588,7 +589,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
               settings,
             );
             if (deleteFiles != null) {
-              provider.deleteTask(task.id, deleteFiles: deleteFiles);
+              unawaited(provider.deleteTask(task.id, deleteFiles: deleteFiles));
               if (context.mounted) {
                 ThemedSnackbar.show(
                   context,
@@ -2203,7 +2204,7 @@ void _confirmDelete(
     settings,
   );
   if (deleteFiles != null) {
-    provider.deleteTask(task.id, deleteFiles: deleteFiles);
+    unawaited(provider.deleteTask(task.id, deleteFiles: deleteFiles));
   }
 }
 

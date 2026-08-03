@@ -90,6 +90,26 @@ class DownloadEngine {
 
   final List<CancelToken> _activeCancelTokens = [];
 
+  /// A delay that completes immediately if [cancelToken] is cancelled.
+  /// Prevents the engine from being stuck in a sleep when the user
+  /// cancels or deletes a download.
+  static Future<void> _cancellableDelay(
+    Duration duration, {
+    required CancelToken cancelToken,
+  }) async {
+    if (cancelToken.isCancelled) return;
+    final completer = Completer<void>();
+    final timer = Timer(duration, () {
+      if (!completer.isCompleted) completer.complete();
+    });
+    final sub = cancelToken.whenCancel.then((_) {
+      timer.cancel();
+      if (!completer.isCompleted) completer.complete();
+    });
+    await completer.future;
+    await sub;
+  }
+
   DownloadIsolatePool? _pool;
   Future<DownloadIsolatePool>? _poolInit;
 
@@ -2292,7 +2312,17 @@ class DownloadEngine {
 
                     final sleepMs = await governor.acquire(chunk.length);
                     if (sleepMs > 0) {
-                      await Future.delayed(Duration(milliseconds: sleepMs));
+                      await _cancellableDelay(
+                        Duration(milliseconds: sleepMs),
+                        cancelToken: chunkCancelTokens[idx],
+                      );
+                      if (chunkCancelTokens[idx].isCancelled) {
+                        throw DioException(
+                          requestOptions: RequestOptions(path: punyUrl),
+                          type: DioExceptionType.cancel,
+                          message: 'Download cancelled.',
+                        );
+                      }
                     }
 
                     final absolutePosition =
@@ -2376,9 +2406,19 @@ class DownloadEngine {
                 debugPrint(
                   'Thread $idx failed attempt $attempts: $e. Retrying...',
                 );
-
                 final delay = (attempts * attempts * 2) + Random().nextInt(3);
-                await Future.delayed(Duration(seconds: delay));
+                await _cancellableDelay(
+                  Duration(seconds: delay),
+                  cancelToken: chunkCancelTokens[idx],
+                );
+                if (chunkCancelTokens[idx].isCancelled ||
+                    cancelToken.isCancelled) {
+                  throw DioException(
+                    requestOptions: RequestOptions(path: punyUrl),
+                    type: DioExceptionType.cancel,
+                    message: 'Download cancelled.',
+                  );
+                }
               }
             }
           }());
@@ -3394,8 +3434,9 @@ void _tryUpdateBandwidthGovernor(BandwidthGovernor governor, int limit) {
 
 Future<void> _cancelAndAwaitFutures(
   List<CancelToken> tokens,
-  List<Future<void>> futures,
-) async {
+  List<Future<void>> futures, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
   for (final token in tokens) {
     if (!token.isCancelled) {
       try {
@@ -3410,15 +3451,23 @@ Future<void> _cancelAndAwaitFutures(
 
   if (futures.isEmpty) return;
 
-  await Future.wait(
-    futures.map(
-      (f) => f.catchError((e, st) {
-        Logger(
-          'download_engine',
-        ).warning('[download_engine] operation failed', e, st);
-      }),
-    ),
-  );
+  try {
+    await Future.any([
+      Future.wait(
+        futures.map(
+          (f) => f.catchError((e, st) {
+            Logger(
+              'download_engine',
+            ).warning('[download_engine] operation failed', e, st);
+          }),
+        ),
+      ),
+      Future.delayed(timeout),
+    ]);
+  } catch (e, st) {
+    Logger('download_engine')
+        .warning('[DMX] _cancelAndAwaitFutures timed out', e, st);
+  }
 }
 
 Future<void> _deleteFileIfExists(File file) async {
