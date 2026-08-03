@@ -194,7 +194,8 @@ class BackgroundService {
       _wakeLockSafetyTimer?.cancel();
       _wakeLockSafetyTimer = Timer(_maxWakeLockHold, () async {
         if (_wakeLockHeld) {
-          _log.warning('Wake lock held for ${_maxWakeLockHold.inHours}h. Auto-releasing.');
+          _log.warning(
+              'Wake lock held for ${_maxWakeLockHold.inHours}h. Auto-releasing.');
           await releaseWakeLock();
         }
       });

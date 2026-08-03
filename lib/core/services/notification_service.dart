@@ -30,7 +30,8 @@ void _onBackgroundNotificationResponse(NotificationResponse response) {
 Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
   try {
     if (payload == null || payload.isEmpty) {
-      debugPrint('[NotificationService] WARNING: null or empty payload for action $actionId');
+      debugPrint(
+          '[NotificationService] WARNING: null or empty payload for action $actionId');
     }
     final prefs = await SharedPreferences.getInstance();
     final nonce = prefs.getString(_nonceKey);

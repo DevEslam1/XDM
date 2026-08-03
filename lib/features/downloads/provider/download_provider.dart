@@ -110,7 +110,8 @@ class DownloadProvider extends ChangeNotifier
         _downloadEngine = downloadEngine ?? DownloadEngine(),
         _permissionService = permissionService ?? PermissionService(),
         _notificationService = notificationService ?? NotificationService(),
-        enableBackgroundTimers = enableBackgroundTimers && !Platform.environment.containsKey('FLUTTER_TEST') {
+        enableBackgroundTimers = enableBackgroundTimers &&
+            !Platform.environment.containsKey('FLUTTER_TEST') {
     _settingsProvider.addListener(_onSettingsChanged);
 
     _networkMonitor = NetworkMonitor(
@@ -673,9 +674,11 @@ class DownloadProvider extends ChangeNotifier
 
     // In load(), after loading tasks:
     if (Platform.isIOS && !kIsWeb) {
-      final activeDownloads = _tasks.where(
-        (t) => t.status == DownloadStatus.downloading,
-      ).length;
+      final activeDownloads = _tasks
+          .where(
+            (t) => t.status == DownloadStatus.downloading,
+          )
+          .length;
       if (activeDownloads > 0) {
         _log.warning(
           'iOS: $activeDownloads download(s) were active but iOS does not '
@@ -786,6 +789,7 @@ class DownloadProvider extends ChangeNotifier
       }
       pumpQueue();
     }
+
     unawaited(safePumpQueue());
 
     _updateTelemetryWidget(force: true);
@@ -1473,7 +1477,8 @@ class DownloadProvider extends ChangeNotifier
         : List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
 
     final videoStateBytes = await _readDmxStateBytes(task.tempFilePath);
-    final audioProgressVal = task.audioSize > 0 && (realBytesOnDisk - videoStateBytes) > 0
+    final audioProgressVal = task.audioSize > 0 &&
+            (realBytesOnDisk - videoStateBytes) > 0
         ? ((realBytesOnDisk - videoStateBytes) / task.audioSize).clamp(0.0, 1.0)
         : task.audioProgress;
 
@@ -1880,8 +1885,8 @@ class DownloadProvider extends ChangeNotifier
   /// structural update (status change, URL edit, metadata save) carries
   /// stale progress values captured before the update was enqueued.
   DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
-    final isReset =
-        incoming.status == DownloadStatus.queued && incoming.downloadedBytes == 0;
+    final isReset = incoming.status == DownloadStatus.queued &&
+        incoming.downloadedBytes == 0;
 
     final effectiveDownloadedBytes = isReset
         ? incoming.downloadedBytes

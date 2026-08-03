@@ -845,8 +845,8 @@ class DownloadOrchestrator {
       final effectiveVideoSize =
           videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
       final totalSize = effectiveVideoSize + audioContribution;
-      final totalDownloaded = (audioBytesSoFar + videoBytesSoFar)
-          .clamp(0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
+      final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
+          0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
       final instantSpeed = audioSpeedNow + videoSpeedNow;
       final speedQueue = _host.speedHistories[task.id];
       if (speedQueue != null) {
@@ -2232,4 +2232,3 @@ class DownloadOrchestrator {
     return 0;
   }
 }
-

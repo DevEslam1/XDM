@@ -30,7 +30,9 @@ void main() {
       expect(task.audioProgressPercentString, '50.0%');
     });
 
-    test('copyWith updating status to paused does not lose downloadedBytes or audioProgress', () {
+    test(
+        'copyWith updating status to paused does not lose downloadedBytes or audioProgress',
+        () {
       final liveTask = DownloadTask(
         id: 'yt_test_2',
         fileName: 'Test Video.mp4',

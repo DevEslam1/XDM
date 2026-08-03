@@ -141,7 +141,8 @@ class _HomeScreenState extends State<HomeScreen>
                                       RepaintBoundary(
                                     child: _RedesignedAnalyticsPanel(
                                       categorySizes: categorySizes,
-                                      settings: context.read<SettingsProvider>(),
+                                      settings:
+                                          context.read<SettingsProvider>(),
                                     ),
                                   ),
                                 ),

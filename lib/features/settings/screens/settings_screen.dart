@@ -821,7 +821,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? 'عنوان الخادم الخلفي لـ yt-dlp (http/https)'
                               : 'Backend URL for yt-dlp (http:// or https://)',
                           controller: _backendUrlController,
-                          onChanged: (val) => _onBackendUrlChanged(val, settings),
+                          onChanged: (val) =>
+                              _onBackendUrlChanged(val, settings),
                           onSubmitted: (val) => _saveBackendUrl(val, settings),
                         ),
                         _Divider(isDark: isDark),
@@ -1317,7 +1318,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                           title: L10n.of(context, 'settings_text_scaling'),
                           valueLabel:
                               '${(settings.textScaleFactor * 100).toInt()}%',
-                          subtitle: L10n.of(context, 'settings_text_scaling_sub'),
+                          subtitle:
+                              L10n.of(context, 'settings_text_scaling_sub'),
                           value: settings.textScaleFactor,
                           min: 0.8,
                           max: 2.0,

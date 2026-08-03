@@ -1362,7 +1362,8 @@ class _TorrentFileRow extends StatelessWidget {
         padding: const EdgeInsets.only(left: 12, bottom: 8),
         child: Text(
           'Unknown file',
-          style: AppTheme.microLabel(isDark: isDark, color: mutedClr, size: 8.5),
+          style:
+              AppTheme.microLabel(isDark: isDark, color: mutedClr, size: 8.5),
         ),
       );
     }

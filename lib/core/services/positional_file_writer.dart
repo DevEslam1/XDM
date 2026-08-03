@@ -83,7 +83,8 @@ class PositionalFileWriter {
     // writeOnlyAppend preserves existing bytes (no truncation).
     // We immediately call setPosition to neutralise O_APPEND so that
     // positional writes work correctly.
-    final RandomAccessFile raf = await file.open(mode: FileMode.writeOnlyAppend);
+    final RandomAccessFile raf =
+        await file.open(mode: FileMode.writeOnlyAppend);
     // Force position to 0 so subsequent setPosition calls work correctly.
     // On platforms where O_APPEND is forced, we re-open with read/write.
     try {

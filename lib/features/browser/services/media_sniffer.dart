@@ -197,8 +197,7 @@ class MediaSniffer {
       }
     }
     try {
-      final result = await tab.controller
-          .runJavaScriptReturningResult('''
+      final result = await tab.controller.runJavaScriptReturningResult('''
 (function() {
   var sources = [];
   var videos = document.getElementsByTagName('video');
@@ -282,7 +281,8 @@ class MediaSniffer {
         }
       }
     } on TimeoutException {
-      debugPrint('[DMX Browser] Media scan JS injection timed out for tab ${tab.id}');
+      debugPrint(
+          '[DMX Browser] Media scan JS injection timed out for tab ${tab.id}');
       if (isActive() && containsTab(tab)) {
         _update(() {
           mediaScanFailed[tab.id] = true;

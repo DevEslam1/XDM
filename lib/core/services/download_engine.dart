@@ -1864,7 +1864,8 @@ class DownloadEngine {
             savedEtag = decoded['etag'] as String?;
             savedLastModified = decoded['lastModified'] as String?;
 
-            const sizeTolerance = 2048; // 2 KB tolerance for CDN Content-Length jitter
+            const sizeTolerance =
+                2048; // 2 KB tolerance for CDN Content-Length jitter
             final isSizeWithinTolerance =
                 (savedTotalSize - totalSize).abs() <= sizeTolerance;
 
