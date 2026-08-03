@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 import '../../../features/downloads/models/download_task.dart';
 import '../bandwidth_governor.dart';
 import '../connection_manager.dart';
 import '../download_journal.dart';
+import '../checksum_service.dart';
 import '../positional_file_writer.dart';
 
 class HttpDownloadEngine {
@@ -89,8 +89,8 @@ class HttpDownloadEngine {
     final file = File(task.localFilePath);
     if (!await file.exists()) return false;
 
-    final bytes = await file.readAsBytes();
-    final actualHash = sha256.convert(bytes).toString().toLowerCase();
+    // Streaming SHA-256 calculation to avoid loading entire file in memory
+    final actualHash = (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
 
     if (actualHash == expectedSha256.toLowerCase()) {
       _log.info('[Verify] SHA-256 matched successfully: $actualHash');
@@ -103,35 +103,39 @@ class HttpDownloadEngine {
     final chunkSize = (task.fileSize / task.threadCount).ceil();
     final corruptedChunks = <int>[];
 
-    for (var i = 0; i < task.threadCount; i++) {
-      if (cancelToken.isCancelled) return false;
-      final start = i * chunkSize;
-      final end = (i == task.threadCount - 1)
-          ? task.fileSize - 1
-          : start + chunkSize - 1;
+    final repairDio = Dio();
+    try {
+      for (var i = 0; i < task.threadCount; i++) {
+        if (cancelToken.isCancelled) return false;
+        final start = i * chunkSize;
+        final end = (i == task.threadCount - 1)
+            ? task.fileSize - 1
+            : start + chunkSize - 1;
 
-      try {
-        final dio = Dio();
-        final response = await dio.get<List<int>>(
-          task.url,
-          options: Options(
-            headers: {'Range': 'bytes=$start-$end'},
-            responseType: ResponseType.bytes,
-          ),
-          cancelToken: cancelToken,
-        );
+        try {
+          final response = await repairDio.get<List<int>>(
+            task.url,
+            options: Options(
+              headers: {'Range': 'bytes=$start-$end'},
+              responseType: ResponseType.bytes,
+            ),
+            cancelToken: cancelToken,
+          );
 
-        if (response.data != null) {
-          final freshData = response.data!;
-          final existing = await writer.readRange(start, freshData.length);
-          if (!_bytesEqual(freshData, existing)) {
-            corruptedChunks.add(i);
-            await writer.writeAt(start, freshData);
+          if (response.data != null) {
+            final freshData = response.data!;
+            final existing = await writer.readRange(start, freshData.length);
+            if (!_bytesEqual(freshData, existing)) {
+              corruptedChunks.add(i);
+              await writer.writeAt(start, freshData);
+            }
           }
+        } catch (e) {
+          _log.warning('[Verify] Range request failed for chunk $i: $e');
         }
-      } catch (e) {
-        _log.warning('[Verify] Range request failed for chunk $i: $e');
       }
+    } finally {
+      repairDio.close();
     }
 
     if (corruptedChunks.isEmpty) {
@@ -140,8 +144,9 @@ class HttpDownloadEngine {
     }
 
     await writer.flushAll();
-    final repairedBytes = await file.readAsBytes();
-    final repairedHash = sha256.convert(repairedBytes).toString().toLowerCase();
+    
+    // Streaming SHA-256 re-verification to prevent OOM
+    final repairedHash = (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
 
     if (repairedHash == expectedSha256.toLowerCase()) {
       _log.info(
