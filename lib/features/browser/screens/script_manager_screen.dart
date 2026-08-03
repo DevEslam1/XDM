@@ -38,6 +38,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
         urlPattern: result.urlPattern,
         code: result.code,
         isCss: result.isCss,
+        permissions: result.permissions,
       ),
     );
   }
@@ -50,6 +51,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
         initialUrlPattern: script.urlPattern,
         initialCode: script.code,
         initialIsCss: script.isCss,
+        initialPermissions: script.permissions,
       ),
     );
     if (result == null) return;
@@ -61,6 +63,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
         urlPattern: result.urlPattern,
         code: result.code,
         isCss: result.isCss,
+        permissions: result.permissions,
       ),
     );
   }
@@ -235,7 +238,8 @@ class _ScriptResult {
   final String urlPattern;
   final String code;
   final bool isCss;
-  _ScriptResult(this.name, this.urlPattern, this.code, this.isCss);
+  final Set<ScriptPermission> permissions;
+  _ScriptResult(this.name, this.urlPattern, this.code, this.isCss, this.permissions);
 }
 
 class _ScriptEditorDialog extends StatefulWidget {
@@ -243,12 +247,14 @@ class _ScriptEditorDialog extends StatefulWidget {
   final String initialUrlPattern;
   final String initialCode;
   final bool initialIsCss;
+  final Set<ScriptPermission> initialPermissions;
 
   const _ScriptEditorDialog({
     this.initialName = '',
     this.initialUrlPattern = '',
     this.initialCode = '',
     this.initialIsCss = false,
+    this.initialPermissions = const {ScriptPermission.domRead, ScriptPermission.domWrite},
   });
 
   @override
@@ -260,6 +266,7 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
   late final TextEditingController _urlC;
   late final TextEditingController _codeC;
   late bool _isCss;
+  late Set<ScriptPermission> _permissions;
 
   @override
   void initState() {
@@ -268,6 +275,7 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
     _urlC = TextEditingController(text: widget.initialUrlPattern);
     _codeC = TextEditingController(text: widget.initialCode);
     _isCss = widget.initialIsCss;
+    _permissions = Set.from(widget.initialPermissions);
   }
 
   @override
@@ -295,6 +303,7 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextField(
               controller: _nameC,
@@ -336,6 +345,38 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
                 ),
               ],
             ),
+            if (!_isCss) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Script Permissions',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: ScriptPermission.values.map((perm) {
+                  final selected = _permissions.contains(perm);
+                  return FilterChip(
+                    label: Text(perm.name, style: const TextStyle(fontSize: 11)),
+                    selected: selected,
+                    onSelected: (val) {
+                      setState(() {
+                        if (val) {
+                          _permissions.add(perm);
+                        } else {
+                          _permissions.remove(perm);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
             const SizedBox(height: 8),
             TextField(
               controller: _codeC,
@@ -362,7 +403,7 @@ class _ScriptEditorDialogState extends State<_ScriptEditorDialog> {
             if (name.isEmpty || pattern.isEmpty || code.isEmpty) return;
             Navigator.pop(
               context,
-              _ScriptResult(name, pattern, code, _isCss),
+              _ScriptResult(name, pattern, code, _isCss, _permissions),
             );
           },
           child: Text(L10n.of(context, 'browser_save_btn')),

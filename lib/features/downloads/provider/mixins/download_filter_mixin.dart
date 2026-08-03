@@ -27,6 +27,8 @@ mixin DownloadFilterMixin {
   int _activeTabIndex = 0;
   bool _isNavbarVisible = true;
 
+  final Set<String> _selectedTaskIds = {}; // UI-9: Selection set for batch operations
+
   String? _browserUrlToLoad;
 
   List<DownloadTask>? _cachedFilteredTasks;
@@ -45,6 +47,30 @@ mixin DownloadFilterMixin {
   int get activeTabIndex => _activeTabIndex;
   bool get isNavbarVisible => _isNavbarVisible;
   String? get browserUrlToLoad => _browserUrlToLoad;
+
+  // UI-9: Multi-selection mode getters and mutators
+  bool get isSelectionMode => _selectedTaskIds.isNotEmpty;
+  Set<String> get selectedTaskIds => Set.unmodifiable(_selectedTaskIds);
+
+  void toggleTaskSelection(String id) {
+    if (_selectedTaskIds.contains(id)) {
+      _selectedTaskIds.remove(id);
+    } else {
+      _selectedTaskIds.add(id);
+    }
+    notifyListeners();
+  }
+
+  void selectAllTasks() {
+    _selectedTaskIds.clear();
+    _selectedTaskIds.addAll(filteredTasks.map((t) => t.id));
+    notifyListeners();
+  }
+
+  void clearTaskSelection() {
+    _selectedTaskIds.clear();
+    notifyListeners();
+  }
 
   // ---------------------------------------------------------------------------
   // Dirty flag — usable by other mixins / host

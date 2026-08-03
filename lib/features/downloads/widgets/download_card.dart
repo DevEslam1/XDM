@@ -19,6 +19,8 @@ import '../../downloads/provider/download_provider.dart';
 import '../../details/screens/details_screen.dart';
 import 'channel_progress_painter.dart';
 
+import '../../../core/services/undo_service.dart';
+
 /// Adaptive download card. Detects the download kind and renders a
 /// purpose-built variant:
 ///   • Torrent / magnet  -> _TorrentCard  (seeds/peers, per-file %, seeding)
@@ -31,19 +33,22 @@ import 'channel_progress_painter.dart';
 class DownloadCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
-  final bool showDragHandle; // FIX(13)
-  final int? index; // FIX(13)
+  final bool showDragHandle;
+  final int? index;
 
   const DownloadCard({
     super.key,
     required this.task,
     this.compact = false,
-    this.showDragHandle = false, // FIX(13)
-    this.index, // FIX(13)
+    this.showDragHandle = false,
+    this.index,
   });
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<DownloadProvider>();
+    final isSelectionMode = provider.isSelectionMode;
+
     final statusLabel = task.status.name;
     final semanticLabel = '${task.fileName}, status: $statusLabel, '
         '${(task.progress * 100).toStringAsFixed(0)}% downloaded, '
@@ -53,22 +58,74 @@ class DownloadCard extends StatelessWidget with HapticHelper {
         ? _TorrentCard(
             task: task,
             compact: compact,
-            showDragHandle: showDragHandle, // FIX(13)
-            index: index, // FIX(13)
           )
         : (task.youtubeQualityPreset != null || task.mergedAudioUrl != null)
             ? _MediaCard(
                 task: task,
                 compact: compact,
-                showDragHandle: showDragHandle, // FIX(13)
-                index: index, // FIX(13)
               )
             : _FileCard(
                 task: task,
                 compact: compact,
-                showDragHandle: showDragHandle, // FIX(13)
-                index: index, // FIX(13)
               );
+
+    final Widget interactiveCard = isSelectionMode
+        ? cardWidget
+        : Dismissible(
+            key: ValueKey('dismiss_${task.id}'),
+            direction: DismissDirection.horizontal,
+            background: Container(
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.only(left: 20),
+              decoration: BoxDecoration(
+                color: AppTheme.neonGreen.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                task.status == DownloadStatus.paused
+                    ? Icons.play_arrow_rounded
+                    : (task.status == DownloadStatus.failed
+                        ? Icons.refresh_rounded
+                        : Icons.folder_open_rounded),
+                color: AppTheme.neonGreen,
+              ),
+            ),
+            secondaryBackground: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20),
+              decoration: BoxDecoration(
+                color: AppTheme.neonRed.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.delete_outline_rounded,
+                  color: AppTheme.neonRed),
+            ),
+            confirmDismiss: (direction) async {
+              runHaptic(context.read<SettingsProvider>());
+              if (direction == DismissDirection.startToEnd) {
+                if (task.status == DownloadStatus.paused) {
+                  provider.resumeTask(task.id);
+                } else if (task.status == DownloadStatus.failed) {
+                  provider.retryTask(task.id);
+                } else if (task.status == DownloadStatus.completed) {
+                  openFile(
+                      context, task.localFilePath, context.read<SettingsProvider>());
+                }
+                return false;
+              } else {
+                final taskCopy = task;
+                UndoService.instance.execute(
+                  context: context,
+                  message: '${task.fileName} deleted',
+                  action: () async =>
+                      provider.deleteTask(taskCopy.id, deleteFiles: false),
+                  undo: () async {},
+                );
+                return true;
+              }
+            },
+            child: cardWidget,
+          );
 
     return Semantics(
       container: true,
@@ -77,7 +134,7 @@ class DownloadCard extends StatelessWidget with HapticHelper {
       child: Hero(
         tag: 'download_card_${task.id}',
         createRectTween: (begin, end) => RectTween(begin: begin, end: end),
-        child: cardWidget,
+        child: interactiveCard,
       ),
     );
   }
@@ -687,15 +744,8 @@ class _NoticeRow extends StatelessWidget {
 class _FileCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
-  final bool showDragHandle; // FIX(13)
-  final int? index; // FIX(13)
 
-  const _FileCard({
-    required this.task,
-    required this.compact,
-    this.showDragHandle = false, // FIX(13)
-    this.index, // FIX(13)
-  });
+  const _FileCard({required this.task, required this.compact});
 
   @override
   Widget build(BuildContext context) {
@@ -723,15 +773,6 @@ class _FileCard extends StatelessWidget with HapticHelper {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (showDragHandle && index != null) ...[
-                  ReorderableDragStartListener(
-                    index: index!,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8.0, top: 12),
-                      child: Icon(Icons.drag_handle, size: 20, color: mutedClr),
-                    ),
-                  ),
-                ],
                 Container(
                   width: compact ? 38 : 44,
                   height: compact ? 38 : 44,
@@ -839,15 +880,8 @@ class _FileCard extends StatelessWidget with HapticHelper {
 class _MediaCard extends StatelessWidget with HapticHelper {
   final DownloadTask task;
   final bool compact;
-  final bool showDragHandle; // FIX(13)
-  final int? index; // FIX(13)
 
-  const _MediaCard({
-    required this.task,
-    required this.compact,
-    this.showDragHandle = false, // FIX(13)
-    this.index, // FIX(13)
-  });
+  const _MediaCard({required this.task, required this.compact});
 
   String get _qualityLabel {
     final preset = task.youtubeQualityPreset ?? '';
@@ -891,15 +925,6 @@ class _MediaCard extends StatelessWidget with HapticHelper {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (showDragHandle && index != null) ...[
-                  ReorderableDragStartListener(
-                    index: index!,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8.0, top: 10),
-                      child: Icon(Icons.drag_handle, size: 20, color: mutedClr),
-                    ),
-                  ),
-                ],
                 Container(
                   width: compact ? 46 : 56,
                   height: compact ? 34 : 40,
@@ -1035,15 +1060,8 @@ class _MediaCard extends StatelessWidget with HapticHelper {
 class _TorrentCard extends StatefulWidget {
   final DownloadTask task;
   final bool compact;
-  final bool showDragHandle; // FIX(13)
-  final int? index; // FIX(13)
 
-  const _TorrentCard({
-    required this.task,
-    required this.compact,
-    this.showDragHandle = false, // FIX(13)
-    this.index, // FIX(13)
-  });
+  const _TorrentCard({required this.task, required this.compact});
 
   @override
   State<_TorrentCard> createState() => _TorrentCardState();
@@ -1099,16 +1117,6 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (widget.showDragHandle && widget.index != null) ...[
-                      ReorderableDragStartListener(
-                        index: widget.index!,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 8.0, top: 12),
-                          child:
-                              Icon(Icons.drag_handle, size: 20, color: mutedClr),
-                        ),
-                      ),
-                    ],
                     Container(
                       width: widget.compact ? 38 : 44,
                       height: widget.compact ? 38 : 44,

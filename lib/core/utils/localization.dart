@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -32,16 +33,29 @@ class L10n {
     return _cache.putIfAbsent(lang, () => _loadLocale(lang));
   }
 
+  static String translate(String lang, String key) {
+    final trans = _getTranslations(lang);
+    if (trans.containsKey(key)) return trans[key]!;
+    final fallback = _getTranslations('en')[key];
+    if (fallback != null) {
+      if (kDebugMode) {
+        debugPrint(
+            'P0-6: Missing localization key "$key" in locale "$lang", using English fallback.');
+      }
+      return fallback;
+    }
+    if (kDebugMode) {
+      debugPrint('P0-6: Missing localization key "$key" in all locales.');
+    }
+    return key;
+  }
+
   static String of(BuildContext context, String key, {bool listen = false}) {
     final lang = Provider.of<SettingsProvider>(
       context,
       listen: listen,
     ).languageCode;
-    return _getTranslations(lang)[key] ?? _getTranslations('en')[key] ?? key;
-  }
-
-  static String translate(String lang, String key) {
-    return _getTranslations(lang)[key] ?? _getTranslations('en')[key] ?? key;
+    return translate(lang, key);
   }
 
   static bool isRtl(BuildContext context, {bool listen = false}) {

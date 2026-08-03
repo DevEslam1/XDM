@@ -16,11 +16,8 @@ class XdmBackendClient {
   static final XdmBackendClient _instance = XdmBackendClient._internal();
   factory XdmBackendClient() => _instance;
 
-  static String? _apiKey = _kDefaultApiKey;
-
-  /// Hardcoded production fallback token used when neither secure storage
-  /// nor the compile-time [DMX_API_KEY] define provides a key.
-  static const _kDefaultApiKey = 'KxPgwFT0VvqoJUgVfcWuvE3-QSrc7qM-1YDS1dzNJv0';
+  // P0-1: No hardcoded fallback secret
+  static String? _apiKey;
 
   late Dio _dio;
   final Map<String, _StreamsCacheEntry> _streamsCache = {};
@@ -29,18 +26,14 @@ class XdmBackendClient {
   static final _secureStorage = const FlutterSecureStorage();
   static const _apiKeyStorageKey = 'xdm_backend_api_key';
 
-  /// Reads the API key from secure storage, from the compile-time
-  /// [DMX_API_KEY] environment variable, or falls back to the hardcoded
-  /// default token.
-  ///
-  /// Call this once at app startup before using the client.
+  /// // P0-1: Reads the API key from secure storage or compile-time env var.
   static Future<void> loadApiKey() async {
     try {
       final stored = await _secureStorage.read(key: _apiKeyStorageKey);
 
       if (stored != null && stored.isNotEmpty) {
         _apiKey = stored;
-        _log.info('API key loaded from secure storage');
+        _log.info('P0-1: API key loaded from secure storage');
         return;
       }
 
@@ -48,16 +41,15 @@ class XdmBackendClient {
 
       if (envKey.isNotEmpty) {
         _apiKey = envKey;
-        _log.info('API key loaded from compile-time define');
+        _log.info('P0-1: API key loaded from compile-time define');
         return;
       }
 
-      // Default production token fallback
-      _apiKey = _kDefaultApiKey;
-      _log.info('API key falling back to hardcoded default');
+      _apiKey = null;
+      _log.info('P0-1: No API key configured');
     } catch (e) {
-      _log.severe('Failed to load API key', e);
-      _apiKey = _kDefaultApiKey;
+      _log.severe('P0-1: Failed to load API key', e);
+      _apiKey = null;
     }
   }
 

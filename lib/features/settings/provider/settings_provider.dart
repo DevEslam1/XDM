@@ -170,12 +170,21 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool enableProxy = false;
   String proxyAddress = '';
   bool bypassSSL = false;
+  bool developerMode = false; // P0-2: Gate advanced/risky options behind Developer Mode
   bool httpsOnly = false;
   bool reduceVisuals = false;
   double textScaleFactor = 1.0;
   String customUserAgent = '';
   int cleanupDays = 0;
   bool categoryFolders = false;
+
+  void toggleDeveloperMode() {
+    developerMode = !developerMode;
+    if (!developerMode) {
+      bypassSSL = false;
+    }
+    notifyListeners();
+  }
 
   String backendUrl = '';
   String backendToken = '';
@@ -593,6 +602,15 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setBypassSSL(bool value) async {
+    // P0-2: Require developer mode for SSL bypass
+    if (!developerMode) {
+      _log.warning('P0-2: Attempted to toggle SSL bypass without developer mode enabled');
+      bypassSSL = false;
+      _pendingBypassSSLConfirmation = false;
+      await _prefs.setBool(_bypassSSLKey, false);
+      notifyListeners();
+      return;
+    }
     if (value) {
       // Require explicit confirmation before enabling — the UI checks this
       // flag and shows a warning dialog; only confirmBypassSSL() enables it.
@@ -610,6 +628,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get pendingBypassSSLConfirmation => _pendingBypassSSLConfirmation;
 
   Future<void> confirmBypassSSL() async {
+    if (!developerMode) return;
+    _log.warning('P0-2: WARNING: SSL certificate validation has been bypassed by user in Developer Mode');
     bypassSSL = true;
     _pendingBypassSSLConfirmation = false;
     await _prefs.setBool(_bypassSSLKey, true);
