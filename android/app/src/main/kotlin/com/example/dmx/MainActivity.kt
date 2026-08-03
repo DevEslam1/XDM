@@ -65,17 +65,24 @@ class MainActivity : FlutterActivity() {
             window?.decorView?.post {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     try {
-                        val viewRoot = window?.decorView?.viewRootImpl
-                        val surfaceControlField = viewRoot?.javaClass?.getMethod("getSurfaceControl")
-                        val surfaceControl = surfaceControlField?.invoke(viewRoot)
-                        val surfaceField = surfaceControl?.javaClass?.getMethod("getSurface")
-                        val surface = surfaceField?.invoke(surfaceControl) as? android.view.Surface
-                        if (surface != null && surface.isValid) {
-                            surface.setFrameRate(
-                                120f,
-                                android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
-                                android.view.Surface.CHANGE_FRAME_RATE_ALWAYS
-                            )
+                        val decor = window?.decorView
+                        if (decor != null) {
+                            val viewRoot = decor.javaClass.getMethod("getViewRootImpl").invoke(decor)
+                            if (viewRoot != null) {
+                                val viewRootImplClass = Class.forName("android.view.ViewRootImpl")
+                                val surfaceControlClass = Class.forName("android.view.SurfaceControl")
+                                val surfaceControl = viewRootImplClass.getMethod("getSurfaceControl").invoke(viewRoot)
+                                if (surfaceControl != null) {
+                                    val surface = surfaceControlClass.getMethod("getSurface").invoke(surfaceControl) as? android.view.Surface
+                                    if (surface != null && surface.isValid) {
+                                        surface.setFrameRate(
+                                            120f,
+                                            android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+                                            android.view.Surface.CHANGE_FRAME_RATE_ALWAYS
+                                        )
+                                    }
+                                }
+                            }
                         }
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Failed to set Surface frame rate: " + e.message)

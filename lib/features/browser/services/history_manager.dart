@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 
 import '../../../core/services/database_service.dart';
 
@@ -7,6 +7,7 @@ import '../../../core/services/database_service.dart';
 /// after the page-load event (REFACTOR B extraction from
 /// `_BrowserScreenState`).
 class BrowserHistoryManager {
+  static final _log = Logger('BrowserHistoryManager');
   BrowserHistoryManager({
     required this.resolveDatabase,
     required this.isIncognito,
@@ -42,12 +43,11 @@ class BrowserHistoryManager {
             db
                 .updateBrowserHistoryTitle(_lastHistoryEntryId!, title)
                 .catchError((e) {
-              debugPrint('[HistoryManager] Title update error: $e');
+              _log.warning('[HistoryManager] Title update error: $e');
             });
           } catch (e) {
-            debugPrint(
-              '[DMX Browser] Failed to update browser history title: $e',
-            );
+            _log.warning(
+                '[DMX Browser] Failed to update browser history title: $e');
           }
         }
       }
@@ -68,10 +68,10 @@ class BrowserHistoryManager {
           _lastHistoryEntryId = id;
         }
       }).catchError((e) {
-        debugPrint('[HistoryManager] Failed to record history: $e');
+        _log.warning('[HistoryManager] Failed to record history: $e');
       });
     } catch (e) {
-      debugPrint('[DMX Browser] Failed to add browser history: $e');
+      _log.warning('[DMX Browser] Failed to add browser history: $e');
     }
   }
 }

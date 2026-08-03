@@ -457,6 +457,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           await tab.controller!.setSettings(
             settings: InAppWebViewSettings(
               contentBlockers: _adBlocker.contentBlockers,
+              incognito: tab.isIncognito,
             ),
           );
         } catch (e) {
@@ -600,6 +601,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     controller.setSettings(settings: InAppWebViewSettings(
       userAgent: _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
       supportZoom: settings.desktopMode || settings.pinchToZoom,
+      incognito: tab.isIncognito,
     ));
 
     // Initialize PullToRefresh
@@ -628,6 +630,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         url.contains('google.com/accounts')) {
       tab.controller?.setSettings(settings: InAppWebViewSettings(
         userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+        incognito: tab.isIncognito,
       ));
       _hideWebViewFingerprints(tab);
     }
@@ -970,6 +973,20 @@ $_customJs
     _mediaScanFailed.remove(tabId);
     _loadingTimeoutTimers[tabId]?.cancel();
     _loadingTimeoutTimers.remove(tabId);
+
+    final tabIndex = _tabs.indexWhere((t) => t.id == tabId);
+    if (tabIndex != -1) {
+      final tab = _tabs[tabIndex];
+      if (tab.isIncognito) {
+        try {
+          unawaited(InAppWebViewController.clearAllCache());
+          unawaited(tab.controller?.evaluateJavascript(source: 'window.localStorage.clear(); window.sessionStorage.clear();'));
+          if (tab.url.isNotEmpty && tab.url != 'about:blank') {
+            unawaited(CookieManager.instance().deleteCookies(url: WebUri(tab.url)));
+          }
+        } catch (_) {}
+      }
+    }
   }
 
   static const _desktopUserAgent =
@@ -1001,6 +1018,7 @@ $_customJs
       await tab.controller?.setSettings(
         settings: InAppWebViewSettings(
           userAgent: _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
+          incognito: tab.isIncognito,
         ),
       );
     } catch (e) {
@@ -1617,6 +1635,7 @@ $_customJs
                 await t.controller?.setSettings(
                   settings: InAppWebViewSettings(
                     supportZoom: settings.desktopMode || settings.pinchToZoom,
+                    incognito: t.isIncognito,
                   ),
                 );
               } catch (e, st) {
@@ -1686,13 +1705,8 @@ $_customJs
             icon: Icons.security,
             isDarkMode: settings.isDarkMode,
           );
-          if (settings.incognitoEnabled) {
-            await CookieManager.instance().deleteAllCookies();
-            for (final t in _tabs) {
-              await InAppWebViewController.clearAllCache();
-              await t.controller?.evaluateJavascript(source: 'window.localStorage.clear(); window.sessionStorage.clear();');
-            }
-          }
+          // Handled per-tab dynamically via settings: incognito isolation
+          // is native. Global cookie deletion removed.
         }
         break;
       case 'injector':
@@ -3522,6 +3536,7 @@ $_customJs
         tab.controller?.setSettings(
           settings: InAppWebViewSettings(
             supportZoom: settings.pinchToZoom,
+            incognito: tab.isIncognito,
           ),
         );
       }
@@ -4322,6 +4337,7 @@ $_customJs
                                                              mediaPlaybackRequiresUserGesture: false,
                                                              supportZoom: settings.desktopMode || settings.pinchToZoom,
                                                              contentBlockers: _adBlocker.contentBlockers,
+                                                              incognito: tab.isIncognito,
                                                            ),
                                                            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
                                                              Factory<VerticalDragGestureRecognizer>(

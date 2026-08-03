@@ -22,6 +22,8 @@ typedef CreateTabCallback = BrowserTab Function(
 /// It is a plain Dart class: UI concerns (setState, URL bar sync, nav state)
 /// are reached through the host callbacks passed to the constructor.
 class TabManager {
+
+  static final _log = Logger('TabManager');
   TabManager({
     required this.isActive,
     required this.setHostState,
@@ -120,7 +122,7 @@ class TabManager {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('browser_tabs', jsonEncode(data));
     } catch (e) {
-      debugPrint('Failed to save tabs: $e');
+      _log.warning('Failed to save tabs: $e');
     }
   }
 
@@ -137,9 +139,7 @@ class TabManager {
         }
       }
     } catch (e) {
-      debugPrint(
-        '[Browser] Drift restore failed, trying SharedPreferences: $e',
-      );
+      _log.warning('[Browser] Drift restore failed, trying SharedPreferences: $e');
     }
     // Fall back to SharedPreferences (legacy persistence)
     try {
@@ -165,7 +165,7 @@ class TabManager {
                 url.isNotEmpty &&
                 uri.scheme != 'http' &&
                 uri.scheme != 'https') {
-              debugPrint('[Browser] Skipping unsafe restored URL: $url');
+              _log.warning('[Browser] Skipping unsafe restored URL: $url');
               continue;
             }
             final tab = createTab(
@@ -199,7 +199,7 @@ class TabManager {
         }
       }
     } catch (e) {
-      debugPrint('[Browser] SharedPreferences restore failed: $e');
+      _log.warning('[Browser] SharedPreferences restore failed: $e');
     }
     // Nothing to restore — create a single blank tab
     if (!isActive()) return;
@@ -255,7 +255,7 @@ class TabManager {
           try {
             active.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(active.url)));
           } catch (e) {
-            debugPrint('[Browser] Restored active tab load error: $e');
+            _log.warning('[Browser] Restored active tab load error: $e');
           }
         }
       });

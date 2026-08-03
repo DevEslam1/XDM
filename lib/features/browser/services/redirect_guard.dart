@@ -1,10 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
 
 /// Detects cross-domain automatic redirects and manages user preferences
 /// for opening them in a new tab versus the current tab.
 class RedirectGuard {
+
+  static final _log = Logger('RedirectGuard');
   RedirectGuard._();
   static final RedirectGuard instance = RedirectGuard._();
 
@@ -46,7 +47,7 @@ class RedirectGuard {
       _alwaysNewTabDomains.clear();
       _alwaysNewTabDomains.addAll(savedDomains);
     } catch (e) {
-      debugPrint('[RedirectGuard] Init error: $e');
+      _log.warning('[RedirectGuard] Init error: $e');
     }
   }
 
@@ -56,7 +57,7 @@ class RedirectGuard {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefKeyEnabled, value);
     } catch (e) {
-      debugPrint('[RedirectGuard] Failed to save enabled state: $e');
+      _log.warning('[RedirectGuard] Failed to save enabled state: $e');
     }
   }
 
@@ -91,7 +92,7 @@ class RedirectGuard {
       await prefs.setStringList(
           _prefKeyAlwaysNewTab, _alwaysNewTabDomains.toList());
     } catch (e) {
-      debugPrint('[RedirectGuard] Failed to save domain whitelist: $e');
+      _log.warning('[RedirectGuard] Failed to save domain whitelist: $e');
     }
   }
 
@@ -105,7 +106,7 @@ class RedirectGuard {
       await prefs.setStringList(
           _prefKeyAlwaysNewTab, _alwaysNewTabDomains.toList());
     } catch (e) {
-      debugPrint('[RedirectGuard] Failed to remove domain whitelist: $e');
+      _log.warning('[RedirectGuard] Failed to remove domain whitelist: $e');
     }
   }
 

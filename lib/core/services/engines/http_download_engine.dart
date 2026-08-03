@@ -89,8 +89,9 @@ class HttpDownloadEngine {
     final file = File(task.localFilePath);
     if (!await file.exists()) return false;
 
-    // Streaming SHA-256 calculation to avoid loading entire file in memory
-    final actualHash = (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
+    // FIX: Streaming SHA-256 — constant memory usage regardless of file size
+    final actualHash =
+        (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
 
     if (actualHash == expectedSha256.toLowerCase()) {
       _log.info('[Verify] SHA-256 matched successfully: $actualHash');
@@ -98,11 +99,14 @@ class HttpDownloadEngine {
     }
 
     _log.warning(
-      '[Verify] SHA-256 mismatch ($actualHash vs $expectedSha256). Attempting chunk repair...',
+      '[Verify] SHA-256 mismatch ($actualHash vs $expectedSha256). '
+      'Attempting chunk repair...',
     );
+
     final chunkSize = (task.fileSize / task.threadCount).ceil();
     final corruptedChunks = <int>[];
 
+    // FIX: Single Dio instance created outside the loop, closed in finally
     final repairDio = Dio();
     try {
       for (var i = 0; i < task.threadCount; i++) {
@@ -111,7 +115,6 @@ class HttpDownloadEngine {
         final end = (i == task.threadCount - 1)
             ? task.fileSize - 1
             : start + chunkSize - 1;
-
         try {
           final response = await repairDio.get<List<int>>(
             task.url,
@@ -121,7 +124,6 @@ class HttpDownloadEngine {
             ),
             cancelToken: cancelToken,
           );
-
           if (response.data != null) {
             final freshData = response.data!;
             final existing = await writer.readRange(start, freshData.length);
@@ -135,7 +137,7 @@ class HttpDownloadEngine {
         }
       }
     } finally {
-      repairDio.close();
+      repairDio.close(); // FIX: Always closed, even on cancel/exception
     }
 
     if (corruptedChunks.isEmpty) {
@@ -144,17 +146,16 @@ class HttpDownloadEngine {
     }
 
     await writer.flushAll();
-    
-    // Streaming SHA-256 re-verification to prevent OOM
-    final repairedHash = (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
 
+    // FIX: Streaming SHA-256 re-verification to prevent OOM
+    final repairedHash =
+        (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
     if (repairedHash == expectedSha256.toLowerCase()) {
       _log.info(
         '[Verify] Successfully repaired ${corruptedChunks.length} corrupted chunks!',
       );
       return true;
     }
-
     return false;
   }
 

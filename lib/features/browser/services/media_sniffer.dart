@@ -14,6 +14,8 @@ import 'package:logging/logging.dart';
 /// tab's WebView. It does NOT manage UI: the host screen listens through
 /// [onStateChanged] and renders FABs/sheets from the exposed maps.
 class MediaSniffer {
+
+  static final _log = Logger('MediaSniffer');
   MediaSniffer({
     required this.isActive,
     required this.containsTab,
@@ -147,7 +149,7 @@ class MediaSniffer {
           });
         }
       } catch (e) {
-        debugPrint('YouTube playlist scan error: $e');
+        _log.warning('YouTube playlist scan error: $e');
       }
       if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
@@ -161,7 +163,7 @@ class MediaSniffer {
             });
           }
         } catch (e) {
-          debugPrint('YouTube single stream scan error after playlist: $e');
+          _log.warning('YouTube single stream scan error after playlist: $e');
         }
       }
       return;
@@ -181,7 +183,7 @@ class MediaSniffer {
           return;
         }
       } catch (e) {
-        debugPrint('YouTube stream detection error: $e');
+        _log.warning('YouTube stream detection error: $e');
       }
       if (isActive() && tab.url == scannedUrl) {
         _update(() {
@@ -281,15 +283,14 @@ class MediaSniffer {
         }
       }
     } on TimeoutException {
-      debugPrint(
-          '[DMX Browser] Media scan JS injection timed out for tab ${tab.id}');
+      _log.warning('[DMX Browser] Media scan JS injection timed out for tab ${tab.id}');
       if (isActive() && containsTab(tab)) {
         _update(() {
           mediaScanFailed[tab.id] = true;
         });
       }
     } catch (e) {
-      debugPrint('[DMX Browser] Failed to run media scan JavaScript: $e');
+      _log.warning('[DMX Browser] Failed to run media scan JavaScript: $e');
       if (isActive() && containsTab(tab)) {
         _update(() {
           mediaScanFailed[tab.id] = true;

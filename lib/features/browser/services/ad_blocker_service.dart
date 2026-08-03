@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'adblock_filter_updater.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -21,6 +22,7 @@ class AdBlockerService {
   AdBlockerService._();
   static final AdBlockerService instance = AdBlockerService._();
 
+  static final _log = Logger('AdBlockerService');
   static String get intervalCleanupJs => _intervalCleanupJs;
   static String get scrollUnblockJs => _scrollUnblockJs;
 
@@ -115,7 +117,7 @@ class AdBlockerService {
         }
       }));
     } catch (e) {
-      debugPrint('[AdBlocker] init error: $e');
+      _log.warning('init error: $e');
     }
   }
 
@@ -147,7 +149,7 @@ class AdBlockerService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(_customRulesPrefKey, _customRules);
     } catch (e) {
-      debugPrint('[AdBlocker] persist custom rules error: $e');
+      _log.warning('persist custom rules error: $e');
     }
   }
 
@@ -174,7 +176,7 @@ class AdBlockerService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefKey, value);
     } catch (e) {
-      debugPrint('[AdBlocker] persist error: $e');
+      _log.warning('persist error: $e');
     }
   }
 
@@ -791,6 +793,26 @@ body {
   // 4. ANTI-DETECT STEALTH LAYER
   // ─────────────────────────────────────────────────────────────────────
 
+  /// Validates a `set-constant` scriptlet value against a strict allowlist
+  /// to prevent arbitrary JavaScript injection from untrusted filter lists.
+  ///
+  /// Allowed values:
+  ///   - Boolean literals: `true`, `false`
+  ///   - Special literals: `null`, `undefined`
+  ///   - Integer or decimal numbers: `0`, `1`, `-1`, `3.14`
+  ///   - Double-quoted strings with no embedded quotes or backslashes
+  static bool _isValidScriptletValue(String value) {
+    if (value == 'true' || value == 'false' ||
+        value == 'null' || value == 'undefined') {
+      return true;
+    }
+    // Numeric: optional minus, digits, optional decimal
+    if (RegExp(r'^-?\d+(\.\d+)?$').hasMatch(value)) return true;
+    // Double-quoted string with no embedded quotes or backslashes
+    if (RegExp(r'^"[^"\\]*"$').hasMatch(value)) return true;
+    return false;
+  }
+
   /// Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO,
   /// and neutralises bait elements.
   String get antiDetectJs {
@@ -810,7 +832,11 @@ body {
           if (parts.length >= 3) {
             final target = parts[1].trim();
             final value = parts[2].trim();
-            sb.writeln('  try { window.$target = $value; } catch(e) {}');
+            if (_isValidScriptletValue(value)) {
+              sb.writeln('  try { window.$target = $value; } catch(e) {}');
+            } else {
+              _log.warning('set-constant: rejected unsafe value "$value" for target "$target"');
+            }
           }
         }
       }
@@ -826,7 +852,11 @@ body {
         if (parts.length >= 3) {
           final target = parts[1].trim();
           final value = parts[2].trim();
-          sb.writeln('  try { window.$target = $value; } catch(e) {}');
+          if (_isValidScriptletValue(value)) {
+            sb.writeln('  try { window.$target = $value; } catch(e) {}');
+          } else {
+            _log.warning('set-constant: rejected unsafe value "$value" for target "$target"');
+          }
         }
       }
     }

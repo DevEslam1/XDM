@@ -160,7 +160,39 @@ class AdBlockFilterUpdater {
         await dio.download(source.url, tempPath);
 
         final file = File(tempPath);
+
+        // ── Integrity check 1: reject empty files ──────────────────────────
+        final fileSize = await file.length();
+        if (fileSize == 0) {
+          _log.warning('Filter ${source.name}: rejected empty file');
+          if (await file.exists()) await file.delete();
+          continue;
+        }
+
+        // ── Integrity check 2: reject binary content (null bytes) ──────────
+        final sample = await file.openRead(0, 1024).expand((b) => b).toList();
+        if (sample.contains(0x00)) {
+          _log.warning('Filter ${source.name}: rejected binary content');
+          if (await file.exists()) await file.delete();
+          continue;
+        }
+
+        // ── Integrity check 3: reject suspicious size regressions ──────────
+        final sizeKey = 'adblock_last_size_${source.name}';
+        final lastSize = prefs.getInt(sizeKey) ?? 0;
+        if (lastSize > 0 && fileSize < (lastSize * 0.30).round()) {
+          _log.warning(
+            'Filter ${source.name}: rejected suspiciously small file '
+            '($fileSize bytes vs last good $lastSize bytes)',
+          );
+          if (await file.exists()) await file.delete();
+          continue;
+        }
+
         final result = await _parseFilterFile(file, source.type);
+
+        // Save size of the successfully validated file for future comparisons
+        await prefs.setInt(sizeKey, fileSize);
 
         // Save successfully parsed sets for this specific source
         await prefs.setStringList(
