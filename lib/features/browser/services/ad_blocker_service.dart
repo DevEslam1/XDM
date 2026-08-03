@@ -20,19 +20,51 @@ class AdBlockerService {
   static final AdBlockerService instance = AdBlockerService._();
 
   static const String _prefKey = 'adBlockerEnabled';
+  static const String _customRulesPrefKey = 'adBlockerCustomRules';
   bool _enabled = true;
+  final List<String> _customRules = [];
   final AdBlockFilterUpdater _updater = AdBlockFilterUpdater();
 
   bool get isEnabled => _enabled;
+
+  /// User-added cosmetic rules (e.g. from the element picker), persisted.
+  List<String> get customRules => List.unmodifiable(_customRules);
 
   Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _enabled = prefs.getBool(_prefKey) ?? true;
+      _customRules
+        ..clear()
+        ..addAll(prefs.getStringList(_customRulesPrefKey) ?? []);
       await _updater.init();
       unawaited(_updater.updateIfNeeded());
     } catch (e) {
       debugPrint('[AdBlocker] init error: $e');
+    }
+  }
+
+  /// Adds a user cosmetic rule (e.g. `selector { display: none !important; }`).
+  Future<void> addCustomRule(String rule) async {
+    final clean = rule.trim();
+    if (clean.isEmpty || _customRules.contains(clean)) return;
+    _customRules.add(clean);
+    await _persistCustomRules();
+  }
+
+  /// Removes a user cosmetic rule.
+  Future<void> removeCustomRule(String rule) async {
+    if (_customRules.remove(rule)) {
+      await _persistCustomRules();
+    }
+  }
+
+  Future<void> _persistCustomRules() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_customRulesPrefKey, _customRules);
+    } catch (e) {
+      debugPrint('[AdBlocker] persist custom rules error: $e');
     }
   }
 
@@ -214,9 +246,13 @@ class AdBlockerService {
   /// retain their layout dimensions — avoiding JS-based detection.
   String get cssRules {
     final dynamicRules = _updater.cosmeticRules;
-    if (dynamicRules.isEmpty) return _cssRules;
+    final custom = _customRules.join('\n');
+    if (dynamicRules.isEmpty && custom.isEmpty) return _cssRules;
     final selectors = dynamicRules.take(2000).join(', ');
-    return '$_cssRules\n$selectors { visibility: hidden !important; height: 0 !important; overflow: hidden !important; pointer-events: none !important; }';
+    final base = '$selectors { visibility: hidden !important; height: 0 !important; overflow: hidden !important; pointer-events: none !important; }';
+    return custom.isEmpty
+        ? '$_cssRules\n$base'
+        : '$_cssRules\n$base\n$custom';
   }
 
   /// Anti-detect CSS: makes bait elements visually invisible but JS-measurable

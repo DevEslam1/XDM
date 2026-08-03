@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:logging/logging.dart';
 
 class ReaderArticle {
@@ -53,7 +53,7 @@ class ReaderModeService {
   ''';
 
   static Future<ReaderArticle?> extract(
-    PlatformWebViewController controller,
+    WebViewController controller,
   ) async {
     try {
       final result = await controller.runJavaScriptReturningResult(_extractJs);
@@ -97,7 +97,7 @@ class ReaderModeService {
 
   /// Extracts article content and displays it in a clean modal view.
   static Future<bool> activateReaderMode(
-    PlatformWebViewController controller,
+    WebViewController controller,
     void Function(String htmlUrl) onLoadReaderUrl,
   ) async {
     final article = await extract(controller);

@@ -33,9 +33,11 @@ import '../models/browser_tab.dart';
 import '../services/browser_detector.dart';
 import '../services/ad_blocker_delegate.dart';
 import '../services/download_interceptor.dart';
+import '../services/element_picker_service.dart';
 import '../services/history_manager.dart';
 import '../services/long_press_parser.dart';
 import '../services/media_sniffer.dart';
+import '../services/reader_mode_service.dart';
 import '../services/tab_manager.dart';
 import '../services/redirect_guard.dart';
 import '../screens/script_manager_screen.dart';
@@ -139,6 +141,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   static const String _longPressChannel = 'XDM_LongPress';
   static const String _popupsChannel = 'XDM_Popups';
+  static const String _pickerChannel = 'XdmPickerChannel';
 
   static const String _kTimerSpeedScript = '''
 (function() {
@@ -524,6 +527,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       ..addJavaScriptChannel(
         _popupsChannel,
         onMessageReceived: (msg) => _handlePopupMessageForTab(tab, msg),
+      )
+      ..addJavaScriptChannel(
+        _pickerChannel,
+        onMessageReceived: (msg) => _handlePickerMessageForTab(tab, msg),
       )
       ..setUserAgent(
         _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
@@ -936,6 +943,92 @@ class _BrowserScreenState extends State<BrowserScreen>
     });
     _saveTabs();
   }
+
+  void _handlePickerMessageForTab(
+    BrowserTab tab,
+    JavaScriptMessage message,
+  ) {
+    if (!mounted) return;
+    if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+    if (_tabs[_currentTabIndex].id != tab.id) return;
+    String? selector;
+    try {
+      final decoded = jsonDecode(message.message);
+      if (decoded is Map<String, dynamic>) {
+        selector = decoded['selector'] as String?;
+      }
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to decode picker message: $e');
+      return;
+    }
+    if (selector == null || selector.trim().isEmpty) return;
+    _confirmBlockElement(tab, selector.trim());
+  }
+
+  void _confirmBlockElement(BrowserTab tab, String selector) {
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final isDark = settings.isDarkMode;
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final rule = ElementPickerService.blockRule(selector);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        title: const Text('Block element'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Hide this element on every page?',
+              style: TextStyle(
+                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              rule,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: accent,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await _adBlocker.addCustomRule(rule);
+              if (mounted) {
+                ThemedSnackbar.show(
+                  context,
+                  message: 'Element blocked: $selector',
+                  color: accent,
+                  icon: Icons.block,
+                  isDarkMode: settings.isDarkMode,
+                );
+                if (!tab.isHome) {
+                  await tab.controller.reload();
+                }
+              }
+            },
+            child: const Text('BLOCK'),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   void _openInNewTab(String url,
       {bool isIncognito = false, bool switchToTab = false}) {
@@ -1482,12 +1575,69 @@ class _BrowserScreenState extends State<BrowserScreen>
       case 'injector':
         _showJsCssInjectorDialog();
         break;
+      case 'reader':
+        await _activateReaderMode(activeTab);
+        break;
+      case 'picker':
+        await _startElementPicker(activeTab);
+        break;
       case 'offline':
         _savePageOffline(activeTab);
         break;
       case 'quit':
         await _quitBrowser();
         break;
+    }
+  }
+
+  Future<void> _activateReaderMode(BrowserTab activeTab) async {
+    final settings = context.read<SettingsProvider>();
+    if (activeTab.isHome || activeTab.url.isEmpty) return;
+    final isDark = settings.isDarkMode;
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final ok = await ReaderModeService.activateReaderMode(
+      activeTab.controller,
+      (htmlUrl) {
+        if (mounted) {
+          activeTab.controller
+              .loadRequest(Uri.parse(htmlUrl))
+              .catchError((e, st) {
+            Logger('browser_screen')
+                .warning('[browser_screen] reader mode load failed', e, st);
+          });
+        }
+      },
+    );
+    if (mounted) {
+      ThemedSnackbar.show(
+        context,
+        message: ok ? 'Reader mode activated' : 'No article content found',
+        color: accent,
+        icon: ok ? Icons.menu_book : Icons.error_outline,
+        isDarkMode: isDark,
+      );
+    }
+  }
+
+  Future<void> _startElementPicker(BrowserTab activeTab) async {
+    final settings = context.read<SettingsProvider>();
+    if (activeTab.isHome) return;
+    try {
+      await activeTab.controller.runJavaScript(ElementPickerService.pickerScript);
+    } catch (e) {
+      debugPrint('[DMX Browser] Failed to start element picker: $e');
+      return;
+    }
+    if (mounted) {
+      ThemedSnackbar.show(
+        context,
+        message: 'Tap an element on the page to block it',
+        color: settings.isDarkMode
+            ? AppTheme.neonBlue
+            : AppTheme.lightNeonBlue,
+        icon: Icons.touch_app,
+        isDarkMode: settings.isDarkMode,
+      );
     }
   }
 
@@ -2431,6 +2581,7 @@ ${script.code}
                   setModalState(() {
                     setState(() {
                       _cleanupTabState(_tabs[closeIdx].id);
+                      _tabs[closeIdx].dispose();
                       _tabs.removeAt(closeIdx);
                       if (_currentTabIndex >= _tabs.length) {
                         _currentTabIndex = _tabs.length - 1;
@@ -2746,6 +2897,7 @@ ${script.code}
                                                         _cleanupTabState(
                                                           tab.id,
                                                         );
+                                                        tab.dispose();
                                                         _tabs.removeAt(index);
                                                         if (_currentTabIndex >=
                                                             _tabs.length) {
@@ -3748,6 +3900,12 @@ ${script.code}
                                   textClr,
                                 ),
                                 _menuItem(
+                                  Icons.menu_book_outlined,
+                                  'Reader Mode',
+                                  'reader',
+                                  textClr,
+                                ),
+                                _menuItem(
                                   Icons.code,
                                   'Inject JS / CSS',
                                   'injector',
@@ -3786,6 +3944,12 @@ ${script.code}
                                       ? 'Ad blocker: ON'
                                       : 'Ad blocker: OFF',
                                   'adblocker',
+                                  textClr,
+                                ),
+                                _menuItem(
+                                  Icons.touch_app_outlined,
+                                  'Block Element',
+                                  'picker',
                                   textClr,
                                 ),
                                 _menuItem(
