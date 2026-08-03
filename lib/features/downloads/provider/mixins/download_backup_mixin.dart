@@ -103,8 +103,7 @@ mixin DownloadBackupMixin {
 
         final ivBytes = payload.sublist(ivStart, ivStart + 16);
         final cipherBytes = payload.sublist(ivStart + 16);
-        final encrypter =
-            encrypt_lib.Encrypter(encrypt_lib.AES(encrypt_lib.Key(
+        final encrypter = encrypt_lib.Encrypter(encrypt_lib.AES(encrypt_lib.Key(
           Uint8List.fromList(keyBytes),
         )));
         final encrypted =
@@ -116,8 +115,7 @@ mixin DownloadBackupMixin {
       }
 
       final authenticatedMagic = utf8.encode('XDMCRYPT3');
-      final isAuthenticated =
-          bytes.length >= authenticatedMagic.length &&
+      final isAuthenticated = bytes.length >= authenticatedMagic.length &&
           _hasMagic(bytes, authenticatedMagic);
       final legacyMagic = utf8.encode('XDMCRYPT');
 
@@ -149,9 +147,8 @@ mixin DownloadBackupMixin {
         if (bytes.length < authenticatedMagic.length + 16 + 32) return null;
       }
 
-      final payload = isAuthenticated
-          ? bytes.sublist(0, bytes.length - 32)
-          : bytes;
+      final payload =
+          isAuthenticated ? bytes.sublist(0, bytes.length - 32) : bytes;
       if (isAuthenticated) {
         final keyBytes = sha256.convert(utf8.encode(password)).bytes;
         final expectedMac = Hmac(sha256, keyBytes).convert(payload).bytes;
@@ -225,7 +222,8 @@ mixin DownloadBackupMixin {
           }
         }
       } catch (e, st) {
-        Logger('download_backup_mixin').warning('[download_backup_mixin] operation failed', e, st);
+        Logger('download_backup_mixin')
+            .warning('[download_backup_mixin] operation failed', e, st);
       }
 
       if (isEncrypted) {

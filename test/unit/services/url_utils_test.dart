@@ -38,12 +38,12 @@ void main() {
     });
 
     group('safeFileName', () {
-    test('removes path separators', () {
-      expect(safeFileName('foo/bar.txt'), 'foo_bar.txt');
-      expect(safeFileName('foo<bar.txt'), 'foo_bar.txt');
-      expect(safeFileName('foo>bar.txt'), 'foo_bar.txt');
-      expect(safeFileName('foo:bar.txt'), 'foo_bar.txt');
-    });
+      test('removes path separators', () {
+        expect(safeFileName('foo/bar.txt'), 'foo_bar.txt');
+        expect(safeFileName('foo<bar.txt'), 'foo_bar.txt');
+        expect(safeFileName('foo>bar.txt'), 'foo_bar.txt');
+        expect(safeFileName('foo:bar.txt'), 'foo_bar.txt');
+      });
 
       test('trims whitespace', () {
         expect(safeFileName('  file.txt  '), 'file.txt');
@@ -58,7 +58,10 @@ void main() {
     group('isValidTransmissionUrl', () {
       test('valid transmission URLs', () {
         expect(isValidTransmissionUrl('https://example.com/file.zip'), true);
-        expect(isValidTransmissionUrl('magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10'), true);
+        expect(
+            isValidTransmissionUrl(
+                'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10'),
+            true);
         expect(isValidTransmissionUrl('http://example.com/file.torrent'), true);
       });
 

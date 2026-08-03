@@ -24,16 +24,19 @@ void main() {
 
       final trackers = trackerManager.getTrackers(1);
       expect(trackers.length, equals(1));
-      expect(trackers.first.url, equals('udp://tracker.opentrackr.org:1337/announce'));
+      expect(trackers.first.url,
+          equals('udp://tracker.opentrackr.org:1337/announce'));
       expect(trackers.first.status, equals(TrackerStatus.updating));
     });
 
     test('addTracker rejects invalid scheme or duplicate URLs', () {
-      final addedInvalid = trackerManager.addTracker(1, 'ftp://invalid-scheme.com');
+      final addedInvalid =
+          trackerManager.addTracker(1, 'ftp://invalid-scheme.com');
       expect(addedInvalid, isFalse);
 
       trackerManager.addTracker(1, 'http://tracker1.org/announce');
-      final addedDuplicate = trackerManager.addTracker(1, 'http://tracker1.org/announce');
+      final addedDuplicate =
+          trackerManager.addTracker(1, 'http://tracker1.org/announce');
       expect(addedDuplicate, isFalse);
     });
 

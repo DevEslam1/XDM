@@ -6,7 +6,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('FFmpegMuxService Unit Tests', () {
-    test('Semaphore acquire and release work correctly under concurrency', () async {
+    test('Semaphore acquire and release work correctly under concurrency',
+        () async {
       final sem = Semaphore(2);
       expect(sem.maxCount, equals(2));
 

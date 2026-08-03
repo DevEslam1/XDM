@@ -77,7 +77,8 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           // Title
           Row(
             children: [
-              Icon(Icons.checklist_rtl_rounded, color: theme.colorScheme.primary),
+              Icon(Icons.checklist_rtl_rounded,
+                  color: theme.colorScheme.primary),
               const SizedBox(width: 12),
               Text(
                 'Batch Actions ($count selected)',
@@ -163,10 +164,12 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+            leading: const Icon(Icons.delete_forever_rounded,
+                color: Colors.redAccent),
             title: Text(
               'Delete Selected ($count)',
-              style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: Colors.redAccent, fontWeight: FontWeight.bold),
             ),
             onTap: () async {
               final navigator = Navigator.of(context);
@@ -192,7 +195,14 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
   }
 
   Future<String?> _showCategoryDialog(BuildContext context) {
-    final categories = ['General', 'Video', 'Audio', 'Documents', 'Archives', 'Software'];
+    final categories = [
+      'General',
+      'Video',
+      'Audio',
+      'Documents',
+      'Archives',
+      'Software'
+    ];
     return showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(

@@ -32,10 +32,20 @@ void main() {
 
   group('filterSourcesForTarget', () {
     const sources = [
-      MediaSourceItem(label: '720p', url: 'https://cdn.com/video/720p.mp4', type: 'video'),
-      MediaSourceItem(label: '1080p', url: 'https://cdn.com/video/1080p.mp4', type: 'video'),
-      MediaSourceItem(label: 'Audio', url: 'https://cdn.com/audio/english.m4a', type: 'audio'),
-      MediaSourceItem(label: 'Other site', url: 'https://other.net/thing.mp4', type: 'video'),
+      MediaSourceItem(
+          label: '720p', url: 'https://cdn.com/video/720p.mp4', type: 'video'),
+      MediaSourceItem(
+          label: '1080p',
+          url: 'https://cdn.com/video/1080p.mp4',
+          type: 'video'),
+      MediaSourceItem(
+          label: 'Audio',
+          url: 'https://cdn.com/audio/english.m4a',
+          type: 'audio'),
+      MediaSourceItem(
+          label: 'Other site',
+          url: 'https://other.net/thing.mp4',
+          type: 'video'),
     ];
 
     test('always includes the target url first', () {
@@ -71,7 +81,8 @@ void main() {
         'video',
       );
       final urls = filtered.map((s) => s.url).toList();
-      expect(urls.where((u) => u == 'https://cdn.com/video/720p.mp4').length, 1);
+      expect(
+          urls.where((u) => u == 'https://cdn.com/video/720p.mp4').length, 1);
     });
 
     test('ignores empty source urls', () {

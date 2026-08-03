@@ -9,9 +9,12 @@ ScreenType getScreenType(BuildContext context) {
   return ScreenType.phone;
 }
 
-bool isTablet(BuildContext context) => getScreenType(context) != ScreenType.phone;
-bool isPhone(BuildContext context) => getScreenType(context) == ScreenType.phone;
-bool isDesktop(BuildContext context) => getScreenType(context) == ScreenType.desktop;
+bool isTablet(BuildContext context) =>
+    getScreenType(context) != ScreenType.phone;
+bool isPhone(BuildContext context) =>
+    getScreenType(context) == ScreenType.phone;
+bool isDesktop(BuildContext context) =>
+    getScreenType(context) == ScreenType.desktop;
 
 class ResponsiveBuilder extends StatelessWidget {
   final Widget Function(BuildContext, ScreenType) builder;
@@ -49,7 +52,8 @@ EdgeInsets screenPadding(BuildContext context) {
 const double kGridTileHeight = 140.0;
 const double kGridTileGap = 24.0;
 
-double gridChildAspectRatio(BuildContext context, {int columns = 2, double horizontalPadding = 32.0}) {
+double gridChildAspectRatio(BuildContext context,
+    {int columns = 2, double horizontalPadding = 32.0}) {
   final w = MediaQuery.of(context).size.width;
   final availableWidth = w - horizontalPadding * 2;
   // There are (columns - 1) gaps between `columns` tiles in a row, not one

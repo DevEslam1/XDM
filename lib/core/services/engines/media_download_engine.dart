@@ -12,7 +12,8 @@ class MediaDownloadEngine {
   Future<void> download({
     required DownloadTask task,
     required CancelToken cancelToken,
-    required void Function(double progress, int downloadedBytes, int speedBps) onProgress,
+    required void Function(double progress, int downloadedBytes, int speedBps)
+        onProgress,
   }) async {
     // Delegate component
   }

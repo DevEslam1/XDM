@@ -85,7 +85,9 @@ class DesktopUpdateService {
           return jsonDecode(response.data as String) as Map<String, dynamic>;
         }
       } catch (e) {
-        _log.severe('Failed to fetch update manifest from both primary and mirror URLs', e);
+        _log.severe(
+            'Failed to fetch update manifest from both primary and mirror URLs',
+            e);
       }
     }
     return null;

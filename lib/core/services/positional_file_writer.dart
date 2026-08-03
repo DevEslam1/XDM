@@ -30,9 +30,9 @@ class PositionalFileWriter {
   bool _closed = false;
 
   PositionalFileWriter._(this._file, this.threadCount, this._bufferSize)
-    : _buffers = List.generate(threadCount, (_) => BytesBuilder(copy: false)),
-      _bufferFilePositions = List.filled(threadCount, 0),
-      _threadLocks = List.generate(threadCount, (_) => Lock());
+      : _buffers = List.generate(threadCount, (_) => BytesBuilder(copy: false)),
+        _bufferFilePositions = List.filled(threadCount, 0),
+        _threadLocks = List.generate(threadCount, (_) => Lock());
 
   /// Opens a new file for multi-thread writing.
   ///

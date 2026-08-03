@@ -148,10 +148,13 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                 final bm = _bookmarks[i];
                 return Container(
                   decoration: BoxDecoration(
-                    color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg).withValues(alpha: 0.4),
+                    color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg)
+                        .withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                      color: isDark
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder,
                       width: 0.6,
                     ),
                   ),
@@ -175,7 +178,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                 color: accent.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: Icon(Icons.bookmark, color: accent, size: 18),
+                              child:
+                                  Icon(Icons.bookmark, color: accent, size: 18),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -214,7 +218,8 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
                                   color: isDark
                                       ? AppTheme.textSecondary
                                       : AppTheme.lightTextSecondary),
-                              tooltip: L10n.of(context, 'browser_menu_copy_url'),
+                              tooltip:
+                                  L10n.of(context, 'browser_menu_copy_url'),
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: bm.url));
                                 runHaptic(settings);
@@ -289,8 +294,8 @@ class _AddBookmarkDialogState extends State<_AddBookmarkDialog> {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     return AlertDialog(
-      backgroundColor:
-          (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.95),
+      backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+          .withValues(alpha: 0.95),
       title: Text(widget.initialUrl.isEmpty
           ? L10n.of(context, 'browser_add_bookmark')
           : L10n.of(context, 'browser_edit_bookmark')),
@@ -299,18 +304,21 @@ class _AddBookmarkDialogState extends State<_AddBookmarkDialog> {
         children: [
           TextField(
             controller: _titleC,
-            decoration: InputDecoration(labelText: L10n.of(context, 'browser_title_label')),
+            decoration: InputDecoration(
+                labelText: L10n.of(context, 'browser_title_label')),
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _urlC,
-            decoration: InputDecoration(labelText: L10n.of(context, 'browser_url_label')),
+            decoration: InputDecoration(
+                labelText: L10n.of(context, 'browser_url_label')),
             keyboardType: TextInputType.url,
           ),
           const SizedBox(height: 8),
           TextField(
             controller: _folderC,
-            decoration: InputDecoration(labelText: L10n.of(context, 'browser_folder_optional')),
+            decoration: InputDecoration(
+                labelText: L10n.of(context, 'browser_folder_optional')),
           ),
         ],
       ),

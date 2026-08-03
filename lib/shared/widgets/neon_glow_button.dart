@@ -55,9 +55,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
-    final filledContentColor = isDark
-        ? AppTheme.background
-        : AppTheme.lightBackground;
+    final filledContentColor =
+        isDark ? AppTheme.background : AppTheme.lightBackground;
     final effectiveGlow = widget.hasGlow || settings.enableGlow;
     final enabled = widget.onPressed != null && !widget.isLoading;
     final glow = widget.glowColor ?? widget.color;
@@ -89,9 +88,9 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
         Text(
           widget.text,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: widget.isFilled ? filledContentColor : widget.color,
-            fontWeight: FontWeight.w600,
-          ),
+                color: widget.isFilled ? filledContentColor : widget.color,
+                fontWeight: FontWeight.w600,
+              ),
         ),
       ],
     );
@@ -163,7 +162,8 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
-                      color: isDark ? AppTheme.focusRing : AppTheme.lightFocusRing,
+                      color:
+                          isDark ? AppTheme.focusRing : AppTheme.lightFocusRing,
                       width: 0,
                     ),
                   ),

@@ -11,8 +11,10 @@ void main() {
       expect(safeFileName(''), 'download.bin');
     });
 
-    test('getUniqueFilePath creates non-colliding filename when file exists', () async {
-      final tempDir = await Directory.systemTemp.createTemp('dmx_file_utils_test_');
+    test('getUniqueFilePath creates non-colliding filename when file exists',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('dmx_file_utils_test_');
       try {
         final initialPath = p.join(tempDir.path, 'sample.mp4');
         await File(initialPath).writeAsString('test');

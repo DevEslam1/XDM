@@ -21,7 +21,8 @@ class TorrentService {
     String filePath,
     String savePath, {
     String? sourceKey,
-  }) => -1;
+  }) =>
+      -1;
   static void removeTorrent(int id, {bool deleteFiles = false}) {}
   static void pauseTorrent(int id) {}
   static void resumeTorrent(int id) {}
@@ -49,7 +50,8 @@ class TorrentService {
     String comment = '',
     int pieceSize = 0,
     bool isPrivate = false,
-  }) async => null;
+  }) async =>
+      null;
   static Future<bool> loadIpFilter(String filePath) async => false;
 }
 

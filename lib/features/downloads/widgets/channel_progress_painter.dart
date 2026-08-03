@@ -63,7 +63,9 @@ class ChannelProgressPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ChannelProgressPainter old) =>
-      old.progress != progress || old.isDark != isDark || old.isTorrent != isTorrent;
+      old.progress != progress ||
+      old.isDark != isDark ||
+      old.isTorrent != isTorrent;
 }
 
 /// Usage wrapper — parent builds ONCE; painter repaints on ticks.

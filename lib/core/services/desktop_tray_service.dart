@@ -68,12 +68,14 @@ class DesktopTrayService with TrayListener {
     }
   }
 
-  Future<void> updateTooltip({required int active, required String speed}) async {
+  Future<void> updateTooltip(
+      {required int active, required String speed}) async {
     if (!_initialized) return;
     try {
       await trayManager.setToolTip('XDM — $active active ($speed)');
     } catch (e, st) {
-      Logger('desktop_tray_service').warning('[desktop_tray_service] operation failed', e, st);
+      Logger('desktop_tray_service')
+          .warning('[desktop_tray_service] operation failed', e, st);
     }
   }
 }

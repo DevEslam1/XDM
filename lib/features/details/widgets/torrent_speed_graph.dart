@@ -20,7 +20,8 @@ class TorrentSpeedGraph extends StatelessWidget {
       height: 120,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.surface : Colors.white).withValues(alpha: 0.6),
+        color:
+            (isDark ? AppTheme.surface : Colors.white).withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(

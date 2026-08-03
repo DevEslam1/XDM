@@ -78,7 +78,8 @@ class DiagnosticService {
     final info = <String, String>{};
     try {
       final package = await PackageInfo.fromPlatform();
-      info['app'] = '${package.appName} ${package.version}+${package.buildNumber}';
+      info['app'] =
+          '${package.appName} ${package.version}+${package.buildNumber}';
     } catch (e) {
       LoggingService.logger('DiagnosticService').info(
         '[DiagnosticService] package info unavailable, skipping app field: $e',

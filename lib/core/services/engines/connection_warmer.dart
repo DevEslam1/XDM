@@ -59,7 +59,8 @@ class ConnectionWarmer {
       final lastWarm = _warmedHosts[host];
       return lastWarm != null && DateTime.now().difference(lastWarm) < _warmTtl;
     } catch (e) {
-      _log.info('[ConnectionWarmer] URL parse skipped, returning not warmed: $e');
+      _log.info(
+          '[ConnectionWarmer] URL parse skipped, returning not warmed: $e');
       return false;
     }
   }

@@ -76,9 +76,8 @@ class MirrorBenchmarkService {
       );
       final downloadMs = stopwatch.elapsedMilliseconds;
       final bytesReceived = response.data?.length ?? 0;
-      final speedBps = downloadMs > 0
-          ? (bytesReceived * 1000.0 / downloadMs)
-          : 0.0;
+      final speedBps =
+          downloadMs > 0 ? (bytesReceived * 1000.0 / downloadMs) : 0.0;
 
       final result = _BenchmarkResult(
         ttfbMs: ttfb,
@@ -125,9 +124,9 @@ class _BenchmarkResult {
       DateTime.now().difference(timestamp) > MirrorBenchmarkService._cacheTtl;
 
   MirrorBenchmarkResult toResult(String url) => MirrorBenchmarkResult(
-    url: url,
-    latencyMs: ttfbMs,
-    speedBps: speedBps,
-    success: true,
-  );
+        url: url,
+        latencyMs: ttfbMs,
+        speedBps: speedBps,
+        success: true,
+      );
 }

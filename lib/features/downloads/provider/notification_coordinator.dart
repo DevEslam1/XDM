@@ -33,16 +33,16 @@ class NotificationCoordinator {
     required void Function(String taskId) onCancelTask,
     required void Function() onPauseAll,
     required void Function() onResumeAll,
-  }) : _notificationService = notificationService,
-       _settingsProvider = settingsProvider,
-       _downloadingTasksCount = downloadingTasksCount,
-       _currentDownloadSpeed = currentDownloadSpeed,
-       _findTask = findTask,
-       _onPauseTask = onPauseTask,
-       _onResumeTask = onResumeTask,
-       _onCancelTask = onCancelTask,
-       _onPauseAll = onPauseAll,
-       _onResumeAll = onResumeAll;
+  })  : _notificationService = notificationService,
+        _settingsProvider = settingsProvider,
+        _downloadingTasksCount = downloadingTasksCount,
+        _currentDownloadSpeed = currentDownloadSpeed,
+        _findTask = findTask,
+        _onPauseTask = onPauseTask,
+        _onResumeTask = onResumeTask,
+        _onCancelTask = onCancelTask,
+        _onPauseAll = onPauseAll,
+        _onResumeAll = onResumeAll;
 
   final NotificationService _notificationService;
   final SettingsProvider _settingsProvider;
@@ -79,8 +79,7 @@ class NotificationCoordinator {
     final existing = _taskToHandle[taskId];
     if (existing != null) return existing;
 
-    final handle =
-        't${_handleRandom.nextInt(1 << 31).toRadixString(16)}'
+    final handle = 't${_handleRandom.nextInt(1 << 31).toRadixString(16)}'
         '${_handleRandom.nextInt(1 << 31).toRadixString(16)}';
     _opaqueHandles[handle] = taskId;
     _taskToHandle[taskId] = handle;
@@ -97,9 +96,8 @@ class NotificationCoordinator {
     return handle;
   }
 
-  String? _resolveOpaqueHandle(String? handle) => handle == null
-      ? null
-      : _opaqueHandles[handle];
+  String? _resolveOpaqueHandle(String? handle) =>
+      handle == null ? null : _opaqueHandles[handle];
 
   void init() {
     _actionSubscription = _notificationService.onActionTapped.listen(
@@ -244,13 +242,13 @@ class NotificationCoordinator {
     unawaited(
       _notificationService
           .showGroupSummary(
-            notificationId: _groupSummaryId,
-            activeCount: activeCount,
-            groupKey: _groupKey,
-          )
+        notificationId: _groupSummaryId,
+        activeCount: activeCount,
+        groupKey: _groupKey,
+      )
           .catchError((Object e) {
-            debugPrint('[Notifications] Group summary failed: $e');
-          }),
+        debugPrint('[Notifications] Group summary failed: $e');
+      }),
     );
   }
 

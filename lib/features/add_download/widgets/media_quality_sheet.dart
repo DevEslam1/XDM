@@ -148,13 +148,11 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final green = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final glassBorder = isDark
-        ? AppTheme.glassBorder
-        : AppTheme.lightGlassBorder;
+    final glassBorder =
+        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final panelBg = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
 
     final muxed = _streams.where((s) => s['type'] == 'muxed').toList();
@@ -356,18 +354,16 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 width: half - 6,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color:
-                                        (_selectedTabIndex == 0
-                                                ? accent
-                                                : green)
-                                            .withValues(alpha: 0.14),
+                                    color: (_selectedTabIndex == 0
+                                            ? accent
+                                            : green)
+                                        .withValues(alpha: 0.14),
                                     borderRadius: BorderRadius.circular(9),
                                     border: Border.all(
-                                      color:
-                                          (_selectedTabIndex == 0
-                                                  ? accent
-                                                  : green)
-                                              .withValues(alpha: 0.4),
+                                      color: (_selectedTabIndex == 0
+                                              ? accent
+                                              : green)
+                                          .withValues(alpha: 0.4),
                                     ),
                                   ),
                                 ),
@@ -702,9 +698,8 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
           content: Text(
             content,
             style: TextStyle(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
+              color:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
               fontSize: 13,
             ),
           ),
@@ -760,9 +755,8 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     final quality = stream['quality'] as String? ?? '';
     final color = _colorForType(type, isDark);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     String sizeLabel;

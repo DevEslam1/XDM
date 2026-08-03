@@ -72,16 +72,27 @@ mixin DownloadQueueMixin {
   // ---------------------------------------------------------------------------
   // Queue pump
   // ---------------------------------------------------------------------------
-  void pumpQueue() {
-    if (_queueProcessing) {
-      _needsRePump = true;
+  void pumpQueue({
+    bool skipPump = false,
+    int? maxConcurrentOverride,
+  }) {
+    if (skipPump || _queueProcessing) {
+      if (!skipPump) _needsRePump = true;
       return;
     }
     _queueProcessing = true;
     _needsRePump = false;
     try {
-      final maxSlots = providerSettingsProvider.maxDownloads;
-      final maxTotalConn = providerSettingsProvider.maxTotalConnections;
+      final settings = providerSettingsProvider;
+      final activeCount = providerTasks
+          .where((t) => t.status == DownloadStatus.downloading)
+          .length;
+
+      // Use override when provided (batch playlist), otherwise normal setting.
+      final maxActive = maxConcurrentOverride ?? settings.maxDownloads;
+
+      if (activeCount >= maxActive) return;
+
       final queued = providerTasks
           .where((task) =>
               task.status == DownloadStatus.queued &&
@@ -89,6 +100,7 @@ mixin DownloadQueueMixin {
           .toList();
 
       queued.sort((a, b) {
+        if (a.isAppUpdate != b.isAppUpdate) return b.isAppUpdate ? 1 : -1;
         final prioCmp = b.priority.compareTo(a.priority);
         if (prioCmp != 0) return prioCmp;
         return a.createdAt.compareTo(b.createdAt);
@@ -101,20 +113,18 @@ mixin DownloadQueueMixin {
 
       var startedThisPass = 0;
       for (final task in queued) {
+        if (activeCount + startedThisPass >= maxActive) break;
+
         // Skip if this task already has a pending override (already being started)
         if (effectiveThreadOverrides.containsKey(task.id)) continue;
 
-        final activePlusPending = downloadingTasksCount + pendingStartCount + startedThisPass;
-        final availableSlots = maxSlots - activePlusPending;
-        if (availableSlots <= 0) break;
-
         // Enforce global connection cap: distribute connections evenly across
         // all concurrent downloads (including the ones being started this pass).
-        // Also respect battery-saver thread limit (if active) via providerSettingsProvider.
-        final totalConcurrent = max(1, activePlusPending + 1);
+        final totalConcurrent =
+            max(1, activeCount + pendingStartCount + startedThisPass + 1);
         final baseLimit = min(
-          maxTotalConn ~/ totalConcurrent,
-          providerSettingsProvider.defaultThreadCount,
+          settings.maxTotalConnections ~/ totalConcurrent,
+          settings.defaultThreadCount,
         );
         final effectiveThreads = max(1, baseLimit);
         final clampedThreads = min(task.threadCount, effectiveThreads);
@@ -129,9 +139,7 @@ mixin DownloadQueueMixin {
       _queueProcessing = false;
       if (_needsRePump) {
         _needsRePump = false;
-        // FIX(C-H3): Use microtask to break potential synchronous recursion
-        // from listeners that request another pump within pumpQueue.
-        Future.microtask(pumpQueue);
+        Future.microtask(() => pumpQueue());
       }
     }
   }

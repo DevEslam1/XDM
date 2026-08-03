@@ -64,11 +64,13 @@ void main() {
 
     test('invalid times never count as quiet', () {
       expect(
-        QuietHours.isInQuietHours(start: 'garbage', end: '07:00', now: at('01:00')),
+        QuietHours.isInQuietHours(
+            start: 'garbage', end: '07:00', now: at('01:00')),
         isFalse,
       );
       expect(
-        QuietHours.isInQuietHours(start: '23:00', end: '25:00', now: at('01:00')),
+        QuietHours.isInQuietHours(
+            start: '23:00', end: '25:00', now: at('01:00')),
         isFalse,
       );
       expect(
@@ -79,7 +81,8 @@ void main() {
 
     test('zero-length window is inactive', () {
       expect(
-        QuietHours.isInQuietHours(start: '12:00', end: '12:00', now: at('12:00')),
+        QuietHours.isInQuietHours(
+            start: '12:00', end: '12:00', now: at('12:00')),
         isFalse,
       );
     });

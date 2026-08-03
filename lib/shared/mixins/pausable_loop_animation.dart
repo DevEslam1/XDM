@@ -22,7 +22,8 @@ bool modernAnimationsAllowed(
   // Respect the system "reduce motion" accessibility setting. Pass
   // `respectSystemMotion: false` when called from `initState`, where
   // inherited-widget lookups are not allowed yet.
-  if (respectSystemMotion && (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+  if (respectSystemMotion &&
+      (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
     return false;
   }
   return !settings.effectiveClassicUi && !settings.reduceVisuals;

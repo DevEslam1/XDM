@@ -69,7 +69,7 @@ class IsolateMessage {
   final Map<String, Object?> data;
 
   IsolateMessage(this.jobId, this.type, [Map<String, Object?>? data])
-    : data = data ?? const {};
+      : data = data ?? const {};
 }
 
 /// Pool of long-lived worker isolates.
@@ -163,9 +163,8 @@ class DownloadIsolatePool {
   void _onJobCompleted(int workerId) {
     if (_draining || _pendingQueue.isEmpty) return;
 
-    final worker = _workers
-        .where((w) => w.id == workerId && w._isAlive)
-        .firstOrNull;
+    final worker =
+        _workers.where((w) => w.id == workerId && w._isAlive).firstOrNull;
     if (worker == null || worker._jobs.length >= _maxJobsPerWorker) return;
 
     final next = _pendingQueue.removeAt(0);

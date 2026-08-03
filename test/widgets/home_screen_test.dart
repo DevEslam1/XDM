@@ -17,7 +17,8 @@ void main() {
       expect(find.byType(HomeScreen), findsOneWidget);
     });
 
-    testWidgets('renders active tasks list when tasks are provided', (tester) async {
+    testWidgets('renders active tasks list when tasks are provided',
+        (tester) async {
       final provider = createMockDownloadProvider(
         tasks: createMixedTaskList(),
       );

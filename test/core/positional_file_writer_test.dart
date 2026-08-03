@@ -13,7 +13,8 @@ void main() {
       const int writeSize = 512 * 1024; // 512 KB to write
 
       final tempDir = Directory.systemTemp;
-      final filePath = '${tempDir.path}/resume_test_${DateTime.now().millisecondsSinceEpoch}.bin';
+      final filePath =
+          '${tempDir.path}/resume_test_${DateTime.now().millisecondsSinceEpoch}.bin';
 
       // 1. Write 1 MB of known bytes to a temp file.
       final originalFile = File(filePath);
@@ -46,13 +47,15 @@ void main() {
 
       for (int i = 0; i < writeOffset; i++) {
         expect(readBack[i], 0xAB,
-            reason: 'Byte at position $i should be unchanged 0xAB, got 0x${readBack[i].toRadixString(16)}');
+            reason:
+                'Byte at position $i should be unchanged 0xAB, got 0x${readBack[i].toRadixString(16)}');
       }
 
       // 5. Assert bytes 512 KB-1 MB contain the new data.
       for (int i = 0; i < writeSize; i++) {
         expect(readBack[writeOffset + i], 0xCD,
-            reason: 'Byte at position ${writeOffset + i} should be new 0xCD, got 0x${readBack[writeOffset + i].toRadixString(16)}');
+            reason:
+                'Byte at position ${writeOffset + i} should be new 0xCD, got 0x${readBack[writeOffset + i].toRadixString(16)}');
       }
 
       // 6. Assert file length is still 1 MB.
@@ -62,7 +65,8 @@ void main() {
 
     test('openForResume creates new file when it does not exist', () async {
       final tempDir = Directory.systemTemp;
-      final filePath = '${tempDir.path}/new_file_${DateTime.now().millisecondsSinceEpoch}.bin';
+      final filePath =
+          '${tempDir.path}/new_file_${DateTime.now().millisecondsSinceEpoch}.bin';
 
       final writer = await PositionalFileWriter.openForResume(
         filePath,
@@ -91,7 +95,8 @@ void main() {
 
     test('close prevents further writes', () async {
       final tempDir = Directory.systemTemp;
-      final filePath = '${tempDir.path}/close_test_${DateTime.now().millisecondsSinceEpoch}.bin';
+      final filePath =
+          '${tempDir.path}/close_test_${DateTime.now().millisecondsSinceEpoch}.bin';
 
       final writer = await PositionalFileWriter.openForResume(
         filePath,

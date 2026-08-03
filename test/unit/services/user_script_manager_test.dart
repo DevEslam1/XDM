@@ -17,14 +17,15 @@ void main() {
     String code = 'console.log("hi");',
     bool isCss = false,
     bool enabled = true,
-  }) => UserScript(
-    id: id,
-    name: name,
-    urlPattern: pattern,
-    code: code,
-    isCss: isCss,
-    enabled: enabled,
-  );
+  }) =>
+      UserScript(
+        id: id,
+        name: name,
+        urlPattern: pattern,
+        code: code,
+        isCss: isCss,
+        enabled: enabled,
+      );
 
   test('url matching: wildcard pattern matches host and full url', () {
     expect(

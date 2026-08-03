@@ -11,7 +11,8 @@ void main() {
       SiteSettingsStore.clearCache();
     });
 
-    test('getForHost returns default SiteSettings for unconfigured host', () async {
+    test('getForHost returns default SiteSettings for unconfigured host',
+        () async {
       final settings = await SiteSettingsStore.getForHost('example.com');
       expect(settings.desktopMode, isNull);
       expect(settings.adBlockEnabled, isNull);

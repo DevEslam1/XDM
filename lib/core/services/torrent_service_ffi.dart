@@ -155,15 +155,15 @@ class TorrentService {
     try {
       final settings = SettingsProvider.instance;
       final config = LibtorrentFlutter.instance.getDefaultConfig().copyWith(
-        disableDht: !settings.enableDht,
-        disableUpnp: !settings.enableUpnp,
-        forceEncrypt: settings.forceEncrypt,
-        connectionsLimit: settings.torrentConnectionsLimit,
-        downloadRateLimit: settings.speedLimitBytesPerSecond ~/ 1024,
-        uploadRateLimit: settings.globalTorrentSeedingLimited
-            ? settings.globalTorrentSeedingLimitKbps
-            : 0,
-      );
+            disableDht: !settings.enableDht,
+            disableUpnp: !settings.enableUpnp,
+            forceEncrypt: settings.forceEncrypt,
+            connectionsLimit: settings.torrentConnectionsLimit,
+            downloadRateLimit: settings.speedLimitBytesPerSecond ~/ 1024,
+            uploadRateLimit: settings.globalTorrentSeedingLimited
+                ? settings.globalTorrentSeedingLimitKbps
+                : 0,
+          );
       LibtorrentFlutter.instance.configureSession(config);
 
       _sequentialDownload = settings.sequentialDownload;
@@ -298,7 +298,8 @@ class TorrentService {
   ///   Uint8List saveResumeData(int torrentId);
   ///   void loadResumeData(int torrentId, Uint8List data);
   static Future<void> saveResumeData(int torrentId) async {
-    if (_state == TorrentSessionState.uninitialized || _state == TorrentSessionState.initializing) return;
+    if (_state == TorrentSessionState.uninitialized ||
+        _state == TorrentSessionState.initializing) return;
     try {
       final data = LibtorrentFlutter.instance.trySaveResumeData(torrentId);
       if (data != null) {
@@ -611,9 +612,8 @@ class TorrentService {
     if (!isInitialized || torrentId < 0) return [];
     try {
       // ignore: avoid_dynamic_calls
-      final raw =
-          (LibtorrentFlutter.instance as dynamic).getTrackers(torrentId)
-              as List<dynamic>?;
+      final raw = (LibtorrentFlutter.instance as dynamic).getTrackers(torrentId)
+          as List<dynamic>?;
       if (raw == null) return [];
       return raw.map((t) {
         final map = t as Map<String, dynamic>;

@@ -42,7 +42,8 @@ void main() {
     });
 
     test('classifies SocketException and Dio connection errors', () {
-      final socketRes = ErrorTaxonomy.classify(const SocketException('No route to host'));
+      final socketRes =
+          ErrorTaxonomy.classify(const SocketException('No route to host'));
       expect(socketRes.family, equals(ErrorFamily.network));
       expect(socketRes.isNetworkError, isTrue);
       expect(socketRes.retryable, isTrue);

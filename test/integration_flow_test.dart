@@ -9,15 +9,12 @@ import 'package:dmx/features/downloads/models/download_task.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
 
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
-
-
 
 late String uniqueHivePath;
 
@@ -93,7 +90,7 @@ class FakeDownloadEngine extends DownloadEngine {
     startedUrls.add(url);
     knownFileSizes[url] = knownFileSize;
     final completer = Completer<void>();
-    
+
     Timer(const Duration(milliseconds: 10), () {
       onProgress(DownloadProgress(
         downloadedBytes: 50,
@@ -160,7 +157,8 @@ void main() {
   setUpAll(() {
     TestWidgetsFlutterBinding.ensureInitialized();
     drift.driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
-    uniqueHivePath = 'build/test_hive_int_${DateTime.now().microsecondsSinceEpoch}';
+    uniqueHivePath =
+        'build/test_hive_int_${DateTime.now().microsecondsSinceEpoch}';
     try {
       final dir = Directory(uniqueHivePath);
       if (dir.existsSync()) {
@@ -169,8 +167,6 @@ void main() {
     } catch (_) {}
     Hive.init(uniqueHivePath);
     ConnectivityPlatform.instance = MockConnectivityPlatform();
-
-
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -242,13 +238,15 @@ void main() {
 
     expect(provider.tasks.length, 1);
     final taskId = provider.tasks.first.id;
-    expect(provider.tasks.first.status, anyOf(DownloadStatus.downloading, DownloadStatus.queued));
+    expect(provider.tasks.first.status,
+        anyOf(DownloadStatus.downloading, DownloadStatus.queued));
 
     await provider.pauseTask(taskId);
     expect(provider.tasks.first.status, DownloadStatus.paused);
 
     await provider.resumeTask(taskId);
-    expect(provider.tasks.first.status, anyOf(DownloadStatus.downloading, DownloadStatus.queued));
+    expect(provider.tasks.first.status,
+        anyOf(DownloadStatus.downloading, DownloadStatus.queued));
 
     for (int i = 0; i < 50; i++) {
       if (provider.tasks.first.status == DownloadStatus.completed) {
@@ -294,9 +292,9 @@ void main() {
     // In a test environment without real ffmpeg binary, the merge phase will fail.
     // The provider should fall back to keeping the video-only file and complete the task with mergeFailedVideoOnly status message.
     expect(provider.tasks.first.status, DownloadStatus.completed);
-    expect(provider.tasks.first.statusMessage, DownloadStatusMessages.mergeFailedVideoOnly);
+    expect(provider.tasks.first.statusMessage,
+        DownloadStatusMessages.mergeFailedVideoOnly);
     expect(engine.knownFileSizes['https://example.com/video'], 50,
         reason: 'Combined tasks must request only the video stream length.');
   });
-
 }

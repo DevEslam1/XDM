@@ -83,9 +83,7 @@ class BackgroundService {
       heartbeatSub?.cancel();
     }
 
-    stopSub = service
-        .on('stopService')
-        .listen(
+    stopSub = service.on('stopService').listen(
           (_) {
             try {
               cancelAll();
@@ -100,9 +98,7 @@ class BackgroundService {
           },
         );
 
-    updateSub = service
-        .on('updateNotification')
-        .listen(
+    updateSub = service.on('updateNotification').listen(
           (event) {
             try {
               if (isStopped) return;

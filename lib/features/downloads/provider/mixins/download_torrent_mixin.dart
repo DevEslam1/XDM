@@ -229,7 +229,7 @@ mixin DownloadTorrentMixin {
       } else if (providerSettingsProvider.globalTorrentSeedingLimited) {
         final limitBytes =
             (providerSettingsProvider.globalTorrentSeedingLimitKbps * 1000) ~/
-            8;
+                8;
         TorrentService.setUploadLimit(limitBytes > 0 ? limitBytes : 0);
       } else {
         TorrentService.setUploadLimit(0); // Unlimited
@@ -278,7 +278,7 @@ mixin DownloadTorrentMixin {
           if (shouldStopSeeding) {
             if (torrentId != null) {
               TorrentService.pauseTorrent(torrentId);
-              TorrentService.removeTorrent(torrentId);
+              TorrentService.removeTorrent(torrentId, deleteFiles: false);
               providerTorrentIds.remove(task.id);
             }
             providerTasks[i] = task.copyWith(seedingEnabled: false);
@@ -334,7 +334,7 @@ mixin DownloadTorrentMixin {
         // while still downloading would abort the in-progress transfer.
         if (torrentId != null && oldTask.status == DownloadStatus.completed) {
           TorrentService.pauseTorrent(torrentId);
-          TorrentService.removeTorrent(torrentId);
+          TorrentService.removeTorrent(torrentId, deleteFiles: false);
           providerTorrentIds.remove(taskId);
         }
         // Snap downloadedBytes to fileSize so the Completed tab shows 100%.

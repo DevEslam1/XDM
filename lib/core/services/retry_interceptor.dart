@@ -34,8 +34,7 @@ class ProfessionalRetryInterceptor extends Interceptor {
 
     // Break infinite retry loops: if the request already carries a retry
     // count at the max, stop retrying regardless of the in-memory map state.
-    final existingRetryCount =
-        int.tryParse(
+    final existingRetryCount = int.tryParse(
           requestOptions.headers['X-Retry-Count']?.toString() ?? '0',
         ) ??
         0;

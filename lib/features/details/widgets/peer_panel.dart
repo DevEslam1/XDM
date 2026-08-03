@@ -62,7 +62,8 @@ class PeerPanel extends StatelessWidget {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
               ),
             ),
             Text(
@@ -101,8 +102,10 @@ class PeerPanel extends StatelessWidget {
                   color: peer.isSeed ? AppTheme.neonGreen : AppTheme.neonBlue,
                 ),
                 title: Text('${peer.ip}:${peer.port} (${peer.country})'),
-                subtitle: Text('${peer.client} • ${(peer.progress * 100).toStringAsFixed(0)}%'),
-                trailing: Text('↓ ${_formatSpeed(peer.downloadSpeed)}  ↑ ${_formatSpeed(peer.uploadSpeed)}'),
+                subtitle: Text(
+                    '${peer.client} • ${(peer.progress * 100).toStringAsFixed(0)}%'),
+                trailing: Text(
+                    '↓ ${_formatSpeed(peer.downloadSpeed)}  ↑ ${_formatSpeed(peer.uploadSpeed)}'),
               );
             },
           ),

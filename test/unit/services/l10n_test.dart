@@ -9,7 +9,8 @@ void main() {
       expect(L10n.translate('en', 'title_transmissions'), equals('Downloads'));
       expect(L10n.translate('ar', 'title_transmissions'), equals('التنزيلات'));
       expect(L10n.translate('es', 'title_transmissions'), equals('Descargas'));
-      expect(L10n.translate('fr', 'title_transmissions'), equals('Téléchargements'));
+      expect(L10n.translate('fr', 'title_transmissions'),
+          equals('Téléchargements'));
       expect(L10n.translate('de', 'title_transmissions'), equals('Downloads'));
     });
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
+import 'package:path/path.dart' as p;
+
 import '../../../core/app_theme.dart';
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/haptic_helper.dart';
@@ -9,9 +11,10 @@ import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
+import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
-import '../../../shared/widgets/themed_snackbar.dart';
 
 /// Result returned when the user confirms playlist download.
 class PlaylistDownloadResult {
@@ -75,13 +78,9 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   // cursor token for playlist pagination. Casting to `int?` would throw at
   // runtime when the backend returns a String.
   dynamic _nextPageToken;
-  bool _isDownloading = false;
-  bool _isCancelled = false;
   String? _errorMessage;
   String? _note;
   String _qualityPreset = 'best_combined';
-  int _downloadProgress = 0;
-  String _currentVideoTitle = '';
   String _searchQuery = '';
   final ScrollController _scrollController = ScrollController();
 
@@ -226,135 +225,88 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   }
 
   Future<void> _startBatchDownload() async {
-    final selectedVideos = _videos.where((v) => v['selected'] == true).toList();
-    if (selectedVideos.isEmpty) return;
-
-    setState(() {
-      _isDownloading = true;
-      _isCancelled = false;
-    });
-
-    final provider = Provider.of<DownloadProvider>(context, listen: false);
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final provider = context.read<DownloadProvider>();
+    final settings = context.read<SettingsProvider>();
     final savePath = settings.customDownloadPath ?? '';
     final isDark = settings.isDarkMode;
-    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-
     final playlistId = YoutubeService.extractPlaylistId(widget.playlistUrl) ??
         widget.playlistUrl;
     final playlistTitle = _playlistInfo?['title'] as String? ?? 'Playlist';
 
-    int completed = 0;
-    int failed = 0;
-    int consecutiveErrors = 0;
-    final enqueuedVideos = <Map<String, dynamic>>[];
-    final batchSpecs = <DownloadAddSpec>[];
+    final selectedVideos = _videos.where((v) => v['selected'] == true).toList();
+
+    if (selectedVideos.isEmpty) return;
+
+    // ── Build ALL tasks up-front (no awaiting, no pumping) ──
+    final batchTasks = <DownloadTask>[];
+    final now = DateTime.now();
 
     for (int i = 0; i < selectedVideos.length; i++) {
-      if (!mounted) break;
-      if (_isCancelled) break;
-
       final video = selectedVideos[i];
       final videoId = video['id'] as String;
-      final videoTitle = video['title'] as String? ?? 'YouTube Video';
-      final rawThumb =
+      final videoTitle = video['title'] as String? ?? 'video_$videoId';
+      final videoThumbnail =
           video['thumbnailUrl'] ?? video['thumbnail'] ?? video['thumbnail_url'];
-      final videoThumbnail = rawThumb != null && rawThumb.toString().isNotEmpty
-          ? rawThumb.toString()
-          : 'https://img.youtube.com/vi/$videoId/hqdefault.jpg';
+      final videoUrl = YoutubeService.videoUrl(videoId);
 
-      try {
-        final videoUrl = YoutubeService.videoUrl(videoId);
-        final ext = _qualityPreset == 'audio_only' ? 'm4a' : 'mp4';
+      final ext = _qualityPreset == 'audio_only' ? 'm4a' : 'mp4';
+      final displayQuality =
+          _qualityPreset == 'audio_only' ? 'Audio' : _qualityPreset;
+      final fileName = '$videoTitle [$displayQuality].$ext';
 
-        String displayQuality = _qualityPreset;
-        if (_qualityPreset == 'best_combined') displayQuality = 'Best';
-        if (_qualityPreset == 'audio_only') displayQuality = 'Audio';
-
-        final fileName = '$videoTitle [$displayQuality].$ext';
-
-        batchSpecs.add(
-          DownloadAddSpec(
-            name: fileName,
-            url: videoUrl,
-            size: 0,
-            category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
-            savePath: savePath,
-            downloadPageUrl: videoUrl,
-            youtubeQualityPreset: _qualityPreset,
-            playlistId: playlistId,
-            playlistTitle: playlistTitle,
-            thumbnailUrl: videoThumbnail,
-          ),
-        );
-        enqueuedVideos.add(video);
-        completed++;
-        consecutiveErrors = 0;
-      } catch (e) {
-        debugPrint('Failed to enqueue video $videoId: $e');
-        failed++;
-        consecutiveErrors++;
-      }
-
-      // If too many consecutive failures, abort early (likely rate-limited)
-      if (consecutiveErrors >= 5) {
-        debugPrint(
-          'Too many consecutive failures. Aborting playlist download.',
-        );
-        if (mounted) {
-          ThemedSnackbar.show(
-            context,
-            message:
-                'Too many failures. Aborting after ${completed + 1} videos.',
-            color: redClr,
-            icon: Icons.error_outline,
-            isDarkMode: settings.isDarkMode,
-          );
-        }
-        break;
-      }
-
-      if (mounted) {
-        setState(() {
-          _downloadProgress = completed;
-          _currentVideoTitle = videoTitle;
-        });
-      }
-
-      if (i < selectedVideos.length - 1) {
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-      }
+      batchTasks.add(DownloadTask(
+        id: '${now.microsecondsSinceEpoch}_$i',
+        fileName: fileName,
+        url: videoUrl,
+        fileSize: 0,
+        downloadedBytes: 0,
+        speed: 0,
+        category: _qualityPreset == 'audio_only' ? 'Audio' : 'Video',
+        status: DownloadStatus.queued,
+        savePath: savePath,
+        localFilePath: p.join(savePath, fileName),
+        tempFilePath: p.join(savePath, '.tmp_$fileName'),
+        threadCount: settings.defaultThreadCount,
+        chunks: List<double>.filled(settings.defaultThreadCount, 0.0),
+        createdAt: now,
+        updatedAt: now,
+        supportsResume: false,
+        speedLimitKbps: 0,
+        seedingEnabled: false,
+        seedingLimited: false,
+        seedingLimitKbps: 500,
+        downloadPageUrl: videoUrl,
+        youtubeQualityPreset: _qualityPreset,
+        playlistId: playlistId,
+        playlistTitle: playlistTitle,
+        thumbnailUrl: videoThumbnail?.toString(),
+        isAppUpdate: false,
+        priority: 0,
+        pausedByUser: false,
+        audioProgress: 0.0,
+        audioSize: 0,
+      ));
     }
 
-    if (batchSpecs.isNotEmpty) {
-      await provider.addDownloadsBatch(batchSpecs);
-    }
+    // ── Single call: adds all, saves all, pumps once ──
+    await provider.addBatchDownloads(
+      tasks: batchTasks,
+      savePath: savePath,
+    );
 
-    if (mounted) {
-      if (failed > 0) {
-        final remaining = selectedVideos.length - completed;
-        final msg = remaining > 0
-            ? '$failed video(s) failed ($remaining skipped).'
-            : '$failed video(s) failed (stream not available).';
-        ThemedSnackbar.show(
-          context,
-          message: msg,
-          color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-          icon: Icons.warning_amber_rounded,
-          isDarkMode: settings.isDarkMode,
-        );
-      }
-      Navigator.pop(
-        context,
-        enqueuedVideos.isEmpty
-            ? null
-            : PlaylistDownloadResult(
-                selectedVideos: enqueuedVideos,
-                qualityPreset: _qualityPreset,
-                playlistTitle: _playlistInfo?['title'] as String? ?? 'Playlist',
-              ),
-      );
-    }
+    if (!mounted) return;
+
+    ThemedSnackbar.show(
+      context,
+      message: L10n.isRtl(context)
+          ? 'بدأ تحميل ${batchTasks.length} فيديو'
+          : 'Downloading ${batchTasks.length} videos',
+      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+      icon: Icons.check_circle_outline,
+      isDarkMode: isDark,
+    );
+
+    Navigator.of(context).pop();
   }
 
   @override
@@ -366,7 +318,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-    final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     final glassBorder =
         isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
@@ -1063,15 +1014,13 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                             child: Text(opt['label']!),
                                           );
                                         }).toList(),
-                                        onChanged: _isDownloading
-                                            ? null
-                                            : (val) {
-                                                if (val != null) {
-                                                  setState(
-                                                    () => _qualityPreset = val,
-                                                  );
-                                                }
-                                              },
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setState(
+                                              () => _qualityPreset = val,
+                                            );
+                                          }
+                                        },
                                       ),
                                     ),
                                   ),
@@ -1116,100 +1065,19 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
                                 ),
                               ),
                             const SizedBox(height: 12),
-
-                            // Download progress or button
-                            if (_isDownloading)
-                              Column(
-                                children: [
-                                  LinearProgressIndicator(
-                                    value: _selectedCount > 0
-                                        ? _downloadProgress / _selectedCount
-                                        : 0,
-                                    backgroundColor: glassBorder,
-                                    color: greenClr,
-                                    minHeight: 4,
-                                    borderRadius: BorderRadius.circular(2),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              L10n.isRtl(context)
-                                                  ? 'جاري إضافة $_downloadProgress من $_selectedCount فيديو...'
-                                                  : 'Enqueuing $_downloadProgress of $_selectedCount videos...',
-                                              style: TextStyle(
-                                                color: secClr,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            if (_currentVideoTitle.isNotEmpty)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 2,
-                                                ),
-                                                child: Text(
-                                                  _currentVideoTitle,
-                                                  style: TextStyle(
-                                                    color: mutedClr,
-                                                    fontSize: 10,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed: () {
-                                          runHaptic(settings);
-                                          setState(() => _isCancelled = true);
-                                        },
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 4,
-                                          ),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        child: Text(
-                                          L10n.isRtl(context)
-                                              ? 'إلغاء'
-                                              : 'CANCEL',
-                                          style: TextStyle(
-                                            color: redClr,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )
-                            else
-                              NeonGlowButton(
-                                isExpanded: true,
-                                isFilled: true,
-                                onPressed: _selectedCount == 0
-                                    ? null
-                                    : _startBatchDownload,
-                                text: L10n.isRtl(context)
-                                    ? 'تحميل $_selectedCount فيديو'
-                                    : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
-                                icon: Icons.download_rounded,
-                                color: accent,
-                                glowColor: accent,
-                              ),
+                            NeonGlowButton(
+                              isExpanded: true,
+                              isFilled: true,
+                              onPressed: _selectedCount == 0
+                                  ? null
+                                  : _startBatchDownload,
+                              text: L10n.isRtl(context)
+                                  ? 'تحميل $_selectedCount فيديو'
+                                  : 'DOWNLOAD $_selectedCount VIDEO${_selectedCount != 1 ? 'S' : ''}',
+                              icon: Icons.download_rounded,
+                              color: accent,
+                              glowColor: accent,
+                            ),
                           ],
                         ),
                       ),

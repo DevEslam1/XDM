@@ -16,8 +16,10 @@ void main() {
     test('createDownloadDio creates valid Dio instance', () {
       final dio = ConnectionManager.createDownloadDio();
       expect(dio, isNotNull);
-      expect(dio.options.connectTimeout, equals(const Duration(milliseconds: 15000)));
-      expect(dio.options.receiveTimeout, equals(const Duration(milliseconds: 60000)));
+      expect(dio.options.connectTimeout,
+          equals(const Duration(milliseconds: 15000)));
+      expect(dio.options.receiveTimeout,
+          equals(const Duration(milliseconds: 60000)));
     });
 
     test('createProtocolDio returns configured Dio for each protocol', () {
@@ -31,7 +33,8 @@ void main() {
       expect(dioH1, isNotNull);
     });
 
-    test('isGoawayOrReset correctly identifies GOAWAY & stream reset errors', () {
+    test('isGoawayOrReset correctly identifies GOAWAY & stream reset errors',
+        () {
       final goawayErr = DioException(
         requestOptions: RequestOptions(path: '/'),
         message: 'HTTP/2 GOAWAY received',
@@ -50,7 +53,8 @@ void main() {
       );
       expect(ConnectionManager.isGoawayOrReset(unknownErr), isFalse);
 
-      expect(ConnectionManager.isGoawayOrReset(Exception('generic error')), isFalse);
+      expect(ConnectionManager.isGoawayOrReset(Exception('generic error')),
+          isFalse);
     });
 
     test('detectHttp2 returns false for non-https URLs gracefully', () async {

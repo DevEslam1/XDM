@@ -39,8 +39,7 @@ class SingleInstanceService {
       // Fail closed if HOME is unset.
       return File('/nonexistent/xdm_instance_$_port.token');
     } else if (Platform.isWindows) {
-      final appData =
-          Platform.environment['APPDATA'] ??
+      final appData = Platform.environment['APPDATA'] ??
           Platform.environment['LOCALAPPDATA'];
       if (appData != null && appData.isNotEmpty) {
         return File('$appData\\xdm\\xdm_instance_$_port.token');
@@ -71,8 +70,7 @@ class SingleInstanceService {
           _log.info('[SingleInstanceService] chmod on token dir skipped: $e');
         }
       } else if (Platform.isWindows) {
-        final appData =
-            Platform.environment['APPDATA'] ??
+        final appData = Platform.environment['APPDATA'] ??
             Platform.environment['LOCALAPPDATA'];
         if (appData == null || appData.isEmpty) return;
         final configDir = Directory('$appData\\xdm');
@@ -212,7 +210,8 @@ class SingleInstanceService {
           request.response.statusCode = HttpStatus.internalServerError;
           await request.response.close();
         } catch (e) {
-          _log.info('[SingleInstanceService] closing error response failed: $e');
+          _log.info(
+              '[SingleInstanceService] closing error response failed: $e');
         }
       }
     });

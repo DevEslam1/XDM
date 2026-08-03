@@ -11,8 +11,8 @@ import 'package:logging/logging.dart';
 
 /// Signature matching the screen's `_createNewTab` factory — building a tab
 /// (WebViewController + NavigationDelegate) stays on the screen.
-typedef CreateTabCallback =
-    BrowserTab Function({String initialUrl, bool isIncognito, String? id});
+typedef CreateTabCallback = BrowserTab Function(
+    {String initialUrl, bool isIncognito, String? id});
 
 /// Owns the open-tab list, the active index, tab persistence/restore, and
 /// the screen's pending-timer bookkeeping (REFACTOR B extraction from

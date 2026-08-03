@@ -20,7 +20,9 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
 
   bool _shouldPulse(DownloadTask task) {
     return task.status == DownloadStatus.downloading ||
-        (task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled);
+        (task.status == DownloadStatus.completed &&
+            task.isTorrent &&
+            task.seedingEnabled);
   }
 
   @override
@@ -77,7 +79,9 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
     Color color;
     String label;
     final task = widget.task;
-    final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
+    final isSeeding = task.status == DownloadStatus.completed &&
+        task.isTorrent &&
+        task.seedingEnabled;
 
     if (isSeeding) {
       color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
@@ -94,11 +98,14 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
           break;
         case DownloadStatus.paused:
           color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-          if (task.scheduledAt != null && task.scheduledAt!.isAfter(DateTime.now())) {
+          if (task.scheduledAt != null &&
+              task.scheduledAt!.isAfter(DateTime.now())) {
             label = L10n.of(context, 'add_download_schedule').toUpperCase();
-          } else if (task.errorMessage != null && task.errorMessage!.contains('WiFi')) {
+          } else if (task.errorMessage != null &&
+              task.errorMessage!.contains('WiFi')) {
             label = L10n.of(context, 'status_paused_wifi');
-          } else if (task.errorMessage != null && task.errorMessage!.contains('Network')) {
+          } else if (task.errorMessage != null &&
+              task.errorMessage!.contains('Network')) {
             label = L10n.of(context, 'status_paused_offline');
           } else {
             label = L10n.of(context, 'stats_paused_short');

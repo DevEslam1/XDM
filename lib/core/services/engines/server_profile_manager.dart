@@ -95,8 +95,8 @@ class ServerProfileManager {
 
   static void _evictIfNeeded() {
     if (_profiles.length > _maxProfiles) {
-      final oldest = _profiles.entries
-          .reduce((a, b) => a.value.lastAccess.isBefore(b.value.lastAccess) ? a : b);
+      final oldest = _profiles.entries.reduce(
+          (a, b) => a.value.lastAccess.isBefore(b.value.lastAccess) ? a : b);
       _profiles.remove(oldest.key);
     }
   }

@@ -216,44 +216,44 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) async {
-      await m.createAll();
-      // Create indexes on fresh database
-      await customStatement(
-        'CREATE INDEX idx_download_tasks_status ON download_tasks (status)',
-      );
-      await customStatement(
-        'CREATE INDEX idx_download_tasks_category ON download_tasks (category)',
-      );
-      await customStatement(
-        'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
-      );
-      await customStatement(
-        'CREATE INDEX idx_download_tasks_playlist_id ON download_tasks (playlist_id)',
-      );
-      await customStatement(
-        'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)',
-      );
-    },
-    onUpgrade: (m, from, to) async {
-      debugPrint('AppDatabase: Upgrading schema from $from to $to');
-      if (from < 2) {
-        // Migration 1 -> 2: Add notes column
-        await m.addColumn(downloadTasks, downloadTasks.notes);
-      }
-      if (from < 3) {
-        // Migration 2 -> 3: Convert timestamp columns from text to integer
-        // and add indexes.
+        onCreate: (m) async {
+          await m.createAll();
+          // Create indexes on fresh database
+          await customStatement(
+            'CREATE INDEX idx_download_tasks_status ON download_tasks (status)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_download_tasks_category ON download_tasks (category)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_download_tasks_playlist_id ON download_tasks (playlist_id)',
+          );
+          await customStatement(
+            'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)',
+          );
+        },
+        onUpgrade: (m, from, to) async {
+          debugPrint('AppDatabase: Upgrading schema from $from to $to');
+          if (from < 2) {
+            // Migration 1 -> 2: Add notes column
+            await m.addColumn(downloadTasks, downloadTasks.notes);
+          }
+          if (from < 3) {
+            // Migration 2 -> 3: Convert timestamp columns from text to integer
+            // and add indexes.
 
-        // Pre-migration: normalize date strings that julianday can't handle
-        await customStatement('''
+            // Pre-migration: normalize date strings that julianday can't handle
+            await customStatement('''
           UPDATE download_tasks SET created_at =
             SUBSTR(created_at, 1, INSTR(created_at, '.') - 1)
           WHERE created_at LIKE '%.%';
         ''');
 
-        // Step 1: Create a temporary table with the new schema
-        await customStatement('''
+            // Step 1: Create a temporary table with the new schema
+            await customStatement('''
               CREATE TABLE download_tasks_new (
                 id TEXT PRIMARY KEY NOT NULL,
                 file_name TEXT NOT NULL,
@@ -290,10 +290,10 @@ class AppDatabase extends _$AppDatabase {
               )
             ''');
 
-        // Step 2: Copy data with date conversion
-        // ISO8601 string dates are converted to milliseconds since epoch.
-        // We use REPLACE to handle ISO8601 'T' and 'Z' which julianday doesn't parse natively.
-        await customStatement('''
+            // Step 2: Copy data with date conversion
+            // ISO8601 string dates are converted to milliseconds since epoch.
+            // We use REPLACE to handle ISO8601 'T' and 'Z' which julianday doesn't parse natively.
+            await customStatement('''
               INSERT INTO download_tasks_new (
                 id, file_name, url, file_size, downloaded_bytes, speed, eta,
                 category, status, save_path, local_file_path, temp_file_path,
@@ -319,90 +319,91 @@ class AppDatabase extends _$AppDatabase {
               FROM download_tasks
             ''');
 
-        // Step 3: Drop old table
-        await customStatement('DROP TABLE download_tasks');
+            // Step 3: Drop old table
+            await customStatement('DROP TABLE download_tasks');
 
-        // Step 4: Rename new table
-        await customStatement(
-          'ALTER TABLE download_tasks_new RENAME TO download_tasks',
-        );
+            // Step 4: Rename new table
+            await customStatement(
+              'ALTER TABLE download_tasks_new RENAME TO download_tasks',
+            );
 
-        // Step 5: Create indexes
-        await customStatement(
-          'CREATE INDEX idx_download_tasks_status ON download_tasks (status)',
-        );
-        await customStatement(
-          'CREATE INDEX idx_download_tasks_category ON download_tasks (category)',
-        );
-        await customStatement(
-          'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
-        );
+            // Step 5: Create indexes
+            await customStatement(
+              'CREATE INDEX idx_download_tasks_status ON download_tasks (status)',
+            );
+            await customStatement(
+              'CREATE INDEX idx_download_tasks_category ON download_tasks (category)',
+            );
+            await customStatement(
+              'CREATE INDEX idx_download_tasks_created_at ON download_tasks (created_at)',
+            );
 
-        // Recovery: fix negative epochs resulting from julianday timezone / pre-1970 dates
-        await customStatement(
-          'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0',
-        );
-        await customStatement(
-          'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0',
-        );
+            // Recovery: fix negative epochs resulting from julianday timezone / pre-1970 dates
+            await customStatement(
+              'UPDATE download_tasks SET created_at = 0 WHERE created_at < 0',
+            );
+            await customStatement(
+              'UPDATE download_tasks SET updated_at = 0 WHERE updated_at < 0',
+            );
 
-        // Post-migration: validate no dates are stuck at epoch
-        final badDates = await customSelect(
-          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0',
-        ).get();
-        final badCount = badDates.first.read<int>('cnt');
-        if (badCount > 0) {
-          debugPrint(
-            'WARNING: $badCount tasks have epoch (0) created_at after migration',
-          );
-        }
+            // Post-migration: validate no dates are stuck at epoch
+            final badDates = await customSelect(
+              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0',
+            ).get();
+            final badCount = badDates.first.read<int>('cnt');
+            if (badCount > 0) {
+              debugPrint(
+                'WARNING: $badCount tasks have epoch (0) created_at after migration',
+              );
+            }
 
-        // Recovery: fix rows where created_at = 0 but updated_at > 0
-        final recoveredFromUpdated = await customSelect(
-          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
-        ).get();
-        final recoverFromUpdatedCount = recoveredFromUpdated.first.read<int>(
-          'cnt',
-        );
-        if (recoverFromUpdatedCount > 0) {
-          await customStatement(
-            'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0',
-          );
-          debugPrint(
-            '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)',
-          );
-        }
+            // Recovery: fix rows where created_at = 0 but updated_at > 0
+            final recoveredFromUpdated = await customSelect(
+              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at > 0',
+            ).get();
+            final recoverFromUpdatedCount =
+                recoveredFromUpdated.first.read<int>(
+              'cnt',
+            );
+            if (recoverFromUpdatedCount > 0) {
+              await customStatement(
+                'UPDATE download_tasks SET created_at = updated_at WHERE created_at = 0 AND updated_at > 0',
+              );
+              debugPrint(
+                '[DMX] Migration v2→v3: recovered $recoverFromUpdatedCount rows (created_at = updated_at)',
+              );
+            }
 
-        // Recovery: fix rows where BOTH created_at and updated_at are 0
-        final recoveredFromNow = await customSelect(
-          'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
-        ).get();
-        final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
-        if (recoverFromNowCount > 0) {
-          await customStatement(
-            "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
-          );
-          debugPrint(
-            '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)',
-          );
-        }
-      }
-      if (from < 4) {
-        // Migration 3 -> 4: Add playlistId and playlistTitle columns
-        await m.addColumn(downloadTasks, downloadTasks.playlistId);
-        await m.addColumn(downloadTasks, downloadTasks.playlistTitle);
-      }
-      if (from < 5) {
-        // Migration 4 -> 5: Add isAppUpdate column
-        await m.addColumn(downloadTasks, downloadTasks.isAppUpdate);
-      }
-      if (from < 6) {
-        // Migration 5 -> 6: Add priority and expectedSha256 columns
-        await m.addColumn(downloadTasks, downloadTasks.priority);
-        await m.addColumn(downloadTasks, downloadTasks.expectedSha256);
-      }
-      if (from < 7) {
-        await customStatement('''
+            // Recovery: fix rows where BOTH created_at and updated_at are 0
+            final recoveredFromNow = await customSelect(
+              'SELECT COUNT(*) as cnt FROM download_tasks WHERE created_at = 0 AND updated_at = 0',
+            ).get();
+            final recoverFromNowCount = recoveredFromNow.first.read<int>('cnt');
+            if (recoverFromNowCount > 0) {
+              await customStatement(
+                "UPDATE download_tasks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at = 0 AND updated_at = 0",
+              );
+              debugPrint(
+                '[DMX] Migration v2→v3: recovered $recoverFromNowCount rows (created_at = now)',
+              );
+            }
+          }
+          if (from < 4) {
+            // Migration 3 -> 4: Add playlistId and playlistTitle columns
+            await m.addColumn(downloadTasks, downloadTasks.playlistId);
+            await m.addColumn(downloadTasks, downloadTasks.playlistTitle);
+          }
+          if (from < 5) {
+            // Migration 4 -> 5: Add isAppUpdate column
+            await m.addColumn(downloadTasks, downloadTasks.isAppUpdate);
+          }
+          if (from < 6) {
+            // Migration 5 -> 6: Add priority and expectedSha256 columns
+            await m.addColumn(downloadTasks, downloadTasks.priority);
+            await m.addColumn(downloadTasks, downloadTasks.expectedSha256);
+          }
+          if (from < 7) {
+            await customStatement('''
           CREATE TABLE IF NOT EXISTS browser_tabs (
             id TEXT NOT NULL PRIMARY KEY,
             url TEXT NOT NULL,
@@ -412,10 +413,10 @@ class AppDatabase extends _$AppDatabase {
             created_at INTEGER NOT NULL
           )
         ''');
-      }
-      if (from < 8) {
-        // Migration 7 -> 8: Change browser_history PK from text to auto-increment int
-        await customStatement('''
+          }
+          if (from < 8) {
+            // Migration 7 -> 8: Change browser_history PK from text to auto-increment int
+            await customStatement('''
           CREATE TABLE browser_history_new (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             url TEXT NOT NULL,
@@ -423,39 +424,39 @@ class AppDatabase extends _$AppDatabase {
             visited_at TEXT NOT NULL
           )
         ''');
-        await customStatement('''
+            await customStatement('''
           INSERT INTO browser_history_new (url, title, visited_at)
           SELECT url, title, visited_at FROM browser_history
         ''');
-        await customStatement('DROP TABLE browser_history');
-        await customStatement(
-          'ALTER TABLE browser_history_new RENAME TO browser_history',
-        );
-      }
-      if (from < 9) {
-        // Migration 8 -> 9: Add indexes for playlist_id and visited_at
-        await customStatement(
-          'CREATE INDEX IF NOT EXISTS idx_download_tasks_playlist_id ON download_tasks (playlist_id)',
-        );
-        await customStatement(
-          'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)',
-        );
-      }
-      if (from < 10) {
-        // Migration 9 -> 10: Add thumbnail_url for YouTube playlist items
-        await customStatement(
-          'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT',
-        );
-      }
-      if (from < 11) {
-        // FIX(4)/FIX(5): Migration 10 -> 11. Convert bookmarks.created_at and
-        // browser_history.visited_at from TEXT (ISO8601) to INTEGER (ms since
-        // epoch), matching download_tasks and restoring correct numeric
-        // ordering. ISO8601 strings are converted with the same julianday
-        // formula used by the earlier download_tasks migration.
+            await customStatement('DROP TABLE browser_history');
+            await customStatement(
+              'ALTER TABLE browser_history_new RENAME TO browser_history',
+            );
+          }
+          if (from < 9) {
+            // Migration 8 -> 9: Add indexes for playlist_id and visited_at
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_download_tasks_playlist_id ON download_tasks (playlist_id)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at ON browser_history (visited_at)',
+            );
+          }
+          if (from < 10) {
+            // Migration 9 -> 10: Add thumbnail_url for YouTube playlist items
+            await customStatement(
+              'ALTER TABLE download_tasks ADD COLUMN thumbnail_url TEXT',
+            );
+          }
+          if (from < 11) {
+            // FIX(4)/FIX(5): Migration 10 -> 11. Convert bookmarks.created_at and
+            // browser_history.visited_at from TEXT (ISO8601) to INTEGER (ms since
+            // epoch), matching download_tasks and restoring correct numeric
+            // ordering. ISO8601 strings are converted with the same julianday
+            // formula used by the earlier download_tasks migration.
 
-        // --- bookmarks ---
-        await customStatement('''
+            // --- bookmarks ---
+            await customStatement('''
           CREATE TABLE bookmarks_new (
             id TEXT PRIMARY KEY NOT NULL,
             title TEXT NOT NULL,
@@ -464,7 +465,7 @@ class AppDatabase extends _$AppDatabase {
             created_at INTEGER NOT NULL
           )
         ''');
-        await customStatement('''
+            await customStatement('''
           INSERT INTO bookmarks_new (id, title, url, folder, created_at)
           SELECT id, title, url, folder,
             COALESCE(
@@ -476,13 +477,13 @@ class AppDatabase extends _$AppDatabase {
             )
           FROM bookmarks
         ''');
-        await customStatement('DROP TABLE bookmarks');
-        await customStatement(
-          'ALTER TABLE bookmarks_new RENAME TO bookmarks',
-        );
+            await customStatement('DROP TABLE bookmarks');
+            await customStatement(
+              'ALTER TABLE bookmarks_new RENAME TO bookmarks',
+            );
 
-        // --- browser_history ---
-        await customStatement('''
+            // --- browser_history ---
+            await customStatement('''
           CREATE TABLE browser_history_new (
             id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             url TEXT NOT NULL,
@@ -490,7 +491,7 @@ class AppDatabase extends _$AppDatabase {
             visited_at INTEGER NOT NULL
           )
         ''');
-        await customStatement('''
+            await customStatement('''
           INSERT INTO browser_history_new (url, title, visited_at)
           SELECT url, title,
             COALESCE(
@@ -502,49 +503,49 @@ class AppDatabase extends _$AppDatabase {
             )
           FROM browser_history
         ''');
-        await customStatement('DROP TABLE browser_history');
-        await customStatement(
-          'ALTER TABLE browser_history_new RENAME TO browser_history',
-        );
-        await customStatement(
-          'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at '
-          'ON browser_history (visited_at)',
-        );
+            await customStatement('DROP TABLE browser_history');
+            await customStatement(
+              'ALTER TABLE browser_history_new RENAME TO browser_history',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at '
+              'ON browser_history (visited_at)',
+            );
 
-        // Post-migration recovery for bookmarks: fix rows stuck at 0 or negative timestamps
-        final badBookmarks = await customSelect(
-          'SELECT COUNT(*) as cnt FROM bookmarks WHERE created_at <= 0',
-        ).get();
-        final badBookmarksCount = badBookmarks.first.read<int>('cnt');
-        if (badBookmarksCount > 0) {
-          await customStatement(
-            "UPDATE bookmarks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at <= 0",
-          );
-          _dbLog.warning(
-            'Migration v10→v11: recovered $badBookmarksCount bookmarks stuck at invalid created_at',
-          );
-        }
+            // Post-migration recovery for bookmarks: fix rows stuck at 0 or negative timestamps
+            final badBookmarks = await customSelect(
+              'SELECT COUNT(*) as cnt FROM bookmarks WHERE created_at <= 0',
+            ).get();
+            final badBookmarksCount = badBookmarks.first.read<int>('cnt');
+            if (badBookmarksCount > 0) {
+              await customStatement(
+                "UPDATE bookmarks SET created_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE created_at <= 0",
+              );
+              _dbLog.warning(
+                'Migration v10→v11: recovered $badBookmarksCount bookmarks stuck at invalid created_at',
+              );
+            }
 
-        // Post-migration recovery for browser_history: fix rows stuck at 0 or negative timestamps
-        final badHistory = await customSelect(
-          'SELECT COUNT(*) as cnt FROM browser_history WHERE visited_at <= 0',
-        ).get();
-        final badHistoryCount = badHistory.first.read<int>('cnt');
-        if (badHistoryCount > 0) {
-          await customStatement(
-            "UPDATE browser_history SET visited_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE visited_at <= 0",
-          );
-          _dbLog.warning(
-            'Migration v10→v11: recovered $badHistoryCount browser history rows stuck at invalid visited_at',
-          );
-        }
-      }
-      if (from < 12) {
-        // Migration 11 -> 12: Add mirrorUrls column
-        await customStatement(
-          'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT',
-        );
-      }
-    },
-  );
+            // Post-migration recovery for browser_history: fix rows stuck at 0 or negative timestamps
+            final badHistory = await customSelect(
+              'SELECT COUNT(*) as cnt FROM browser_history WHERE visited_at <= 0',
+            ).get();
+            final badHistoryCount = badHistory.first.read<int>('cnt');
+            if (badHistoryCount > 0) {
+              await customStatement(
+                "UPDATE browser_history SET visited_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) WHERE visited_at <= 0",
+              );
+              _dbLog.warning(
+                'Migration v10→v11: recovered $badHistoryCount browser history rows stuck at invalid visited_at',
+              );
+            }
+          }
+          if (from < 12) {
+            // Migration 11 -> 12: Add mirrorUrls column
+            await customStatement(
+              'ALTER TABLE download_tasks ADD COLUMN mirror_urls TEXT',
+            );
+          }
+        },
+      );
 }

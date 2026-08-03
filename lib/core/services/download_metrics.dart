@@ -23,7 +23,7 @@ class DownloadMetrics {
   int mirrorSwitches = 0;
 
   DownloadMetrics({required this.taskId, required this.url})
-    : startedAt = DateTime.now();
+      : startedAt = DateTime.now();
 
   void markCompleted() {
     completedAt = DateTime.now();
@@ -43,29 +43,29 @@ class DownloadMetrics {
 
   /// Returns a JSON-safe representation with sensitive query params redacted.
   Map<String, dynamic> toJson() => {
-    'taskId': taskId,
-    'url': LoggingService.sanitize(url),
-    'startedAt': startedAt.toIso8601String(),
-    'completedAt': completedAt?.toIso8601String(),
-    'elapsedMs': elapsed.inMilliseconds,
-    'ttfbMs': timeToFirstByteMs,
-    'http2': usedHttp2,
-    'requestedThreads': requestedThreads,
-    'effectiveThreads': effectiveThreads,
-    'bytesDownloaded': totalBytesDownloaded,
-    'peakSpeedBps': peakSpeedBps,
-    'avgSpeedBps': avgSpeedBps.round(),
-    'threadEfficiency': (threadEfficiency * 1000).round() / 1000,
-    'totalRetries': totalRetries,
-    'resumed': resumed,
-    'resumeBytesSaved': resumeBytesSaved,
-    'checksumAlgorithm': checksumAlgorithm,
-    'checksumVerified': checksumVerified,
-    'checksumPassed': checksumPassed,
-    'errorCount': errorCount,
-    'lastError': lastError,
-    'mirrorSwitches': mirrorSwitches,
-  };
+        'taskId': taskId,
+        'url': LoggingService.sanitize(url),
+        'startedAt': startedAt.toIso8601String(),
+        'completedAt': completedAt?.toIso8601String(),
+        'elapsedMs': elapsed.inMilliseconds,
+        'ttfbMs': timeToFirstByteMs,
+        'http2': usedHttp2,
+        'requestedThreads': requestedThreads,
+        'effectiveThreads': effectiveThreads,
+        'bytesDownloaded': totalBytesDownloaded,
+        'peakSpeedBps': peakSpeedBps,
+        'avgSpeedBps': avgSpeedBps.round(),
+        'threadEfficiency': (threadEfficiency * 1000).round() / 1000,
+        'totalRetries': totalRetries,
+        'resumed': resumed,
+        'resumeBytesSaved': resumeBytesSaved,
+        'checksumAlgorithm': checksumAlgorithm,
+        'checksumVerified': checksumVerified,
+        'checksumPassed': checksumPassed,
+        'errorCount': errorCount,
+        'lastError': lastError,
+        'mirrorSwitches': mirrorSwitches,
+      };
 
   factory DownloadMetrics.fromJson(Map<String, dynamic> json) {
     final m = DownloadMetrics(

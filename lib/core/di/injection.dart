@@ -33,10 +33,12 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<ClipboardService>(() => ClipboardService());
   getIt.registerLazySingleton<ShareUrlHandler>(() => ShareUrlHandler());
   getIt.registerLazySingleton<BackgroundService>(() => BackgroundService());
-  getIt.registerLazySingleton<CrashReportingService>(() => CrashReportingService());
+  getIt.registerLazySingleton<CrashReportingService>(
+      () => CrashReportingService());
   getIt.registerLazySingleton<AppLockService>(() => AppLockService());
   getIt.registerLazySingleton<XdmBackendClient>(() => XdmBackendClient());
   getIt.registerLazySingleton<UpdateService>(() => UpdateService());
-  getIt.registerLazySingleton<SingleInstanceService>(() => SingleInstanceService());
+  getIt.registerLazySingleton<SingleInstanceService>(
+      () => SingleInstanceService());
   getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
 }

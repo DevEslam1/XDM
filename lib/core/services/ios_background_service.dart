@@ -34,8 +34,10 @@ class IosBackgroundTransferEvent {
 
 /// Service for managing native iOS out-of-process URLSession background transfers via [MethodChannel] & [EventChannel].
 class IosBackgroundService {
-  static const MethodChannel _channel = MethodChannel('com.dmx.app/background_download');
-  static const EventChannel _eventChannel = EventChannel('com.dmx.app/background_download_events');
+  static const MethodChannel _channel =
+      MethodChannel('com.dmx.app/background_download');
+  static const EventChannel _eventChannel =
+      EventChannel('com.dmx.app/background_download_events');
 
   /// Stream of native iOS background transfer progress and completion events.
   static Stream<IosBackgroundTransferEvent> get backgroundEvents {
@@ -56,11 +58,13 @@ class IosBackgroundService {
   }) async {
     if (!Platform.isIOS) return false;
     try {
-      final bool success = await _channel.invokeMethod<bool>('startNativeDownload', {
-        'taskId': taskId,
-        'url': url,
-        'destinationPath': destinationPath,
-      }) ?? false;
+      final bool success =
+          await _channel.invokeMethod<bool>('startNativeDownload', {
+                'taskId': taskId,
+                'url': url,
+                'destinationPath': destinationPath,
+              }) ??
+              false;
       return success;
     } catch (e) {
       debugPrint('Failed to start native iOS background download: $e');
@@ -72,9 +76,11 @@ class IosBackgroundService {
   static Future<bool> pauseNativeDownload(String taskId) async {
     if (!Platform.isIOS) return false;
     try {
-      final bool success = await _channel.invokeMethod<bool>('pauseNativeDownload', {
-        'taskId': taskId,
-      }) ?? false;
+      final bool success =
+          await _channel.invokeMethod<bool>('pauseNativeDownload', {
+                'taskId': taskId,
+              }) ??
+              false;
       return success;
     } catch (e) {
       debugPrint('Failed to pause native iOS background download: $e');
@@ -90,11 +96,13 @@ class IosBackgroundService {
   }) async {
     if (!Platform.isIOS) return false;
     try {
-      final bool success = await _channel.invokeMethod<bool>('resumeNativeDownload', {
-        'taskId': taskId,
-        'url': url,
-        'destinationPath': destinationPath,
-      }) ?? false;
+      final bool success =
+          await _channel.invokeMethod<bool>('resumeNativeDownload', {
+                'taskId': taskId,
+                'url': url,
+                'destinationPath': destinationPath,
+              }) ??
+              false;
       return success;
     } catch (e) {
       debugPrint('Failed to resume native iOS background download: $e');
@@ -106,9 +114,11 @@ class IosBackgroundService {
   static Future<bool> cancelNativeDownload(String taskId) async {
     if (!Platform.isIOS) return false;
     try {
-      final bool success = await _channel.invokeMethod<bool>('cancelNativeDownload', {
-        'taskId': taskId,
-      }) ?? false;
+      final bool success =
+          await _channel.invokeMethod<bool>('cancelNativeDownload', {
+                'taskId': taskId,
+              }) ??
+              false;
       return success;
     } catch (e) {
       debugPrint('Failed to cancel native iOS background download: $e');
@@ -120,7 +130,8 @@ class IosBackgroundService {
   static Future<bool> scheduleBackgroundDownload() async {
     if (!Platform.isIOS) return false;
     try {
-      final bool success = await _channel.invokeMethod<bool>('scheduleDownload') ?? false;
+      final bool success =
+          await _channel.invokeMethod<bool>('scheduleDownload') ?? false;
       return success;
     } catch (e) {
       debugPrint('Failed to schedule iOS background download: $e');
@@ -132,7 +143,8 @@ class IosBackgroundService {
   static Future<bool> cancelBackgroundDownload() async {
     if (!Platform.isIOS) return false;
     try {
-      final bool success = await _channel.invokeMethod<bool>('cancelDownload') ?? false;
+      final bool success =
+          await _channel.invokeMethod<bool>('cancelDownload') ?? false;
       return success;
     } catch (e) {
       debugPrint('Failed to cancel iOS background download: $e');

@@ -63,7 +63,8 @@ class RedirectSheet extends StatelessWidget {
       final path = uri.path.isEmpty ? '/' : uri.path;
       return '${uri.host}$path';
     } catch (e, st) {
-      Logger('redirect_sheet').warning('[redirect_sheet] operation failed', e, st);
+      Logger('redirect_sheet')
+          .warning('[redirect_sheet] operation failed', e, st);
       return url.split('?').first;
     }
   }
@@ -170,8 +171,9 @@ class RedirectSheet extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg)
-                            .withValues(alpha: 0.5),
+                        color:
+                            (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg)
+                                .withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: isDark
@@ -212,12 +214,15 @@ class RedirectSheet extends StatelessWidget {
                               ),
                             ],
                           ),
-                          if (currentDomain.isNotEmpty && targetDomain.isNotEmpty) ...[
+                          if (currentDomain.isNotEmpty &&
+                              targetDomain.isNotEmpty) ...[
                             const SizedBox(height: 12),
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                                color: (isDark
+                                        ? AppTheme.surface
+                                        : AppTheme.lightSurface)
                                     .withValues(alpha: 0.6),
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -225,7 +230,8 @@ class RedirectSheet extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           L10n.of(context, 'redirect_from'),
@@ -252,7 +258,8 @@ class RedirectSheet extends StatelessWidget {
                                     ),
                                   ),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8),
                                     child: Icon(
                                       isRtl
                                           ? Icons.arrow_back_rounded
@@ -263,7 +270,8 @@ class RedirectSheet extends StatelessWidget {
                                   ),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           L10n.of(context, 'redirect_to'),
@@ -336,7 +344,8 @@ class RedirectSheet extends StatelessWidget {
                               context,
                               RedirectAction.openInBackgroundTab,
                             ),
-                            icon: const Icon(Icons.tab_unselected_rounded, size: 16),
+                            icon: const Icon(Icons.tab_unselected_rounded,
+                                size: 16),
                             label: Text(
                               L10n.of(context, 'redirect_in_background'),
                               style: const TextStyle(
@@ -407,14 +416,18 @@ class RedirectSheet extends StatelessWidget {
                           Icon(
                             Icons.south_rounded,
                             size: 11,
-                            color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
+                            color: (isDark
+                                    ? AppTheme.textMuted
+                                    : AppTheme.lightTextMuted)
                                 .withValues(alpha: 0.6),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             L10n.of(context, 'redirect_dismiss_hint'),
                             style: TextStyle(
-                              color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
+                              color: (isDark
+                                      ? AppTheme.textMuted
+                                      : AppTheme.lightTextMuted)
                                   .withValues(alpha: 0.6),
                               fontSize: 10,
                             ),

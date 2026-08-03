@@ -57,7 +57,7 @@ const Map<String, String> esTranslations = {
   'bypass_ssl_dialog_title': '¿Desactivar la verificación SSL?',
   'bypass_ssl_dialog_body':
       'Esto expone todas las descargas a ataques de intermediario. '
-      'Habilitar solo en redes de confianza.',
+          'Habilitar solo en redes de confianza.',
   'bypass_ssl_dialog_confirm': 'Entiendo el riesgo',
   'settings_https_only': 'Modo solo HTTPS',
   'settings_https_only_sub':
@@ -130,5 +130,6 @@ const Map<String, String> esTranslations = {
   'clipboard_link_detected': 'Enlace detectado en el portapapeles',
   'download_action': 'Descargar',
   'start_btn': 'Iniciar',
-  'file_missing_msg': 'Archivo no encontrado en el disco, movido a la pestaña de fallidos',
+  'file_missing_msg':
+      'Archivo no encontrado en el disco, movido a la pestaña de fallidos',
 };

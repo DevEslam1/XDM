@@ -51,9 +51,8 @@ class ShareUrlHandler {
       final audioUrl = selected['audioSrc'] as String?;
       final audioSize = selected['audioSize'] as int?;
       final streamType = selected['type'] as String? ?? 'muxed';
-      final qualityPreset = streamType == 'audio'
-          ? 'audio_only'
-          : selected['quality'] as String?;
+      final qualityPreset =
+          streamType == 'audio' ? 'audio_only' : selected['quality'] as String?;
       final category = streamType == 'audio' ? 'Audio' : 'Video';
       final fileName = '$title.$ext';
 
@@ -103,9 +102,8 @@ class ShareUrlHandler {
         } else {
           ThemedSnackbar.show(
             context,
-            message: L10n.isRtl(context)
-                ? 'تم بدء التحميل'
-                : 'Download started',
+            message:
+                L10n.isRtl(context) ? 'تم بدء التحميل' : 'Download started',
             color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: Icons.check_circle_outline,
             isDarkMode: isDark,

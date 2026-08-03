@@ -89,9 +89,8 @@ class DownloadInterceptor {
     int? audioSize,
   }) async {
     final downloadProvider = resolveDownloadProvider();
-    final existingTasks = downloadProvider.tasks
-        .where((t) => t.url == url)
-        .toList();
+    final existingTasks =
+        downloadProvider.tasks.where((t) => t.url == url).toList();
     if (existingTasks.isNotEmpty) {
       final existingTask = existingTasks.first;
       if (existingTask.status == DownloadStatus.completed) {
@@ -121,7 +120,8 @@ class DownloadInterceptor {
     final ext = p.extension(finalFileName);
     final base = p.basenameWithoutExtension(finalFileName);
     var counter = 1;
-    final existingNames = downloadProvider.tasks.map((t) => t.fileName.toLowerCase()).toSet();
+    final existingNames =
+        downloadProvider.tasks.map((t) => t.fileName.toLowerCase()).toSet();
     while (existingNames.contains(numberedName.toLowerCase())) {
       numberedName = '${base}_$counter$ext';
       counter++;

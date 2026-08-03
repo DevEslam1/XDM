@@ -24,7 +24,8 @@ void main() {
 
     test('accepts magnet URLs', () {
       expect(
-        isMagnetUrl('magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10'),
+        isMagnetUrl(
+            'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10'),
         true,
       );
     });

@@ -5,7 +5,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ElementPickerService Unit Tests', () {
-    test('blockRule formats CSS selector into display: none !important rule', () {
+    test('blockRule formats CSS selector into display: none !important rule',
+        () {
       final rule1 = ElementPickerService.blockRule('#ad-banner');
       expect(rule1, equals('#ad-banner { display: none !important; }'));
 

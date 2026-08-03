@@ -294,7 +294,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (themeMode == 'system') {
       final newDark =
           WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-          Brightness.dark;
+              Brightness.dark;
       if (newDark != _isDarkMode) {
         _isDarkMode = newDark;
         notifyListeners();
@@ -309,8 +309,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     _maxDownloads = _prefs.getInt(_maxDownloadsKey) ?? _maxDownloads;
     if (![1, 2, 3, 5, 8].contains(_maxDownloads)) _maxDownloads = 3;
     speedLimitMb = _prefs.getDouble(_speedLimitKey) ?? speedLimitMb;
-    bandwidthScheduleEnabled =
-        _prefs.getBool(_bandwidthScheduleEnabledKey) ??
+    bandwidthScheduleEnabled = _prefs.getBool(_bandwidthScheduleEnabledKey) ??
         bandwidthScheduleEnabled;
     scheduleStartTime =
         _prefs.getString(_scheduleStartTimeKey) ?? scheduleStartTime;
@@ -349,16 +348,16 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     backendToken = await _secureStorage.read(key: _backendTokenKey) ?? '';
     sendBrowserCookiesToBackend =
         _prefs.getBool(_sendBrowserCookiesToBackendKey) ??
-        sendBrowserCookiesToBackend;
+            sendBrowserCookiesToBackend;
 
     globalTorrentSeeding =
         _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
     globalTorrentSeedingLimited =
         _prefs.getBool(_globalTorrentSeedingLimitedKey) ??
-        globalTorrentSeedingLimited;
+            globalTorrentSeedingLimited;
     globalTorrentSeedingLimitKbps =
         _prefs.getInt(_globalTorrentSeedingLimitKbpsKey) ??
-        globalTorrentSeedingLimitKbps;
+            globalTorrentSeedingLimitKbps;
     enableDht = _prefs.getBool(_enableDhtKey) ?? enableDht;
     enableUpnp = _prefs.getBool(_enableUpnpKey) ?? enableUpnp;
     enableNatPmp = _prefs.getBool(_enableNatPmpKey) ?? enableNatPmp;
@@ -763,9 +762,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     final resolved = value == 'dark'
         ? true
         : value == 'light'
-        ? false
-        : WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-              Brightness.dark;
+            ? false
+            : WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+                Brightness.dark;
     if (resolved != _isDarkMode) {
       _isDarkMode = resolved;
       await _prefs.setBool(_isDarkModeKey, resolved);

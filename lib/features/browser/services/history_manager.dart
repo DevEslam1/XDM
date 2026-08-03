@@ -39,7 +39,9 @@ class BrowserHistoryManager {
         if (_lastHistoryEntryId != null) {
           try {
             final db = resolveDatabase();
-            db.updateBrowserHistoryTitle(_lastHistoryEntryId!, title).catchError((e) {
+            db
+                .updateBrowserHistoryTitle(_lastHistoryEntryId!, title)
+                .catchError((e) {
               debugPrint('[HistoryManager] Title update error: $e');
             });
           } catch (e) {
@@ -56,18 +58,16 @@ class BrowserHistoryManager {
     final titleToRecord = (title != null && title.isNotEmpty) ? title : clean;
     try {
       final db = resolveDatabase();
-      db
-          .addBrowserHistory({
-            'url': clean,
-            'title': titleToRecord,
-            'visitedAt': now.millisecondsSinceEpoch,
-          })
-          .then((id) {
-            if (!isActive()) return;
-            if (clean == _lastHistoryEntryUrl && id > 0) {
-              _lastHistoryEntryId = id;
-            }
-          }).catchError((e) {
+      db.addBrowserHistory({
+        'url': clean,
+        'title': titleToRecord,
+        'visitedAt': now.millisecondsSinceEpoch,
+      }).then((id) {
+        if (!isActive()) return;
+        if (clean == _lastHistoryEntryUrl && id > 0) {
+          _lastHistoryEntryId = id;
+        }
+      }).catchError((e) {
         debugPrint('[HistoryManager] Failed to record history: $e');
       });
     } catch (e) {

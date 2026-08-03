@@ -43,7 +43,8 @@ class ShareService {
   }) {
     dispose();
 
-    void handleUrl(String? raw, {required String source, bool isInitial = false}) {
+    void handleUrl(String? raw,
+        {required String source, bool isInitial = false}) {
       final text = (raw ?? '').trim();
       if (text.isEmpty) return;
 
@@ -72,7 +73,8 @@ class ShareService {
       );
 
       _recentShares.add(
-        _ShareEntry(url: extractedUrl, source: source, timestamp: DateTime.now()),
+        _ShareEntry(
+            url: extractedUrl, source: source, timestamp: DateTime.now()),
       );
 
       onUrlReceived(extractedUrl, isInitial: isInitial);

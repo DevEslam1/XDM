@@ -74,9 +74,9 @@ void main() {
   ConnectivityPlatform.instance = MockConnectivityPlatform();
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
-        const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
-        (methodCall) async => null,
-      );
+    const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+    (methodCall) async => null,
+  );
 
   late MockDatabaseService db;
   late SettingsProvider settings;

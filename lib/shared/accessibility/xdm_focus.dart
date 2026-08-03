@@ -36,7 +36,8 @@ class _XdmFocusState extends State<XdmFocus> {
 
   @override
   Widget build(BuildContext context) {
-    final ringColor = widget.isDark ? AppTheme.focusRing : AppTheme.lightFocusRing;
+    final ringColor =
+        widget.isDark ? AppTheme.focusRing : AppTheme.lightFocusRing;
     final duration = XdmMotion.duration(
       context,
       const Duration(milliseconds: 160),

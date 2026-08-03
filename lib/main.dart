@@ -90,7 +90,9 @@ Future<void> main(List<String> args) async {
                 decoration: BoxDecoration(
                   color: const Color(0xFF161A22),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3), width: 1.2),
+                  border: Border.all(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                      width: 1.2),
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFFEF4444).withValues(alpha: 0.12),
@@ -107,9 +109,12 @@ Future<void> main(List<String> args) async {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                        border: Border.all(
+                            color:
+                                const Color(0xFFEF4444).withValues(alpha: 0.3)),
                       ),
-                      child: const Icon(Icons.warning_amber_rounded, size: 36, color: Color(0xFFEF4444)),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          size: 36, color: Color(0xFFEF4444)),
                     ),
                     const SizedBox(height: 16),
                     const Text(
@@ -439,29 +444,25 @@ class DmxApp extends StatelessWidget {
                 // Android: block app usage until a download folder is chosen,
                 // otherwise downloads silently land in Android/data.
                 : (!kIsWeb &&
-                      Platform.isAndroid &&
-                      (settings.customDownloadPath?.isEmpty ?? true))
-                ? const PermissionRequestScreen()
-                : (initialUrl != null && initialUrl!.trim().isNotEmpty)
-                ? ShareLaunchScreen(url: initialUrl!)
-                : const MainNavigationContainer(),
+                        Platform.isAndroid &&
+                        (settings.customDownloadPath?.isEmpty ?? true))
+                    ? const PermissionRequestScreen()
+                    : (initialUrl != null && initialUrl!.trim().isNotEmpty)
+                        ? ShareLaunchScreen(url: initialUrl!)
+                        : const MainNavigationContainer(),
             builder: (context, child) {
               return XdmTextScaler(
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
                   value: SystemUiOverlayStyle(
                     statusBarColor: Colors.transparent,
-                    statusBarIconBrightness: isDark
-                        ? Brightness.light
-                        : Brightness.dark,
-                    statusBarBrightness: isDark
-                        ? Brightness.dark
-                        : Brightness.light,
-                    systemNavigationBarColor: isDark
-                        ? AppTheme.background
-                        : AppTheme.lightBackground,
-                    systemNavigationBarIconBrightness: isDark
-                        ? Brightness.light
-                        : Brightness.dark,
+                    statusBarIconBrightness:
+                        isDark ? Brightness.light : Brightness.dark,
+                    statusBarBrightness:
+                        isDark ? Brightness.dark : Brightness.light,
+                    systemNavigationBarColor:
+                        isDark ? AppTheme.background : AppTheme.lightBackground,
+                    systemNavigationBarIconBrightness:
+                        isDark ? Brightness.light : Brightness.dark,
                   ),
                   child: child!,
                 ),

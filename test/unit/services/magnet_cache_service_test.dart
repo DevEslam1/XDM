@@ -22,7 +22,8 @@ void main() {
     });
 
     test('getCachedMetadata returns null for uncached infoHash', () async {
-      final retrieved = await MagnetCacheService.getCachedMetadata('non_existent_hash');
+      final retrieved =
+          await MagnetCacheService.getCachedMetadata('non_existent_hash');
       expect(retrieved, isNull);
     });
   });

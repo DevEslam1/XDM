@@ -12,18 +12,22 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
   @override
   Widget build(BuildContext context) {
     return Selector<SettingsProvider, ({bool isDark, bool classicUi})>(
-      selector: (_, settings) => (isDark: settings.isDarkMode, classicUi: settings.classicUi),
+      selector: (_, settings) =>
+          (isDark: settings.isDarkMode, classicUi: settings.classicUi),
       builder: (context, settingsState, _) {
         final isDark = settingsState.isDark;
         final classicUi = settingsState.classicUi;
 
         final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-        final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+        final violetClr =
+            isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
         final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
         final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
         final amberClr = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-        final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-        final dividerClr = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+        final secClr =
+            isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+        final dividerClr =
+            isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
 
         return Container(
           width: double.infinity,
@@ -31,7 +35,9 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
           decoration: classicUi
               ? BoxDecoration(
                   color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                  border: Border.all(color: isDark ? AppTheme.border : AppTheme.lightBorder, width: 1.0),
+                  border: Border.all(
+                      color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                      width: 1.0),
                   borderRadius: BorderRadius.circular(20),
                 )
               : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
@@ -46,7 +52,8 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                   completed: p.completedTasksCount,
                   failed: p.failedTasksCount,
                   paused: p.pausedTasksCount,
-                  hasActive: p.downloadingTasksCount > 0 || p.queuedTasksCount > 0,
+                  hasActive:
+                      p.downloadingTasksCount > 0 || p.queuedTasksCount > 0,
                 ),
                 builder: (context, data, _) {
                   return Column(
@@ -60,20 +67,26 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                             children: [
                               Text(
                                 L10n.of(context, 'stats_total_speed'),
-                                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: secClr,
-                                  fontSize: 10,
-                                  letterSpacing: 1.0,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: secClr,
+                                      fontSize: 10,
+                                      letterSpacing: 1.0,
+                                    ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 data.speed,
-                                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                                  fontSize: 24,
-                                  color: blueClr,
-                                  letterSpacing: -0.5,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .displayMedium
+                                    ?.copyWith(
+                                      fontSize: 24,
+                                      color: blueClr,
+                                      letterSpacing: -0.5,
+                                    ),
                               ),
                             ],
                           ),
@@ -86,22 +99,30 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(14),
                                 onTap: () {
-                                  triggerHaptic(context.read<SettingsProvider>());
-                                  context.read<DownloadProvider>().toggleStartStopAll();
+                                  triggerHaptic(
+                                      context.read<SettingsProvider>());
+                                  context
+                                      .read<DownloadProvider>()
+                                      .toggleStartStopAll();
                                 },
                                 child: Container(
                                   width: 40,
                                   height: 40,
                                   decoration: BoxDecoration(
-                                    color: (data.hasActive ? redClr : greenClr).withValues(alpha: 0.08),
+                                    color: (data.hasActive ? redClr : greenClr)
+                                        .withValues(alpha: 0.08),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: (data.hasActive ? redClr : greenClr).withValues(alpha: 0.15),
+                                      color:
+                                          (data.hasActive ? redClr : greenClr)
+                                              .withValues(alpha: 0.15),
                                       width: 0.8,
                                     ),
                                   ),
                                   child: Icon(
-                                    data.hasActive ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                    data.hasActive
+                                        ? Icons.pause_rounded
+                                        : Icons.play_arrow_rounded,
                                     color: data.hasActive ? redClr : greenClr,
                                     size: 20,
                                   ),
@@ -117,15 +138,41 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_active_short'), value: '${data.active}', color: blueClr, isDark: isDark)),
+                          Expanded(
+                              child: _buildStatItem(context,
+                                  title: L10n.of(context, 'stats_active_short'),
+                                  value: '${data.active}',
+                                  color: blueClr,
+                                  isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_queued_short'), value: '${data.queued}', color: violetClr, isDark: isDark)),
+                          Expanded(
+                              child: _buildStatItem(context,
+                                  title: L10n.of(context, 'stats_queued_short'),
+                                  value: '${data.queued}',
+                                  color: violetClr,
+                                  isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_completed_short'), value: '${data.completed}', color: greenClr, isDark: isDark)),
+                          Expanded(
+                              child: _buildStatItem(context,
+                                  title:
+                                      L10n.of(context, 'stats_completed_short'),
+                                  value: '${data.completed}',
+                                  color: greenClr,
+                                  isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_paused_short'), value: '${data.paused}', color: amberClr, isDark: isDark)),
+                          Expanded(
+                              child: _buildStatItem(context,
+                                  title: L10n.of(context, 'stats_paused_short'),
+                                  value: '${data.paused}',
+                                  color: amberClr,
+                                  isDark: isDark)),
                           _buildDivider(isDark),
-                          Expanded(child: _buildStatItem(context, title: L10n.of(context, 'stats_failed_short'), value: '${data.failed}', color: redClr, isDark: isDark)),
+                          Expanded(
+                              child: _buildStatItem(context,
+                                  title: L10n.of(context, 'stats_failed_short'),
+                                  value: '${data.failed}',
+                                  color: redClr,
+                                  isDark: isDark)),
                         ],
                       ),
                     ],
@@ -162,10 +209,12 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
         Text(
           title,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-            fontSize: 8,
-            letterSpacing: 0.5,
-          ),
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
+                fontSize: 8,
+                letterSpacing: 0.5,
+              ),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
@@ -173,9 +222,9 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
         Text(
           value,
           style: Theme.of(context).textTheme.displayLarge?.copyWith(
-            fontSize: 16,
-            color: color,
-          ),
+                fontSize: 16,
+                color: color,
+              ),
         ),
       ],
     );
@@ -215,5 +264,6 @@ class _StatsData {
           hasActive == other.hasActive;
 
   @override
-  int get hashCode => Object.hash(speed, active, queued, completed, failed, paused, hasActive);
+  int get hashCode =>
+      Object.hash(speed, active, queued, completed, failed, paused, hasActive);
 }

@@ -127,10 +127,8 @@ class NotificationService {
   Future<bool> requestNotificationPermission() async {
     if (!isSupported) return true;
     try {
-      final androidPlugin = _plugin
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >();
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
       if (androidPlugin != null) {
         final granted = await androidPlugin.requestNotificationsPermission();
         return granted ?? false;
@@ -263,10 +261,8 @@ class NotificationService {
             _onBackgroundNotificationResponse,
       );
 
-      final androidPlugin = _plugin
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >();
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
       if (androidPlugin != null) {
         if (requestPermission) {
           await androidPlugin.requestNotificationsPermission();
@@ -440,12 +436,10 @@ class NotificationService {
     List<AndroidNotificationAction>? actions,
   }) async {
     if (!_initialized) return;
-    final channelId = playSound
-        ? 'dmx_download_alerts_sound'
-        : _downloadChannelId;
-    final channelName = playSound
-        ? 'Download Alerts (Sound)'
-        : _downloadChannelName;
+    final channelId =
+        playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
+    final channelName =
+        playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,
@@ -481,12 +475,10 @@ class NotificationService {
     bool playSound = true,
   }) async {
     if (!_initialized) return;
-    final channelId = playSound
-        ? 'dmx_download_alerts_sound'
-        : _downloadChannelId;
-    final channelName = playSound
-        ? 'Download Alerts (Sound)'
-        : _downloadChannelName;
+    final channelId =
+        playSound ? 'dmx_download_alerts_sound' : _downloadChannelId;
+    final channelName =
+        playSound ? 'Download Alerts (Sound)' : _downloadChannelName;
     final androidDetails = AndroidNotificationDetails(
       channelId,
       channelName,

@@ -61,10 +61,11 @@ class ConnectionManager {
       return ProtocolSupport.http2;
     }
 
-    final client = dio ?? Dio(BaseOptions(
-      receiveTimeout: const Duration(seconds: 5),
-      connectTimeout: const Duration(seconds: 5),
-    ));
+    final client = dio ??
+        Dio(BaseOptions(
+          receiveTimeout: const Duration(seconds: 5),
+          connectTimeout: const Duration(seconds: 5),
+        ));
 
     try {
       final resp = await client.head(
@@ -88,7 +89,8 @@ class ConnectionManager {
       await ProtocolCache.record(url, support);
       return support;
     } catch (e, st) {
-      Logger('connection_manager').warning('[connection_manager] operation failed', e, st);
+      Logger('connection_manager')
+          .warning('[connection_manager] operation failed', e, st);
       return ProtocolSupport.http11;
     }
   }
@@ -123,7 +125,8 @@ class ConnectionManager {
         ),
       );
     } catch (e, st) {
-      Logger('connection_manager').warning('[connection_manager] operation failed', e, st);
+      Logger('connection_manager')
+          .warning('[connection_manager] operation failed', e, st);
     } finally {
       dio.close();
     }
@@ -153,7 +156,8 @@ class ConnectionManager {
       secureSocket = null;
       return proto == 'h2';
     } catch (e, st) {
-      Logger('connection_manager').warning('[connection_manager] operation failed', e, st);
+      Logger('connection_manager')
+          .warning('[connection_manager] operation failed', e, st);
       return false;
     } finally {
       secureSocket?.destroy();

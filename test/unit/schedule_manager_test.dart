@@ -80,8 +80,8 @@ void main() {
     group('checkScheduledDownloads', () {
       test('promotes past-due scheduled task to queued', () async {
         final pastTime = DateTime.now().toUtc().subtract(
-          const Duration(minutes: 5),
-        );
+              const Duration(minutes: 5),
+            );
         tasks.add(_task('s1', DownloadStatus.paused, scheduledAt: pastTime));
 
         await manager.checkScheduledDownloads();
@@ -108,8 +108,8 @@ void main() {
 
       test('does not promote user-paused scheduled task', () async {
         final pastTime = DateTime.now().toUtc().subtract(
-          const Duration(minutes: 5),
-        );
+              const Duration(minutes: 5),
+            );
         tasks.add(
           _task(
             's3',
@@ -128,8 +128,8 @@ void main() {
 
       test('does not promote non-paused task', () async {
         final pastTime = DateTime.now().toUtc().subtract(
-          const Duration(minutes: 5),
-        );
+              const Duration(minutes: 5),
+            );
         tasks.add(_task('s4', DownloadStatus.queued, scheduledAt: pastTime));
 
         await manager.checkScheduledDownloads();
@@ -142,11 +142,11 @@ void main() {
 
       test('promotes multiple past-due tasks concurrently', () async {
         final past1 = DateTime.now().toUtc().subtract(
-          const Duration(minutes: 10),
-        );
+              const Duration(minutes: 10),
+            );
         final past2 = DateTime.now().toUtc().subtract(
-          const Duration(minutes: 5),
-        );
+              const Duration(minutes: 5),
+            );
         tasks.add(_task('s5', DownloadStatus.paused, scheduledAt: past1));
         tasks.add(_task('s6', DownloadStatus.paused, scheduledAt: past2));
 
@@ -163,8 +163,8 @@ void main() {
         () async {
           // Schedule 1 minute in the past UTC.
           final pastUtc = DateTime.now().toUtc().subtract(
-            const Duration(minutes: 1),
-          );
+                const Duration(minutes: 1),
+              );
           tasks.add(_task('s7', DownloadStatus.paused, scheduledAt: pastUtc));
 
           await manager.checkScheduledDownloads();
@@ -183,8 +183,8 @@ void main() {
 
       test('clears error and scheduledAt on promoted task', () async {
         final pastTime = DateTime.now().toUtc().subtract(
-          const Duration(minutes: 5),
-        );
+              const Duration(minutes: 5),
+            );
         final task = _task(
           's8',
           DownloadStatus.paused,

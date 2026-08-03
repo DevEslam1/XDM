@@ -76,7 +76,8 @@ class PowerMonitor {
     _thermalTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       try {
         if (Platform.isAndroid) {
-          final status = await _channel.invokeMethod<String>('getThermalStatus');
+          final status =
+              await _channel.invokeMethod<String>('getThermalStatus');
           if (status != null) {
             _thermal = ThermalStatus.values.firstWhere(
               (t) => t.name == status,

@@ -90,7 +90,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           final isDark = settings.isDarkMode;
           ThemedSnackbar.show(
             context,
-            message: '${L10n.of(context, 'new_update_available')}${update.latestVersion}',
+            message:
+                '${L10n.of(context, 'new_update_available')}${update.latestVersion}',
             color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
             icon: Icons.system_update_rounded,
             isDarkMode: isDark,
@@ -208,14 +209,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               currentIndex: currentIndex,
             )
           : screenType == ScreenType.tablet
-          ? _TabletFloatingNavBar(
-              settings: settings,
-              downloadProvider: downloadProvider,
-              isDark: isDark,
-              isRtl: isRtl,
-              currentIndex: currentIndex,
-            )
-          : null,
+              ? _TabletFloatingNavBar(
+                  settings: settings,
+                  downloadProvider: downloadProvider,
+                  isDark: isDark,
+                  isRtl: isRtl,
+                  currentIndex: currentIndex,
+                )
+              : null,
     );
   }
 }
@@ -296,15 +297,16 @@ class _PhoneBottomNavBar extends StatelessWidget {
               color: settings.classicUi
                   ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
                   : (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                        .withValues(alpha: 0.7),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                      .withValues(alpha: 0.7),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
               border: Border(
                 top: BorderSide(
                   color: settings.classicUi
                       ? (isDark ? AppTheme.border : AppTheme.lightBorder)
                       : (isDark
-                            ? AppTheme.glassBorder
-                            : AppTheme.lightGlassBorder),
+                          ? AppTheme.glassBorder
+                          : AppTheme.lightGlassBorder),
                   width: settings.classicUi ? 1.0 : 0.6,
                 ),
               ),
@@ -491,9 +493,8 @@ class _NavigationRailWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final inactiveColor = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final inactiveColor =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return DmxBackdropFilter(
       sigmaX: 15,
@@ -675,12 +676,10 @@ class _NavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final inactiveColor = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
-    final activeDownloadsCount = index == 0
-        ? downloadProvider.downloadingTasksCount
-        : 0;
+    final inactiveColor =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final activeDownloadsCount =
+        index == 0 ? downloadProvider.downloadingTasksCount : 0;
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? activeIcon : icon;
 
@@ -739,11 +738,10 @@ class _NavItem extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: [
                             BoxShadow(
-                              color:
-                                  (isDark
-                                          ? AppTheme.neonGreen
-                                          : AppTheme.lightNeonGreen)
-                                      .withValues(alpha: 0.4),
+                              color: (isDark
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.lightNeonGreen)
+                                  .withValues(alpha: 0.4),
                               blurRadius: 4,
                             ),
                           ],
@@ -767,11 +765,12 @@ class _NavItem extends StatelessWidget {
                   label,
                   maxLines: 1,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: color,
-                    fontSize: 10.0,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    letterSpacing: 0.3,
-                  ),
+                        color: color,
+                        fontSize: 10.0,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w500,
+                        letterSpacing: 0.3,
+                      ),
                 ),
               ),
             ],

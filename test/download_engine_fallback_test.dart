@@ -53,13 +53,14 @@ void main() {
     expect(localFile.existsSync(), isTrue);
     expect(localFile.lengthSync(), 100);
     expect(progress.last.downloadedBytes, 100);
-    
+
     await server.close();
     if (tempFile.existsSync()) tempFile.deleteSync();
     if (localFile.existsSync()) localFile.deleteSync();
   });
 
-  test('DownloadEngine throws badResponse exception on non-2xx status code', () async {
+  test('DownloadEngine throws badResponse exception on non-2xx status code',
+      () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final port = server.port;
     final url = 'http://localhost:$port/errorfile.bin';

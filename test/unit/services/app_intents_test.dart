@@ -17,7 +17,8 @@ void main() {
 
     test('handles dmx://share?url= deep link', () async {
       final uri = Uri.parse('dmx://share?url=https://example.com/file.zip');
-      await ShareUrlHandler.handleDeepLink(uri, onUrl: (url) => receivedUrl = url);
+      await ShareUrlHandler.handleDeepLink(uri,
+          onUrl: (url) => receivedUrl = url);
 
       expect(receivedUrl, equals('https://example.com/file.zip'));
     });
@@ -38,14 +39,16 @@ void main() {
 
     test('ignores non-dmx schemes', () async {
       final uri = Uri.parse('https://example.com');
-      await ShareUrlHandler.handleDeepLink(uri, onUrl: (url) => receivedUrl = url);
+      await ShareUrlHandler.handleDeepLink(uri,
+          onUrl: (url) => receivedUrl = url);
 
       expect(receivedUrl, isNull);
     });
 
     test('ignores unknown dmx hosts', () async {
       final uri = Uri.parse('dmx://unknown-action');
-      await ShareUrlHandler.handleDeepLink(uri, onUrl: (url) => receivedUrl = url);
+      await ShareUrlHandler.handleDeepLink(uri,
+          onUrl: (url) => receivedUrl = url);
 
       expect(receivedUrl, isNull);
       expect(pauseAllCalled, isFalse);
@@ -55,7 +58,8 @@ void main() {
       final uri = Uri.parse(
         'dmx://share?url=magnet%3A%3Fxt%3Durn%3Abtih%3Ac12fe1c06bba254a9dc9f519b335aa7c1367a88a',
       );
-      await ShareUrlHandler.handleDeepLink(uri, onUrl: (url) => receivedUrl = url);
+      await ShareUrlHandler.handleDeepLink(uri,
+          onUrl: (url) => receivedUrl = url);
 
       expect(receivedUrl, contains('magnet:'));
     });

@@ -65,7 +65,8 @@ class SiteSettingsStore {
       final map = jsonDecode(raw) as Map<String, dynamic>;
       _cache = map.map((k, v) => MapEntry(k, SiteSettings.fromJson(v)));
     } catch (e, st) {
-      Logger('site_settings_store').warning('[site_settings_store] operation failed', e, st);
+      Logger('site_settings_store')
+          .warning('[site_settings_store] operation failed', e, st);
       _cache = {};
     }
     return _cache!;

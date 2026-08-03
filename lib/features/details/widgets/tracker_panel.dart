@@ -53,7 +53,8 @@ class _TrackerPanelState extends State<TrackerPanel> {
               Navigator.pop(ctx);
               if (!added && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invalid or duplicate tracker URL')),
+                  const SnackBar(
+                      content: Text('Invalid or duplicate tracker URL')),
                 );
               }
             },

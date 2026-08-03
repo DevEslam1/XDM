@@ -22,12 +22,12 @@ class NetworkMonitor {
     required bool Function() wifiOnly,
     required Future<void> Function(DownloadTask updated) setTask,
     required void Function() pumpQueue,
-  }) : _tasks = tasks,
-       _torrentIds = torrentIds,
-       _cancelTokens = cancelTokens,
-       _wifiOnly = wifiOnly,
-       _setTask = setTask,
-       _pumpQueue = pumpQueue;
+  })  : _tasks = tasks,
+        _torrentIds = torrentIds,
+        _cancelTokens = cancelTokens,
+        _wifiOnly = wifiOnly,
+        _setTask = setTask,
+        _pumpQueue = pumpQueue;
 
   final List<DownloadTask> Function() _tasks;
   final Map<String, int> Function() _torrentIds;
@@ -87,7 +87,7 @@ class NetworkMonitor {
     try {
       final hasNoNetwork =
           _currentConnectivity.contains(ConnectivityResult.none) ||
-          _currentConnectivity.isEmpty;
+              _currentConnectivity.isEmpty;
 
       if (hasNoNetwork) {
         await _pauseForNetworkDisconnect();
@@ -101,8 +101,7 @@ class NetworkMonitor {
         return;
       }
 
-      final hasWifi =
-          _currentConnectivity.contains(ConnectivityResult.wifi) ||
+      final hasWifi = _currentConnectivity.contains(ConnectivityResult.wifi) ||
           _currentConnectivity.contains(ConnectivityResult.ethernet);
 
       if (!hasWifi) {
@@ -116,7 +115,8 @@ class NetworkMonitor {
         _networkRecheckPending = false;
         // FIX(C-H4): Break potential synchronous recursion from rapid
         // platform connectivity events by deferring to a microtask.
-        unawaited(Future.microtask(() => checkNetworkConnectivity(skipPump: skipPump)));
+        unawaited(Future.microtask(
+            () => checkNetworkConnectivity(skipPump: skipPump)));
       }
     }
   }

@@ -89,7 +89,8 @@ class DatabaseService {
         await _db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
         swCheckpoint.stop();
         if (swCheckpoint.elapsedMilliseconds > 500) {
-          _log.info('wal_checkpoint(TRUNCATE) took ${swCheckpoint.elapsedMilliseconds}ms');
+          _log.info(
+              'wal_checkpoint(TRUNCATE) took ${swCheckpoint.elapsedMilliseconds}ms');
         }
       } catch (e) {
         _log.warning('wal_checkpoint(TRUNCATE) failed', e);
@@ -98,9 +99,11 @@ class DatabaseService {
       _maintenanceRuns++;
       if (_maintenanceRuns % 12 == 0) {
         try {
-          final activeCountResult = await _db.customSelect(
-            "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'",
-          ).get();
+          final activeCountResult = await _db
+              .customSelect(
+                "SELECT COUNT(*) as cnt FROM download_tasks WHERE status = 'downloading'",
+              )
+              .get();
           final activeCount = activeCountResult.first.read<int>('cnt');
           if (activeCount > 0) {
             _log.info(
@@ -384,8 +387,7 @@ class DatabaseService {
             BrowserHistoryCompanion.insert(
               url: val['url'] as String? ?? '',
               title: val['title'] as String? ?? val['url'] as String? ?? '',
-              visitedAt:
-                  (val['visitedAt'] as num?)?.toInt() ??
+              visitedAt: (val['visitedAt'] as num?)?.toInt() ??
                   DateTime.now().millisecondsSinceEpoch,
             ),
           );
@@ -442,9 +444,8 @@ class DatabaseService {
       }
       final backupPath = p.join(backupDir.path, '${boxName}_backup.hive');
       // Hive Box.path is String?
-      final String? boxPath = box is Box
-          ? box.path
-          : (box as dynamic).path as String?;
+      final String? boxPath =
+          box is Box ? box.path : (box as dynamic).path as String?;
       if (boxPath != null) {
         final srcDir = Directory(boxPath);
         if (await srcDir.exists()) {
@@ -621,9 +622,8 @@ class DatabaseService {
       youtubeQualityPreset: row.youtubeQualityPreset,
       notes: row.notes,
       playlistId: row.playlistId?.isNotEmpty == true ? row.playlistId : null,
-      playlistTitle: row.playlistTitle?.isNotEmpty == true
-          ? row.playlistTitle
-          : null,
+      playlistTitle:
+          row.playlistTitle?.isNotEmpty == true ? row.playlistTitle : null,
       thumbnailUrl: row.thumbnailUrl,
       isAppUpdate: row.isAppUpdate,
       priority: row.priority,
@@ -635,7 +635,8 @@ class DatabaseService {
   Future<List<DownloadTask>> loadTasks() async {
     final rows = await (_db.select(
       _db.downloadTasks,
-    )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])).get();
+    )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
+        .get();
     return rows.map(_rowToTask).toList();
   }
 
@@ -699,14 +700,13 @@ class DatabaseService {
   Future<List<Bookmark>> loadBookmarks() async {
     final rows = await (_db.select(
       _db.bookmarks,
-    )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)])).get();
+    )..orderBy([(t) => drift.OrderingTerm.desc(t.createdAt)]))
+        .get();
     return rows.map(_rowToBookmark).toList();
   }
 
   Future<void> saveBookmark(Bookmark bookmark) {
-    return _db
-        .into(_db.bookmarks)
-        .insert(
+    return _db.into(_db.bookmarks).insert(
           _bookmarkToCompanion(bookmark),
           mode: drift.InsertMode.insertOrReplace,
         );
@@ -721,11 +721,10 @@ class DatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> loadBrowserHistory({int max = 200}) async {
-    final rows =
-        await (_db.select(_db.browserHistory)
-              ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
-              ..limit(max))
-            .get();
+    final rows = await (_db.select(_db.browserHistory)
+          ..orderBy([(t) => drift.OrderingTerm.desc(t.visitedAt)])
+          ..limit(max))
+        .get();
 
     return rows
         .map(
@@ -742,14 +741,11 @@ class DatabaseService {
   Future<int> addBrowserHistory(Map<String, dynamic> entry) async {
     final url = entry['url'] as String? ?? '';
     if (url.isEmpty || url == 'about:blank') return 0;
-    final visitedAt =
-        (entry['visitedAt'] as num?)?.toInt() ??
+    final visitedAt = (entry['visitedAt'] as num?)?.toInt() ??
         DateTime.now().millisecondsSinceEpoch;
     final title = entry['title'] as String? ?? url;
 
-    final id = await _db
-        .into(_db.browserHistory)
-        .insert(
+    final id = await _db.into(_db.browserHistory).insert(
           BrowserHistoryCompanion.insert(
             url: url,
             title: title,
@@ -800,7 +796,8 @@ class DatabaseService {
   Future<List<SavedBrowserTab>> loadOpenTabs() {
     return (_db.select(
       _db.browserTabs,
-    )..orderBy([(t) => drift.OrderingTerm.asc(t.position)])).get();
+    )..orderBy([(t) => drift.OrderingTerm.asc(t.position)]))
+        .get();
   }
 
   Future<void> clearOpenTabs() => _db.delete(_db.browserTabs).go();

@@ -19,7 +19,8 @@ abstract class CrashReporter {
   Future<void> recordError(Object error, StackTrace stackTrace, {String? hint});
   Future<void> recordLog(pkg_logging.Level level, String message);
   Future<void> setContext(String key, Map<String, dynamic> value);
-  Future<void> addBreadcrumb(String message, {String? category, Map<String, dynamic>? data});
+  Future<void> addBreadcrumb(String message,
+      {String? category, Map<String, dynamic>? data});
 }
 
 /// No-op crash reporter used when no DSN is configured.
@@ -41,7 +42,8 @@ class NoOpCrashReporter extends CrashReporter {
   Future<void> setContext(String key, Map<String, dynamic> value) async {}
 
   @override
-  Future<void> addBreadcrumb(String message, {String? category, Map<String, dynamic>? data}) async {}
+  Future<void> addBreadcrumb(String message,
+      {String? category, Map<String, dynamic>? data}) async {}
 }
 
 class CrashReportingService {
@@ -66,12 +68,10 @@ class CrashReportingService {
     await SentryFlutter.init((options) {
       options.dsn = effectiveDsn;
       options.tracesSampleRate = 0.1;
-      options.environment =
-          kDebugMode ? 'dev' : 'production';
+      options.environment = kDebugMode ? 'dev' : 'production';
       options.beforeSend = (event, hint) {
         // Redact URLs that carry auth tokens (e.g. signed download URLs).
-        if (event.request?.url != null &&
-            event.request!.url!.contains('?')) {
+        if (event.request?.url != null && event.request!.url!.contains('?')) {
           final uri = Uri.tryParse(event.request!.url!);
           if (uri != null) {
             final redacted = uri.replace(queryParameters: {
@@ -99,28 +99,26 @@ class CrashReportingService {
     _reporter = SentryCrashReporter();
   }
 
-  static final RegExp _sensitiveUrlPattern =
-      RegExp(r'''(https?://[^\s"'<]+)(?<params>[?&][^\s"'<]*)''', caseSensitive: false);
+  static final RegExp _sensitiveUrlPattern = RegExp(
+      r'''(https?://[^\s"'<]+)(?<params>[?&][^\s"'<]*)''',
+      caseSensitive: false);
 
   static String _redactSensitive(String input) {
     return input.replaceAllMapped(_sensitiveUrlPattern, (match) {
       final query = match.group(2) ?? '';
       if (query.isEmpty) return match.group(0)!;
-      final sanitized = query
-          .split('&')
-          .map((part) {
-            final idx = part.indexOf('=');
-            if (idx <= 0) return part;
-            final name = part.substring(0, idx).toLowerCase();
-            return (name.contains('token') ||
-                    name.contains('key') ||
-                    name.contains('auth') ||
-                    name.contains('sig') ||
-                    name.contains('secret'))
-                ? '${part.substring(0, idx)}=***'
-                : part;
-          })
-          .join('&');
+      final sanitized = query.split('&').map((part) {
+        final idx = part.indexOf('=');
+        if (idx <= 0) return part;
+        final name = part.substring(0, idx).toLowerCase();
+        return (name.contains('token') ||
+                name.contains('key') ||
+                name.contains('auth') ||
+                name.contains('sig') ||
+                name.contains('secret'))
+            ? '${part.substring(0, idx)}=***'
+            : part;
+      }).join('&');
       return '${match.group(1)}$sanitized';
     });
   }
@@ -163,7 +161,10 @@ class CrashReportingService {
           details.exception,
           details.stack ?? StackTrace.current,
           hint: details.library,
-        ).catchError((e, st) { pkg_logging.Logger('crash_reporting_service').warning('[crash_reporting_service] operation failed', e, st); }),
+        ).catchError((e, st) {
+          pkg_logging.Logger('crash_reporting_service')
+              .warning('[crash_reporting_service] operation failed', e, st);
+        }),
       );
     };
   }
@@ -181,7 +182,10 @@ class CrashReportingService {
             error,
             stack,
             hint: 'Unhandled zone error',
-          ).catchError((e, st) { pkg_logging.Logger('crash_reporting_service').warning('[crash_reporting_service] operation failed', e, st); }),
+          ).catchError((e, st) {
+            pkg_logging.Logger('crash_reporting_service')
+                .warning('[crash_reporting_service] operation failed', e, st);
+          }),
         );
       },
     );

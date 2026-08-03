@@ -66,41 +66,35 @@ mixin DownloadFilterMixin {
   String get currentDownloadSpeedFormatted =>
       '${formatBytes(currentDownloadSpeed)}/s';
 
-  int get downloadingTasksCount =>
-      providerTasks
-          .where((task) => task.status == DownloadStatus.downloading)
-          .length;
+  int get downloadingTasksCount => providerTasks
+      .where((task) => task.status == DownloadStatus.downloading)
+      .length;
 
   /// Number of active downloads including seeding torrents.
   /// Used for background service and widget lifetime.
-  int get activeOrSeedingCount =>
-      providerTasks
-          .where((task) =>
-              task.status == DownloadStatus.downloading ||
-              (task.status == DownloadStatus.completed &&
-                  task.isTorrent &&
-                  task.seedingEnabled))
-          .length;
+  int get activeOrSeedingCount => providerTasks
+      .where((task) =>
+          task.status == DownloadStatus.downloading ||
+          (task.status == DownloadStatus.completed &&
+              task.isTorrent &&
+              task.seedingEnabled))
+      .length;
 
-  int get queuedTasksCount =>
-      providerTasks
-          .where((task) => task.status == DownloadStatus.queued)
-          .length;
+  int get queuedTasksCount => providerTasks
+      .where((task) => task.status == DownloadStatus.queued)
+      .length;
 
-  int get completedTasksCount =>
-      providerTasks
-          .where((task) => task.status == DownloadStatus.completed)
-          .length;
+  int get completedTasksCount => providerTasks
+      .where((task) => task.status == DownloadStatus.completed)
+      .length;
 
-  int get failedTasksCount =>
-      providerTasks
-          .where((task) => task.status == DownloadStatus.failed)
-          .length;
+  int get failedTasksCount => providerTasks
+      .where((task) => task.status == DownloadStatus.failed)
+      .length;
 
-  int get pausedTasksCount =>
-      providerTasks
-          .where((task) => task.status == DownloadStatus.paused)
-          .length;
+  int get pausedTasksCount => providerTasks
+      .where((task) => task.status == DownloadStatus.paused)
+      .length;
 
   Map<String, int> get categoryCounts {
     final counts = _emptyCategoryCounts<int>(0);
@@ -139,8 +133,7 @@ mixin DownloadFilterMixin {
     }
     final list = providerTasks.where((task) {
       final queryLower = _searchQuery.toLowerCase();
-      final matchesSearch =
-          task.fileName.toLowerCase().contains(queryLower) ||
+      final matchesSearch = task.fileName.toLowerCase().contains(queryLower) ||
           task.url.toLowerCase().contains(queryLower);
       if (!matchesSearch) return false;
 
@@ -150,18 +143,17 @@ mixin DownloadFilterMixin {
       }
 
       return switch (_statusFilter) {
-        'Downloading' =>
-          task.status == DownloadStatus.downloading ||
-              task.status == DownloadStatus.queued ||
-              (task.status == DownloadStatus.completed &&
-                  task.isTorrent &&
-                  task.seedingEnabled),
-        'Completed' =>
-          task.status == DownloadStatus.completed &&
-              !(task.isTorrent && task.seedingEnabled),
+        'Downloading' => task.status == DownloadStatus.downloading ||
+            task.status == DownloadStatus.queued ||
+            (task.status == DownloadStatus.completed &&
+                task.isTorrent &&
+                task.seedingEnabled),
+        'Completed' => task.status == DownloadStatus.completed &&
+            !(task.isTorrent && task.seedingEnabled),
         'Failed' => task.status == DownloadStatus.failed,
         'Paused' => task.status == DownloadStatus.paused,
-        'Scheduled' => task.status == DownloadStatus.paused && task.scheduledAt != null,
+        'Scheduled' =>
+          task.status == DownloadStatus.paused && task.scheduledAt != null,
         'Torrents' => task.isTorrent,
         _ => true,
       };
@@ -178,8 +170,8 @@ mixin DownloadFilterMixin {
           break;
         case SortOption.fileName:
           comparison = a.fileName.toLowerCase().compareTo(
-            b.fileName.toLowerCase(),
-          );
+                b.fileName.toLowerCase(),
+              );
           break;
         case SortOption.status:
           comparison = a.status.name.compareTo(b.status.name);
@@ -280,7 +272,12 @@ mixin DownloadFilterMixin {
   // Helpers
   // ---------------------------------------------------------------------------
   static const List<String> _categories = [
-    'Video', 'Audio', 'Document', 'Archive', 'APK', 'Other'
+    'Video',
+    'Audio',
+    'Document',
+    'Archive',
+    'APK',
+    'Other'
   ];
 
   Map<String, T> _emptyCategoryCounts<T>(T value) {

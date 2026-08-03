@@ -66,6 +66,7 @@ class AppTheme {
   /// High-visibility focus ring (keyboard / screen-reader focus).
   static const Color focusRing = Color(0xFF60A5FA);
   static const Color lightFocusRing = Color(0xFF1D4ED8);
+
   /// 3:1+ contrast fill used behind a focused widget in high-contrast mode.
   static const Color focusFill = Color(0x33008FE0);
   static const Color lightFocusFill = Color(0x33008FE0);
@@ -480,9 +481,8 @@ class AppTheme {
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       systemNavigationBarColor: isDark ? background : lightBackground,
-      systemNavigationBarIconBrightness: isDark
-          ? Brightness.light
-          : Brightness.dark,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
     );
   }
 
@@ -721,10 +721,10 @@ class CockpitNotchBorder extends ShapeBorder {
 
   @override
   ShapeBorder scale(double t) => CockpitNotchBorder(
-    radius: radius * t,
-    notch: notch * t,
-    side: side.scale(t),
-  );
+        radius: radius * t,
+        notch: notch * t,
+        side: side.scale(t),
+      );
 
   Path _path(Rect r) {
     final rad = math.min(radius, math.min(r.width, r.height) / 2);

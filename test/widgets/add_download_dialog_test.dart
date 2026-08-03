@@ -22,7 +22,8 @@ void main() {
 
       final textFields = find.byType(TextFormField);
       if (textFields.evaluate().isNotEmpty) {
-        await tester.enterText(textFields.first, 'https://example.com/file.zip');
+        await tester.enterText(
+            textFields.first, 'https://example.com/file.zip');
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.text('https://example.com/file.zip'), findsOneWidget);
       }

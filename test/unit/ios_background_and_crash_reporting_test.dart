@@ -25,16 +25,22 @@ void main() {
       expect(result, isFalse);
     });
 
-    test('pauseNativeDownload and cancelNativeDownload return false when not on iOS', () async {
+    test(
+        'pauseNativeDownload and cancelNativeDownload return false when not on iOS',
+        () async {
       expect(await IosBackgroundService.pauseNativeDownload('t1'), isFalse);
       expect(await IosBackgroundService.cancelNativeDownload('t1'), isFalse);
     });
   });
 
   group('CrashReportingService Enriched API', () {
-    test('setContext and addBreadcrumb work without error on default NoOpReporter', () async {
-      await CrashReportingService.setContext('task_info', {'id': '123', 'status': 'downloading'});
-      await CrashReportingService.addBreadcrumb('Downloading chunk 1', category: 'engine');
+    test(
+        'setContext and addBreadcrumb work without error on default NoOpReporter',
+        () async {
+      await CrashReportingService.setContext(
+          'task_info', {'id': '123', 'status': 'downloading'});
+      await CrashReportingService.addBreadcrumb('Downloading chunk 1',
+          category: 'engine');
       expect(CrashReportingService.reporter, isA<NoOpCrashReporter>());
     });
   });

@@ -47,7 +47,8 @@ Future<void> showUpdateInfoDialog(
                 isRtl
                     ? 'تحديث جديد متوفر v${update.latestVersion}'
                     : 'New Update Available v${update.latestVersion}',
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -61,7 +62,9 @@ Future<void> showUpdateInfoDialog(
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                color: isDark
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary,
               ),
             ),
             const SizedBox(height: 6),
@@ -91,10 +94,12 @@ Future<void> showUpdateInfoDialog(
             ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+              backgroundColor:
+                  isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
               foregroundColor: Colors.black,
             ),
-            icon: Icon(isDownloaded ? Icons.install_mobile : Icons.download_rounded),
+            icon: Icon(
+                isDownloaded ? Icons.install_mobile : Icons.download_rounded),
             label: Text(
               isDownloaded
                   ? L10n.of(dialogCtx, 'btn_install_now')
@@ -135,7 +140,8 @@ Future<void> showMandatoryUpdateDialog(
             ElevatedButton(
               onPressed: () async {
                 final updatesDir = await UpdateService().getUpdatesDirectory();
-                final fileName = 'XDM_${update.latestVersion}_v${update.versionCode}.apk';
+                final fileName =
+                    'XDM_${update.latestVersion}_v${update.versionCode}.apk';
                 final apkFile = File('${updatesDir.path}/$fileName');
                 if (await apkFile.exists()) {
                   await OpenFilex.open(apkFile.path);

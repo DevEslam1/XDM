@@ -6,7 +6,8 @@ import '../helpers/test_helpers.dart';
 
 void main() {
   group('Accessibility & Semantics', () {
-    testWidgets('DownloadCard provides accessible semantic label', (tester) async {
+    testWidgets('DownloadCard provides accessible semantic label',
+        (tester) async {
       final task = createTestTask(
         fileName: 'accessibility-test.iso',
         progress: 0.75,
@@ -22,7 +23,9 @@ void main() {
       expect(semantics.label, contains('75% downloaded'));
     });
 
-    testWidgets('HomeScreen renders with zero semantic accessibility violations', (tester) async {
+    testWidgets(
+        'HomeScreen renders with zero semantic accessibility violations',
+        (tester) async {
       final provider = createMockDownloadProvider(tasks: []);
 
       await tester.pumpWidget(createTestApp(
@@ -34,7 +37,8 @@ void main() {
       expect(find.byType(HomeScreen), findsOneWidget);
     });
 
-    testWidgets('SettingsScreen renders accessibility settings section', (tester) async {
+    testWidgets('SettingsScreen renders accessibility settings section',
+        (tester) async {
       await tester.pumpWidget(createTestApp(
         child: const SettingsScreen(),
       ));

@@ -93,9 +93,8 @@ class ChecksumService {
           if (!_isHex(partValue)) {
             try {
               final bytes = base64Decode(partValue);
-              hexValue = bytes
-                  .map((b) => b.toRadixString(16).padLeft(2, '0'))
-                  .join();
+              hexValue =
+                  bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
             } catch (e, st) {
               _log.warning('[checksum_service] operation failed', e, st);
             }

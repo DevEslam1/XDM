@@ -164,9 +164,8 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
     final isRtl = L10n.isRtl(context);
     final accent = _accentColor(isDark);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return Directionality(
@@ -309,11 +308,10 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
                         width: double.infinity,
                         padding: const EdgeInsets.all(13),
                         decoration: BoxDecoration(
-                          color:
-                              (isDark
-                                      ? AppTheme.background
-                                      : AppTheme.lightBackground)
-                                  .withValues(alpha: 0.6),
+                          color: (isDark
+                                  ? AppTheme.background
+                                  : AppTheme.lightBackground)
+                              .withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -426,9 +424,8 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
       final targetType = source?.type ?? widget.type;
 
       // 1. Deduplicate by URL
-      final existing = downloadProvider.tasks
-          .where((t) => t.url == targetUrl)
-          .toList();
+      final existing =
+          downloadProvider.tasks.where((t) => t.url == targetUrl).toList();
       if (existing.isNotEmpty) {
         final task = existing.first;
         if (task.status == DownloadStatus.completed) {
@@ -456,9 +453,7 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
           downloadProvider.resumeTask(task.id);
           ThemedSnackbar.show(
             context,
-            message: isRtl
-                ? 'تم استئناف التنزيل'
-                : 'Download resumed.',
+            message: isRtl ? 'تم استئناف التنزيل' : 'Download resumed.',
             color: AppTheme.neonBlue,
             icon: Icons.play_arrow,
             isDarkMode: isDark,
@@ -481,7 +476,8 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
       final ext = p.extension(finalFileName);
       final base = p.basenameWithoutExtension(finalFileName);
       var counter = 1;
-      final existingNames = downloadProvider.tasks.map((t) => t.fileName.toLowerCase()).toSet();
+      final existingNames =
+          downloadProvider.tasks.map((t) => t.fileName.toLowerCase()).toSet();
       while (existingNames.contains(numbered.toLowerCase())) {
         numbered = '${base}_$counter$ext';
         counter++;
@@ -535,7 +531,9 @@ class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
         ThemedSnackbar.show(
           context,
           message: e.toString(),
-          color: settingsProvider.isDarkMode ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          color: settingsProvider.isDarkMode
+              ? AppTheme.neonRed
+              : AppTheme.lightNeonRed,
           icon: Icons.error_outline,
           isDarkMode: settingsProvider.isDarkMode,
         );
@@ -697,9 +695,8 @@ class _SourceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textPrimary = isDark
-        ? AppTheme.textPrimary
-        : AppTheme.lightTextPrimary;
+    final textPrimary =
+        isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
@@ -716,9 +713,8 @@ class _SourceTile extends StatelessWidget {
                   .withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isDark
-                    ? AppTheme.glassBorder
-                    : AppTheme.lightGlassBorder,
+                color:
+                    isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
                 width: 0.6,
               ),
             ),

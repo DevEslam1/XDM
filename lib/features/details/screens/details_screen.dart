@@ -64,15 +64,15 @@ class _DetailsScreenState extends State<DetailsScreen>
       child: SlideTransition(
         position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
             .animate(
-              CurvedAnimation(
-                parent: _reveal,
-                curve: Interval(
-                  start,
-                  (start + 0.5).clamp(0.0, 1.0),
-                  curve: AppTheme.motionCurve,
-                ),
-              ),
+          CurvedAnimation(
+            parent: _reveal,
+            curve: Interval(
+              start,
+              (start + 0.5).clamp(0.0, 1.0),
+              curve: AppTheme.motionCurve,
             ),
+          ),
+        ),
         child: child,
       ),
     );
@@ -101,10 +101,10 @@ class _DetailsScreenState extends State<DetailsScreen>
           title: Text(
             L10n.of(context, 'details_title'),
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-              fontSize: 16,
-            ),
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                  fontSize: 16,
+                ),
           ),
           leading: IconButton(
             icon: Icon(
@@ -134,8 +134,7 @@ class _DetailsScreenState extends State<DetailsScreen>
               );
             }
             final task = provider.tasks[taskIndex];
-            final isSeeding =
-                task.status == DownloadStatus.completed &&
+            final isSeeding = task.status == DownloadStatus.completed &&
                 task.isTorrent &&
                 task.seedingEnabled;
             final isDownloadingTorrent =
@@ -160,24 +159,20 @@ class _DetailsScreenState extends State<DetailsScreen>
             Color statusColor;
             switch (task.status) {
               case DownloadStatus.queued:
-                statusColor = isDark
-                    ? AppTheme.neonViolet
-                    : AppTheme.lightNeonViolet;
+                statusColor =
+                    isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
                 break;
               case DownloadStatus.downloading:
-                statusColor = isDark
-                    ? AppTheme.neonBlue
-                    : AppTheme.lightNeonBlue;
+                statusColor =
+                    isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
                 break;
               case DownloadStatus.paused:
-                statusColor = isDark
-                    ? AppTheme.neonAmber
-                    : AppTheme.lightNeonAmber;
+                statusColor =
+                    isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
                 break;
               case DownloadStatus.completed:
-                statusColor = isDark
-                    ? AppTheme.neonGreen
-                    : AppTheme.lightNeonGreen;
+                statusColor =
+                    isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
                 break;
               case DownloadStatus.failed:
                 statusColor = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
@@ -200,20 +195,21 @@ class _DetailsScreenState extends State<DetailsScreen>
                         0.0,
                         Hero(
                           tag: 'download_card_${widget.taskId}',
-                          createRectTween: (begin, end) => RectTween(begin: begin, end: end),
+                          createRectTween: (begin, end) =>
+                              RectTween(begin: begin, end: end),
                           child: _TelemetryHero(
                             task: task,
                             statusColor: statusColor,
                             speedText: speedTextInsideCircle,
                             etaText:
                                 (task.status == DownloadStatus.downloading ||
-                                    isSeeding)
-                                ? L10n.translateStatus(
-                                    context,
-                                    task.status,
-                                    task.etaFormatted,
-                                  )
-                                : L10n.of(context, 'details_inactive_eta'),
+                                        isSeeding)
+                                    ? L10n.translateStatus(
+                                        context,
+                                        task.status,
+                                        task.etaFormatted,
+                                      )
+                                    : L10n.of(context, 'details_inactive_eta'),
                             pulse: _pulse,
                           ),
                         ),
@@ -792,9 +788,8 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
           content: Text(
             L10n.of(context, 'details_threads_warning_desc'),
             style: TextStyle(
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
+              color:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
               fontSize: 14,
             ),
           ),
@@ -1062,14 +1057,12 @@ class _SpeedGraphPanel extends StatelessWidget {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final speedHistory = provider.getSpeedHistory(task.id);
     final isDownloading = task.status == DownloadStatus.downloading;
-    final isSeeding =
-        task.status == DownloadStatus.completed &&
+    final isSeeding = task.status == DownloadStatus.completed &&
         task.isTorrent &&
         task.seedingEnabled;
     final showUploadSpeed = task.isTorrent && (isDownloading || isSeeding);
-    final uploadSpeed = showUploadSpeed
-        ? provider.getTorrentUploadSpeed(task.id)
-        : 0.0;
+    final uploadSpeed =
+        showUploadSpeed ? provider.getTorrentUploadSpeed(task.id) : 0.0;
 
     final List<FlSpot> spots = List.generate(speedHistory.length, (i) {
       return FlSpot(i.toDouble(), speedHistory[i]);
@@ -1115,11 +1108,11 @@ class _SpeedGraphPanel extends StatelessWidget {
               child: Text(
                 isDownloading
                     ? (L10n.isRtl(context)
-                          ? 'جاري تجميع البيانات...'
-                          : 'AWAITING SPEED DATA...')
+                        ? 'جاري تجميع البيانات...'
+                        : 'AWAITING SPEED DATA...')
                     : (L10n.isRtl(context)
-                          ? 'محرك التنزيل غير نشط'
-                          : 'DOWNLOAD ENGINE INACTIVE'),
+                        ? 'محرك التنزيل غير نشط'
+                        : 'DOWNLOAD ENGINE INACTIVE'),
                 style: AppTheme.microLabel(isDark: isDark, color: mutedClr),
               ),
             )
@@ -1326,9 +1319,8 @@ class _BandwidthPanelState extends State<_BandwidthPanel> with HapticHelper {
           if (task.isTorrent) ...[
             const SizedBox(height: 16),
             Divider(
-              color: isDark
-                  ? AppTheme.borderSubtle
-                  : AppTheme.lightBorderSubtle,
+              color:
+                  isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
               height: 1,
             ),
             const SizedBox(height: 14),
@@ -1504,8 +1496,7 @@ class _TorrentStatsPanel extends StatelessWidget {
     final seeds = provider.getTorrentSeeds(task.id);
     final peers = provider.getTorrentPeers(task.id);
     final isActive = task.status == DownloadStatus.downloading;
-    final isSeeding =
-        task.status == DownloadStatus.completed &&
+    final isSeeding = task.status == DownloadStatus.completed &&
         task.isTorrent &&
         task.seedingEnabled;
     final dlSpeed = task.speed;
@@ -1791,9 +1782,8 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
               ? 'هل تريد حذف "$fileName" من وحدة التخزين وإلغاء تحميلة؟'
               : 'Are you sure you want to delete "$fileName" from storage and stop downloading it?',
           style: TextStyle(
-            color: isDark
-                ? AppTheme.textSecondary
-                : AppTheme.lightTextSecondary,
+            color:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
           ),
         ),
         actions: [
@@ -1990,9 +1980,8 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
               separatorBuilder: (context, index) => Divider(
                 height: 16,
                 thickness: 0.3,
-                color: isDark
-                    ? AppTheme.borderSubtle
-                    : AppTheme.lightBorderSubtle,
+                color:
+                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
               ),
               itemBuilder: (context, index) {
                 final f = files[index];
@@ -2002,18 +1991,19 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                 final estimatedBytes = (f['downloadedBytes'] as int?) ?? 0;
                 final speed = (f['speed'] as num?)?.toDouble() ?? 0.0;
                 final rawResolvedBytes = _resolvedBytes(index, estimatedBytes);
-                final resolvedBytes = isCompleted && selected
-                    ? length
-                    : rawResolvedBytes;
+                final resolvedBytes =
+                    isCompleted && selected ? length : rawResolvedBytes;
                 final diskVerified =
                     _diskBytes.length > index && _diskBytes[index] > 0;
-                final fileProgress = length > 0
-                    ? (resolvedBytes / length).clamp(0.0, 1.0)
-                    : 0.0;
+                final fileProgress =
+                    length > 0 ? (resolvedBytes / length).clamp(0.0, 1.0) : 0.0;
                 final fileComplete = fileProgress >= 1.0;
-                final textClr = isDark
-                    ? AppTheme.textPrimary
-                    : AppTheme.lightTextPrimary;
+                final isEstimated = f['progressEstimated'] == true;
+                final progressText = isEstimated
+                    ? '~${(fileProgress * 100).toStringAsFixed(0)}%'
+                    : '${(fileProgress * 100).toStringAsFixed(1)}%';
+                final textClr =
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
 
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2025,9 +2015,8 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                         value: selected,
                         activeColor: blueClr,
                         side: BorderSide(
-                          color: isDark
-                              ? AppTheme.border
-                              : AppTheme.lightBorder,
+                          color:
+                              isDark ? AppTheme.border : AppTheme.lightBorder,
                           width: 1.0,
                         ),
                         onChanged: (val) {
@@ -2149,8 +2138,8 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                                       fileComplete
                                           ? greenClr
                                           : (isDownloading
-                                                ? blueClr
-                                                : mutedClr),
+                                              ? blueClr
+                                              : mutedClr),
                                     ),
                                   ),
                                 ),
@@ -2191,11 +2180,15 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
                                     ),
                                   ),
                                 Text(
-                                  '${(fileProgress * 100).toStringAsFixed(1)}%',
+                                  progressText,
                                   style: AppTheme.dataStyle(
                                     isDark: isDark,
                                     size: 10,
-                                    color: fileComplete ? greenClr : textClr,
+                                    color: fileComplete
+                                        ? greenClr
+                                        : (isEstimated
+                                            ? textClr.withValues(alpha: 0.6)
+                                            : textClr),
                                   ),
                                 ),
                               ],
@@ -2647,9 +2640,8 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                 controller: textController,
                 maxLines: 3,
                 style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                   fontSize: 12,
                 ),
                 decoration: InputDecoration(
@@ -2730,9 +2722,8 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                       message: isRtl
                           ? 'تم تحديث الرابط بنجاح. يمكنك استئناف التحميل الآن.'
                           : 'Link updated successfully. You can resume download now.',
-                      color: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
+                      color:
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                       icon: Icons.check_circle_outline,
                       isDarkMode: isDark,
                     );
@@ -2830,9 +2821,8 @@ class _MetaRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 _MetaAction(
                   icon: Icons.open_in_new_rounded,
-                  color: isDark
-                      ? AppTheme.neonViolet
-                      : AppTheme.lightNeonViolet,
+                  color:
+                      isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                   onTap: onOpen!,
                 ),
               ],
@@ -2911,19 +2901,18 @@ Future<bool?> _showDeleteConfirmationDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
                 side: BorderSide(
-                  color: isDark
-                      ? AppTheme.glassBorder
-                      : AppTheme.lightGlassBorder,
+                  color:
+                      isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
                   width: 0.8,
                 ),
               ),
               title: Text(
                 L10n.of(context, 'delete_title'),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2934,10 +2923,10 @@ Future<bool?> _showDeleteConfirmationDialog(
                         ? 'هل أنت متأكد من حذف "${task.fileName}" من القائمة؟'
                         : 'Are you sure you want to remove "${task.fileName}" from the list?',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isDark
-                          ? AppTheme.textSecondary
-                          : AppTheme.lightTextSecondary,
-                    ),
+                          color: isDark
+                              ? AppTheme.textSecondary
+                              : AppTheme.lightTextSecondary,
+                        ),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -2947,9 +2936,8 @@ Future<bool?> _showDeleteConfirmationDialog(
                         height: 24,
                         child: Checkbox(
                           value: deleteFiles,
-                          activeColor: isDark
-                              ? AppTheme.neonRed
-                              : AppTheme.lightNeonRed,
+                          activeColor:
+                              isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                           side: BorderSide(
                             color: isDark
                                 ? AppTheme.glassBorder
@@ -2975,13 +2963,13 @@ Future<bool?> _showDeleteConfirmationDialog(
                           },
                           child: Text(
                             L10n.of(context, 'delete_files_label'),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: isDark
-                                      ? AppTheme.textPrimary
-                                      : AppTheme.lightTextPrimary,
-                                  fontSize: 12,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: isDark
+                                          ? AppTheme.textPrimary
+                                          : AppTheme.lightTextPrimary,
+                                      fontSize: 12,
+                                    ),
                           ),
                         ),
                       ),

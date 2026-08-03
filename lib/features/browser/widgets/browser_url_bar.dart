@@ -101,8 +101,8 @@ class BrowserUrlBar extends StatelessWidget {
                         color: isFocused
                             ? accent.withValues(alpha: 0.55)
                             : (isDark
-                                  ? const Color(0x15FFFFFF)
-                                  : const Color(0x0D000000)),
+                                ? const Color(0x15FFFFFF)
+                                : const Color(0x0D000000)),
                         width: isFocused ? 1.4 : 0.8,
                       ),
                       boxShadow: isFocused && isDark && settings.enableGlow
@@ -125,15 +125,15 @@ class BrowserUrlBar extends StatelessWidget {
                             isLoading
                                 ? Icons.autorenew_rounded
                                 : _isSecure
-                                ? Icons.lock_rounded
-                                : Icons.info_outline_rounded,
+                                    ? Icons.lock_rounded
+                                    : Icons.info_outline_rounded,
                             key: ValueKey('${isLoading}_$_isSecure'),
                             size: 15,
                             color: isLoading
                                 ? accent
                                 : _isSecure
-                                ? green
-                                : muted,
+                                    ? green
+                                    : muted,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -141,9 +141,8 @@ class BrowserUrlBar extends StatelessWidget {
                           child: TextField(
                             controller: controller,
                             focusNode: focusNode,
-                            textDirection: isRtl
-                                ? TextDirection.rtl
-                                : TextDirection.ltr,
+                            textDirection:
+                                isRtl ? TextDirection.rtl : TextDirection.ltr,
                             style: TextStyle(
                               color: textClr,
                               fontSize: 13,

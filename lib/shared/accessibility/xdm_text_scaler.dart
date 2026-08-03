@@ -13,7 +13,8 @@ class XdmTextScaler extends StatelessWidget {
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(
         textScaler: TextScaler.linear(
-          (MediaQuery.of(context).textScaler.scale(1.0) * settings.textScaleFactor)
+          (MediaQuery.of(context).textScaler.scale(1.0) *
+                  settings.textScaleFactor)
               .clamp(0.8, 2.5),
         ),
       ),

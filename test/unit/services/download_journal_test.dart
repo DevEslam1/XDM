@@ -30,7 +30,8 @@ void main() {
     expect(recovered, equals([100, 200, 0, 0]));
   });
 
-  test('corrupted journal line is skipped gracefully during recovery', () async {
+  test('corrupted journal line is skipped gracefully during recovery',
+      () async {
     final journal = DownloadJournal(journalPath);
     await journal.open();
     await journal.writeInit(2, 500);

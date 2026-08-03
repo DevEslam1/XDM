@@ -157,10 +157,10 @@ class _TabChip extends StatelessWidget {
               tab.isIncognito
                   ? Icons.visibility_off_rounded
                   : tab.isHome
-                  ? Icons.home_rounded
-                  : tab.isSecure
-                  ? Icons.lock_rounded
-                  : Icons.language_rounded,
+                      ? Icons.home_rounded
+                      : tab.isSecure
+                          ? Icons.lock_rounded
+                          : Icons.language_rounded,
               size: 13,
               color: isActive ? accent : muted,
             ),
@@ -180,8 +180,8 @@ class _TabChip extends StatelessWidget {
                       fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                       color: isActive
                           ? (isDark
-                                ? AppTheme.textPrimary
-                                : AppTheme.lightTextPrimary)
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary)
                           : muted,
                     ),
                   ),
@@ -257,9 +257,8 @@ class _BarIconButton extends StatelessWidget {
             child: Icon(
               icon,
               size: 18,
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
+              color:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
             ),
           ),
         ),

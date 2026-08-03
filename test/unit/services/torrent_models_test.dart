@@ -41,7 +41,8 @@ void main() {
       expect(info.progress, equals(0.75));
       expect(info.hasMetadata, isTrue);
       expect(info.fileProgress.length, equals(2));
-      expect(() => (info.fileProgress as List).add(300), throwsUnsupportedError);
+      expect(
+          () => (info.fileProgress as List).add(300), throwsUnsupportedError);
     });
 
     test('TorrentTrackerInfo copyWith mutates specified fields', () {

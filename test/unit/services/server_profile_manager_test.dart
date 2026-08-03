@@ -8,15 +8,18 @@ void main() {
     });
 
     test('identifies CDN hosts correctly', () {
-      final cdnProfile = ServerProfileManager.getProfile('https://files.cloudflare.com/app.apk');
+      final cdnProfile = ServerProfileManager.getProfile(
+          'https://files.cloudflare.com/app.apk');
       expect(cdnProfile.isCdn, isTrue);
 
-      final normalProfile = ServerProfileManager.getProfile('https://my-server.org/file.zip');
+      final normalProfile =
+          ServerProfileManager.getProfile('https://my-server.org/file.zip');
       expect(normalProfile.isCdn, isFalse);
     });
 
     test('CDN hosts get shorter retry delays', () {
-      final delay = ServerProfileManager.getRetryDelay('https://cdn.example.com/file', 1);
+      final delay =
+          ServerProfileManager.getRetryDelay('https://cdn.example.com/file', 1);
       expect(delay.inSeconds, lessThanOrEqualTo(10));
     });
 
@@ -27,7 +30,8 @@ void main() {
         retryAfter: null,
       );
 
-      final delay = ServerProfileManager.getRetryDelay('https://api.example.com/file', 1);
+      final delay =
+          ServerProfileManager.getRetryDelay('https://api.example.com/file', 1);
       expect(delay.inSeconds, greaterThanOrEqualTo(30));
     });
 
@@ -38,7 +42,8 @@ void main() {
         retryAfter: '45',
       );
 
-      final delay = ServerProfileManager.getRetryDelay('https://custom.example.com/file', 1);
+      final delay = ServerProfileManager.getRetryDelay(
+          'https://custom.example.com/file', 1);
       expect(delay.inSeconds, equals(45));
     });
   });

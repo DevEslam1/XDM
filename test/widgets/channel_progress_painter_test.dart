@@ -6,7 +6,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ChannelProgressPainter Widget Tests', () {
-    testWidgets('IsolatedProgressBar renders without error', (WidgetTester tester) async {
+    testWidgets('IsolatedProgressBar renders without error',
+        (WidgetTester tester) async {
       final progress = ValueNotifier<double>(0.45);
 
       await tester.pumpWidget(
@@ -43,13 +44,18 @@ void main() {
       expect(find.byType(IsolatedProgressBar), findsOneWidget);
     });
 
-    testWidgets('ChannelProgressPainter shouldRepaint compares properties correctly', (WidgetTester tester) async {
+    testWidgets(
+        'ChannelProgressPainter shouldRepaint compares properties correctly',
+        (WidgetTester tester) async {
       final p1 = ValueNotifier<double>(0.2);
       final p2 = ValueNotifier<double>(0.5);
 
-      final painter1 = ChannelProgressPainter(progress: p1, isDark: true, isTorrent: false);
-      final painter2 = ChannelProgressPainter(progress: p1, isDark: true, isTorrent: false);
-      final painter3 = ChannelProgressPainter(progress: p2, isDark: true, isTorrent: false);
+      final painter1 =
+          ChannelProgressPainter(progress: p1, isDark: true, isTorrent: false);
+      final painter2 =
+          ChannelProgressPainter(progress: p1, isDark: true, isTorrent: false);
+      final painter3 =
+          ChannelProgressPainter(progress: p2, isDark: true, isTorrent: false);
 
       expect(painter1.shouldRepaint(painter2), isFalse);
       expect(painter1.shouldRepaint(painter3), isTrue);

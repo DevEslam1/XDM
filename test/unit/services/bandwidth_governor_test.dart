@@ -48,7 +48,8 @@ void main() {
       expect(gov.perConsumerBytesPerSecond, greaterThan(0));
     });
 
-    test('acquire returns 0 immediately if unlimited or non-positive bytes', () async {
+    test('acquire returns 0 immediately if unlimited or non-positive bytes',
+        () async {
       final gov = BandwidthGovernor(0);
       expect(await gov.acquire(0), 0);
       expect(await gov.acquire(-10), 0);

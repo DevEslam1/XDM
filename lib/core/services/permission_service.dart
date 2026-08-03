@@ -11,7 +11,8 @@ class PermissionService {
   static int? _cachedSdkLevel;
 
   Future<int> _androidSdkLevel() async {
-    if (_cachedSdkLevel != null && _cachedSdkLevel! > 0) return _cachedSdkLevel!;
+    if (_cachedSdkLevel != null && _cachedSdkLevel! > 0)
+      return _cachedSdkLevel!;
     if (kIsWeb) return 0;
     if (!Platform.isAndroid) return 0;
     try {

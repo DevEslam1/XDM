@@ -39,8 +39,7 @@ class _GlassCardState extends State<GlassCard> {
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDarkMode;
-    final accent =
-        widget.accentColor ??
+    final accent = widget.accentColor ??
         (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
 
     final base = AnimatedContainer(
@@ -50,8 +49,7 @@ class _GlassCardState extends State<GlassCard> {
       decoration: BoxDecoration(
         color: isDark ? AppTheme.surface : AppTheme.lightSurface,
         borderRadius: BorderRadius.circular(widget.borderRadius),
-        border:
-            widget.border ??
+        border: widget.border ??
             Border.all(
               color: widget.accentColor != null
                   ? accent.withValues(alpha: 0.30)

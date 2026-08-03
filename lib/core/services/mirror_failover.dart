@@ -62,7 +62,7 @@ class MirrorFailover {
   String? _lastAttempted;
 
   MirrorFailover(List<String> urls, {String? primary})
-    : mirrorUrls = orderMirrorUrls(urls, primary: primary);
+      : mirrorUrls = orderMirrorUrls(urls, primary: primary);
 
   /// The mirror URL that was attempted last (or `null` before any attempt).
   String? get lastAttempted => _lastAttempted;
@@ -98,9 +98,7 @@ class MirrorFailover {
         }
         return mirrorUrl;
       } catch (e) {
-        final statusCode = e is DioException
-            ? e.response?.statusCode ?? 0
-            : 0;
+        final statusCode = e is DioException ? e.response?.statusCode ?? 0 : 0;
         await MirrorHealthStore.recordFailure(
           mirrorUrl,
           statusCode: statusCode,

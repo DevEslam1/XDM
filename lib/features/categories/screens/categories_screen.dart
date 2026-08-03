@@ -14,13 +14,16 @@ class CategoriesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final counts = context.select<DownloadProvider, Map<String, int>>((p) => p.categoryCounts);
-    final sizes = context.select<DownloadProvider, Map<String, double>>((p) => p.categorySizes);
+    final counts = context
+        .select<DownloadProvider, Map<String, int>>((p) => p.categoryCounts);
+    final sizes = context
+        .select<DownloadProvider, Map<String, double>>((p) => p.categorySizes);
     final settings = Provider.of<SettingsProvider>(context);
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     // Define category presentation details
@@ -75,18 +78,19 @@ class CategoriesScreen extends StatelessWidget {
               sigmaX: 12,
               sigmaY: 12,
               child: Container(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                    .withValues(alpha: 0.5),
               ),
             ),
           ),
           title: Text(
             'XDM',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: textClr,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-              fontSize: 16,
-            ),
+                  color: textClr,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                  fontSize: 16,
+                ),
           ),
           automaticallyImplyLeading: false,
         ),
@@ -107,12 +111,13 @@ class CategoriesScreen extends StatelessWidget {
                     children: [
                       Text(
                         L10n.of(context, 'category_overview'),
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: secClr,
-                          fontSize: 10,
-                          letterSpacing: 1.0,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: secClr,
+                                  fontSize: 10,
+                                  letterSpacing: 1.0,
+                                  fontWeight: FontWeight.bold,
+                                ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -120,9 +125,9 @@ class CategoriesScreen extends StatelessWidget {
                             ? 'عرض تفصيلي للملفات المحملة مقسمة حسب نوع الملف.'
                             : 'Overview of downloaded content structured by MIME-type.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: mutedClr,
-                          fontSize: 11,
-                        ),
+                              color: mutedClr,
+                              fontSize: 11,
+                            ),
                       ),
                     ],
                   ),
@@ -130,8 +135,10 @@ class CategoriesScreen extends StatelessWidget {
 
                 // Donut PieChart Analytics Panel
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: _buildDonutChartCard(context, categoryCards, sizes, totalSizeMb, settings),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0, vertical: 8.0),
+                  child: _buildDonutChartCard(
+                      context, categoryCards, sizes, totalSizeMb, settings),
                 ),
                 const SizedBox(height: 10),
 
@@ -140,7 +147,8 @@ class CategoriesScreen extends StatelessWidget {
                   child: GridView.builder(
                     padding: const EdgeInsets.all(16.0),
                     physics: const BouncingScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
@@ -181,10 +189,14 @@ class CategoriesScreen extends StatelessWidget {
                             sigmaY: 8,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
+                                color: isDark
+                                    ? AppTheme.glassBg
+                                    : AppTheme.lightGlassBg,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                  color: isDark
+                                      ? AppTheme.glassBorder
+                                      : AppTheme.lightGlassBorder,
                                   width: 0.8,
                                 ),
                               ),
@@ -197,7 +209,8 @@ class CategoriesScreen extends StatelessWidget {
                                     child: Container(
                                       height: 3,
                                       decoration: BoxDecoration(
-                                        borderRadius: const BorderRadius.vertical(
+                                        borderRadius:
+                                            const BorderRadius.vertical(
                                           top: Radius.circular(20),
                                         ),
                                         gradient: LinearGradient(
@@ -213,7 +226,8 @@ class CategoriesScreen extends StatelessWidget {
                                   Padding(
                                     padding: const EdgeInsets.all(14.0),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           mainAxisAlignment:
@@ -225,7 +239,8 @@ class CategoriesScreen extends StatelessWidget {
                                                 color: color.withValues(
                                                   alpha: 0.08,
                                                 ),
-                                                borderRadius: BorderRadius.circular(
+                                                borderRadius:
+                                                    BorderRadius.circular(
                                                   12,
                                                 ),
                                               ),
@@ -236,17 +251,24 @@ class CategoriesScreen extends StatelessWidget {
                                               ),
                                             ),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
                                                 horizontal: 10,
                                                 vertical: 4,
                                               ),
                                               decoration: BoxDecoration(
-                                                color: isDark ? AppTheme.glassBg : AppTheme.lightGlassBg,
-                                                borderRadius: BorderRadius.circular(
+                                                color: isDark
+                                                    ? AppTheme.glassBg
+                                                    : AppTheme.lightGlassBg,
+                                                borderRadius:
+                                                    BorderRadius.circular(
                                                   12,
                                                 ),
                                                 border: Border.all(
-                                                  color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                                                  color: isDark
+                                                      ? AppTheme.glassBorder
+                                                      : AppTheme
+                                                          .lightGlassBorder,
                                                   width: 0.6,
                                                 ),
                                               ),
@@ -258,7 +280,8 @@ class CategoriesScreen extends StatelessWidget {
                                                     ?.copyWith(
                                                       color: textClr,
                                                       fontSize: 9,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                               ),
                                             ),
@@ -266,7 +289,8 @@ class CategoriesScreen extends StatelessWidget {
                                         ),
                                         const Spacer(),
                                         Text(
-                                          _translateCategoryName(context, name).toUpperCase(),
+                                          _translateCategoryName(context, name)
+                                              .toUpperCase(),
                                           style: Theme.of(context)
                                               .textTheme
                                               .titleMedium
@@ -303,7 +327,8 @@ class CategoriesScreen extends StatelessWidget {
                                                 shadows: isDark
                                                     ? [
                                                         Shadow(
-                                                          color: color.withValues(
+                                                          color:
+                                                              color.withValues(
                                                             alpha: 0.25,
                                                           ),
                                                           blurRadius: 4.0,
@@ -364,24 +389,29 @@ class CategoriesScreen extends StatelessWidget {
               title: '',
             )
           ]
-        : categoryCards.map((card) {
-            final String name = card['name'];
-            final Color color = card['color'];
-            final sizeMb = sizes[name] ?? 0.0;
-            final percentage = totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
+        : categoryCards
+            .map((card) {
+              final String name = card['name'];
+              final Color color = card['color'];
+              final sizeMb = sizes[name] ?? 0.0;
+              final percentage =
+                  totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
 
-            return PieChartSectionData(
-              color: color,
-              value: sizeMb,
-              radius: 16,
-              title: percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
-              titleStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 8,
-                fontWeight: FontWeight.bold,
-              ),
-            );
-          }).where((section) => section.value > 0).toList();
+              return PieChartSectionData(
+                color: color,
+                value: sizeMb,
+                radius: 16,
+                title:
+                    percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
+                titleStyle: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                ),
+              );
+            })
+            .where((section) => section.value > 0)
+            .toList();
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -392,7 +422,8 @@ class CategoriesScreen extends StatelessWidget {
           width: double.infinity,
           height: 120,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+          decoration:
+              AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
           child: Row(
             children: [
               // 1. Donut PieChart
@@ -440,14 +471,16 @@ class CategoriesScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: (() {
-                    final sortedCards = List<Map<String, dynamic>>.from(categoryCards)
-                      ..sort((a, b) {
-                        final sizeA = sizes[a['name']] ?? 0.0;
-                        final sizeB = sizes[b['name']] ?? 0.0;
-                        return sizeB.compareTo(sizeA);
-                      });
+                    final sortedCards =
+                        List<Map<String, dynamic>>.from(categoryCards)
+                          ..sort((a, b) {
+                            final sizeA = sizes[a['name']] ?? 0.0;
+                            final sizeB = sizes[b['name']] ?? 0.0;
+                            return sizeB.compareTo(sizeA);
+                          });
                     return sortedCards.take(3);
-                  })().map((card) {
+                  })()
+                      .map((card) {
                     final String name = card['name'];
                     final Color color = card['color'];
                     final sizeMb = sizes[name] ?? 0.0;

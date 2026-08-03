@@ -10,7 +10,10 @@ void main() {
         'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Ubuntu'
       ];
       final extracted = SingleInstanceService.extractLaunchUrl(args);
-      expect(extracted, equals('magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Ubuntu'));
+      expect(
+          extracted,
+          equals(
+              'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Ubuntu'));
     });
 
     test('Extracts .torrent file path from args', () {
@@ -28,12 +31,14 @@ void main() {
 
   group('Transmission URL Validation Tests', () {
     test('Recognizes magnet URLs as valid transmission URLs', () {
-      const magnet = 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Test';
+      const magnet =
+          'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Test';
       expect(isMagnetUrl(magnet), isTrue);
       expect(isValidTransmissionUrl(magnet), isTrue);
     });
 
-    test('Recognizes file:// and .torrent paths as valid torrent file URLs', () {
+    test('Recognizes file:// and .torrent paths as valid torrent file URLs',
+        () {
       const torrentPath = 'C:\\Users\\User\\Downloads\\sample.torrent';
       const fileUri = 'file:///C:/Users/User/Downloads/sample.torrent';
       expect(isTorrentFileUrl(torrentPath), isTrue);

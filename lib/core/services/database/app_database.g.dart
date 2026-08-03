@@ -159,12 +159,12 @@ class $DownloadTasksTable extends DownloadTasks
   @override
   late final GeneratedColumnWithTypeConverter<List<double>?, String> chunks =
       GeneratedColumn<String>(
-        'chunks',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      ).withConverter<List<double>?>($DownloadTasksTable.$converterchunks);
+    'chunks',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  ).withConverter<List<double>?>($DownloadTasksTable.$converterchunks);
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -279,20 +279,16 @@ class $DownloadTasksTable extends DownloadTasks
     defaultValue: const Constant(500),
   );
   @override
-  late final GeneratedColumnWithTypeConverter<
-    List<Map<String, dynamic>>?,
-    String
-  >
-  torrentFiles =
-      GeneratedColumn<String>(
-        'torrent_files',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      ).withConverter<List<Map<String, dynamic>>?>(
-        $DownloadTasksTable.$convertertorrentFiles,
-      );
+  late final GeneratedColumnWithTypeConverter<List<Map<String, dynamic>>?,
+      String> torrentFiles = GeneratedColumn<String>(
+    'torrent_files',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  ).withConverter<List<Map<String, dynamic>>?>(
+    $DownloadTasksTable.$convertertorrentFiles,
+  );
   static const VerificationMeta _downloadPageUrlMeta = const VerificationMeta(
     'downloadPageUrl',
   );
@@ -359,12 +355,12 @@ class $DownloadTasksTable extends DownloadTasks
   @override
   late final GeneratedColumn<String> youtubeQualityPreset =
       GeneratedColumn<String>(
-        'youtube_quality_preset',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      );
+    'youtube_quality_preset',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
@@ -447,7 +443,7 @@ class $DownloadTasksTable extends DownloadTasks
   );
   @override
   late final GeneratedColumnWithTypeConverter<List<String>?, String>
-  mirrorUrls = GeneratedColumn<String>(
+      mirrorUrls = GeneratedColumn<String>(
     'mirror_urls',
     aliasedName,
     true,
@@ -456,46 +452,46 @@ class $DownloadTasksTable extends DownloadTasks
   ).withConverter<List<String>?>($DownloadTasksTable.$convertermirrorUrls);
   @override
   List<GeneratedColumn> get $columns => [
-    id,
-    fileName,
-    url,
-    fileSize,
-    downloadedBytes,
-    speed,
-    eta,
-    category,
-    status,
-    savePath,
-    localFilePath,
-    tempFilePath,
-    errorMessage,
-    threadCount,
-    chunks,
-    createdAt,
-    updatedAt,
-    completedAt,
-    scheduledAt,
-    supportsResume,
-    speedLimitKbps,
-    seedingEnabled,
-    seedingLimited,
-    seedingLimitKbps,
-    torrentFiles,
-    downloadPageUrl,
-    mergedAudioUrl,
-    audioSize,
-    audioProgress,
-    pausedByUser,
-    youtubeQualityPreset,
-    notes,
-    playlistId,
-    playlistTitle,
-    thumbnailUrl,
-    isAppUpdate,
-    priority,
-    expectedSha256,
-    mirrorUrls,
-  ];
+        id,
+        fileName,
+        url,
+        fileSize,
+        downloadedBytes,
+        speed,
+        eta,
+        category,
+        status,
+        savePath,
+        localFilePath,
+        tempFilePath,
+        errorMessage,
+        threadCount,
+        chunks,
+        createdAt,
+        updatedAt,
+        completedAt,
+        scheduledAt,
+        supportsResume,
+        speedLimitKbps,
+        seedingEnabled,
+        seedingLimited,
+        seedingLimitKbps,
+        torrentFiles,
+        downloadPageUrl,
+        mergedAudioUrl,
+        audioSize,
+        audioProgress,
+        pausedByUser,
+        youtubeQualityPreset,
+        notes,
+        playlistId,
+        playlistTitle,
+        thumbnailUrl,
+        isAppUpdate,
+        priority,
+        expectedSha256,
+        mirrorUrls,
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -988,7 +984,7 @@ class $DownloadTasksTable extends DownloadTasks
   static TypeConverter<List<double>?, String?> $converterchunks =
       const NullAwareTypeConverter.wrap(DoubleListConverter());
   static TypeConverter<List<Map<String, dynamic>>?, String?>
-  $convertertorrentFiles = const NullAwareTypeConverter.wrap(
+      $convertertorrentFiles = const NullAwareTypeConverter.wrap(
     TorrentFilesConverter(),
   );
   static TypeConverter<List<String>?, String?> $convertermirrorUrls =
@@ -1175,9 +1171,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? const Value.absent()
           : Value(errorMessage),
       threadCount: Value(threadCount),
-      chunks: chunks == null && nullToAbsent
-          ? const Value.absent()
-          : Value(chunks),
+      chunks:
+          chunks == null && nullToAbsent ? const Value.absent() : Value(chunks),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       completedAt: completedAt == null && nullToAbsent
@@ -1206,9 +1201,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       youtubeQualityPreset: youtubeQualityPreset == null && nullToAbsent
           ? const Value.absent()
           : Value(youtubeQualityPreset),
-      notes: notes == null && nullToAbsent
-          ? const Value.absent()
-          : Value(notes),
+      notes:
+          notes == null && nullToAbsent ? const Value.absent() : Value(notes),
       playlistId: playlistId == null && nullToAbsent
           ? const Value.absent()
           : Value(playlistId),
@@ -1368,57 +1362,58 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     int? priority,
     Value<String?> expectedSha256 = const Value.absent(),
     Value<List<String>?> mirrorUrls = const Value.absent(),
-  }) => DbDownloadTask(
-    id: id ?? this.id,
-    fileName: fileName ?? this.fileName,
-    url: url ?? this.url,
-    fileSize: fileSize ?? this.fileSize,
-    downloadedBytes: downloadedBytes ?? this.downloadedBytes,
-    speed: speed ?? this.speed,
-    eta: eta.present ? eta.value : this.eta,
-    category: category ?? this.category,
-    status: status ?? this.status,
-    savePath: savePath ?? this.savePath,
-    localFilePath: localFilePath ?? this.localFilePath,
-    tempFilePath: tempFilePath ?? this.tempFilePath,
-    errorMessage: errorMessage.present ? errorMessage.value : this.errorMessage,
-    threadCount: threadCount ?? this.threadCount,
-    chunks: chunks.present ? chunks.value : this.chunks,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-    completedAt: completedAt.present ? completedAt.value : this.completedAt,
-    scheduledAt: scheduledAt.present ? scheduledAt.value : this.scheduledAt,
-    supportsResume: supportsResume ?? this.supportsResume,
-    speedLimitKbps: speedLimitKbps ?? this.speedLimitKbps,
-    seedingEnabled: seedingEnabled ?? this.seedingEnabled,
-    seedingLimited: seedingLimited ?? this.seedingLimited,
-    seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
-    torrentFiles: torrentFiles.present ? torrentFiles.value : this.torrentFiles,
-    downloadPageUrl: downloadPageUrl.present
-        ? downloadPageUrl.value
-        : this.downloadPageUrl,
-    mergedAudioUrl: mergedAudioUrl.present
-        ? mergedAudioUrl.value
-        : this.mergedAudioUrl,
-    audioSize: audioSize ?? this.audioSize,
-    audioProgress: audioProgress ?? this.audioProgress,
-    pausedByUser: pausedByUser ?? this.pausedByUser,
-    youtubeQualityPreset: youtubeQualityPreset.present
-        ? youtubeQualityPreset.value
-        : this.youtubeQualityPreset,
-    notes: notes.present ? notes.value : this.notes,
-    playlistId: playlistId.present ? playlistId.value : this.playlistId,
-    playlistTitle: playlistTitle.present
-        ? playlistTitle.value
-        : this.playlistTitle,
-    thumbnailUrl: thumbnailUrl.present ? thumbnailUrl.value : this.thumbnailUrl,
-    isAppUpdate: isAppUpdate ?? this.isAppUpdate,
-    priority: priority ?? this.priority,
-    expectedSha256: expectedSha256.present
-        ? expectedSha256.value
-        : this.expectedSha256,
-    mirrorUrls: mirrorUrls.present ? mirrorUrls.value : this.mirrorUrls,
-  );
+  }) =>
+      DbDownloadTask(
+        id: id ?? this.id,
+        fileName: fileName ?? this.fileName,
+        url: url ?? this.url,
+        fileSize: fileSize ?? this.fileSize,
+        downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+        speed: speed ?? this.speed,
+        eta: eta.present ? eta.value : this.eta,
+        category: category ?? this.category,
+        status: status ?? this.status,
+        savePath: savePath ?? this.savePath,
+        localFilePath: localFilePath ?? this.localFilePath,
+        tempFilePath: tempFilePath ?? this.tempFilePath,
+        errorMessage:
+            errorMessage.present ? errorMessage.value : this.errorMessage,
+        threadCount: threadCount ?? this.threadCount,
+        chunks: chunks.present ? chunks.value : this.chunks,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        completedAt: completedAt.present ? completedAt.value : this.completedAt,
+        scheduledAt: scheduledAt.present ? scheduledAt.value : this.scheduledAt,
+        supportsResume: supportsResume ?? this.supportsResume,
+        speedLimitKbps: speedLimitKbps ?? this.speedLimitKbps,
+        seedingEnabled: seedingEnabled ?? this.seedingEnabled,
+        seedingLimited: seedingLimited ?? this.seedingLimited,
+        seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
+        torrentFiles:
+            torrentFiles.present ? torrentFiles.value : this.torrentFiles,
+        downloadPageUrl: downloadPageUrl.present
+            ? downloadPageUrl.value
+            : this.downloadPageUrl,
+        mergedAudioUrl:
+            mergedAudioUrl.present ? mergedAudioUrl.value : this.mergedAudioUrl,
+        audioSize: audioSize ?? this.audioSize,
+        audioProgress: audioProgress ?? this.audioProgress,
+        pausedByUser: pausedByUser ?? this.pausedByUser,
+        youtubeQualityPreset: youtubeQualityPreset.present
+            ? youtubeQualityPreset.value
+            : this.youtubeQualityPreset,
+        notes: notes.present ? notes.value : this.notes,
+        playlistId: playlistId.present ? playlistId.value : this.playlistId,
+        playlistTitle:
+            playlistTitle.present ? playlistTitle.value : this.playlistTitle,
+        thumbnailUrl:
+            thumbnailUrl.present ? thumbnailUrl.value : this.thumbnailUrl,
+        isAppUpdate: isAppUpdate ?? this.isAppUpdate,
+        priority: priority ?? this.priority,
+        expectedSha256:
+            expectedSha256.present ? expectedSha256.value : this.expectedSha256,
+        mirrorUrls: mirrorUrls.present ? mirrorUrls.value : this.mirrorUrls,
+      );
   DbDownloadTask copyWithCompanion(DownloadTasksCompanion data) {
     return DbDownloadTask(
       id: data.id.present ? data.id.value : this.id,
@@ -1442,18 +1437,15 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       errorMessage: data.errorMessage.present
           ? data.errorMessage.value
           : this.errorMessage,
-      threadCount: data.threadCount.present
-          ? data.threadCount.value
-          : this.threadCount,
+      threadCount:
+          data.threadCount.present ? data.threadCount.value : this.threadCount,
       chunks: data.chunks.present ? data.chunks.value : this.chunks,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-      completedAt: data.completedAt.present
-          ? data.completedAt.value
-          : this.completedAt,
-      scheduledAt: data.scheduledAt.present
-          ? data.scheduledAt.value
-          : this.scheduledAt,
+      completedAt:
+          data.completedAt.present ? data.completedAt.value : this.completedAt,
+      scheduledAt:
+          data.scheduledAt.present ? data.scheduledAt.value : this.scheduledAt,
       supportsResume: data.supportsResume.present
           ? data.supportsResume.value
           : this.supportsResume,
@@ -1489,25 +1481,22 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? data.youtubeQualityPreset.value
           : this.youtubeQualityPreset,
       notes: data.notes.present ? data.notes.value : this.notes,
-      playlistId: data.playlistId.present
-          ? data.playlistId.value
-          : this.playlistId,
+      playlistId:
+          data.playlistId.present ? data.playlistId.value : this.playlistId,
       playlistTitle: data.playlistTitle.present
           ? data.playlistTitle.value
           : this.playlistTitle,
       thumbnailUrl: data.thumbnailUrl.present
           ? data.thumbnailUrl.value
           : this.thumbnailUrl,
-      isAppUpdate: data.isAppUpdate.present
-          ? data.isAppUpdate.value
-          : this.isAppUpdate,
+      isAppUpdate:
+          data.isAppUpdate.present ? data.isAppUpdate.value : this.isAppUpdate,
       priority: data.priority.present ? data.priority.value : this.priority,
       expectedSha256: data.expectedSha256.present
           ? data.expectedSha256.value
           : this.expectedSha256,
-      mirrorUrls: data.mirrorUrls.present
-          ? data.mirrorUrls.value
-          : this.mirrorUrls,
+      mirrorUrls:
+          data.mirrorUrls.present ? data.mirrorUrls.value : this.mirrorUrls,
     );
   }
 
@@ -1559,46 +1548,46 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
 
   @override
   int get hashCode => Object.hashAll([
-    id,
-    fileName,
-    url,
-    fileSize,
-    downloadedBytes,
-    speed,
-    eta,
-    category,
-    status,
-    savePath,
-    localFilePath,
-    tempFilePath,
-    errorMessage,
-    threadCount,
-    chunks,
-    createdAt,
-    updatedAt,
-    completedAt,
-    scheduledAt,
-    supportsResume,
-    speedLimitKbps,
-    seedingEnabled,
-    seedingLimited,
-    seedingLimitKbps,
-    torrentFiles,
-    downloadPageUrl,
-    mergedAudioUrl,
-    audioSize,
-    audioProgress,
-    pausedByUser,
-    youtubeQualityPreset,
-    notes,
-    playlistId,
-    playlistTitle,
-    thumbnailUrl,
-    isAppUpdate,
-    priority,
-    expectedSha256,
-    mirrorUrls,
-  ]);
+        id,
+        fileName,
+        url,
+        fileSize,
+        downloadedBytes,
+        speed,
+        eta,
+        category,
+        status,
+        savePath,
+        localFilePath,
+        tempFilePath,
+        errorMessage,
+        threadCount,
+        chunks,
+        createdAt,
+        updatedAt,
+        completedAt,
+        scheduledAt,
+        supportsResume,
+        speedLimitKbps,
+        seedingEnabled,
+        seedingLimited,
+        seedingLimitKbps,
+        torrentFiles,
+        downloadPageUrl,
+        mergedAudioUrl,
+        audioSize,
+        audioProgress,
+        pausedByUser,
+        youtubeQualityPreset,
+        notes,
+        playlistId,
+        playlistTitle,
+        thumbnailUrl,
+        isAppUpdate,
+        priority,
+        expectedSha256,
+        mirrorUrls,
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1768,17 +1757,17 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.expectedSha256 = const Value.absent(),
     this.mirrorUrls = const Value.absent(),
     this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       fileName = Value(fileName),
-       url = Value(url),
-       category = Value(category),
-       status = Value(status),
-       savePath = Value(savePath),
-       localFilePath = Value(localFilePath),
-       tempFilePath = Value(tempFilePath),
-       threadCount = Value(threadCount),
-       createdAt = Value(createdAt),
-       updatedAt = Value(updatedAt);
+  })  : id = Value(id),
+        fileName = Value(fileName),
+        url = Value(url),
+        category = Value(category),
+        status = Value(status),
+        savePath = Value(savePath),
+        localFilePath = Value(localFilePath),
+        tempFilePath = Value(tempFilePath),
+        threadCount = Value(threadCount),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
   static Insertable<DbDownloadTask> custom({
     Expression<String>? id,
     Expression<String>? fileName,
@@ -2305,9 +2294,8 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
       id: Value(id),
       title: Value(title),
       url: Value(url),
-      folder: folder == null && nullToAbsent
-          ? const Value.absent()
-          : Value(folder),
+      folder:
+          folder == null && nullToAbsent ? const Value.absent() : Value(folder),
       createdAt: Value(createdAt),
     );
   }
@@ -2343,13 +2331,14 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
     String? url,
     Value<String?> folder = const Value.absent(),
     int? createdAt,
-  }) => DbBookmark(
-    id: id ?? this.id,
-    title: title ?? this.title,
-    url: url ?? this.url,
-    folder: folder.present ? folder.value : this.folder,
-    createdAt: createdAt ?? this.createdAt,
-  );
+  }) =>
+      DbBookmark(
+        id: id ?? this.id,
+        title: title ?? this.title,
+        url: url ?? this.url,
+        folder: folder.present ? folder.value : this.folder,
+        createdAt: createdAt ?? this.createdAt,
+      );
   DbBookmark copyWithCompanion(BookmarksCompanion data) {
     return DbBookmark(
       id: data.id.present ? data.id.value : this.id,
@@ -2407,10 +2396,10 @@ class BookmarksCompanion extends UpdateCompanion<DbBookmark> {
     this.folder = const Value.absent(),
     required int createdAt,
     this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       title = Value(title),
-       url = Value(url),
-       createdAt = Value(createdAt);
+  })  : id = Value(id),
+        title = Value(title),
+        url = Value(url),
+        createdAt = Value(createdAt);
   static Insertable<DbBookmark> custom({
     Expression<String>? id,
     Expression<String>? title,
@@ -2667,12 +2656,13 @@ class DbBrowserHistory extends DataClass
     String? url,
     String? title,
     int? visitedAt,
-  }) => DbBrowserHistory(
-    id: id ?? this.id,
-    url: url ?? this.url,
-    title: title ?? this.title,
-    visitedAt: visitedAt ?? this.visitedAt,
-  );
+  }) =>
+      DbBrowserHistory(
+        id: id ?? this.id,
+        url: url ?? this.url,
+        title: title ?? this.title,
+        visitedAt: visitedAt ?? this.visitedAt,
+      );
   DbBrowserHistory copyWithCompanion(BrowserHistoryCompanion data) {
     return DbBrowserHistory(
       id: data.id.present ? data.id.value : this.id,
@@ -2721,9 +2711,9 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     required String url,
     required String title,
     required int visitedAt,
-  }) : url = Value(url),
-       title = Value(title),
-       visitedAt = Value(visitedAt);
+  })  : url = Value(url),
+        title = Value(title),
+        visitedAt = Value(visitedAt);
   static Insertable<DbBrowserHistory> custom({
     Expression<int>? id,
     Expression<String>? url,
@@ -2856,13 +2846,13 @@ class $BrowserTabsTable extends BrowserTabs
   );
   @override
   List<GeneratedColumn> get $columns => [
-    id,
-    url,
-    title,
-    isActive,
-    position,
-    createdAt,
-  ];
+        id,
+        url,
+        title,
+        isActive,
+        position,
+        createdAt,
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -3028,14 +3018,15 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
     bool? isActive,
     int? position,
     int? createdAt,
-  }) => SavedBrowserTab(
-    id: id ?? this.id,
-    url: url ?? this.url,
-    title: title ?? this.title,
-    isActive: isActive ?? this.isActive,
-    position: position ?? this.position,
-    createdAt: createdAt ?? this.createdAt,
-  );
+  }) =>
+      SavedBrowserTab(
+        id: id ?? this.id,
+        url: url ?? this.url,
+        title: title ?? this.title,
+        isActive: isActive ?? this.isActive,
+        position: position ?? this.position,
+        createdAt: createdAt ?? this.createdAt,
+      );
   SavedBrowserTab copyWithCompanion(BrowserTabsCompanion data) {
     return SavedBrowserTab(
       id: data.id.present ? data.id.value : this.id,
@@ -3100,9 +3091,9 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
     this.position = const Value.absent(),
     required int createdAt,
     this.rowid = const Value.absent(),
-  }) : id = Value(id),
-       url = Value(url),
-       createdAt = Value(createdAt);
+  })  : id = Value(id),
+        url = Value(url),
+        createdAt = Value(createdAt);
   static Insertable<SavedBrowserTab> custom({
     Expression<String>? id,
     Expression<String>? url,
@@ -3197,99 +3188,99 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
-    downloadTasks,
-    bookmarks,
-    browserHistory,
-    browserTabs,
-  ];
+        downloadTasks,
+        bookmarks,
+        browserHistory,
+        browserTabs,
+      ];
 }
 
-typedef $$DownloadTasksTableCreateCompanionBuilder =
-    DownloadTasksCompanion Function({
-      required String id,
-      required String fileName,
-      required String url,
-      Value<int> fileSize,
-      Value<int> downloadedBytes,
-      Value<double> speed,
-      Value<int?> eta,
-      required String category,
-      required String status,
-      required String savePath,
-      required String localFilePath,
-      required String tempFilePath,
-      Value<String?> errorMessage,
-      required int threadCount,
-      Value<List<double>?> chunks,
-      required int createdAt,
-      required int updatedAt,
-      Value<int?> completedAt,
-      Value<int?> scheduledAt,
-      Value<bool> supportsResume,
-      Value<int> speedLimitKbps,
-      Value<bool> seedingEnabled,
-      Value<bool> seedingLimited,
-      Value<int> seedingLimitKbps,
-      Value<List<Map<String, dynamic>>?> torrentFiles,
-      Value<String?> downloadPageUrl,
-      Value<String?> mergedAudioUrl,
-      Value<int> audioSize,
-      Value<double> audioProgress,
-      Value<bool> pausedByUser,
-      Value<String?> youtubeQualityPreset,
-      Value<String?> notes,
-      Value<String?> playlistId,
-      Value<String?> playlistTitle,
-      Value<String?> thumbnailUrl,
-      Value<bool> isAppUpdate,
-      Value<int> priority,
-      Value<String?> expectedSha256,
-      Value<List<String>?> mirrorUrls,
-      Value<int> rowid,
-    });
-typedef $$DownloadTasksTableUpdateCompanionBuilder =
-    DownloadTasksCompanion Function({
-      Value<String> id,
-      Value<String> fileName,
-      Value<String> url,
-      Value<int> fileSize,
-      Value<int> downloadedBytes,
-      Value<double> speed,
-      Value<int?> eta,
-      Value<String> category,
-      Value<String> status,
-      Value<String> savePath,
-      Value<String> localFilePath,
-      Value<String> tempFilePath,
-      Value<String?> errorMessage,
-      Value<int> threadCount,
-      Value<List<double>?> chunks,
-      Value<int> createdAt,
-      Value<int> updatedAt,
-      Value<int?> completedAt,
-      Value<int?> scheduledAt,
-      Value<bool> supportsResume,
-      Value<int> speedLimitKbps,
-      Value<bool> seedingEnabled,
-      Value<bool> seedingLimited,
-      Value<int> seedingLimitKbps,
-      Value<List<Map<String, dynamic>>?> torrentFiles,
-      Value<String?> downloadPageUrl,
-      Value<String?> mergedAudioUrl,
-      Value<int> audioSize,
-      Value<double> audioProgress,
-      Value<bool> pausedByUser,
-      Value<String?> youtubeQualityPreset,
-      Value<String?> notes,
-      Value<String?> playlistId,
-      Value<String?> playlistTitle,
-      Value<String?> thumbnailUrl,
-      Value<bool> isAppUpdate,
-      Value<int> priority,
-      Value<String?> expectedSha256,
-      Value<List<String>?> mirrorUrls,
-      Value<int> rowid,
-    });
+typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
+    Function({
+  required String id,
+  required String fileName,
+  required String url,
+  Value<int> fileSize,
+  Value<int> downloadedBytes,
+  Value<double> speed,
+  Value<int?> eta,
+  required String category,
+  required String status,
+  required String savePath,
+  required String localFilePath,
+  required String tempFilePath,
+  Value<String?> errorMessage,
+  required int threadCount,
+  Value<List<double>?> chunks,
+  required int createdAt,
+  required int updatedAt,
+  Value<int?> completedAt,
+  Value<int?> scheduledAt,
+  Value<bool> supportsResume,
+  Value<int> speedLimitKbps,
+  Value<bool> seedingEnabled,
+  Value<bool> seedingLimited,
+  Value<int> seedingLimitKbps,
+  Value<List<Map<String, dynamic>>?> torrentFiles,
+  Value<String?> downloadPageUrl,
+  Value<String?> mergedAudioUrl,
+  Value<int> audioSize,
+  Value<double> audioProgress,
+  Value<bool> pausedByUser,
+  Value<String?> youtubeQualityPreset,
+  Value<String?> notes,
+  Value<String?> playlistId,
+  Value<String?> playlistTitle,
+  Value<String?> thumbnailUrl,
+  Value<bool> isAppUpdate,
+  Value<int> priority,
+  Value<String?> expectedSha256,
+  Value<List<String>?> mirrorUrls,
+  Value<int> rowid,
+});
+typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
+    Function({
+  Value<String> id,
+  Value<String> fileName,
+  Value<String> url,
+  Value<int> fileSize,
+  Value<int> downloadedBytes,
+  Value<double> speed,
+  Value<int?> eta,
+  Value<String> category,
+  Value<String> status,
+  Value<String> savePath,
+  Value<String> localFilePath,
+  Value<String> tempFilePath,
+  Value<String?> errorMessage,
+  Value<int> threadCount,
+  Value<List<double>?> chunks,
+  Value<int> createdAt,
+  Value<int> updatedAt,
+  Value<int?> completedAt,
+  Value<int?> scheduledAt,
+  Value<bool> supportsResume,
+  Value<int> speedLimitKbps,
+  Value<bool> seedingEnabled,
+  Value<bool> seedingLimited,
+  Value<int> seedingLimitKbps,
+  Value<List<Map<String, dynamic>>?> torrentFiles,
+  Value<String?> downloadPageUrl,
+  Value<String?> mergedAudioUrl,
+  Value<int> audioSize,
+  Value<double> audioProgress,
+  Value<bool> pausedByUser,
+  Value<String?> youtubeQualityPreset,
+  Value<String?> notes,
+  Value<String?> playlistId,
+  Value<String?> playlistTitle,
+  Value<String?> thumbnailUrl,
+  Value<bool> isAppUpdate,
+  Value<int> priority,
+  Value<String?> expectedSha256,
+  Value<List<String>?> mirrorUrls,
+  Value<int> rowid,
+});
 
 class $$DownloadTasksTableFilterComposer
     extends Composer<_$AppDatabase, $DownloadTasksTable> {
@@ -3301,206 +3292,203 @@ class $$DownloadTasksTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get fileName => $composableBuilder(
-    column: $table.fileName,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.fileName,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get fileSize => $composableBuilder(
-    column: $table.fileSize,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.fileSize,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get downloadedBytes => $composableBuilder(
-    column: $table.downloadedBytes,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.downloadedBytes,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<double> get speed => $composableBuilder(
-    column: $table.speed,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.speed,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get eta => $composableBuilder(
-    column: $table.eta,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.eta,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get category => $composableBuilder(
-    column: $table.category,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.category,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get status => $composableBuilder(
-    column: $table.status,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.status,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get savePath => $composableBuilder(
-    column: $table.savePath,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.savePath,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get localFilePath => $composableBuilder(
-    column: $table.localFilePath,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.localFilePath,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get tempFilePath => $composableBuilder(
-    column: $table.tempFilePath,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.tempFilePath,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get errorMessage => $composableBuilder(
-    column: $table.errorMessage,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.errorMessage,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get threadCount => $composableBuilder(
-    column: $table.threadCount,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.threadCount,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnWithTypeConverterFilters<List<double>?, List<double>, String>
-  get chunks => $composableBuilder(
-    column: $table.chunks,
-    builder: (column) => ColumnWithTypeConverterFilters(column),
-  );
+      get chunks => $composableBuilder(
+            column: $table.chunks,
+            builder: (column) => ColumnWithTypeConverterFilters(column),
+          );
 
   ColumnFilters<int> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.createdAt,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.updatedAt,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get completedAt => $composableBuilder(
-    column: $table.completedAt,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.completedAt,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get scheduledAt => $composableBuilder(
-    column: $table.scheduledAt,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.scheduledAt,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<bool> get supportsResume => $composableBuilder(
-    column: $table.supportsResume,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.supportsResume,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get speedLimitKbps => $composableBuilder(
-    column: $table.speedLimitKbps,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.speedLimitKbps,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<bool> get seedingEnabled => $composableBuilder(
-    column: $table.seedingEnabled,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.seedingEnabled,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<bool> get seedingLimited => $composableBuilder(
-    column: $table.seedingLimited,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.seedingLimited,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get seedingLimitKbps => $composableBuilder(
-    column: $table.seedingLimitKbps,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.seedingLimitKbps,
+        builder: (column) => ColumnFilters(column),
+      );
 
-  ColumnWithTypeConverterFilters<
-    List<Map<String, dynamic>>?,
-    List<Map<String, dynamic>>,
-    String
-  >
-  get torrentFiles => $composableBuilder(
-    column: $table.torrentFiles,
-    builder: (column) => ColumnWithTypeConverterFilters(column),
-  );
+  ColumnWithTypeConverterFilters<List<Map<String, dynamic>>?,
+          List<Map<String, dynamic>>, String>
+      get torrentFiles => $composableBuilder(
+            column: $table.torrentFiles,
+            builder: (column) => ColumnWithTypeConverterFilters(column),
+          );
 
   ColumnFilters<String> get downloadPageUrl => $composableBuilder(
-    column: $table.downloadPageUrl,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.downloadPageUrl,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get mergedAudioUrl => $composableBuilder(
-    column: $table.mergedAudioUrl,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.mergedAudioUrl,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get audioSize => $composableBuilder(
-    column: $table.audioSize,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.audioSize,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<double> get audioProgress => $composableBuilder(
-    column: $table.audioProgress,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.audioProgress,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<bool> get pausedByUser => $composableBuilder(
-    column: $table.pausedByUser,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.pausedByUser,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get youtubeQualityPreset => $composableBuilder(
-    column: $table.youtubeQualityPreset,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.youtubeQualityPreset,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get notes => $composableBuilder(
-    column: $table.notes,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.notes,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get playlistId => $composableBuilder(
-    column: $table.playlistId,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.playlistId,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get playlistTitle => $composableBuilder(
-    column: $table.playlistTitle,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.playlistTitle,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get thumbnailUrl => $composableBuilder(
-    column: $table.thumbnailUrl,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.thumbnailUrl,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<bool> get isAppUpdate => $composableBuilder(
-    column: $table.isAppUpdate,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.isAppUpdate,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get priority => $composableBuilder(
-    column: $table.priority,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.priority,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get expectedSha256 => $composableBuilder(
-    column: $table.expectedSha256,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.expectedSha256,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
-  get mirrorUrls => $composableBuilder(
-    column: $table.mirrorUrls,
-    builder: (column) => ColumnWithTypeConverterFilters(column),
-  );
+      get mirrorUrls => $composableBuilder(
+            column: $table.mirrorUrls,
+            builder: (column) => ColumnWithTypeConverterFilters(column),
+          );
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -3513,199 +3501,199 @@ class $$DownloadTasksTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get fileName => $composableBuilder(
-    column: $table.fileName,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.fileName,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get fileSize => $composableBuilder(
-    column: $table.fileSize,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.fileSize,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get downloadedBytes => $composableBuilder(
-    column: $table.downloadedBytes,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.downloadedBytes,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<double> get speed => $composableBuilder(
-    column: $table.speed,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.speed,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get eta => $composableBuilder(
-    column: $table.eta,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.eta,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get category => $composableBuilder(
-    column: $table.category,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.category,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get status => $composableBuilder(
-    column: $table.status,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.status,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get savePath => $composableBuilder(
-    column: $table.savePath,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.savePath,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get localFilePath => $composableBuilder(
-    column: $table.localFilePath,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.localFilePath,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get tempFilePath => $composableBuilder(
-    column: $table.tempFilePath,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.tempFilePath,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get errorMessage => $composableBuilder(
-    column: $table.errorMessage,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.errorMessage,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get threadCount => $composableBuilder(
-    column: $table.threadCount,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.threadCount,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get chunks => $composableBuilder(
-    column: $table.chunks,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.chunks,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.createdAt,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.updatedAt,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get completedAt => $composableBuilder(
-    column: $table.completedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.completedAt,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get scheduledAt => $composableBuilder(
-    column: $table.scheduledAt,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.scheduledAt,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<bool> get supportsResume => $composableBuilder(
-    column: $table.supportsResume,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.supportsResume,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get speedLimitKbps => $composableBuilder(
-    column: $table.speedLimitKbps,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.speedLimitKbps,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<bool> get seedingEnabled => $composableBuilder(
-    column: $table.seedingEnabled,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.seedingEnabled,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<bool> get seedingLimited => $composableBuilder(
-    column: $table.seedingLimited,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.seedingLimited,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get seedingLimitKbps => $composableBuilder(
-    column: $table.seedingLimitKbps,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.seedingLimitKbps,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get torrentFiles => $composableBuilder(
-    column: $table.torrentFiles,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.torrentFiles,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get downloadPageUrl => $composableBuilder(
-    column: $table.downloadPageUrl,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.downloadPageUrl,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get mergedAudioUrl => $composableBuilder(
-    column: $table.mergedAudioUrl,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.mergedAudioUrl,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get audioSize => $composableBuilder(
-    column: $table.audioSize,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.audioSize,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<double> get audioProgress => $composableBuilder(
-    column: $table.audioProgress,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.audioProgress,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<bool> get pausedByUser => $composableBuilder(
-    column: $table.pausedByUser,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.pausedByUser,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get youtubeQualityPreset => $composableBuilder(
-    column: $table.youtubeQualityPreset,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.youtubeQualityPreset,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get notes => $composableBuilder(
-    column: $table.notes,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.notes,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get playlistId => $composableBuilder(
-    column: $table.playlistId,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.playlistId,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get playlistTitle => $composableBuilder(
-    column: $table.playlistTitle,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.playlistTitle,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get thumbnailUrl => $composableBuilder(
-    column: $table.thumbnailUrl,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.thumbnailUrl,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<bool> get isAppUpdate => $composableBuilder(
-    column: $table.isAppUpdate,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.isAppUpdate,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get priority => $composableBuilder(
-    column: $table.priority,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.priority,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get expectedSha256 => $composableBuilder(
-    column: $table.expectedSha256,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.expectedSha256,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get mirrorUrls => $composableBuilder(
-    column: $table.mirrorUrls,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.mirrorUrls,
+        builder: (column) => ColumnOrderings(column),
+      );
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3730,9 +3718,9 @@ class $$DownloadTasksTableAnnotationComposer
       $composableBuilder(column: $table.fileSize, builder: (column) => column);
 
   GeneratedColumn<int> get downloadedBytes => $composableBuilder(
-    column: $table.downloadedBytes,
-    builder: (column) => column,
-  );
+        column: $table.downloadedBytes,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<double> get speed =>
       $composableBuilder(column: $table.speed, builder: (column) => column);
@@ -3750,24 +3738,24 @@ class $$DownloadTasksTableAnnotationComposer
       $composableBuilder(column: $table.savePath, builder: (column) => column);
 
   GeneratedColumn<String> get localFilePath => $composableBuilder(
-    column: $table.localFilePath,
-    builder: (column) => column,
-  );
+        column: $table.localFilePath,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get tempFilePath => $composableBuilder(
-    column: $table.tempFilePath,
-    builder: (column) => column,
-  );
+        column: $table.tempFilePath,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get errorMessage => $composableBuilder(
-    column: $table.errorMessage,
-    builder: (column) => column,
-  );
+        column: $table.errorMessage,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<int> get threadCount => $composableBuilder(
-    column: $table.threadCount,
-    builder: (column) => column,
-  );
+        column: $table.threadCount,
+        builder: (column) => column,
+      );
 
   GeneratedColumnWithTypeConverter<List<double>?, String> get chunks =>
       $composableBuilder(column: $table.chunks, builder: (column) => column);
@@ -3779,104 +3767,104 @@ class $$DownloadTasksTableAnnotationComposer
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<int> get completedAt => $composableBuilder(
-    column: $table.completedAt,
-    builder: (column) => column,
-  );
+        column: $table.completedAt,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<int> get scheduledAt => $composableBuilder(
-    column: $table.scheduledAt,
-    builder: (column) => column,
-  );
+        column: $table.scheduledAt,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<bool> get supportsResume => $composableBuilder(
-    column: $table.supportsResume,
-    builder: (column) => column,
-  );
+        column: $table.supportsResume,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<int> get speedLimitKbps => $composableBuilder(
-    column: $table.speedLimitKbps,
-    builder: (column) => column,
-  );
+        column: $table.speedLimitKbps,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<bool> get seedingEnabled => $composableBuilder(
-    column: $table.seedingEnabled,
-    builder: (column) => column,
-  );
+        column: $table.seedingEnabled,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<bool> get seedingLimited => $composableBuilder(
-    column: $table.seedingLimited,
-    builder: (column) => column,
-  );
+        column: $table.seedingLimited,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<int> get seedingLimitKbps => $composableBuilder(
-    column: $table.seedingLimitKbps,
-    builder: (column) => column,
-  );
+        column: $table.seedingLimitKbps,
+        builder: (column) => column,
+      );
 
   GeneratedColumnWithTypeConverter<List<Map<String, dynamic>>?, String>
-  get torrentFiles => $composableBuilder(
-    column: $table.torrentFiles,
-    builder: (column) => column,
-  );
+      get torrentFiles => $composableBuilder(
+            column: $table.torrentFiles,
+            builder: (column) => column,
+          );
 
   GeneratedColumn<String> get downloadPageUrl => $composableBuilder(
-    column: $table.downloadPageUrl,
-    builder: (column) => column,
-  );
+        column: $table.downloadPageUrl,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get mergedAudioUrl => $composableBuilder(
-    column: $table.mergedAudioUrl,
-    builder: (column) => column,
-  );
+        column: $table.mergedAudioUrl,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<int> get audioSize =>
       $composableBuilder(column: $table.audioSize, builder: (column) => column);
 
   GeneratedColumn<double> get audioProgress => $composableBuilder(
-    column: $table.audioProgress,
-    builder: (column) => column,
-  );
+        column: $table.audioProgress,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<bool> get pausedByUser => $composableBuilder(
-    column: $table.pausedByUser,
-    builder: (column) => column,
-  );
+        column: $table.pausedByUser,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get youtubeQualityPreset => $composableBuilder(
-    column: $table.youtubeQualityPreset,
-    builder: (column) => column,
-  );
+        column: $table.youtubeQualityPreset,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
   GeneratedColumn<String> get playlistId => $composableBuilder(
-    column: $table.playlistId,
-    builder: (column) => column,
-  );
+        column: $table.playlistId,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get playlistTitle => $composableBuilder(
-    column: $table.playlistTitle,
-    builder: (column) => column,
-  );
+        column: $table.playlistTitle,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<String> get thumbnailUrl => $composableBuilder(
-    column: $table.thumbnailUrl,
-    builder: (column) => column,
-  );
+        column: $table.thumbnailUrl,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<bool> get isAppUpdate => $composableBuilder(
-    column: $table.isAppUpdate,
-    builder: (column) => column,
-  );
+        column: $table.isAppUpdate,
+        builder: (column) => column,
+      );
 
   GeneratedColumn<int> get priority =>
       $composableBuilder(column: $table.priority, builder: (column) => column);
 
   GeneratedColumn<String> get expectedSha256 => $composableBuilder(
-    column: $table.expectedSha256,
-    builder: (column) => column,
-  );
+        column: $table.expectedSha256,
+        builder: (column) => column,
+      );
 
   GeneratedColumnWithTypeConverter<List<String>?, String> get mirrorUrls =>
       $composableBuilder(
@@ -3885,248 +3873,241 @@ class $$DownloadTasksTableAnnotationComposer
       );
 }
 
-class $$DownloadTasksTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $DownloadTasksTable,
-          DbDownloadTask,
-          $$DownloadTasksTableFilterComposer,
-          $$DownloadTasksTableOrderingComposer,
-          $$DownloadTasksTableAnnotationComposer,
-          $$DownloadTasksTableCreateCompanionBuilder,
-          $$DownloadTasksTableUpdateCompanionBuilder,
-          (
-            DbDownloadTask,
-            BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>,
-          ),
-          DbDownloadTask,
-          PrefetchHooks Function()
-        > {
+class $$DownloadTasksTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $DownloadTasksTable,
+    DbDownloadTask,
+    $$DownloadTasksTableFilterComposer,
+    $$DownloadTasksTableOrderingComposer,
+    $$DownloadTasksTableAnnotationComposer,
+    $$DownloadTasksTableCreateCompanionBuilder,
+    $$DownloadTasksTableUpdateCompanionBuilder,
+    (
+      DbDownloadTask,
+      BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>,
+    ),
+    DbDownloadTask,
+    PrefetchHooks Function()> {
   $$DownloadTasksTableTableManager(_$AppDatabase db, $DownloadTasksTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$DownloadTasksTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$DownloadTasksTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$DownloadTasksTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> fileName = const Value.absent(),
-                Value<String> url = const Value.absent(),
-                Value<int> fileSize = const Value.absent(),
-                Value<int> downloadedBytes = const Value.absent(),
-                Value<double> speed = const Value.absent(),
-                Value<int?> eta = const Value.absent(),
-                Value<String> category = const Value.absent(),
-                Value<String> status = const Value.absent(),
-                Value<String> savePath = const Value.absent(),
-                Value<String> localFilePath = const Value.absent(),
-                Value<String> tempFilePath = const Value.absent(),
-                Value<String?> errorMessage = const Value.absent(),
-                Value<int> threadCount = const Value.absent(),
-                Value<List<double>?> chunks = const Value.absent(),
-                Value<int> createdAt = const Value.absent(),
-                Value<int> updatedAt = const Value.absent(),
-                Value<int?> completedAt = const Value.absent(),
-                Value<int?> scheduledAt = const Value.absent(),
-                Value<bool> supportsResume = const Value.absent(),
-                Value<int> speedLimitKbps = const Value.absent(),
-                Value<bool> seedingEnabled = const Value.absent(),
-                Value<bool> seedingLimited = const Value.absent(),
-                Value<int> seedingLimitKbps = const Value.absent(),
-                Value<List<Map<String, dynamic>>?> torrentFiles =
-                    const Value.absent(),
-                Value<String?> downloadPageUrl = const Value.absent(),
-                Value<String?> mergedAudioUrl = const Value.absent(),
-                Value<int> audioSize = const Value.absent(),
-                Value<double> audioProgress = const Value.absent(),
-                Value<bool> pausedByUser = const Value.absent(),
-                Value<String?> youtubeQualityPreset = const Value.absent(),
-                Value<String?> notes = const Value.absent(),
-                Value<String?> playlistId = const Value.absent(),
-                Value<String?> playlistTitle = const Value.absent(),
-                Value<String?> thumbnailUrl = const Value.absent(),
-                Value<bool> isAppUpdate = const Value.absent(),
-                Value<int> priority = const Value.absent(),
-                Value<String?> expectedSha256 = const Value.absent(),
-                Value<List<String>?> mirrorUrls = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => DownloadTasksCompanion(
-                id: id,
-                fileName: fileName,
-                url: url,
-                fileSize: fileSize,
-                downloadedBytes: downloadedBytes,
-                speed: speed,
-                eta: eta,
-                category: category,
-                status: status,
-                savePath: savePath,
-                localFilePath: localFilePath,
-                tempFilePath: tempFilePath,
-                errorMessage: errorMessage,
-                threadCount: threadCount,
-                chunks: chunks,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                completedAt: completedAt,
-                scheduledAt: scheduledAt,
-                supportsResume: supportsResume,
-                speedLimitKbps: speedLimitKbps,
-                seedingEnabled: seedingEnabled,
-                seedingLimited: seedingLimited,
-                seedingLimitKbps: seedingLimitKbps,
-                torrentFiles: torrentFiles,
-                downloadPageUrl: downloadPageUrl,
-                mergedAudioUrl: mergedAudioUrl,
-                audioSize: audioSize,
-                audioProgress: audioProgress,
-                pausedByUser: pausedByUser,
-                youtubeQualityPreset: youtubeQualityPreset,
-                notes: notes,
-                playlistId: playlistId,
-                playlistTitle: playlistTitle,
-                thumbnailUrl: thumbnailUrl,
-                isAppUpdate: isAppUpdate,
-                priority: priority,
-                expectedSha256: expectedSha256,
-                mirrorUrls: mirrorUrls,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String fileName,
-                required String url,
-                Value<int> fileSize = const Value.absent(),
-                Value<int> downloadedBytes = const Value.absent(),
-                Value<double> speed = const Value.absent(),
-                Value<int?> eta = const Value.absent(),
-                required String category,
-                required String status,
-                required String savePath,
-                required String localFilePath,
-                required String tempFilePath,
-                Value<String?> errorMessage = const Value.absent(),
-                required int threadCount,
-                Value<List<double>?> chunks = const Value.absent(),
-                required int createdAt,
-                required int updatedAt,
-                Value<int?> completedAt = const Value.absent(),
-                Value<int?> scheduledAt = const Value.absent(),
-                Value<bool> supportsResume = const Value.absent(),
-                Value<int> speedLimitKbps = const Value.absent(),
-                Value<bool> seedingEnabled = const Value.absent(),
-                Value<bool> seedingLimited = const Value.absent(),
-                Value<int> seedingLimitKbps = const Value.absent(),
-                Value<List<Map<String, dynamic>>?> torrentFiles =
-                    const Value.absent(),
-                Value<String?> downloadPageUrl = const Value.absent(),
-                Value<String?> mergedAudioUrl = const Value.absent(),
-                Value<int> audioSize = const Value.absent(),
-                Value<double> audioProgress = const Value.absent(),
-                Value<bool> pausedByUser = const Value.absent(),
-                Value<String?> youtubeQualityPreset = const Value.absent(),
-                Value<String?> notes = const Value.absent(),
-                Value<String?> playlistId = const Value.absent(),
-                Value<String?> playlistTitle = const Value.absent(),
-                Value<String?> thumbnailUrl = const Value.absent(),
-                Value<bool> isAppUpdate = const Value.absent(),
-                Value<int> priority = const Value.absent(),
-                Value<String?> expectedSha256 = const Value.absent(),
-                Value<List<String>?> mirrorUrls = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => DownloadTasksCompanion.insert(
-                id: id,
-                fileName: fileName,
-                url: url,
-                fileSize: fileSize,
-                downloadedBytes: downloadedBytes,
-                speed: speed,
-                eta: eta,
-                category: category,
-                status: status,
-                savePath: savePath,
-                localFilePath: localFilePath,
-                tempFilePath: tempFilePath,
-                errorMessage: errorMessage,
-                threadCount: threadCount,
-                chunks: chunks,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                completedAt: completedAt,
-                scheduledAt: scheduledAt,
-                supportsResume: supportsResume,
-                speedLimitKbps: speedLimitKbps,
-                seedingEnabled: seedingEnabled,
-                seedingLimited: seedingLimited,
-                seedingLimitKbps: seedingLimitKbps,
-                torrentFiles: torrentFiles,
-                downloadPageUrl: downloadPageUrl,
-                mergedAudioUrl: mergedAudioUrl,
-                audioSize: audioSize,
-                audioProgress: audioProgress,
-                pausedByUser: pausedByUser,
-                youtubeQualityPreset: youtubeQualityPreset,
-                notes: notes,
-                playlistId: playlistId,
-                playlistTitle: playlistTitle,
-                thumbnailUrl: thumbnailUrl,
-                isAppUpdate: isAppUpdate,
-                priority: priority,
-                expectedSha256: expectedSha256,
-                mirrorUrls: mirrorUrls,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
+      : super(
+          TableManagerState(
+            db: db,
+            table: table,
+            createFilteringComposer: () =>
+                $$DownloadTasksTableFilterComposer($db: db, $table: table),
+            createOrderingComposer: () =>
+                $$DownloadTasksTableOrderingComposer($db: db, $table: table),
+            createComputedFieldComposer: () =>
+                $$DownloadTasksTableAnnotationComposer($db: db, $table: table),
+            updateCompanionCallback: ({
+              Value<String> id = const Value.absent(),
+              Value<String> fileName = const Value.absent(),
+              Value<String> url = const Value.absent(),
+              Value<int> fileSize = const Value.absent(),
+              Value<int> downloadedBytes = const Value.absent(),
+              Value<double> speed = const Value.absent(),
+              Value<int?> eta = const Value.absent(),
+              Value<String> category = const Value.absent(),
+              Value<String> status = const Value.absent(),
+              Value<String> savePath = const Value.absent(),
+              Value<String> localFilePath = const Value.absent(),
+              Value<String> tempFilePath = const Value.absent(),
+              Value<String?> errorMessage = const Value.absent(),
+              Value<int> threadCount = const Value.absent(),
+              Value<List<double>?> chunks = const Value.absent(),
+              Value<int> createdAt = const Value.absent(),
+              Value<int> updatedAt = const Value.absent(),
+              Value<int?> completedAt = const Value.absent(),
+              Value<int?> scheduledAt = const Value.absent(),
+              Value<bool> supportsResume = const Value.absent(),
+              Value<int> speedLimitKbps = const Value.absent(),
+              Value<bool> seedingEnabled = const Value.absent(),
+              Value<bool> seedingLimited = const Value.absent(),
+              Value<int> seedingLimitKbps = const Value.absent(),
+              Value<List<Map<String, dynamic>>?> torrentFiles =
+                  const Value.absent(),
+              Value<String?> downloadPageUrl = const Value.absent(),
+              Value<String?> mergedAudioUrl = const Value.absent(),
+              Value<int> audioSize = const Value.absent(),
+              Value<double> audioProgress = const Value.absent(),
+              Value<bool> pausedByUser = const Value.absent(),
+              Value<String?> youtubeQualityPreset = const Value.absent(),
+              Value<String?> notes = const Value.absent(),
+              Value<String?> playlistId = const Value.absent(),
+              Value<String?> playlistTitle = const Value.absent(),
+              Value<String?> thumbnailUrl = const Value.absent(),
+              Value<bool> isAppUpdate = const Value.absent(),
+              Value<int> priority = const Value.absent(),
+              Value<String?> expectedSha256 = const Value.absent(),
+              Value<List<String>?> mirrorUrls = const Value.absent(),
+              Value<int> rowid = const Value.absent(),
+            }) =>
+                DownloadTasksCompanion(
+              id: id,
+              fileName: fileName,
+              url: url,
+              fileSize: fileSize,
+              downloadedBytes: downloadedBytes,
+              speed: speed,
+              eta: eta,
+              category: category,
+              status: status,
+              savePath: savePath,
+              localFilePath: localFilePath,
+              tempFilePath: tempFilePath,
+              errorMessage: errorMessage,
+              threadCount: threadCount,
+              chunks: chunks,
+              createdAt: createdAt,
+              updatedAt: updatedAt,
+              completedAt: completedAt,
+              scheduledAt: scheduledAt,
+              supportsResume: supportsResume,
+              speedLimitKbps: speedLimitKbps,
+              seedingEnabled: seedingEnabled,
+              seedingLimited: seedingLimited,
+              seedingLimitKbps: seedingLimitKbps,
+              torrentFiles: torrentFiles,
+              downloadPageUrl: downloadPageUrl,
+              mergedAudioUrl: mergedAudioUrl,
+              audioSize: audioSize,
+              audioProgress: audioProgress,
+              pausedByUser: pausedByUser,
+              youtubeQualityPreset: youtubeQualityPreset,
+              notes: notes,
+              playlistId: playlistId,
+              playlistTitle: playlistTitle,
+              thumbnailUrl: thumbnailUrl,
+              isAppUpdate: isAppUpdate,
+              priority: priority,
+              expectedSha256: expectedSha256,
+              mirrorUrls: mirrorUrls,
+              rowid: rowid,
+            ),
+            createCompanionCallback: ({
+              required String id,
+              required String fileName,
+              required String url,
+              Value<int> fileSize = const Value.absent(),
+              Value<int> downloadedBytes = const Value.absent(),
+              Value<double> speed = const Value.absent(),
+              Value<int?> eta = const Value.absent(),
+              required String category,
+              required String status,
+              required String savePath,
+              required String localFilePath,
+              required String tempFilePath,
+              Value<String?> errorMessage = const Value.absent(),
+              required int threadCount,
+              Value<List<double>?> chunks = const Value.absent(),
+              required int createdAt,
+              required int updatedAt,
+              Value<int?> completedAt = const Value.absent(),
+              Value<int?> scheduledAt = const Value.absent(),
+              Value<bool> supportsResume = const Value.absent(),
+              Value<int> speedLimitKbps = const Value.absent(),
+              Value<bool> seedingEnabled = const Value.absent(),
+              Value<bool> seedingLimited = const Value.absent(),
+              Value<int> seedingLimitKbps = const Value.absent(),
+              Value<List<Map<String, dynamic>>?> torrentFiles =
+                  const Value.absent(),
+              Value<String?> downloadPageUrl = const Value.absent(),
+              Value<String?> mergedAudioUrl = const Value.absent(),
+              Value<int> audioSize = const Value.absent(),
+              Value<double> audioProgress = const Value.absent(),
+              Value<bool> pausedByUser = const Value.absent(),
+              Value<String?> youtubeQualityPreset = const Value.absent(),
+              Value<String?> notes = const Value.absent(),
+              Value<String?> playlistId = const Value.absent(),
+              Value<String?> playlistTitle = const Value.absent(),
+              Value<String?> thumbnailUrl = const Value.absent(),
+              Value<bool> isAppUpdate = const Value.absent(),
+              Value<int> priority = const Value.absent(),
+              Value<String?> expectedSha256 = const Value.absent(),
+              Value<List<String>?> mirrorUrls = const Value.absent(),
+              Value<int> rowid = const Value.absent(),
+            }) =>
+                DownloadTasksCompanion.insert(
+              id: id,
+              fileName: fileName,
+              url: url,
+              fileSize: fileSize,
+              downloadedBytes: downloadedBytes,
+              speed: speed,
+              eta: eta,
+              category: category,
+              status: status,
+              savePath: savePath,
+              localFilePath: localFilePath,
+              tempFilePath: tempFilePath,
+              errorMessage: errorMessage,
+              threadCount: threadCount,
+              chunks: chunks,
+              createdAt: createdAt,
+              updatedAt: updatedAt,
+              completedAt: completedAt,
+              scheduledAt: scheduledAt,
+              supportsResume: supportsResume,
+              speedLimitKbps: speedLimitKbps,
+              seedingEnabled: seedingEnabled,
+              seedingLimited: seedingLimited,
+              seedingLimitKbps: seedingLimitKbps,
+              torrentFiles: torrentFiles,
+              downloadPageUrl: downloadPageUrl,
+              mergedAudioUrl: mergedAudioUrl,
+              audioSize: audioSize,
+              audioProgress: audioProgress,
+              pausedByUser: pausedByUser,
+              youtubeQualityPreset: youtubeQualityPreset,
+              notes: notes,
+              playlistId: playlistId,
+              playlistTitle: playlistTitle,
+              thumbnailUrl: thumbnailUrl,
+              isAppUpdate: isAppUpdate,
+              priority: priority,
+              expectedSha256: expectedSha256,
+              mirrorUrls: mirrorUrls,
+              rowid: rowid,
+            ),
+            withReferenceMapper: (p0) => p0
+                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+                .toList(),
+            prefetchHooksCallback: null,
+          ),
+        );
 }
 
-typedef $$DownloadTasksTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $DownloadTasksTable,
+typedef $$DownloadTasksTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $DownloadTasksTable,
+    DbDownloadTask,
+    $$DownloadTasksTableFilterComposer,
+    $$DownloadTasksTableOrderingComposer,
+    $$DownloadTasksTableAnnotationComposer,
+    $$DownloadTasksTableCreateCompanionBuilder,
+    $$DownloadTasksTableUpdateCompanionBuilder,
+    (
       DbDownloadTask,
-      $$DownloadTasksTableFilterComposer,
-      $$DownloadTasksTableOrderingComposer,
-      $$DownloadTasksTableAnnotationComposer,
-      $$DownloadTasksTableCreateCompanionBuilder,
-      $$DownloadTasksTableUpdateCompanionBuilder,
-      (
-        DbDownloadTask,
-        BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>,
-      ),
-      DbDownloadTask,
-      PrefetchHooks Function()
-    >;
-typedef $$BookmarksTableCreateCompanionBuilder =
-    BookmarksCompanion Function({
-      required String id,
-      required String title,
-      required String url,
-      Value<String?> folder,
-      required int createdAt,
-      Value<int> rowid,
-    });
-typedef $$BookmarksTableUpdateCompanionBuilder =
-    BookmarksCompanion Function({
-      Value<String> id,
-      Value<String> title,
-      Value<String> url,
-      Value<String?> folder,
-      Value<int> createdAt,
-      Value<int> rowid,
-    });
+      BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>,
+    ),
+    DbDownloadTask,
+    PrefetchHooks Function()>;
+typedef $$BookmarksTableCreateCompanionBuilder = BookmarksCompanion Function({
+  required String id,
+  required String title,
+  required String url,
+  Value<String?> folder,
+  required int createdAt,
+  Value<int> rowid,
+});
+typedef $$BookmarksTableUpdateCompanionBuilder = BookmarksCompanion Function({
+  Value<String> id,
+  Value<String> title,
+  Value<String> url,
+  Value<String?> folder,
+  Value<int> createdAt,
+  Value<int> rowid,
+});
 
 class $$BookmarksTableFilterComposer
     extends Composer<_$AppDatabase, $BookmarksTable> {
@@ -4138,29 +4119,29 @@ class $$BookmarksTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.title,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get folder => $composableBuilder(
-    column: $table.folder,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.folder,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.createdAt,
+        builder: (column) => ColumnFilters(column),
+      );
 }
 
 class $$BookmarksTableOrderingComposer
@@ -4173,29 +4154,29 @@ class $$BookmarksTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.title,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get folder => $composableBuilder(
-    column: $table.folder,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.folder,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.createdAt,
+        builder: (column) => ColumnOrderings(column),
+      );
 }
 
 class $$BookmarksTableAnnotationComposer
@@ -4223,103 +4204,98 @@ class $$BookmarksTableAnnotationComposer
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
 
-class $$BookmarksTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $BookmarksTable,
-          DbBookmark,
-          $$BookmarksTableFilterComposer,
-          $$BookmarksTableOrderingComposer,
-          $$BookmarksTableAnnotationComposer,
-          $$BookmarksTableCreateCompanionBuilder,
-          $$BookmarksTableUpdateCompanionBuilder,
-          (
-            DbBookmark,
-            BaseReferences<_$AppDatabase, $BookmarksTable, DbBookmark>,
-          ),
-          DbBookmark,
-          PrefetchHooks Function()
-        > {
+class $$BookmarksTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $BookmarksTable,
+    DbBookmark,
+    $$BookmarksTableFilterComposer,
+    $$BookmarksTableOrderingComposer,
+    $$BookmarksTableAnnotationComposer,
+    $$BookmarksTableCreateCompanionBuilder,
+    $$BookmarksTableUpdateCompanionBuilder,
+    (
+      DbBookmark,
+      BaseReferences<_$AppDatabase, $BookmarksTable, DbBookmark>,
+    ),
+    DbBookmark,
+    PrefetchHooks Function()> {
   $$BookmarksTableTableManager(_$AppDatabase db, $BookmarksTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$BookmarksTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$BookmarksTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$BookmarksTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> title = const Value.absent(),
-                Value<String> url = const Value.absent(),
-                Value<String?> folder = const Value.absent(),
-                Value<int> createdAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => BookmarksCompanion(
-                id: id,
-                title: title,
-                url: url,
-                folder: folder,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String title,
-                required String url,
-                Value<String?> folder = const Value.absent(),
-                required int createdAt,
-                Value<int> rowid = const Value.absent(),
-              }) => BookmarksCompanion.insert(
-                id: id,
-                title: title,
-                url: url,
-                folder: folder,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
+      : super(
+          TableManagerState(
+            db: db,
+            table: table,
+            createFilteringComposer: () =>
+                $$BookmarksTableFilterComposer($db: db, $table: table),
+            createOrderingComposer: () =>
+                $$BookmarksTableOrderingComposer($db: db, $table: table),
+            createComputedFieldComposer: () =>
+                $$BookmarksTableAnnotationComposer($db: db, $table: table),
+            updateCompanionCallback: ({
+              Value<String> id = const Value.absent(),
+              Value<String> title = const Value.absent(),
+              Value<String> url = const Value.absent(),
+              Value<String?> folder = const Value.absent(),
+              Value<int> createdAt = const Value.absent(),
+              Value<int> rowid = const Value.absent(),
+            }) =>
+                BookmarksCompanion(
+              id: id,
+              title: title,
+              url: url,
+              folder: folder,
+              createdAt: createdAt,
+              rowid: rowid,
+            ),
+            createCompanionCallback: ({
+              required String id,
+              required String title,
+              required String url,
+              Value<String?> folder = const Value.absent(),
+              required int createdAt,
+              Value<int> rowid = const Value.absent(),
+            }) =>
+                BookmarksCompanion.insert(
+              id: id,
+              title: title,
+              url: url,
+              folder: folder,
+              createdAt: createdAt,
+              rowid: rowid,
+            ),
+            withReferenceMapper: (p0) => p0
+                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+                .toList(),
+            prefetchHooksCallback: null,
+          ),
+        );
 }
 
-typedef $$BookmarksTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $BookmarksTable,
-      DbBookmark,
-      $$BookmarksTableFilterComposer,
-      $$BookmarksTableOrderingComposer,
-      $$BookmarksTableAnnotationComposer,
-      $$BookmarksTableCreateCompanionBuilder,
-      $$BookmarksTableUpdateCompanionBuilder,
-      (DbBookmark, BaseReferences<_$AppDatabase, $BookmarksTable, DbBookmark>),
-      DbBookmark,
-      PrefetchHooks Function()
-    >;
-typedef $$BrowserHistoryTableCreateCompanionBuilder =
-    BrowserHistoryCompanion Function({
-      Value<int> id,
-      required String url,
-      required String title,
-      required int visitedAt,
-    });
-typedef $$BrowserHistoryTableUpdateCompanionBuilder =
-    BrowserHistoryCompanion Function({
-      Value<int> id,
-      Value<String> url,
-      Value<String> title,
-      Value<int> visitedAt,
-    });
+typedef $$BookmarksTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $BookmarksTable,
+    DbBookmark,
+    $$BookmarksTableFilterComposer,
+    $$BookmarksTableOrderingComposer,
+    $$BookmarksTableAnnotationComposer,
+    $$BookmarksTableCreateCompanionBuilder,
+    $$BookmarksTableUpdateCompanionBuilder,
+    (DbBookmark, BaseReferences<_$AppDatabase, $BookmarksTable, DbBookmark>),
+    DbBookmark,
+    PrefetchHooks Function()>;
+typedef $$BrowserHistoryTableCreateCompanionBuilder = BrowserHistoryCompanion
+    Function({
+  Value<int> id,
+  required String url,
+  required String title,
+  required int visitedAt,
+});
+typedef $$BrowserHistoryTableUpdateCompanionBuilder = BrowserHistoryCompanion
+    Function({
+  Value<int> id,
+  Value<String> url,
+  Value<String> title,
+  Value<int> visitedAt,
+});
 
 class $$BrowserHistoryTableFilterComposer
     extends Composer<_$AppDatabase, $BrowserHistoryTable> {
@@ -4331,24 +4307,24 @@ class $$BrowserHistoryTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.title,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get visitedAt => $composableBuilder(
-    column: $table.visitedAt,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.visitedAt,
+        builder: (column) => ColumnFilters(column),
+      );
 }
 
 class $$BrowserHistoryTableOrderingComposer
@@ -4361,24 +4337,24 @@ class $$BrowserHistoryTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.title,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get visitedAt => $composableBuilder(
-    column: $table.visitedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.visitedAt,
+        builder: (column) => ColumnOrderings(column),
+      );
 }
 
 class $$BrowserHistoryTableAnnotationComposer
@@ -4403,110 +4379,101 @@ class $$BrowserHistoryTableAnnotationComposer
       $composableBuilder(column: $table.visitedAt, builder: (column) => column);
 }
 
-class $$BrowserHistoryTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $BrowserHistoryTable,
-          DbBrowserHistory,
-          $$BrowserHistoryTableFilterComposer,
-          $$BrowserHistoryTableOrderingComposer,
-          $$BrowserHistoryTableAnnotationComposer,
-          $$BrowserHistoryTableCreateCompanionBuilder,
-          $$BrowserHistoryTableUpdateCompanionBuilder,
-          (
-            DbBrowserHistory,
-            BaseReferences<
-              _$AppDatabase,
-              $BrowserHistoryTable,
-              DbBrowserHistory
-            >,
-          ),
-          DbBrowserHistory,
-          PrefetchHooks Function()
-        > {
+class $$BrowserHistoryTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $BrowserHistoryTable,
+    DbBrowserHistory,
+    $$BrowserHistoryTableFilterComposer,
+    $$BrowserHistoryTableOrderingComposer,
+    $$BrowserHistoryTableAnnotationComposer,
+    $$BrowserHistoryTableCreateCompanionBuilder,
+    $$BrowserHistoryTableUpdateCompanionBuilder,
+    (
+      DbBrowserHistory,
+      BaseReferences<_$AppDatabase, $BrowserHistoryTable, DbBrowserHistory>,
+    ),
+    DbBrowserHistory,
+    PrefetchHooks Function()> {
   $$BrowserHistoryTableTableManager(
     _$AppDatabase db,
     $BrowserHistoryTable table,
   ) : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$BrowserHistoryTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$BrowserHistoryTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$BrowserHistoryTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<int> id = const Value.absent(),
-                Value<String> url = const Value.absent(),
-                Value<String> title = const Value.absent(),
-                Value<int> visitedAt = const Value.absent(),
-              }) => BrowserHistoryCompanion(
-                id: id,
-                url: url,
-                title: title,
-                visitedAt: visitedAt,
-              ),
-          createCompanionCallback:
-              ({
-                Value<int> id = const Value.absent(),
-                required String url,
-                required String title,
-                required int visitedAt,
-              }) => BrowserHistoryCompanion.insert(
-                id: id,
-                url: url,
-                title: title,
-                visitedAt: visitedAt,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
+          TableManagerState(
+            db: db,
+            table: table,
+            createFilteringComposer: () =>
+                $$BrowserHistoryTableFilterComposer($db: db, $table: table),
+            createOrderingComposer: () =>
+                $$BrowserHistoryTableOrderingComposer($db: db, $table: table),
+            createComputedFieldComposer: () =>
+                $$BrowserHistoryTableAnnotationComposer($db: db, $table: table),
+            updateCompanionCallback: ({
+              Value<int> id = const Value.absent(),
+              Value<String> url = const Value.absent(),
+              Value<String> title = const Value.absent(),
+              Value<int> visitedAt = const Value.absent(),
+            }) =>
+                BrowserHistoryCompanion(
+              id: id,
+              url: url,
+              title: title,
+              visitedAt: visitedAt,
+            ),
+            createCompanionCallback: ({
+              Value<int> id = const Value.absent(),
+              required String url,
+              required String title,
+              required int visitedAt,
+            }) =>
+                BrowserHistoryCompanion.insert(
+              id: id,
+              url: url,
+              title: title,
+              visitedAt: visitedAt,
+            ),
+            withReferenceMapper: (p0) => p0
+                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+                .toList(),
+            prefetchHooksCallback: null,
+          ),
+        );
 }
 
-typedef $$BrowserHistoryTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $BrowserHistoryTable,
+typedef $$BrowserHistoryTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $BrowserHistoryTable,
+    DbBrowserHistory,
+    $$BrowserHistoryTableFilterComposer,
+    $$BrowserHistoryTableOrderingComposer,
+    $$BrowserHistoryTableAnnotationComposer,
+    $$BrowserHistoryTableCreateCompanionBuilder,
+    $$BrowserHistoryTableUpdateCompanionBuilder,
+    (
       DbBrowserHistory,
-      $$BrowserHistoryTableFilterComposer,
-      $$BrowserHistoryTableOrderingComposer,
-      $$BrowserHistoryTableAnnotationComposer,
-      $$BrowserHistoryTableCreateCompanionBuilder,
-      $$BrowserHistoryTableUpdateCompanionBuilder,
-      (
-        DbBrowserHistory,
-        BaseReferences<_$AppDatabase, $BrowserHistoryTable, DbBrowserHistory>,
-      ),
-      DbBrowserHistory,
-      PrefetchHooks Function()
-    >;
-typedef $$BrowserTabsTableCreateCompanionBuilder =
-    BrowserTabsCompanion Function({
-      required String id,
-      required String url,
-      Value<String> title,
-      Value<bool> isActive,
-      Value<int> position,
-      required int createdAt,
-      Value<int> rowid,
-    });
-typedef $$BrowserTabsTableUpdateCompanionBuilder =
-    BrowserTabsCompanion Function({
-      Value<String> id,
-      Value<String> url,
-      Value<String> title,
-      Value<bool> isActive,
-      Value<int> position,
-      Value<int> createdAt,
-      Value<int> rowid,
-    });
+      BaseReferences<_$AppDatabase, $BrowserHistoryTable, DbBrowserHistory>,
+    ),
+    DbBrowserHistory,
+    PrefetchHooks Function()>;
+typedef $$BrowserTabsTableCreateCompanionBuilder = BrowserTabsCompanion
+    Function({
+  required String id,
+  required String url,
+  Value<String> title,
+  Value<bool> isActive,
+  Value<int> position,
+  required int createdAt,
+  Value<int> rowid,
+});
+typedef $$BrowserTabsTableUpdateCompanionBuilder = BrowserTabsCompanion
+    Function({
+  Value<String> id,
+  Value<String> url,
+  Value<String> title,
+  Value<bool> isActive,
+  Value<int> position,
+  Value<int> createdAt,
+  Value<int> rowid,
+});
 
 class $$BrowserTabsTableFilterComposer
     extends Composer<_$AppDatabase, $BrowserTabsTable> {
@@ -4518,34 +4485,34 @@ class $$BrowserTabsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.title,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<bool> get isActive => $composableBuilder(
-    column: $table.isActive,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.isActive,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get position => $composableBuilder(
-    column: $table.position,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.position,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<int> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
+        column: $table.createdAt,
+        builder: (column) => ColumnFilters(column),
+      );
 }
 
 class $$BrowserTabsTableOrderingComposer
@@ -4558,34 +4525,34 @@ class $$BrowserTabsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.id,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get url => $composableBuilder(
-    column: $table.url,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.url,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<String> get title => $composableBuilder(
-    column: $table.title,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.title,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<bool> get isActive => $composableBuilder(
-    column: $table.isActive,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.isActive,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get position => $composableBuilder(
-    column: $table.position,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.position,
+        builder: (column) => ColumnOrderings(column),
+      );
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
+        column: $table.createdAt,
+        builder: (column) => ColumnOrderings(column),
+      );
 }
 
 class $$BrowserTabsTableAnnotationComposer
@@ -4616,96 +4583,91 @@ class $$BrowserTabsTableAnnotationComposer
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
 
-class $$BrowserTabsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $BrowserTabsTable,
-          SavedBrowserTab,
-          $$BrowserTabsTableFilterComposer,
-          $$BrowserTabsTableOrderingComposer,
-          $$BrowserTabsTableAnnotationComposer,
-          $$BrowserTabsTableCreateCompanionBuilder,
-          $$BrowserTabsTableUpdateCompanionBuilder,
-          (
-            SavedBrowserTab,
-            BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
-          ),
-          SavedBrowserTab,
-          PrefetchHooks Function()
-        > {
+class $$BrowserTabsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $BrowserTabsTable,
+    SavedBrowserTab,
+    $$BrowserTabsTableFilterComposer,
+    $$BrowserTabsTableOrderingComposer,
+    $$BrowserTabsTableAnnotationComposer,
+    $$BrowserTabsTableCreateCompanionBuilder,
+    $$BrowserTabsTableUpdateCompanionBuilder,
+    (
+      SavedBrowserTab,
+      BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
+    ),
+    SavedBrowserTab,
+    PrefetchHooks Function()> {
   $$BrowserTabsTableTableManager(_$AppDatabase db, $BrowserTabsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$BrowserTabsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$BrowserTabsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$BrowserTabsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> url = const Value.absent(),
-                Value<String> title = const Value.absent(),
-                Value<bool> isActive = const Value.absent(),
-                Value<int> position = const Value.absent(),
-                Value<int> createdAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => BrowserTabsCompanion(
-                id: id,
-                url: url,
-                title: title,
-                isActive: isActive,
-                position: position,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String id,
-                required String url,
-                Value<String> title = const Value.absent(),
-                Value<bool> isActive = const Value.absent(),
-                Value<int> position = const Value.absent(),
-                required int createdAt,
-                Value<int> rowid = const Value.absent(),
-              }) => BrowserTabsCompanion.insert(
-                id: id,
-                url: url,
-                title: title,
-                isActive: isActive,
-                position: position,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
+      : super(
+          TableManagerState(
+            db: db,
+            table: table,
+            createFilteringComposer: () =>
+                $$BrowserTabsTableFilterComposer($db: db, $table: table),
+            createOrderingComposer: () =>
+                $$BrowserTabsTableOrderingComposer($db: db, $table: table),
+            createComputedFieldComposer: () =>
+                $$BrowserTabsTableAnnotationComposer($db: db, $table: table),
+            updateCompanionCallback: ({
+              Value<String> id = const Value.absent(),
+              Value<String> url = const Value.absent(),
+              Value<String> title = const Value.absent(),
+              Value<bool> isActive = const Value.absent(),
+              Value<int> position = const Value.absent(),
+              Value<int> createdAt = const Value.absent(),
+              Value<int> rowid = const Value.absent(),
+            }) =>
+                BrowserTabsCompanion(
+              id: id,
+              url: url,
+              title: title,
+              isActive: isActive,
+              position: position,
+              createdAt: createdAt,
+              rowid: rowid,
+            ),
+            createCompanionCallback: ({
+              required String id,
+              required String url,
+              Value<String> title = const Value.absent(),
+              Value<bool> isActive = const Value.absent(),
+              Value<int> position = const Value.absent(),
+              required int createdAt,
+              Value<int> rowid = const Value.absent(),
+            }) =>
+                BrowserTabsCompanion.insert(
+              id: id,
+              url: url,
+              title: title,
+              isActive: isActive,
+              position: position,
+              createdAt: createdAt,
+              rowid: rowid,
+            ),
+            withReferenceMapper: (p0) => p0
+                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+                .toList(),
+            prefetchHooksCallback: null,
+          ),
+        );
 }
 
-typedef $$BrowserTabsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $BrowserTabsTable,
+typedef $$BrowserTabsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $BrowserTabsTable,
+    SavedBrowserTab,
+    $$BrowserTabsTableFilterComposer,
+    $$BrowserTabsTableOrderingComposer,
+    $$BrowserTabsTableAnnotationComposer,
+    $$BrowserTabsTableCreateCompanionBuilder,
+    $$BrowserTabsTableUpdateCompanionBuilder,
+    (
       SavedBrowserTab,
-      $$BrowserTabsTableFilterComposer,
-      $$BrowserTabsTableOrderingComposer,
-      $$BrowserTabsTableAnnotationComposer,
-      $$BrowserTabsTableCreateCompanionBuilder,
-      $$BrowserTabsTableUpdateCompanionBuilder,
-      (
-        SavedBrowserTab,
-        BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
-      ),
-      SavedBrowserTab,
-      PrefetchHooks Function()
-    >;
+      BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
+    ),
+    SavedBrowserTab,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;

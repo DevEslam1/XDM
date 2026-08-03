@@ -65,7 +65,8 @@ class ReaderModeService {
         domain: data['domain'] as String? ?? '',
       );
     } catch (e, st) {
-      Logger('reader_mode_service').warning('[reader_mode_service] operation failed', e, st);
+      Logger('reader_mode_service')
+          .warning('[reader_mode_service] operation failed', e, st);
       return null;
     }
   }

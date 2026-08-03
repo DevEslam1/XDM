@@ -41,8 +41,7 @@ class _DmxAppIconState extends State<DmxAppIcon>
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
     final isDark = settings.isDarkMode;
-    final accentClr =
-        widget.customColor ??
+    final accentClr = widget.customColor ??
         (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
     final glowOn = isDark && widget.showGlow && settings.enableGlow;
 

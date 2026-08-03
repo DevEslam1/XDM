@@ -138,7 +138,8 @@ void main() {
           response: Response(
             requestOptions: RequestOptions(path: url),
             statusCode: 403,
-          ),        );
+          ),
+        );
       });
 
       expect(succeeded, isNull);

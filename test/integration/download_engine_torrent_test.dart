@@ -5,7 +5,8 @@ import 'package:dmx/core/services/torrent_service.dart';
 
 void main() {
   group('Cross-Feature Integration Tests', () {
-    test('Journal recovery retains progress state after crash simulation', () async {
+    test('Journal recovery retains progress state after crash simulation',
+        () async {
       const journalPath = 'test_integration.journal';
       final journal = DownloadJournal(journalPath);
       await journal.open();
@@ -23,10 +24,13 @@ void main() {
       final governor = BandwidthGovernor(1024 * 1024);
       governor.reportDomainSpeed('cdn1.example.com', 500000);
       governor.reportDomainSpeed('cdn1.example.com', 700000);
-      expect(governor.getAverageSpeedForDomain('cdn1.example.com'), equals(600000));
+      expect(governor.getAverageSpeedForDomain('cdn1.example.com'),
+          equals(600000));
     });
 
-    test('Torrent stub methods provide safe fallback values when FFI is uninitialized', () async {
+    test(
+        'Torrent stub methods provide safe fallback values when FFI is uninitialized',
+        () async {
       expect(TorrentService.isSupported, isA<bool>());
       expect(TorrentService.getTrackers(1), isEmpty);
       expect(await TorrentService.loadIpFilter('dummy.dat'), isFalse);

@@ -4,8 +4,10 @@ import 'package:dmx/core/utils/constants.dart';
 
 void main() async {
   final dio = Dio();
-  final targetVideo = 'https://m.youtube.com/watch?v=04qaw2nx5qY&list=RD04qaw2nx5qY&start_radio=1&pp=oAcB';
-  final url = '$kDefaultBackendBaseUrl/api/streams?url=${Uri.encodeComponent(targetVideo)}';
+  final targetVideo =
+      'https://m.youtube.com/watch?v=04qaw2nx5qY&list=RD04qaw2nx5qY&start_radio=1&pp=oAcB';
+  final url =
+      '$kDefaultBackendBaseUrl/api/streams?url=${Uri.encodeComponent(targetVideo)}';
   debugPrint('Requesting: $url');
   try {
     final response = await dio.get(url);

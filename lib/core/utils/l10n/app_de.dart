@@ -57,7 +57,7 @@ const Map<String, String> deTranslations = {
   'bypass_ssl_dialog_title': 'SSL-Prüfung deaktivieren?',
   'bypass_ssl_dialog_body':
       'Dadurch sind alle Downloads Man-in-the-Middle-Angriffen '
-      'ausgesetzt. Nur in vertrauenswürdigen Netzwerken aktivieren.',
+          'ausgesetzt. Nur in vertrauenswürdigen Netzwerken aktivieren.',
   'bypass_ssl_dialog_confirm': 'Ich verstehe das Risiko',
   'settings_https_only': 'Nur-HTTPS-Modus',
   'settings_https_only_sub':
@@ -87,7 +87,8 @@ const Map<String, String> deTranslations = {
 
   // System & UI Dialogs
   'update_changelog': 'Änderungsprotokoll:',
-  'update_general_fixes': 'Allgemeine Leistungsverbesserungen und Fehlerbehebungen.',
+  'update_general_fixes':
+      'Allgemeine Leistungsverbesserungen und Fehlerbehebungen.',
   'btn_later': 'Später',
   'btn_install_now': 'Jetzt installieren',
   'update_mandatory_title': 'Zwingendes Update erforderlich',
@@ -104,7 +105,8 @@ const Map<String, String> deTranslations = {
   'no_matching_records': 'KEINE PASSENDEN DATENSÄTZE',
   'no_completed_signals': 'KEINE ABGESCHLOSSENEN SIGNALE GEFUNDEN',
   'try_different_search': 'Versuchen Sie einen anderen Suchbegriff.',
-  'finished_logs_cataloged': 'Abgeschlossene Protokolle werden hier katalogisiert.',
+  'finished_logs_cataloged':
+      'Abgeschlossene Protokolle werden hier katalogisiert.',
   'clear_history_logs': 'VERLAUFSPROTOKOLLE LÖSCHEN',
   'cat_filter_label': 'KAT: ',
   'battery_impact_low': 'SEHR NIEDRIG (Inaktiv)',
@@ -129,5 +131,6 @@ const Map<String, String> deTranslations = {
   'clipboard_link_detected': 'Link in der Zwischenablage erkannt',
   'download_action': 'Herunterladen',
   'start_btn': 'Starten',
-  'file_missing_msg': 'Datei fehlt auf dem Datenträger, in die Registerkarte "Fehlgeschlagen" verschoben',
+  'file_missing_msg':
+      'Datei fehlt auf dem Datenträger, in die Registerkarte "Fehlgeschlagen" verschoben',
 };

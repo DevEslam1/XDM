@@ -299,9 +299,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     if (url.isEmpty) {
       ThemedSnackbar.show(
         context,
-        message: L10n.isRtl(context)
-            ? 'أدخل الرابط أولاً'
-            : 'Enter a URL first',
+        message:
+            L10n.isRtl(context) ? 'أدخل الرابط أولاً' : 'Enter a URL first',
         color: AppTheme.neonRed,
         icon: Icons.error_outline,
         isDarkMode: context.read<SettingsProvider>().isDarkMode,
@@ -317,9 +316,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             final isDark = context.read<SettingsProvider>().isDarkMode;
             final isRtl = L10n.isRtl(context);
             return AlertDialog(
-              backgroundColor: isDark
-                  ? AppTheme.surface
-                  : AppTheme.lightSurface,
+              backgroundColor:
+                  isDark ? AppTheme.surface : AppTheme.lightSurface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -416,9 +414,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         final audioSize = stream['audioSize'] as int?;
         final streamType = stream['type'] as String? ?? 'muxed';
         final thumbnailUrl = stream['thumbnailUrl'] as String?;
-        final qualityPreset = streamType == 'audio'
-            ? 'audio_only'
-            : stream['quality'] as String?;
+        final qualityPreset =
+            streamType == 'audio' ? 'audio_only' : stream['quality'] as String?;
         final category = streamType == 'audio' ? 'Audio' : 'Video';
         final fileName = '$title.$ext';
         final provider = context.read<DownloadProvider>();
@@ -502,7 +499,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
         try {
           localFilePath = Uri.parse(url).toFilePath();
         } catch (e, st) {
-          Logger('add_download_dialog').warning('[add_download_dialog] operation failed', e, st);
+          Logger('add_download_dialog')
+              .warning('[add_download_dialog] operation failed', e, st);
           localFilePath = url.replaceFirst(
             RegExp(r'^file://', caseSensitive: false),
             '',
@@ -665,14 +663,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
       if (addedCount > 0) {
         final dupMsg = duplicateCount > 0
             ? (isRtl
-                  ? ' ($duplicateCount مكرر تم تخطيه)'
-                  : ' ($duplicateCount duplicate${duplicateCount != 1 ? 's' : ''} skipped)')
+                ? ' ($duplicateCount مكرر تم تخطيه)'
+                : ' ($duplicateCount duplicate${duplicateCount != 1 ? 's' : ''} skipped)')
             : '';
         ThemedSnackbar.show(
           context,
           message:
               (isRtl ? 'تم إضافة $addedCount رابط' : '$addedCount URLs added') +
-              dupMsg,
+                  dupMsg,
           color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
           icon: Icons.check_circle_outline,
           isDarkMode: isDark,
@@ -707,11 +705,12 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     DownloadTask? duplicateTask;
     final trimmedUrl = singleUrl.trim();
     for (final task in provider.tasks) {
-      final normalizedTaskUrl = task.url.trim().toLowerCase().replaceAll(RegExp(r'/+$'), '');
-      final normalizedNewUrl = trimmedUrl.toLowerCase().replaceAll(RegExp(r'/+$'), '');
+      final normalizedTaskUrl =
+          task.url.trim().toLowerCase().replaceAll(RegExp(r'/+$'), '');
+      final normalizedNewUrl =
+          trimmedUrl.toLowerCase().replaceAll(RegExp(r'/+$'), '');
       final isSameUrl = normalizedTaskUrl == normalizedNewUrl;
-      final isSameNameAndSize =
-          finalSize > 0 &&
+      final isSameNameAndSize = finalSize > 0 &&
           task.fileName.toLowerCase() == finalFileName.toLowerCase() &&
           task.fileSize == finalSize;
       if (isSameUrl || isSameNameAndSize) {
@@ -730,9 +729,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
               side: BorderSide(
-                color: isDark
-                    ? AppTheme.glassBorder
-                    : AppTheme.lightGlassBorder,
+                color:
+                    isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
               ),
             ),
             title: Text(
@@ -778,9 +776,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     ThemedSnackbar.show(
                       context,
                       message: isRtl ? 'تم تحديث الرابط' : 'Link updated',
-                      color: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
+                      color:
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                       icon: Icons.check_circle_outline,
                       isDarkMode: isDark,
                     );
@@ -812,9 +809,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       (isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet)
                           .withValues(alpha: 0.1),
                   side: BorderSide(
-                    color: isDark
-                        ? AppTheme.neonViolet
-                        : AppTheme.lightNeonViolet,
+                    color:
+                        isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -830,9 +826,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                     ThemedSnackbar.show(
                       context,
                       message: isRtl ? 'بدأ من جديد' : 'Started over',
-                      color: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
+                      color:
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                       icon: Icons.refresh,
                       isDarkMode: isDark,
                     );
@@ -852,9 +847,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 child: Text(
                   isRtl ? 'بدء من جديد' : 'START OVER',
                   style: TextStyle(
-                    color: isDark
-                        ? AppTheme.neonViolet
-                        : AppTheme.lightNeonViolet,
+                    color:
+                        isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                     fontWeight: FontWeight.bold,
                     fontSize: 11,
                   ),
@@ -866,9 +860,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
                           .withValues(alpha: 0.1),
                   side: BorderSide(
-                    color: isDark
-                        ? AppTheme.neonGreen
-                        : AppTheme.lightNeonGreen,
+                    color:
+                        isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                   ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -898,17 +891,14 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                       name: numberedName,
                       url: singleUrl,
                       size: finalSize,
-                      category: _selectedCategory == 'Auto'
-                          ? ''
-                          : _selectedCategory,
+                      category:
+                          _selectedCategory == 'Auto' ? '' : _selectedCategory,
                       savePath: _pathController.text.trim(),
                       threadCount: _selectedThreads,
                       scheduledAt: _isScheduled ? _scheduledDateTime : null,
-                      torrentFiles: _torrentFiles.isNotEmpty
-                          ? _torrentFiles
-                          : null,
-                      downloadPageUrl:
-                          widget.downloadPageUrl ??
+                      torrentFiles:
+                          _torrentFiles.isNotEmpty ? _torrentFiles : null,
+                      downloadPageUrl: widget.downloadPageUrl ??
                           _referrerController.text.trim(),
                       youtubeQualityPreset: _resolvedYoutubeQualityPreset,
                       torrentId: _resolvedTorrentId,
@@ -935,9 +925,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 child: Text(
                   isRtl ? 'إضافة كملف مرقم' : 'ADD NUMBERED',
                   style: TextStyle(
-                    color: isDark
-                        ? AppTheme.neonGreen
-                        : AppTheme.lightNeonGreen,
+                    color:
+                        isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                     fontWeight: FontWeight.bold,
                     fontSize: 11,
                   ),
@@ -951,9 +940,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                 child: Text(
                   L10n.of(context, 'cancel_btn'),
                   style: TextStyle(
-                    color: isDark
-                        ? AppTheme.textMuted
-                        : AppTheme.lightTextMuted,
+                    color:
+                        isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                   ),
                 ),
               ),
@@ -1026,9 +1014,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
@@ -1272,10 +1259,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                             color: _urlController.text.isEmpty
                                 ? borderClr
                                 : (_urlValid
-                                      ? greenClr
-                                      : (isDark
-                                            ? AppTheme.neonRed
-                                            : AppTheme.lightNeonRed)),
+                                    ? greenClr
+                                    : (isDark
+                                        ? AppTheme.neonRed
+                                        : AppTheme.lightNeonRed)),
                             child: AnimatedBuilder(
                               animation: Listenable.merge([
                                 _urlController,
@@ -1298,10 +1285,10 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                             ),
                                             child: AnimatedBuilder(
                                               animation: _scanController,
-                                              builder: (context, child) => LayoutBuilder(
+                                              builder: (context, child) =>
+                                                  LayoutBuilder(
                                                 builder: (context, c) {
-                                                  final x =
-                                                      (c.maxWidth + 60) *
+                                                  final x = (c.maxWidth + 60) *
                                                           _scanController
                                                               .value -
                                                       60;
@@ -1313,22 +1300,23 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                         bottom: 0,
                                                         child: Container(
                                                           width: 40,
-                                                          decoration: BoxDecoration(
-                                                            gradient: LinearGradient(
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            gradient:
+                                                                LinearGradient(
                                                               colors: [
                                                                 blueClr
                                                                     .withValues(
-                                                                      alpha: 0,
-                                                                    ),
+                                                                  alpha: 0,
+                                                                ),
                                                                 blueClr
                                                                     .withValues(
-                                                                      alpha:
-                                                                          0.06,
-                                                                    ),
+                                                                  alpha: 0.06,
+                                                                ),
                                                                 blueClr
                                                                     .withValues(
-                                                                      alpha: 0,
-                                                                    ),
+                                                                  alpha: 0,
+                                                                ),
                                                               ],
                                                             ),
                                                           ),
@@ -1396,9 +1384,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                           fillColor: panelBg,
                                           contentPadding:
                                               const EdgeInsets.symmetric(
-                                                horizontal: 14,
-                                                vertical: 12,
-                                              ),
+                                            horizontal: 14,
+                                            vertical: 12,
+                                          ),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(
                                               12,
@@ -1427,26 +1415,23 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               12,
                                             ),
                                             borderSide: BorderSide(
-                                              color:
-                                                  (isDark
-                                                          ? AppTheme.neonRed
-                                                          : AppTheme
-                                                                .lightNeonRed)
-                                                      .withValues(alpha: 0.6),
+                                              color: (isDark
+                                                      ? AppTheme.neonRed
+                                                      : AppTheme.lightNeonRed)
+                                                  .withValues(alpha: 0.6),
                                               width: 1.0,
                                             ),
                                           ),
-                                          focusedErrorBorder: OutlineInputBorder(
+                                          focusedErrorBorder:
+                                              OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(
                                               12,
                                             ),
                                             borderSide: BorderSide(
-                                              color:
-                                                  (isDark
-                                                          ? AppTheme.neonRed
-                                                          : AppTheme
-                                                                .lightNeonRed)
-                                                      .withValues(alpha: 0.8),
+                                              color: (isDark
+                                                      ? AppTheme.neonRed
+                                                      : AppTheme.lightNeonRed)
+                                                  .withValues(alpha: 0.8),
                                               width: 1.2,
                                             ),
                                           ),
@@ -1486,28 +1471,28 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       color: valid
                                           ? greenClr
                                           : (isDark
-                                                ? AppTheme.neonRed
-                                                : AppTheme.lightNeonRed),
+                                              ? AppTheme.neonRed
+                                              : AppTheme.lightNeonRed),
                                     ),
                                     const SizedBox(width: 6),
                                     Text(
                                       valid
                                           ? (lineCount > 1
-                                                ? (isRtl
-                                                      ? '$lineCount روابط صالحة'
-                                                      : '$lineCount VALID SIGNALS')
-                                                : (isRtl
-                                                      ? 'إشارة صالحة'
-                                                      : 'SIGNAL VALID'))
+                                              ? (isRtl
+                                                  ? '$lineCount روابط صالحة'
+                                                  : '$lineCount VALID SIGNALS')
+                                              : (isRtl
+                                                  ? 'إشارة صالحة'
+                                                  : 'SIGNAL VALID'))
                                           : (isRtl
-                                                ? 'إشارة غير صالحة'
-                                                : 'INVALID SIGNAL'),
+                                              ? 'إشارة غير صالحة'
+                                              : 'INVALID SIGNAL'),
                                       style: TextStyle(
                                         color: valid
                                             ? greenClr
                                             : (isDark
-                                                  ? AppTheme.neonRed
-                                                  : AppTheme.lightNeonRed),
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed),
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 1,
@@ -1566,22 +1551,20 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                               errorBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
-                                  color:
-                                      (isDark
-                                              ? AppTheme.neonRed
-                                              : AppTheme.lightNeonRed)
-                                          .withValues(alpha: 0.6),
+                                  color: (isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed)
+                                      .withValues(alpha: 0.6),
                                   width: 1.0,
                                 ),
                               ),
                               focusedErrorBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
-                                  color:
-                                      (isDark
-                                              ? AppTheme.neonRed
-                                              : AppTheme.lightNeonRed)
-                                          .withValues(alpha: 0.8),
+                                  color: (isDark
+                                          ? AppTheme.neonRed
+                                          : AppTheme.lightNeonRed)
+                                      .withValues(alpha: 0.8),
                                   width: 1.2,
                                 ),
                               ),
@@ -1640,9 +1623,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               ),
                                               contentPadding:
                                                   const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 11,
-                                                  ),
+                                                horizontal: 12,
+                                                vertical: 11,
+                                              ),
                                               border: OutlineInputBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(12),
@@ -1677,36 +1660,33 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color:
-                                                      (isDark
-                                                              ? AppTheme.neonRed
-                                                              : AppTheme
-                                                                    .lightNeonRed)
-                                                          .withValues(
-                                                            alpha: 0.6,
-                                                          ),
+                                                  color: (isDark
+                                                          ? AppTheme.neonRed
+                                                          : AppTheme
+                                                              .lightNeonRed)
+                                                      .withValues(
+                                                    alpha: 0.6,
+                                                  ),
                                                   width: 1.0,
                                                 ),
                                               ),
                                               focusedErrorBorder:
                                                   OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
-                                                    borderSide: BorderSide(
-                                                      color:
-                                                          (isDark
-                                                                  ? AppTheme
-                                                                        .neonRed
-                                                                  : AppTheme
-                                                                        .lightNeonRed)
-                                                              .withValues(
-                                                                alpha: 0.8,
-                                                              ),
-                                                      width: 1.2,
-                                                    ),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                  12,
+                                                ),
+                                                borderSide: BorderSide(
+                                                  color: (isDark
+                                                          ? AppTheme.neonRed
+                                                          : AppTheme
+                                                              .lightNeonRed)
+                                                      .withValues(
+                                                    alpha: 0.8,
                                                   ),
+                                                  width: 1.2,
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -1745,9 +1725,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               fillColor: panelBg,
                                               contentPadding:
                                                   const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 11,
-                                                  ),
+                                                horizontal: 10,
+                                                vertical: 11,
+                                              ),
                                               border: OutlineInputBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(12),
@@ -1782,36 +1762,33 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 borderSide: BorderSide(
-                                                  color:
-                                                      (isDark
-                                                              ? AppTheme.neonRed
-                                                              : AppTheme
-                                                                    .lightNeonRed)
-                                                          .withValues(
-                                                            alpha: 0.6,
-                                                          ),
+                                                  color: (isDark
+                                                          ? AppTheme.neonRed
+                                                          : AppTheme
+                                                              .lightNeonRed)
+                                                      .withValues(
+                                                    alpha: 0.6,
+                                                  ),
                                                   width: 1.0,
                                                 ),
                                               ),
                                               focusedErrorBorder:
                                                   OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          12,
-                                                        ),
-                                                    borderSide: BorderSide(
-                                                      color:
-                                                          (isDark
-                                                                  ? AppTheme
-                                                                        .neonRed
-                                                                  : AppTheme
-                                                                        .lightNeonRed)
-                                                              .withValues(
-                                                                alpha: 0.8,
-                                                              ),
-                                                      width: 1.2,
-                                                    ),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                  12,
+                                                ),
+                                                borderSide: BorderSide(
+                                                  color: (isDark
+                                                          ? AppTheme.neonRed
+                                                          : AppTheme
+                                                              .lightNeonRed)
+                                                      .withValues(
+                                                    alpha: 0.8,
                                                   ),
+                                                  width: 1.2,
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -1948,22 +1925,20 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     errorBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
-                                        color:
-                                            (isDark
-                                                    ? AppTheme.neonRed
-                                                    : AppTheme.lightNeonRed)
-                                                .withValues(alpha: 0.6),
+                                        color: (isDark
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed)
+                                            .withValues(alpha: 0.6),
                                         width: 1.0,
                                       ),
                                     ),
                                     focusedErrorBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
-                                        color:
-                                            (isDark
-                                                    ? AppTheme.neonRed
-                                                    : AppTheme.lightNeonRed)
-                                                .withValues(alpha: 0.8),
+                                        color: (isDark
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed)
+                                            .withValues(alpha: 0.8),
                                         width: 1.2,
                                       ),
                                     ),
@@ -1980,8 +1955,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                     final result =
                                         await FilePicker.getDirectoryPath()
                                             .timeout(
-                                              const Duration(seconds: 30),
-                                            );
+                                      const Duration(seconds: 30),
+                                    );
                                     if (result != null) {
                                       setState(
                                         () => _pathController.text = result,
@@ -2190,8 +2165,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                       final now = DateTime.now();
                                       final date = await showDatePicker(
                                         context: context,
-                                        initialDate:
-                                            _scheduledDateTime ??
+                                        initialDate: _scheduledDateTime ??
                                             now.add(const Duration(hours: 1)),
                                         firstDate: now,
                                         lastDate: now.add(
@@ -2251,8 +2225,8 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
                                               _scheduledDateTime != null
                                                   ? '${_scheduledDateTime!.day}/${_scheduledDateTime!.month}/${_scheduledDateTime!.year}  ${_scheduledDateTime!.hour.toString().padLeft(2, '0')}:${_scheduledDateTime!.minute.toString().padLeft(2, '0')}'
                                                   : (isRtl
-                                                        ? 'اختر الوقت'
-                                                        : 'Tap to set date & time'),
+                                                      ? 'اختر الوقت'
+                                                      : 'Tap to set date & time'),
                                               style: TextStyle(
                                                 color: textClr,
                                                 fontSize: 12,
@@ -2426,9 +2400,9 @@ class _CornerFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     const len = 12.0;
     Widget bracket(bool top, bool left) => CustomPaint(
-      size: const Size(len, len),
-      painter: _BracketPainter(color: color, top: top, left: left),
-    );
+          size: const Size(len, len),
+          painter: _BracketPainter(color: color, top: top, left: left),
+        );
     return Stack(
       children: [
         Padding(padding: const EdgeInsets.all(5), child: child),
@@ -2760,9 +2734,8 @@ class _TorrentFilesPanel extends StatelessWidget {
                     L10n.isRtl(context) ? 'إلغاء' : 'NONE',
                     style: TextStyle(
                       fontSize: 10,
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                     ),
                   ),
                 ),
@@ -2803,26 +2776,23 @@ class _TorrentFilesPanel extends StatelessWidget {
                     style: TextStyle(
                       color: isSelected
                           ? (isDark
-                                ? AppTheme.textPrimary
-                                : AppTheme.lightTextPrimary)
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary)
                           : (isDark
-                                ? AppTheme.textSecondary
-                                : AppTheme.lightTextSecondary),
+                              ? AppTheme.textSecondary
+                              : AppTheme.lightTextSecondary),
                       fontSize: 12,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                      decoration: isSelected
-                          ? null
-                          : TextDecoration.lineThrough,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                      decoration:
+                          isSelected ? null : TextDecoration.lineThrough,
                     ),
                   ),
                   subtitle: Text(
                     formatBytes(length.toDouble()),
                     style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontSize: 10,
                       fontFamily: 'monospace',
                     ),

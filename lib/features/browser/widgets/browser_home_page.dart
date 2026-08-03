@@ -56,15 +56,15 @@ class _BrowserHomePageState extends State<BrowserHomePage>
       child: SlideTransition(
         position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
             .animate(
-              CurvedAnimation(
-                parent: _reveal!,
-                curve: Interval(
-                  start,
-                  (start + 0.4).clamp(0.0, 1.0),
-                  curve: Curves.easeOutCubic,
-                ),
-              ),
+          CurvedAnimation(
+            parent: _reveal!,
+            curve: Interval(
+              start,
+              (start + 0.4).clamp(0.0, 1.0),
+              curve: Curves.easeOutCubic,
             ),
+          ),
+        ),
         child: child,
       ),
     );

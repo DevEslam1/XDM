@@ -38,7 +38,8 @@ void main() {
       final notFoundErr = const BackendNotFoundException();
       expect(notFoundErr, isA<BackendException>());
 
-      final rateLimitErr = const BackendRateLimitException(retryAfterSeconds: 30);
+      final rateLimitErr =
+          const BackendRateLimitException(retryAfterSeconds: 30);
       expect(rateLimitErr, isA<BackendException>());
       expect(rateLimitErr.retryAfterSeconds, 30);
 

@@ -44,7 +44,8 @@ void main() {
 
       // Verify cosmetic rules
       expect(updater.cosmeticRules.contains('.ad-banner'), isTrue);
-      expect(updater.cosmeticRules.contains('div[class="advertisement"]'), isTrue);
+      expect(
+          updater.cosmeticRules.contains('div[class="advertisement"]'), isTrue);
 
       // Verify URL pattern rules
       expect(updater.urlPatterns.contains('/ads/banner/'), isTrue);

@@ -86,7 +86,8 @@ class BencodeDecoder {
       throw const FormatException('Negative bencode string length');
     }
     if (len > _data.length - _offset - 1) {
-      throw const FormatException('Bencode string length exceeds remaining data');
+      throw const FormatException(
+          'Bencode string length exceeds remaining data');
     }
     _offset++; // skip ':'
 
@@ -199,10 +200,18 @@ class BencodeDecoder {
               final rawPath = f['path.utf-8'] ?? f['path'];
               final pathSegments = (rawPath is List ? rawPath : <dynamic>[]);
               final pathList = pathSegments
-                  .map((s) => s is Uint8List ? utf8.decode(s, allowMalformed: true) : s.toString())
-                  .where((seg) => seg != '.' && seg != '..' && !seg.contains('/') && !seg.contains('\\'))
+                  .map((s) => s is Uint8List
+                      ? utf8.decode(s, allowMalformed: true)
+                      : s.toString())
+                  .where((seg) =>
+                      seg != '.' &&
+                      seg != '..' &&
+                      !seg.contains('/') &&
+                      !seg.contains('\\'))
                   .toList();
-              final safeName = pathList.isNotEmpty ? pathList.join('/') : 'file_$totalLength';
+              final safeName = pathList.isNotEmpty
+                  ? pathList.join('/')
+                  : 'file_$totalLength';
               filesList.add({'name': safeName, 'length': length});
             }
           }
@@ -215,7 +224,10 @@ class BencodeDecoder {
             .split('/')
             .where((seg) => seg != '.' && seg != '..')
             .join('_');
-        filesList.add({'name': safeName.isNotEmpty ? safeName : 'file', 'length': totalLength});
+        filesList.add({
+          'name': safeName.isNotEmpty ? safeName : 'file',
+          'length': totalLength
+        });
       }
 
       // Compute info hash

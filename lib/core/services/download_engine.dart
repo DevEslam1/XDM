@@ -462,7 +462,7 @@ class DownloadEngine {
           metadataTimer?.cancel();
           try {
             TorrentService.pauseTorrent(torrentId);
-            TorrentService.removeTorrent(torrentId);
+            TorrentService.removeTorrent(torrentId, deleteFiles: false);
           } catch (e) {
             debugPrint(
               '[DMX] Error cleaning up torrent during cancellation: $e',
@@ -515,7 +515,7 @@ class DownloadEngine {
 
               try {
                 TorrentService.pauseTorrent(torrentId);
-                TorrentService.removeTorrent(torrentId);
+                TorrentService.removeTorrent(torrentId, deleteFiles: false);
               } catch (e) {
                 debugPrint(
                   '[DMX] Error pausing/removing torrent during metadata parsing: $e',
@@ -542,7 +542,7 @@ class DownloadEngine {
 
             try {
               TorrentService.pauseTorrent(torrentId);
-              TorrentService.removeTorrent(torrentId);
+              TorrentService.removeTorrent(torrentId, deleteFiles: false);
             } catch (e) {
               debugPrint(
                 '[DMX] Error pausing/removing torrent during metadata timeout: $e',
@@ -747,7 +747,7 @@ class DownloadEngine {
     required ValueChangedProgress onProgress,
     required int Function() speedLimitBytesPerSecond,
     required int Function() activeDownloadCount,
-    int threadCount = 1,
+    int threadCount = 0, // 0 = use default
     String? customUserAgent,
     String? referer,
     bool enableProxy = false,
@@ -765,6 +765,9 @@ class DownloadEngine {
     List<String>? mirrorUrls,
   }) async {
     _activeCancelTokens.add(cancelToken);
+
+    // If threadCount > 0, override the task's threadCount
+    final int effectiveThreadCount = threadCount > 0 ? threadCount : 1;
 
     int resolvedFileSize = knownFileSize;
     bool resolvedSupportsResume = supportsResume;
@@ -863,7 +866,7 @@ class DownloadEngine {
       localFilePath: currentLocalFilePath,
       knownFileSize: resolvedFileSize,
       supportsResume: resolvedSupportsResume,
-      threadCount: threadCount,
+      threadCount: effectiveThreadCount,
       customUserAgent: customUserAgent,
       referer: referer,
       enableProxy: enableProxy,
@@ -1223,7 +1226,7 @@ class DownloadEngine {
 
       if (!completer.isCompleted) {
         try {
-          TorrentService.removeTorrent(id);
+          TorrentService.removeTorrent(id, deleteFiles: false);
         } catch (e, st) {
           Logger(
             'download_engine',
@@ -1274,7 +1277,7 @@ class DownloadEngine {
 
       if (!cancelToken.isCancelled) {
         try {
-          TorrentService.removeTorrent(id);
+          TorrentService.removeTorrent(id, deleteFiles: false);
         } catch (e, st) {
           Logger(
             'download_engine',
@@ -2205,17 +2208,18 @@ class DownloadEngine {
                   );
                 }
 
+                // reject HTML responses (expired YouTube stream → error page)
                 final chunkContentType = chunkResponse.headers
                         .value('content-type')
                         ?.toLowerCase() ??
                     '';
-                if (isLikelyHtmlResponse(chunkContentType)) {
+                if (chunkContentType.contains('text/html') ||
+                    chunkContentType.contains('application/xhtml')) {
                   throw DioException(
-                    requestOptions: RequestOptions(path: punyUrl),
+                    requestOptions: chunkResponse.requestOptions,
                     type: DioExceptionType.badResponse,
                     response: chunkResponse,
-                    message:
-                        'Server returned HTML instead of media. The stream URL is likely expired. Please retry the download.',
+                    message: 'HTML_INSTEAD_OF_MEDIA',
                   );
                 }
 
@@ -2593,15 +2597,16 @@ class DownloadEngine {
       );
     }
 
+    // reject HTML responses (expired YouTube stream → error page)
     final contentType =
         response.headers.value('content-type')?.toLowerCase() ?? '';
-    if (isLikelyHtmlResponse(contentType)) {
+    if (contentType.contains('text/html') ||
+        contentType.contains('application/xhtml')) {
       throw DioException(
-        requestOptions: RequestOptions(path: punyUrl),
+        requestOptions: response.requestOptions,
         type: DioExceptionType.badResponse,
         response: response,
-        message:
-            'Server returned HTML instead of media. The stream URL is likely expired. Please retry the download.',
+        message: 'HTML_INSTEAD_OF_MEDIA',
       );
     }
 

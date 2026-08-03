@@ -473,10 +473,16 @@ class DownloadProvider extends ChangeNotifier
               ? task.downloadedBytes.clamp(0, targetSize)
               : 0;
         } catch (e) {
-          debugPrint('Failed to parse .dmxstate: $e');
-          return task.downloadedBytes > 0
-              ? task.downloadedBytes.clamp(0, targetSize)
-              : 0;
+          // State file corrupted — fall back to actual file size on disk
+          debugPrint('[DMX] .dmxstate corrupted for ${task.id}, '
+              'falling back to file size: $e');
+          try {
+            final partFile = File(task.tempFilePath);
+            if (await partFile.exists()) {
+              return await partFile.length();
+            }
+          } catch (_) {}
+          return 0;
         }
       }
 
@@ -809,6 +815,33 @@ class DownloadProvider extends ChangeNotifier
     } finally {
       endBatch(notifyListeners);
     }
+  }
+
+  /// Adds multiple tasks in one shot, saves them in a single DB batch,
+  /// then pumps the queue once with an elevated concurrency ceiling
+  /// so an entire playlist starts downloading in parallel.
+  Future<void> addBatchDownloads({
+    required List<DownloadTask> tasks,
+    required String savePath,
+  }) async {
+    if (tasks.isEmpty) return;
+
+    // 1. Add all tasks to the in-memory list first (no pump yet).
+    _tasks.addAll(tasks);
+    filteredTasksDirty = true;
+
+    // 2. Persist in a single batch write.
+    try {
+      await _databaseService.saveTasks(tasks);
+    } catch (e) {
+      debugPrint('[DMX] batch save failed: $e');
+    }
+
+    // 3. Notify UI immediately so all cards appear at once.
+    notifyListeners();
+
+    // 4. Pump once with the full batch size as the concurrency ceiling.
+    pumpQueue(maxConcurrentOverride: tasks.length);
   }
 
   Future<void> addDownload({
@@ -1477,6 +1510,8 @@ class DownloadProvider extends ChangeNotifier
 
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
+    if (task == null) return;
+
     final activeFuture = _activeFutures[id];
 
     try {
@@ -1517,6 +1552,10 @@ class DownloadProvider extends ChangeNotifier
     final savedNotificationId = _notifications.removeId(id);
 
     _activeFutures.remove(id);
+
+    // Permanent delete → full cleanup, no preservation
+    await cleanupPartFiles(task, preserveParts: false);
+
     _tasks.removeWhere((task) => task.id == id);
     filteredTasksDirty = true;
 
@@ -1526,46 +1565,42 @@ class DownloadProvider extends ChangeNotifier
       _torrentIds.remove(id);
     }
 
-    if (task != null) {
-      if (deleteFiles) {
-        await cleanupPartFiles(task);
-
-        try {
-          final localFile = File(task.localFilePath);
-          if (await localFile.exists()) {
-            await localFile.delete();
-          }
-        } catch (e) {
-          debugPrint('Failed to delete completed file: $e');
+    if (deleteFiles) {
+      try {
+        final localFile = File(task.localFilePath);
+        if (await localFile.exists()) {
+          await localFile.delete();
         }
+      } catch (e) {
+        debugPrint('Failed to delete completed file: $e');
+      }
 
-        if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
-          final root = p.normalize(task.savePath);
+      if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+        final root = p.normalize(task.savePath);
 
-          for (final f in task.torrentFiles!) {
-            final relPath = f['name'] as String?;
+        for (final f in task.torrentFiles!) {
+          final relPath = f['name'] as String?;
 
-            if (relPath != null && relPath.isNotEmpty) {
-              try {
-                final fullPath = p.normalize(p.join(root, relPath));
+          if (relPath != null && relPath.isNotEmpty) {
+            try {
+              final fullPath = p.normalize(p.join(root, relPath));
 
-                // Prevent path traversal and prevent deleting the root folder itself.
-                if (fullPath == root || !p.isWithin(root, fullPath)) {
-                  debugPrint(
-                    '[DMX] Blocked unsafe torrent file path: $relPath',
-                  );
-                  continue;
-                }
-
-                final file = File(fullPath);
-                if (await file.exists()) {
-                  await file.delete();
-                }
-              } catch (e) {
+              // Prevent path traversal and prevent deleting the root folder itself.
+              if (fullPath == root || !p.isWithin(root, fullPath)) {
                 debugPrint(
-                  'Failed to delete torrent file segment $relPath: $e',
+                  '[DMX] Blocked unsafe torrent file path: $relPath',
                 );
+                continue;
               }
+
+              final file = File(fullPath);
+              if (await file.exists()) {
+                await file.delete();
+              }
+            } catch (e) {
+              debugPrint(
+                'Failed to delete torrent file segment $relPath: $e',
+              );
             }
           }
         }
@@ -1641,77 +1676,27 @@ class DownloadProvider extends ChangeNotifier
   /// Deletes residual temporary download files on disk for [task].
   ///
   /// Cleans temporary HTTP transfer sidecars and temporary `.dmxpart` files.
-  Future<void> cleanupHttpArtifacts(DownloadTask task) async {
-    if (task.tempFilePath.trim().isEmpty) return;
-
-    try {
-      final canDeleteTempFile = !(task.tempFilePath == task.localFilePath &&
-          task.status == DownloadStatus.completed);
-
-      if (canDeleteTempFile) {
-        final tempFile = File(task.tempFilePath);
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
-      }
-
-      final sidecars = [
-        File('${task.tempFilePath}.dmxstate'),
-        File('${task.tempFilePath}.journal'),
-        File('${task.tempFilePath}.audio'),
-        File('${task.tempFilePath}.merged'),
-      ];
-
-      for (final f in sidecars) {
-        if (await f.exists()) {
-          await f.delete();
-        }
-      }
-
-      for (int i = 0; i < task.threadCount; i++) {
-        final partFile = File('${task.tempFilePath}.part$i');
-        if (await partFile.exists()) {
-          await partFile.delete();
-        }
-      }
-    } catch (e) {
-      debugPrint('Failed to clean up HTTP artifacts for ${task.id}: $e');
-    }
+  Future<void> cleanupHttpArtifacts(DownloadTask task,
+      {bool preserveParts = false}) async {
+    await _orchestrator.cleanupHttpArtifacts(task,
+        preserveParts: preserveParts);
   }
 
   /// Cleans temporary Torrent transfer sidecars without deleting user payload files.
   Future<void> cleanupTorrentArtifacts(DownloadTask task) async {
-    if (task.tempFilePath.trim().isEmpty) return;
-    try {
-      final sidecars = [
-        File('${task.tempFilePath}.dmxstate'),
-        File('${task.tempFilePath}.journal'),
-        File('${task.tempFilePath}.torrent'),
-      ];
-      for (final f in sidecars) {
-        if (await f.exists()) {
-          await f.delete();
-        }
-      }
-    } catch (e) {
-      debugPrint('Failed to clean up Torrent artifacts for ${task.id}: $e');
-    }
+    await _orchestrator.cleanupTorrentArtifacts(task);
   }
 
   /// Cleans all temporary transfer artifacts safely depending on task type.
-  Future<void> cleanupAllArtifacts(DownloadTask task) async {
-    final isTorrent =
-        task.torrentFiles != null && task.torrentFiles!.isNotEmpty;
-    if (isTorrent) {
-      await cleanupTorrentArtifacts(task);
-    } else {
-      await cleanupHttpArtifacts(task);
-    }
+  Future<void> cleanupAllArtifacts(DownloadTask task,
+      {bool preserveParts = false}) async {
+    await _orchestrator.cleanupAllArtifacts(task, preserveParts: preserveParts);
   }
 
   @override
-  Future<void> cleanupPartFiles(DownloadTask task) async {
-    await cleanupAllArtifacts(task);
+  Future<void> cleanupPartFiles(DownloadTask task,
+      {bool preserveParts = false}) async {
+    await _orchestrator.cleanupAllArtifacts(task, preserveParts: preserveParts);
   }
 
   /// Persists any throttled in-memory progress for [id] that hasn't yet
@@ -2202,11 +2187,11 @@ class DownloadProvider extends ChangeNotifier
     if (wasTorrent || isNewTorrent) {
       final torrentId = _torrentIds[taskId];
       if (torrentId != null) {
-        TorrentService.removeTorrent(torrentId);
+        TorrentService.removeTorrent(torrentId, deleteFiles: false);
         _torrentIds.remove(taskId);
       }
 
-      await cleanupPartFiles(task);
+      await cleanupPartFiles(task, preserveParts: true);
 
       DownloadMetadata? metadata;
 
@@ -2342,6 +2327,7 @@ class DownloadProvider extends ChangeNotifier
           ? (newAudioSize ?? task.audioSize)
           : task.audioSize,
       supportsResume: resolvedSupportsResume,
+      // Only reset progress when the file actually changed
       downloadedBytes: sizeChanged ? 0 : task.downloadedBytes,
       chunks: sizeChanged
           ? List<double>.filled(task.threadCount, 0.0)
@@ -2432,12 +2418,13 @@ class DownloadProvider extends ChangeNotifier
 
     final torrentId = _torrentIds[id];
     if (torrentId != null) {
-      TorrentService.removeTorrent(torrentId);
+      TorrentService.removeTorrent(torrentId, deleteFiles: false);
       _torrentIds.remove(id);
     }
 
     // Preserve any existing partial bytes and state so a restart can resume
     // from the current temp file instead of discarding it.
+    await cleanupPartFiles(task, preserveParts: true);
 
     try {
       final localFile = File(task.localFilePath);

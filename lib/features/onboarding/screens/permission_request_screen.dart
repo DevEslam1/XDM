@@ -125,17 +125,16 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
 
   Future<void> _checkAllPermissions() async {
     if (!_isAndroidPlatform()) return;
-    final storageGranted =
-        (await Permission.storage.isGranted) ||
+    final storageGranted = (await Permission.storage.isGranted) ||
         (await Permission.photos.isGranted &&
             await Permission.videos.isGranted &&
             await Permission.audio.isGranted);
     final notificationsGranted = await Permission.notification.isGranted;
-    final batteryGranted = await _permissionService
-        .isBatteryOptimizationExempt();
+    final batteryGranted =
+        await _permissionService.isBatteryOptimizationExempt();
 
-    final storagePermanentlyDenied = await _permissionService
-        .isStoragePermanentlyDenied();
+    final storagePermanentlyDenied =
+        await _permissionService.isStoragePermanentlyDenied();
     final notificationsPermanentlyDenied =
         await Permission.notification.isPermanentlyDenied;
 
@@ -160,8 +159,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
       _storageOpening = true;
     });
     try {
-      final isPermanentlyDenied = await _permissionService
-          .isStoragePermanentlyDenied();
+      final isPermanentlyDenied =
+          await _permissionService.isStoragePermanentlyDenied();
       if (isPermanentlyDenied) {
         setState(() => _storagePermanentlyDenied = true);
         await openAppSettings();
@@ -179,7 +178,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
         }
       }
     } catch (e, st) {
-      Logger('permission_request_screen').warning('[permission_request_screen] operation failed', e, st);
+      Logger('permission_request_screen')
+          .warning('[permission_request_screen] operation failed', e, st);
     } finally {
       if (mounted) setState(() => _storageOpening = false);
     }
@@ -197,8 +197,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
         setState(() => _notificationsPermanentlyDenied = true);
         await openAppSettings();
       } else {
-        final granted = await NotificationService()
-            .requestNotificationPermission();
+        final granted =
+            await NotificationService().requestNotificationPermission();
         if (mounted) {
           setState(() {
             _notificationsGranted = granted;
@@ -213,7 +213,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
         }
       }
     } catch (e, st) {
-      Logger('permission_request_screen').warning('[permission_request_screen] operation failed', e, st);
+      Logger('permission_request_screen')
+          .warning('[permission_request_screen] operation failed', e, st);
     } finally {
       if (mounted) setState(() => _notificationsOpening = false);
     }
@@ -225,15 +226,16 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
       _batteryOpening = true;
     });
     try {
-      final granted = await _permissionService
-          .requestBatteryOptimizationExemption();
+      final granted =
+          await _permissionService.requestBatteryOptimizationExemption();
       if (mounted) {
         setState(() {
           _batteryGranted = granted;
         });
       }
     } catch (e, st) {
-      Logger('permission_request_screen').warning('[permission_request_screen] operation failed', e, st);
+      Logger('permission_request_screen')
+          .warning('[permission_request_screen] operation failed', e, st);
     } finally {
       if (mounted) {
         setState(() {
@@ -260,17 +262,15 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return GeometricGridBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Directionality(
-          textDirection: L10n.isRtl(context)
-              ? TextDirection.rtl
-              : TextDirection.ltr,
+          textDirection:
+              L10n.isRtl(context) ? TextDirection.rtl : TextDirection.ltr,
           child: SafeArea(
             child: Column(
               children: [
@@ -305,9 +305,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                   isGranted: _storageGranted,
                   isPermanentlyDenied: _storagePermanentlyDenied,
                   onRequest: _requestStorage,
-                  accentColor: isDark
-                      ? AppTheme.neonBlue
-                      : AppTheme.lightNeonBlue,
+                  accentColor:
+                      isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
@@ -322,9 +321,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                   isGranted: _notificationsGranted,
                   isPermanentlyDenied: _notificationsPermanentlyDenied,
                   onRequest: _requestNotifications,
-                  accentColor: isDark
-                      ? AppTheme.neonViolet
-                      : AppTheme.lightNeonViolet,
+                  accentColor:
+                      isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
@@ -338,9 +336,8 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                   isGranted: _batteryGranted,
                   isPermanentlyDenied: false,
                   onRequest: _requestBattery,
-                  accentColor: isDark
-                      ? AppTheme.neonAmber
-                      : AppTheme.lightNeonAmber,
+                  accentColor:
+                      isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
@@ -385,11 +382,10 @@ class _PermissionRequestScreenState extends State<PermissionRequestScreen>
                                 ? AppTheme.neonBlue
                                 : AppTheme.lightNeonBlue,
                             foregroundColor: Colors.white,
-                            disabledBackgroundColor:
-                                (isDark
-                                        ? AppTheme.neonBlue
-                                        : AppTheme.lightNeonBlue)
-                                    .withValues(alpha: 0.3),
+                            disabledBackgroundColor: (isDark
+                                    ? AppTheme.neonBlue
+                                    : AppTheme.lightNeonBlue)
+                                .withValues(alpha: 0.3),
                             disabledForegroundColor: Colors.white70,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
@@ -445,9 +441,8 @@ class _PermissionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bgClr = isDark ? AppTheme.cardBg : AppTheme.lightCardBg;
     final txtClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -531,8 +526,8 @@ class _PermissionCard extends StatelessWidget {
                 child: Text(
                   isPermanentlyDenied
                       ? (L10n.isRtl(context)
-                            ? 'مرفوض — فتح الإعدادات'
-                            : 'Denied — Open Settings')
+                          ? 'مرفوض — فتح الإعدادات'
+                          : 'Denied — Open Settings')
                       : L10n.of(context, 'permission_allow'),
                 ),
               ),
@@ -560,9 +555,8 @@ class _DownloadLocationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bgClr = isDark ? AppTheme.cardBg : AppTheme.lightCardBg;
     final txtClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final accentColor = isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan;
 
     final shortPath = path != null ? _shortenPath(path!) : null;

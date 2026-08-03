@@ -211,9 +211,8 @@ String fileNameFromUrl(String url) {
   final fallback = 'download_${DateTime.now().millisecondsSinceEpoch}.bin';
   if (uri == null) return fallback;
 
-  final segments = uri.pathSegments
-      .where((segment) => segment.trim().isNotEmpty)
-      .toList();
+  final segments =
+      uri.pathSegments.where((segment) => segment.trim().isNotEmpty).toList();
   if (segments.isEmpty) return fallback;
   try {
     return safeFileName(Uri.decodeComponent(segments.last));
@@ -366,8 +365,8 @@ String _punycodeEncode(String input) {
           final t = k <= bias
               ? tmin
               : k >= bias + tmax
-              ? tmax
-              : k - bias;
+                  ? tmax
+                  : k - bias;
           if (q < t) break;
           final code = t + ((q - t) % (base - t));
           output.writeCharCode(_punycodeDigit(code));

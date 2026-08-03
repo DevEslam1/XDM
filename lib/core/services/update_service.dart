@@ -146,8 +146,7 @@ class UpdateService {
 
           final update = UpdateInfo.fromJson(json);
           final packageInfo = await PackageInfo.fromPlatform();
-          final currentVersionCode =
-              int.tryParse(packageInfo.buildNumber) ?? 0;
+          final currentVersionCode = int.tryParse(packageInfo.buildNumber) ?? 0;
 
           if (update.versionCode > currentVersionCode ||
               currentVersionCode < update.minSupportedVersionCode) {

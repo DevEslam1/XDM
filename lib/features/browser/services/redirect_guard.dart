@@ -1,4 +1,3 @@
-
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logging/logging.dart';
@@ -9,7 +8,8 @@ class RedirectGuard {
   RedirectGuard._();
   static final RedirectGuard instance = RedirectGuard._();
 
-  static const String _prefKeyAlwaysNewTab = 'redirect_guard_always_new_tab_domains';
+  static const String _prefKeyAlwaysNewTab =
+      'redirect_guard_always_new_tab_domains';
   static const String _prefKeyEnabled = 'redirect_guard_enabled';
 
   final Set<String> _alwaysNewTabDomains = {};
@@ -88,7 +88,8 @@ class RedirectGuard {
     _alwaysNewTabDomains.add(domain);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_prefKeyAlwaysNewTab, _alwaysNewTabDomains.toList());
+      await prefs.setStringList(
+          _prefKeyAlwaysNewTab, _alwaysNewTabDomains.toList());
     } catch (e) {
       debugPrint('[RedirectGuard] Failed to save domain whitelist: $e');
     }
@@ -101,7 +102,8 @@ class RedirectGuard {
     _alwaysNewTabDomains.remove(domain);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList(_prefKeyAlwaysNewTab, _alwaysNewTabDomains.toList());
+      await prefs.setStringList(
+          _prefKeyAlwaysNewTab, _alwaysNewTabDomains.toList());
     } catch (e) {
       debugPrint('[RedirectGuard] Failed to remove domain whitelist: $e');
     }
@@ -121,12 +123,15 @@ class RedirectGuard {
     final targetDomain = extractDomain(targetUrl);
 
     // If current tab is home/blank or domains match, not a cross-domain redirect
-    if (currentDomain.isEmpty || targetDomain.isEmpty || currentDomain == targetDomain) {
+    if (currentDomain.isEmpty ||
+        targetDomain.isEmpty ||
+        currentDomain == targetDomain) {
       return false;
     }
 
     // Ignore safe domains
-    if (_safeDomains.any((d) => targetDomain == d || targetDomain.endsWith('.$d'))) {
+    if (_safeDomains
+        .any((d) => targetDomain == d || targetDomain.endsWith('.$d'))) {
       return false;
     }
 
@@ -135,18 +140,39 @@ class RedirectGuard {
 
   /// Known multi-part TLDs that need 3-part domain extraction
   static const Set<String> _multiPartTlds = {
-    'co.uk', 'org.uk', 'me.uk', 'net.uk',
-    'com.au', 'net.au', 'org.au',
-    'co.jp', 'or.jp', 'ne.jp',
-    'co.in', 'net.in', 'org.in',
-    'com.br', 'net.br', 'org.br',
-    'com.eg', 'net.eg', 'org.eg',
-    'co.za', 'org.za', 'net.za',
-    'com.tr', 'org.tr', 'net.tr',
-    'com.mx', 'org.mx',
-    'co.kr', 'or.kr',
-    'com.sa', 'net.sa',
-    'com.ar', 'com.co',
+    'co.uk',
+    'org.uk',
+    'me.uk',
+    'net.uk',
+    'com.au',
+    'net.au',
+    'org.au',
+    'co.jp',
+    'or.jp',
+    'ne.jp',
+    'co.in',
+    'net.in',
+    'org.in',
+    'com.br',
+    'net.br',
+    'org.br',
+    'com.eg',
+    'net.eg',
+    'org.eg',
+    'co.za',
+    'org.za',
+    'net.za',
+    'com.tr',
+    'org.tr',
+    'net.tr',
+    'com.mx',
+    'org.mx',
+    'co.kr',
+    'or.kr',
+    'com.sa',
+    'net.sa',
+    'com.ar',
+    'com.co',
   };
 
   /// Utility method to extract root domain (e.g. `example.com` from `sub.example.com`)
@@ -168,7 +194,8 @@ class RedirectGuard {
       }
       return lastTwo;
     } catch (e, st) {
-      Logger('redirect_guard').warning('[redirect_guard] operation failed', e, st);
+      Logger('redirect_guard')
+          .warning('[redirect_guard] operation failed', e, st);
       return '';
     }
   }

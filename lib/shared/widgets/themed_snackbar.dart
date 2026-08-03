@@ -153,9 +153,8 @@ class _SnackbarBodyState extends State<_SnackbarBody>
     final isDark = widget.isDark;
     final color = widget.color;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final mutedClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final mutedClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return Material(
       color: Colors.transparent,

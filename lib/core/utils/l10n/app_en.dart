@@ -168,7 +168,7 @@ const Map<String, String> enTranslations = {
   'bypass_ssl_dialog_title': 'Disable SSL Verification?',
   'bypass_ssl_dialog_body':
       'This exposes all downloads to man-in-the-middle attacks. '
-      'Only enable on trusted networks.',
+          'Only enable on trusted networks.',
   'bypass_ssl_dialog_confirm': 'I Understand the Risk',
   'settings_https_only': 'HTTPS-only mode',
   'settings_https_only_sub':

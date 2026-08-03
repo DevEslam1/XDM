@@ -98,9 +98,8 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
                   Icon(
                     Icons.code_rounded,
                     size: 56,
-                    color: isDark
-                        ? AppTheme.textMuted
-                        : AppTheme.lightTextMuted,
+                    color:
+                        isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                   ),
                   const SizedBox(height: 14),
                   Text(
@@ -133,9 +132,7 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
                 final script = manager.scripts[i];
                 return Container(
                   decoration: BoxDecoration(
-                    color: (isDark
-                            ? AppTheme.glassBg
-                            : AppTheme.lightGlassBg)
+                    color: (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg)
                         .withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
@@ -159,19 +156,17 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: (script.isCss
-                                        ? AppTheme.neonGreen
-                                        : accent)
-                                    .withValues(alpha: 0.12),
+                                color:
+                                    (script.isCss ? AppTheme.neonGreen : accent)
+                                        .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 script.isCss
                                     ? Icons.palette_outlined
                                     : Icons.code,
-                                color: script.isCss
-                                    ? AppTheme.neonGreen
-                                    : accent,
+                                color:
+                                    script.isCss ? AppTheme.neonGreen : accent,
                                 size: 18,
                               ),
                             ),
@@ -209,7 +204,8 @@ class _ScriptManagerScreenState extends State<ScriptManagerScreen> {
                             Switch(
                               value: script.enabled,
                               activeThumbColor: accent,
-                              onChanged: (val) => _manager.toggle(script.id, val),
+                              onChanged: (val) =>
+                                  _manager.toggle(script.id, val),
                             ),
                             IconButton(
                               icon: Icon(

@@ -28,7 +28,8 @@ class LongPressPayload {
         text: (map['text'] as String?) ?? '',
       );
     } catch (e, st) {
-      Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
+      Logger('long_press_parser')
+          .warning('[long_press_parser] operation failed', e, st);
       return null;
     }
   }
@@ -45,7 +46,8 @@ class LongPressPayload {
     try {
       return jsonDecode(raw);
     } catch (e, st) {
-      Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
+      Logger('long_press_parser')
+          .warning('[long_press_parser] operation failed', e, st);
       return null;
     }
   }
@@ -128,7 +130,8 @@ String _host(String url) {
   try {
     return Uri.parse(url).host.toLowerCase();
   } catch (e, st) {
-    Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
+    Logger('long_press_parser')
+        .warning('[long_press_parser] operation failed', e, st);
     return '';
   }
 }
@@ -145,7 +148,8 @@ String _baseUrl(String url) {
     // same media (e.g. /video/720p.mp4 vs /video/1080p.mp4) are grouped.
     return '${uri.scheme}://$host${segments.isEmpty ? '' : '/${segments.first}'}';
   } catch (e, st) {
-    Logger('long_press_parser').warning('[long_press_parser] operation failed', e, st);
+    Logger('long_press_parser')
+        .warning('[long_press_parser] operation failed', e, st);
     return '';
   }
 }

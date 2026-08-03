@@ -43,13 +43,15 @@ class MagnetCacheService {
     _log.fine('[MagnetCache] Cached metadata for infoHash: $infoHash');
   }
 
-  static Future<Map<String, dynamic>?> getCachedMetadata(String infoHash) async {
+  static Future<Map<String, dynamic>?> getCachedMetadata(
+      String infoHash) async {
     if (_basePath == null) await init();
     final file = File(p.join(_basePath!, '$infoHash.json'));
     if (!await file.exists()) return null;
 
     try {
-      final data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final data =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       final cachedAt = data['cachedAt'] as int;
       final age = DateTime.now().millisecondsSinceEpoch - cachedAt;
 

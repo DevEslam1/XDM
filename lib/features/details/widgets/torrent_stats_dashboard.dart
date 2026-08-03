@@ -44,10 +44,12 @@ class TorrentStatsDashboard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.surface : Colors.white).withValues(alpha: 0.6),
+        color:
+            (isDark ? AppTheme.surface : Colors.white).withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.15),
+          color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+              .withValues(alpha: 0.15),
         ),
       ),
       child: Column(

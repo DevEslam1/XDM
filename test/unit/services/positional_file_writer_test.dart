@@ -152,8 +152,10 @@ void main() {
         threadCount: 2,
       );
 
-      await writer.write(0, 0, Uint8List.fromList(List.generate(10, (_) => 0xAA)));
-      await writer.write(1, 50, Uint8List.fromList(List.generate(10, (_) => 0xBB)));
+      await writer.write(
+          0, 0, Uint8List.fromList(List.generate(10, (_) => 0xAA)));
+      await writer.write(
+          1, 50, Uint8List.fromList(List.generate(10, (_) => 0xBB)));
 
       // Flush all and verify data on disk
       await writer.flushAll();

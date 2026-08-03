@@ -1,5 +1,16 @@
 import 'package:logging/logging.dart';
-enum DetectedMediaKind { video, audio, image, document, archive, executable, torrent, magnet, unknown }
+
+enum DetectedMediaKind {
+  video,
+  audio,
+  image,
+  document,
+  archive,
+  executable,
+  torrent,
+  magnet,
+  unknown
+}
 
 class DetectedMedia {
   final DetectedMediaKind kind;
@@ -107,16 +118,16 @@ class BrowserDetector {
     if (lower.startsWith('magnet:')) {
       return DetectedMedia(kind: DetectedMediaKind.magnet, url: url);
     }
-    
+
     final uri = Uri.tryParse(url);
     if (uri == null) return null;
-    
+
     final path = uri.path.toLowerCase();
     final cleanPath = path.split('?').first.split('#').first.trim();
     final trimmedPath = cleanPath.endsWith('/')
         ? cleanPath.substring(0, cleanPath.length - 1)
         : cleanPath;
-    
+
     // Check by file extension first
     for (final entry in _extensionMap.entries) {
       if (trimmedPath.endsWith(entry.key)) {
@@ -127,7 +138,7 @@ class BrowserDetector {
         );
       }
     }
-    
+
     final isCleanDownloadRoute = (trimmedPath.endsWith('/download') ||
             trimmedPath.endsWith('/downloads') ||
             trimmedPath == '/download' ||
@@ -151,31 +162,38 @@ class BrowserDetector {
         );
       }
     }
-    
+
     final webExtensions = [
-      '.html', '.htm', '.php', '.jsp', '.asp', '.aspx', '.xhtml',
-      '.js', '.css'
+      '.html',
+      '.htm',
+      '.php',
+      '.jsp',
+      '.asp',
+      '.aspx',
+      '.xhtml',
+      '.js',
+      '.css'
     ];
     if (webExtensions.any((ext) => trimmedPath.endsWith(ext))) {
       return null;
     }
-    
+
     return null;
   }
 
   static bool isAutoDownloadable(String url) {
     final detected = detect(url);
     if (detected == null) return false;
-    if (detected.kind == DetectedMediaKind.image || detected.kind == DetectedMediaKind.unknown) return false;
+    if (detected.kind == DetectedMediaKind.image ||
+        detected.kind == DetectedMediaKind.unknown) return false;
     return true;
   }
 
   static String _suggestName(String url, String ext) {
     try {
       final uri = Uri.parse(url);
-      final segments = uri.pathSegments
-          .where((s) => s.trim().isNotEmpty)
-          .toList();
+      final segments =
+          uri.pathSegments.where((s) => s.trim().isNotEmpty).toList();
       if (segments.isEmpty) return 'download${ext.isEmpty ? '' : ext}';
       var last = segments.last;
       if (!last.toLowerCase().endsWith(ext) && ext.isNotEmpty) {
@@ -183,7 +201,8 @@ class BrowserDetector {
       }
       return last;
     } catch (e, st) {
-      Logger('browser_detector').warning('[browser_detector] operation failed', e, st);
+      Logger('browser_detector')
+          .warning('[browser_detector] operation failed', e, st);
       return 'download${ext.isEmpty ? '' : ext}';
     }
   }

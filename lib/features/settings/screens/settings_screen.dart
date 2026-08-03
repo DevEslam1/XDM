@@ -66,7 +66,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     _settingsSearchController.addListener(() {
       if (mounted) {
         setState(() {
-          _settingsSearchQuery = _settingsSearchController.text.trim().toLowerCase();
+          _settingsSearchQuery =
+              _settingsSearchController.text.trim().toLowerCase();
         });
       }
     });
@@ -107,15 +108,15 @@ class _SettingsScreenState extends State<SettingsScreen>
       child: SlideTransition(
         position: Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
             .animate(
-              CurvedAnimation(
-                parent: _reveal,
-                curve: Interval(
-                  start,
-                  (start + 0.4).clamp(0.0, 1.0),
-                  curve: AppTheme.motionCurve,
-                ),
-              ),
+          CurvedAnimation(
+            parent: _reveal,
+            curve: Interval(
+              start,
+              (start + 0.4).clamp(0.0, 1.0),
+              curve: AppTheme.motionCurve,
             ),
+          ),
+        ),
         child: child,
       ),
     );
@@ -151,10 +152,6 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
   }
-
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -219,19 +216,24 @@ class _SettingsScreenState extends State<SettingsScreen>
                     0.04,
                     Container(
                       decoration: BoxDecoration(
-                        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                        color:
+                            isDark ? AppTheme.surface : AppTheme.lightSurface,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                          color:
+                              isDark ? AppTheme.border : AppTheme.lightBorder,
                           width: 1.0,
                         ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 2),
                       child: Row(
                         children: [
                           Icon(
                             Icons.search_rounded,
-                            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                            color: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
@@ -239,26 +241,34 @@ class _SettingsScreenState extends State<SettingsScreen>
                             child: TextField(
                               controller: _settingsSearchController,
                               style: TextStyle(
-                                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                                color: isDark
+                                    ? AppTheme.textPrimary
+                                    : AppTheme.lightTextPrimary,
                                 fontFamily: 'Inter',
                                 fontSize: 13,
                               ),
                               decoration: InputDecoration(
-                                hintText: L10n.of(context, 'search_settings_hint'),
+                                hintText:
+                                    L10n.of(context, 'search_settings_hint'),
                                 hintStyle: TextStyle(
-                                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                                  color: isDark
+                                      ? AppTheme.textMuted
+                                      : AppTheme.lightTextMuted,
                                   fontSize: 13,
                                 ),
                                 border: InputBorder.none,
                                 isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                               ),
                             ),
                           ),
                           if (_settingsSearchQuery.isNotEmpty)
                             IconButton(
                               icon: const Icon(Icons.clear_rounded, size: 18),
-                              color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                              color: isDark
+                                  ? AppTheme.textSecondary
+                                  : AppTheme.lightTextSecondary,
                               onPressed: () {
                                 _settingsSearchController.clear();
                               },
@@ -268,150 +278,148 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (_sectionMatches(L10n.of(context, 'settings_engine_status'), ['auto resume', 'max channels', 'speed limit']))
+                  if (_sectionMatches(
+                      L10n.of(context, 'settings_engine_status'),
+                      ['auto resume', 'max channels', 'speed limit']))
                     _stagger(
                       0.08,
                       _ConsoleSection(
                         index: '01',
                         title: L10n.of(context, 'settings_engine_status'),
-                        accentColor: isDark
-                            ? AppTheme.neonBlue
-                            : AppTheme.lightNeonBlue,
+                        accentColor:
+                            isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                         isDark: isDark,
                         isExpanded: _settingsSearchQuery.isNotEmpty ||
                             (_expandedSections['engine'] ?? true),
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['engine'] =
-                              !(_expandedSections['engine'] ?? true);
-                        });
-                      },
-                      children: [
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_auto_resume'),
-                          subtitle: L10n.of(
-                            context,
-                            'settings_auto_resume_sub',
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['engine'] =
+                                !(_expandedSections['engine'] ?? true);
+                          });
+                        },
+                        children: [
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_auto_resume'),
+                            subtitle: L10n.of(
+                              context,
+                              'settings_auto_resume_sub',
+                            ),
+                            value: settings.autoStart,
+                            onChanged: (val) {
+                              settings.setAutoStart(val);
+                              triggerHaptic(settings);
+                            },
                           ),
-                          value: settings.autoStart,
-                          onChanged: (val) {
-                            settings.setAutoStart(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _DropdownTile<int>(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_max_channels'),
-                          subtitle: settings.batterySaverMode
-                              ? (isRtl
+                          _Divider(isDark: isDark),
+                          _DropdownTile<int>(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_max_channels'),
+                            subtitle: settings.batterySaverMode
+                                ? (isRtl
                                     ? 'محدود بـ ${settings.effectiveMaxDownloads} بسبب موفر البطارية'
                                     : 'Limited to ${settings.effectiveMaxDownloads} by Battery Saver')
-                              : L10n.of(context, 'settings_max_channels_sub'),
-                          value: settings.maxDownloads,
-                          items: const [1, 2, 3, 5, 8],
-                          onChanged: settings.batterySaverMode
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    settings.setMaxDownloads(val);
-                                    triggerHaptic(settings);
-                                  }
-                                },
-                        ),
-                        _Divider(isDark: isDark),
-                        _DropdownTile<int>(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_default_threads'),
-                          subtitle: settings.batterySaverMode
-                              ? (isRtl
+                                : L10n.of(context, 'settings_max_channels_sub'),
+                            value: settings.maxDownloads,
+                            items: const [1, 2, 3, 5, 8],
+                            onChanged: settings.batterySaverMode
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      settings.setMaxDownloads(val);
+                                      triggerHaptic(settings);
+                                    }
+                                  },
+                          ),
+                          _Divider(isDark: isDark),
+                          _DropdownTile<int>(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_default_threads'),
+                            subtitle: settings.batterySaverMode
+                                ? (isRtl
                                     ? 'محدود بـ ${settings.effectiveDefaultThreadCount} بسبب موفر البطارية'
                                     : 'Limited to ${settings.effectiveDefaultThreadCount} by Battery Saver')
-                              : L10n.of(
-                                  context,
-                                  'settings_default_threads_sub',
-                                ),
-                          value: settings.defaultThreadCount,
-                          items: kAvailableThreadOptions,
-                          onChanged: settings.batterySaverMode
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    settings.setDefaultThreadCount(val);
-                                    triggerHaptic(settings);
-                                  }
-                                },
-                        ),
-                        _Divider(isDark: isDark),
-                        _DropdownTile<String>(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_lang'),
-                          subtitle: L10n.of(context, 'settings_lang_sub'),
-                          value: settings.languageCode,
-                          items: const ['en', 'ar'],
-                          itemLabels: {'en': 'ENGLISH', 'ar': 'العربية'},
-                          onChanged: (val) {
-                            if (val != null) {
-                              settings.setLanguageCode(val);
+                                : L10n.of(
+                                    context,
+                                    'settings_default_threads_sub',
+                                  ),
+                            value: settings.defaultThreadCount,
+                            items: kAvailableThreadOptions,
+                            onChanged: settings.batterySaverMode
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      settings.setDefaultThreadCount(val);
+                                      triggerHaptic(settings);
+                                    }
+                                  },
+                          ),
+                          _Divider(isDark: isDark),
+                          _DropdownTile<String>(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_lang'),
+                            subtitle: L10n.of(context, 'settings_lang_sub'),
+                            value: settings.languageCode,
+                            items: const ['en', 'ar'],
+                            itemLabels: {'en': 'ENGLISH', 'ar': 'العربية'},
+                            onChanged: (val) {
+                              if (val != null) {
+                                settings.setLanguageCode(val);
+                                triggerHaptic(settings);
+                              }
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _PathPickerTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: isRtl
+                                ? 'مجلد التحميل الافتراضي'
+                                : 'Default Download Folder',
+                            subtitle:
+                                settings.customDownloadPath?.isNotEmpty == true
+                                    ? settings.customDownloadPath!
+                                    : (isRtl
+                                        ? 'تلقائي (Downloads/XDM)'
+                                        : 'Default (Downloads/XDM)'),
+                            onTap: () async {
                               triggerHaptic(settings);
-                            }
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _PathPickerTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: isRtl
-                              ? 'مجلد التحميل الافتراضي'
-                              : 'Default Download Folder',
-                          subtitle:
-                              settings.customDownloadPath?.isNotEmpty == true
-                              ? settings.customDownloadPath!
-                              : (isRtl
-                                    ? 'تلقائي (Downloads/XDM)'
-                                    : 'Default (Downloads/XDM)'),
-                          onTap: () async {
-                            triggerHaptic(settings);
-                            final path = await FilePicker.getDirectoryPath();
-                            if (path != null) {
-                              await settings.setCustomDownloadPath(path);
-                            }
-                          },
-                          onClear:
-                              settings.customDownloadPath?.isNotEmpty == true
-                              ? () async {
-                                  triggerHaptic(settings);
-                                  await settings.setCustomDownloadPath(null);
-                                }
-                              : null,
-                        ),
-                      ],
+                              final path = await FilePicker.getDirectoryPath();
+                              if (path != null) {
+                                await settings.setCustomDownloadPath(path);
+                              }
+                            },
+                            onClear: settings.customDownloadPath?.isNotEmpty ==
+                                    true
+                                ? () async {
+                                    triggerHaptic(settings);
+                                    await settings.setCustomDownloadPath(null);
+                                  }
+                                : null,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 14),
                   _stagger(
                     0.16,
                     _ConsoleSection(
                       index: '02',
                       title: L10n.of(context, 'settings_bandwidth'),
-                      accentColor: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
+                      accentColor:
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['bandwidth'] ??
-                          false,
+                      isExpanded: _expandedSections['bandwidth'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -501,8 +509,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                               divisions: 99,
                               onChanged: (val) =>
                                   settings.setGlobalTorrentSeedingLimitKbps(
-                                    val.round(),
-                                  ),
+                                val.round(),
+                              ),
                               onChangeEnd: (val) => triggerHaptic(settings),
                             ),
                           ],
@@ -535,7 +543,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                           value: settings.maxConcurrentFilesPerTorrent,
                           items: const [0, 1, 2, 3, 5, 10],
                           itemLabels: {
-                            0: L10n.isRtl(context) ? 'الكل (غير محدود)' : 'All (Unlimited)',
+                            0: L10n.isRtl(context)
+                                ? 'الكل (غير محدود)'
+                                : 'All (Unlimited)',
                             1: '1',
                             2: '2',
                             3: '3',
@@ -562,9 +572,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ? AppTheme.neonViolet
                           : AppTheme.lightNeonViolet,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['cockpit'] ??
-                          false,
+                      isExpanded: _expandedSections['cockpit'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -577,9 +585,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                           accentColor: isDark
                               ? AppTheme.neonViolet
                               : AppTheme.lightNeonViolet,
-                          title: L10n.isRtl(context)
-                              ? 'سمة المظهر'
-                              : 'THEME MODE',
+                          title:
+                              L10n.isRtl(context) ? 'سمة المظهر' : 'THEME MODE',
                           subtitle: L10n.isRtl(context)
                               ? 'اختر سمة مظهر التطبيق'
                               : 'Select application theme mode',
@@ -607,8 +614,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                           title: L10n.of(context, 'settings_classic_ui'),
                           subtitle: settings.batterySaverMode
                               ? (isRtl
-                                    ? 'مفعل بواسطة موفر البطارية'
-                                    : 'Forced ON by Battery Saver')
+                                  ? 'مفعل بواسطة موفر البطارية'
+                                  : 'Forced ON by Battery Saver')
                               : L10n.of(context, 'settings_classic_ui_sub'),
                           value: settings.classicUi,
                           onChanged: settings.batterySaverMode
@@ -655,13 +662,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                     _ConsoleSection(
                       index: '04',
                       title: L10n.of(context, 'settings_alerters'),
-                      accentColor: isDark
-                          ? AppTheme.neonAmber
-                          : AppTheme.lightNeonAmber,
+                      accentColor:
+                          isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['alerters'] ??
-                          false,
+                      isExpanded: _expandedSections['alerters'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -727,7 +731,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                           value: settings.maxConcurrentFilesPerTorrent,
                           items: const [0, 1, 2, 3, 5, 10],
                           itemLabels: {
-                            0: L10n.isRtl(context) ? 'الكل (غير محدود)' : 'All (Unlimited)',
+                            0: L10n.isRtl(context)
+                                ? 'الكل (غير محدود)'
+                                : 'All (Unlimited)',
                             1: '1',
                             2: '2',
                             3: '3',
@@ -752,13 +758,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                       title: L10n.isRtl(context)
                           ? 'مراقب الأداء والتحكم بالنظام'
                           : 'TELEMETRY & PERFORMANCE',
-                      accentColor: isDark
-                          ? AppTheme.neonCyan
-                          : AppTheme.lightNeonCyan,
+                      accentColor:
+                          isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['telemetry'] ??
-                          false,
+                      isExpanded: _expandedSections['telemetry'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -775,13 +778,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                     _ConsoleSection(
                       index: '06',
                       title: L10n.of(context, 'settings_youtube_backend'),
-                      accentColor: isDark
-                          ? AppTheme.neonRed
-                          : AppTheme.lightNeonRed,
+                      accentColor:
+                          isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['backend'] ??
-                          false,
+                      isExpanded: _expandedSections['backend'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -791,9 +791,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                       },
                       children: [
                         _TextFieldTile(
-                          accentColor: isDark
-                              ? AppTheme.neonRed
-                              : AppTheme.lightNeonRed,
+                          accentColor:
+                              isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                           title: L10n.isRtl(context)
                               ? 'عنوان الخادم الخلفي (URL)'
                               : 'Backend URL',
@@ -844,15 +843,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                               );
                               try {
                                 XdmBackendClient().refreshConfig();
-                                final response = await XdmBackendClient()
-                                    .health();
+                                final response =
+                                    await XdmBackendClient().health();
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(
                                     context,
                                   ).hideCurrentSnackBar();
                                   final status =
                                       response['status'] as String? ??
-                                      'unknown';
+                                          'unknown';
                                   if (status == 'ok') {
                                     ThemedSnackbar.show(
                                       context,
@@ -909,13 +908,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                     _ConsoleSection(
                       index: '07',
                       title: L10n.of(context, 'settings_adv_console'),
-                      accentColor: isDark
-                          ? AppTheme.neonBlue
-                          : AppTheme.lightNeonBlue,
+                      accentColor:
+                          isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['advanced'] ??
-                          false,
+                      isExpanded: _expandedSections['advanced'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -1114,8 +1110,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                                 await settings.resetToDefaults();
                                 _uaController.text = settings.customUserAgent;
                                 _proxyHostController.text = settings.proxyHost;
-                                _proxyPortController.text = settings.proxyPort
-                                    .toString();
+                                _proxyPortController.text =
+                                    settings.proxyPort.toString();
                                 _proxyUsernameController.text =
                                     settings.proxyUsername;
                                 _proxyPasswordController.text =
@@ -1146,13 +1142,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                     _ConsoleSection(
                       index: '08',
                       title: L10n.of(context, 'settings_adblock_title'),
-                      accentColor: isDark
-                          ? AppTheme.neonGreen
-                          : AppTheme.lightNeonGreen,
+                      accentColor:
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['adblock'] ??
-                          false,
+                      isExpanded: _expandedSections['adblock'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -1166,7 +1159,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? AppTheme.neonGreen
                               : AppTheme.lightNeonGreen,
                           title: L10n.of(context, 'settings_enable_adblock'),
-                          subtitle: L10n.of(context, 'settings_enable_adblock_sub'),
+                          subtitle:
+                              L10n.of(context, 'settings_enable_adblock_sub'),
                           value: AdBlockerService.instance.isEnabled,
                           onChanged: (val) async {
                             await AdBlockerService.instance.setEnabled(val);
@@ -1196,13 +1190,16 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     ? AppTheme.neonGreen
                                     : AppTheme.lightNeonGreen,
                                 text: _isUpdatingAdBlock
-                                    ? L10n.of(context, 'settings_updating_adblock_hosts')
-                                    : L10n.of(context, 'settings_update_adblock_hosts'),
+                                    ? L10n.of(context,
+                                        'settings_updating_adblock_hosts')
+                                    : L10n.of(context,
+                                        'settings_update_adblock_hosts'),
                                 onPressed: _isUpdatingAdBlock
                                     ? null
                                     : () async {
                                         triggerHaptic(settings);
-                                        setState(() => _isUpdatingAdBlock = true);
+                                        setState(
+                                            () => _isUpdatingAdBlock = true);
                                         ThemedSnackbar.show(
                                           context,
                                           message: L10n.of(
@@ -1215,11 +1212,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                                           icon: Icons.sync,
                                           isDarkMode: isDark,
                                         );
-                                        final success = await AdBlockerService.instance
+                                        final success = await AdBlockerService
+                                            .instance
                                             .updateFilters(force: true);
                                         if (mounted && context.mounted) {
-                                          setState(() => _isUpdatingAdBlock = false);
-                                          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                          setState(
+                                              () => _isUpdatingAdBlock = false);
+                                          ScaffoldMessenger.of(context)
+                                              .hideCurrentSnackBar();
                                           if (success) {
                                             ThemedSnackbar.show(
                                               context,
@@ -1260,13 +1260,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                     _ConsoleSection(
                       index: '09',
                       title: L10n.of(context, 'settings_accessibility_title'),
-                      accentColor: isDark
-                          ? AppTheme.neonBlue
-                          : AppTheme.lightNeonBlue,
+                      accentColor:
+                          isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                       isDark: isDark,
-                      isExpanded:
-                          _expandedSections['accessibility'] ??
-                          false,
+                      isExpanded: _expandedSections['accessibility'] ?? false,
                       onToggle: () {
                         triggerHaptic(settings);
                         setState(() {
@@ -1279,7 +1276,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                           accentColor: isDark
                               ? AppTheme.neonBlue
                               : AppTheme.lightNeonBlue,
-                          title: isRtl ? 'تقليل المؤثرات البصرية' : 'REDUCE MOTION & VISUALS',
+                          title: isRtl
+                              ? 'تقليل المؤثرات البصرية'
+                              : 'REDUCE MOTION & VISUALS',
                           subtitle: isRtl
                               ? 'إيقاف تأثيرات التوهج والضبابية لتحسين سهولة القراءة والأداء'
                               : 'Disable animation, glow, and blur effects to improve readability and performance',
@@ -1295,7 +1294,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? AppTheme.neonBlue
                               : AppTheme.lightNeonBlue,
                           title: L10n.of(context, 'settings_text_scaling'),
-                          subtitle: '${(settings.textScaleFactor * 100).toInt()}% ${L10n.of(context, 'settings_text_scaling_sub')}',
+                          subtitle:
+                              '${(settings.textScaleFactor * 100).toInt()}% ${L10n.of(context, 'settings_text_scaling_sub')}',
                           value: settings.textScaleFactor,
                           min: 0.8,
                           max: 2.0,
@@ -1389,9 +1389,8 @@ class _SystemHeaderState extends State<_SystemHeader>
                 Text(
                   '${L10n.of(context, 'settings_firmware')} v$kAppVersion',
                   style: TextStyle(
-                    color: isDark
-                        ? AppTheme.textMuted
-                        : AppTheme.lightTextMuted,
+                    color:
+                        isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                     fontFamily: 'Space Grotesk',
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
@@ -1810,12 +1809,10 @@ class _SwitchTile extends StatelessWidget {
             onChanged: onChanged,
             activeThumbColor: accentColor,
             activeTrackColor: accentColor.withValues(alpha: 0.3),
-            inactiveThumbColor: isDark
-                ? AppTheme.textSecondary
-                : AppTheme.lightTextSecondary,
-            inactiveTrackColor: isDark
-                ? AppTheme.borderSubtle
-                : AppTheme.lightBorderSubtle,
+            inactiveThumbColor:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+            inactiveTrackColor:
+                isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 6,
@@ -1826,9 +1823,8 @@ class _SwitchTile extends StatelessWidget {
             title: Text(
               title,
               style: TextStyle(
-                color: isDark
-                    ? AppTheme.textPrimary
-                    : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                 fontFamily: 'Space Grotesk',
                 fontSize: 14.0,
                 fontWeight: FontWeight.w700,
@@ -1943,9 +1939,8 @@ class _SliderTile extends StatelessWidget {
             SliderTheme(
               data: SliderThemeData(
                 activeTrackColor: accentColor,
-                inactiveTrackColor: isDark
-                    ? AppTheme.borderSubtle
-                    : AppTheme.lightBorderSubtle,
+                inactiveTrackColor:
+                    isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
                 thumbColor: accentColor,
                 overlayColor: accentColor.withValues(alpha: 0.2),
                 trackHeight: 4.0,
@@ -2035,9 +2030,8 @@ class _DropdownTile<T> extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontFamily: 'Inter',
                       fontSize: 12.0,
                       height: 1.35,
@@ -2063,9 +2057,8 @@ class _DropdownTile<T> extends StatelessWidget {
                 child: DropdownButton<T>(
                   isDense: true,
                   isExpanded: true,
-                  dropdownColor: isDark
-                      ? AppTheme.surface
-                      : AppTheme.lightSurface,
+                  dropdownColor:
+                      isDark ? AppTheme.surface : AppTheme.lightSurface,
                   borderRadius: BorderRadius.circular(14),
                   elevation: 4,
                   menuMaxHeight: 250,
@@ -2154,9 +2147,8 @@ class _TextFieldTile extends StatelessWidget {
             Text(
               title,
               style: TextStyle(
-                color: isDark
-                    ? AppTheme.textPrimary
-                    : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                 fontFamily: 'Space Grotesk',
                 fontSize: 14.0,
                 fontWeight: FontWeight.w700,
@@ -2209,9 +2201,8 @@ class _TextFieldTile extends StatelessWidget {
                     ),
                     hintText: subtitle,
                     hintStyle: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontFamily: 'Inter',
                       fontSize: 12,
                     ),
@@ -2279,9 +2270,8 @@ class _PathPickerTile extends StatelessWidget {
             title: Text(
               title,
               style: TextStyle(
-                color: isDark
-                    ? AppTheme.textPrimary
-                    : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                 fontFamily: 'Space Grotesk',
                 fontSize: 14.0,
                 fontWeight: FontWeight.w700,
@@ -2339,8 +2329,6 @@ class _PathPickerTile extends StatelessWidget {
   }
 }
 
-
-
 // ─────────────────────────────────────────────────────────────
 // Backup Module
 // ─────────────────────────────────────────────────────────────
@@ -2366,9 +2354,8 @@ class _BackupModule extends StatelessWidget with HapticHelper {
               Text(
                 L10n.of(context, 'settings_backup_title'),
                 style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                   fontFamily: 'Space Grotesk',
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
@@ -2394,7 +2381,8 @@ class _BackupModule extends StatelessWidget with HapticHelper {
                 child: NeonGlowButton(
                   isFilled: false,
                   color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  onPressed: () => _BackupHelper.exportBackup(context, settings),
+                  onPressed: () =>
+                      _BackupHelper.exportBackup(context, settings),
                   text: L10n.of(context, 'settings_export'),
                 ),
               ),
@@ -2403,7 +2391,8 @@ class _BackupModule extends StatelessWidget with HapticHelper {
                 child: NeonGlowButton(
                   isFilled: true,
                   color: violetClr,
-                  onPressed: () => _BackupHelper.importBackup(context, settings),
+                  onPressed: () =>
+                      _BackupHelper.importBackup(context, settings),
                   text: L10n.of(context, 'settings_import'),
                 ),
               ),
@@ -2440,9 +2429,8 @@ class _CommsModule extends StatelessWidget with HapticHelper {
               Text(
                 L10n.of(context, 'settings_developer'),
                 style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                   fontFamily: 'Space Grotesk',
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
@@ -2535,9 +2523,8 @@ class _ContactTile extends StatelessWidget {
                   ThemedSnackbar.show(
                     context,
                     message: L10n.of(context, 'copied'),
-                    color: isDark
-                        ? AppTheme.neonGreen
-                        : AppTheme.lightNeonGreen,
+                    color:
+                        isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
                     icon: Icons.check_circle_outline,
                     isDarkMode: isDark,
                   );
@@ -2587,9 +2574,8 @@ class _ContactTile extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontFamily: 'Space Grotesk',
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
@@ -2640,23 +2626,21 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
 
         final gpuLoad = settings.classicUi
             ? (isRtl
-                  ? 'منخفض (نمط الواجهة الكلاسيكي)'
-                  : 'LOW (Classic UI Mode)')
+                ? 'منخفض (نمط الواجهة الكلاسيكي)'
+                : 'LOW (Classic UI Mode)')
             : (isRtl
-                  ? 'متوسط (تأثيرات التوهج والضبابية)'
-                  : 'MODERATE (Glows & Blurs Active)');
+                ? 'متوسط (تأثيرات التوهج والضبابية)'
+                : 'MODERATE (Glows & Blurs Active)');
 
         String batteryImpact;
         Color batteryColor;
         if (settings.batterySaverMode) {
-          batteryImpact = isRtl
-              ? 'توفير الطاقة نشط (أمثل)'
-              : 'SAVER ACTIVE (Optimal)';
+          batteryImpact =
+              isRtl ? 'توفير الطاقة نشط (أمثل)' : 'SAVER ACTIVE (Optimal)';
           batteryColor = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
         } else if (activeDownloads.isNotEmpty) {
-          batteryImpact = isRtl
-              ? 'متوسط (تحميل نشط)'
-              : 'MODERATE (Active downloads)';
+          batteryImpact =
+              isRtl ? 'متوسط (تحميل نشط)' : 'MODERATE (Active downloads)';
           batteryColor = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
         } else {
           batteryImpact = isRtl ? 'منخفض جداً (خامل)' : 'VERY LOW (Idle)';
@@ -2790,9 +2774,8 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                         ? 'يقيد قنوات الاتصال إلى ٢، والتحميلات المتزامنة إلى ١، ويفرض الواجهة الكلاسيكية لتوفير الطاقة'
                         : 'Limits threads to 2, downloads to 1, and forces Classic UI to save battery',
                     style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontFamily: 'Space Grotesk',
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
@@ -2823,9 +2806,8 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                         ? 'السماح للتطبيق بالعمل واستكمال التحميلات في الخلفية دون إيقافه بواسطة النظام'
                         : 'Allow app to continue background downloads without OS termination',
                     style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontFamily: 'Space Grotesk',
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
@@ -2845,18 +2827,18 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                         context,
                         message: granted
                             ? (isRtl
-                                  ? 'تم استثناء التطبيق من تحسين البطارية'
-                                  : 'Battery optimization ignored successfully')
+                                ? 'تم استثناء التطبيق من تحسين البطارية'
+                                : 'Battery optimization ignored successfully')
                             : (isRtl
-                                  ? 'يرجى السماح للتطبيق بالعمل في الخلفية من إعدادات النظام'
-                                  : 'Battery optimization exemption not granted'),
+                                ? 'يرجى السماح للتطبيق بالعمل في الخلفية من إعدادات النظام'
+                                : 'Battery optimization exemption not granted'),
                         color: granted
                             ? (isDark
-                                  ? AppTheme.neonGreen
-                                  : AppTheme.lightNeonGreen)
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen)
                             : (isDark
-                                  ? AppTheme.neonAmber
-                                  : AppTheme.lightNeonAmber),
+                                ? AppTheme.neonAmber
+                                : AppTheme.lightNeonAmber),
                         icon: granted
                             ? Icons.check_circle_rounded
                             : Icons.info_rounded,
@@ -2900,9 +2882,8 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                         ? 'إيقاف تأثيرات التوهج والضبابية لتحسين الأداء على الأجهزة الضعيفة'
                         : 'Disable glow and blur effects to improve performance on low-end devices',
                     style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontFamily: 'Space Grotesk',
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
@@ -3071,9 +3052,8 @@ class _DiagRow extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: isDark
-                ? AppTheme.textSecondary
-                : AppTheme.lightTextSecondary,
+            color:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
             fontFamily: 'Space Grotesk',
             fontSize: 11,
             fontWeight: FontWeight.w400,
@@ -3084,8 +3064,7 @@ class _DiagRow extends StatelessWidget {
             value,
             textAlign: TextAlign.end,
             style: TextStyle(
-              color:
-                  valueColor ??
+              color: valueColor ??
                   (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
               fontFamily: 'Space Grotesk',
               fontSize: 11,
@@ -3118,9 +3097,8 @@ abstract final class _BackupHelper {
           titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
           contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          backgroundColor: isDark
-              ? AppTheme.surfaceRaised
-              : AppTheme.lightSurfaceRaised,
+          backgroundColor:
+              isDark ? AppTheme.surfaceRaised : AppTheme.lightSurfaceRaised,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(
@@ -3148,8 +3126,8 @@ abstract final class _BackupHelper {
                   isExport
                       ? (isRtl ? 'حماية النسخة الاحتياطية' : 'ENCRYPT BACKUP')
                       : (isRtl
-                            ? 'فك تشفير النسخة الاحتياطية'
-                            : 'DECRYPT BACKUP'),
+                          ? 'فك تشفير النسخة الاحتياطية'
+                          : 'DECRYPT BACKUP'),
                   style: TextStyle(
                     color: accentColor,
                     fontWeight: FontWeight.w800,
@@ -3168,11 +3146,11 @@ abstract final class _BackupHelper {
               Text(
                 isExport
                     ? (isRtl
-                          ? 'أدخل كلمة مرور لتشفير ملف النسخ الاحتياطي (اتركه فارغاً للتصدير بدون تشفير):'
-                          : 'Enter a password to encrypt the backup file (leave empty to export unencrypted):')
+                        ? 'أدخل كلمة مرور لتشفير ملف النسخ الاحتياطي (اتركه فارغاً للتصدير بدون تشفير):'
+                        : 'Enter a password to encrypt the backup file (leave empty to export unencrypted):')
                     : (isRtl
-                          ? 'هذا الملف مشفر. يرجى إدخال كلمة المرور لفك التشفير:'
-                          : 'This backup file is encrypted. Enter the password to decrypt:'),
+                        ? 'هذا الملف مشفر. يرجى إدخال كلمة المرور لفك التشفير:'
+                        : 'This backup file is encrypted. Enter the password to decrypt:'),
                 style: TextStyle(
                   color: isDark
                       ? AppTheme.textSecondary
@@ -3196,7 +3174,9 @@ abstract final class _BackupHelper {
                   controller: controller,
                   obscureText: true,
                   style: TextStyle(
-                    color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                    color: isDark
+                        ? AppTheme.textPrimary
+                        : AppTheme.lightTextPrimary,
                     fontSize: 12.5,
                     fontFamily: 'Inter',
                   ),
@@ -3206,9 +3186,8 @@ abstract final class _BackupHelper {
                     focusedBorder: InputBorder.none,
                     hintText: isRtl ? 'كلمة المرور' : 'Password',
                     hintStyle: TextStyle(
-                      color: isDark
-                          ? AppTheme.textMuted
-                          : AppTheme.lightTextMuted,
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
                       fontSize: 12,
                       fontFamily: 'Inter',
                     ),
@@ -3304,9 +3283,8 @@ abstract final class _BackupHelper {
               ? 'كيف ترغب في استيراد سجلات التحميل؟\n• دمج: إضافة السجلات الجديدة والاحتفاظ بالحالية.\n• استبدال: مسح السجلات الحالية بالكامل وتطبيق الجديدة.'
               : 'How would you like to restore the download logs?\n• MERGE: Add new logs and keep existing ones.\n• REPLACE: Wipe all existing logs and apply the new ones.',
           style: TextStyle(
-            color: isDark
-                ? AppTheme.textSecondary
-                : AppTheme.lightTextSecondary,
+            color:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
             fontSize: 14.0,
             height: 1.5,
           ),
@@ -3351,7 +3329,8 @@ abstract final class _BackupHelper {
     );
   }
 
-  static void exportBackup(BuildContext context, SettingsProvider settings) async {
+  static void exportBackup(
+      BuildContext context, SettingsProvider settings) async {
     runHaptic(settings);
     final provider = Provider.of<DownloadProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
@@ -3369,7 +3348,8 @@ abstract final class _BackupHelper {
     );
   }
 
-  static void importBackup(BuildContext context, SettingsProvider settings) async {
+  static void importBackup(
+      BuildContext context, SettingsProvider settings) async {
     runHaptic(settings);
     final isDark = settings.isDarkMode;
     final provider = Provider.of<DownloadProvider>(context, listen: false);
@@ -3402,7 +3382,8 @@ abstract final class _BackupHelper {
         }
       }
     } catch (e, st) {
-      Logger('settings_screen').warning('[settings_screen] operation failed', e, st);
+      Logger('settings_screen')
+          .warning('[settings_screen] operation failed', e, st);
     }
     String? password = '';
     if (isEncrypted) {
@@ -3425,11 +3406,11 @@ abstract final class _BackupHelper {
       context,
       message: success
           ? (isRtl
-                ? 'تم استيراد النسخة الاحتياطية بنجاح'
-                : 'Backup imported successfully')
+              ? 'تم استيراد النسخة الاحتياطية بنجاح'
+              : 'Backup imported successfully')
           : (isRtl
-                ? 'فشل استيراد النسخة الاحتياطية (تأكد من صحة كلمة المرور)'
-                : 'Failed to import backup (check password)'),
+              ? 'فشل استيراد النسخة الاحتياطية (تأكد من صحة كلمة المرور)'
+              : 'Failed to import backup (check password)'),
       color: success
           ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
           : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),

@@ -29,13 +29,16 @@ void main() {
   });
 
   group('Magnet URL Tests', () {
-    const validHex40 = 'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3&dn=Ubuntu';
+    const validHex40 =
+        'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3&dn=Ubuntu';
     const validBase32 = 'magnet:?xt=urn:btih:MR6EKEINW5KJPRFD6GPQPTHKMQEH3P5T';
-    const validHex64 = 'magnet:?xt=urn:btih:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-    
+    const validHex64 =
+        'magnet:?xt=urn:btih:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
     const invalidNoXt = 'magnet:?dn=Ubuntu';
     const invalidShortHash = 'magnet:?xt=urn:btih:5dee65101db75097';
-    const invalidCharHash = 'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcg3'; // 'g' is not hex
+    const invalidCharHash =
+        'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcg3'; // 'g' is not hex
 
     test('isMagnetUrl validates correct formats', () {
       expect(isMagnetUrl(validHex40), isTrue);
@@ -55,7 +58,8 @@ void main() {
 
       final parsed2 = parseMagnetUrl(validBase32);
       expect(parsed2['infoHash'], isNotNull);
-      expect(parsed2['infoHash']!.length, 40); // Converted 32-char Base32 to 40-char Hex
+      expect(parsed2['infoHash']!.length,
+          40); // Converted 32-char Base32 to 40-char Hex
     });
 
     test('isValidTransmissionUrl accepts valid magnet URLs', () {
@@ -64,7 +68,8 @@ void main() {
     });
 
     test('parseMagnetUrl with no name returns empty map for name', () {
-      final parsed = parseMagnetUrl('magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3');
+      final parsed = parseMagnetUrl(
+          'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3');
       expect(parsed['infoHash'], isNotNull);
       expect(parsed['name'], isNull);
     });
@@ -88,7 +93,8 @@ void main() {
 
   group('Punycode & Content Disposition Tests', () {
     test('convertIdnToPunycode handles non-Latin domains safely', () {
-      expect(convertIdnToPunycode('https://example.com'), 'https://example.com');
+      expect(
+          convertIdnToPunycode('https://example.com'), 'https://example.com');
       final puny = convertIdnToPunycode('https://موقع.الجزيرة.net/test');
       expect(puny, contains('xn--'));
     });
@@ -118,19 +124,24 @@ void main() {
     });
 
     test('handles URL with query parameters', () {
-      final name = fileNameFromUrl('https://example.com/path/doc.pdf?v=1&token=abc');
+      final name =
+          fileNameFromUrl('https://example.com/path/doc.pdf?v=1&token=abc');
       expect(name, 'doc.pdf');
     });
   });
 
   group('isTorrentUrl edge cases', () {
     test('detects magnet links', () {
-      expect(isTorrentUrl('magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3'), isTrue);
+      expect(
+          isTorrentUrl(
+              'magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3'),
+          isTrue);
     });
 
     test('detects .torrent file URLs', () {
       expect(isTorrentUrl('https://example.com/file.torrent'), isTrue);
-      expect(isTorrentUrl('https://example.com/file.torrent?download=1'), isTrue);
+      expect(
+          isTorrentUrl('https://example.com/file.torrent?download=1'), isTrue);
     });
 
     test('detects file:// torrent paths', () {
@@ -140,7 +151,8 @@ void main() {
     test('rejects non-torrent URLs', () {
       expect(isTorrentUrl('https://example.com/video.mp4'), isFalse);
       expect(isTorrentUrl('https://example.com/file.zip'), isFalse);
-      expect(isTorrentUrl('https://example.com/page?ref=my.torrent.backup'), isFalse);
+      expect(isTorrentUrl('https://example.com/page?ref=my.torrent.backup'),
+          isFalse);
       expect(isTorrentUrl('https://example.com/not-a-torrent.html'), isFalse);
     });
 
@@ -161,12 +173,14 @@ void main() {
 
   group('extractUrlFromText edge cases', () {
     test('extracts URL from surrounding text', () {
-      final url = extractUrlFromText('Check out https://example.com for more info');
+      final url =
+          extractUrlFromText('Check out https://example.com for more info');
       expect(url, 'https://example.com');
     });
 
     test('extracts magnet link from text', () {
-      final url = extractUrlFromText('Download: magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3&dn=Test');
+      final url = extractUrlFromText(
+          'Download: magnet:?xt=urn:btih:5dee65101db75097c523f19f074d0a64087dbcd3&dn=Test');
       expect(url, contains('magnet:'));
     });
 

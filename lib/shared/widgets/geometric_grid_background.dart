@@ -47,7 +47,8 @@ class _AmbientProgress with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       _isBackgrounded = true;
       _stopTimer();
     } else if (state == AppLifecycleState.resumed) {

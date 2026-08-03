@@ -20,10 +20,12 @@ class OpenFilex {
         final process = await Process.start('open', [filePath]);
         result = await process.exitCode;
       } else if (Platform.isWindows) {
-        final process = await Process.start('cmd', ['/c', 'start', '', filePath]);
+        final process =
+            await Process.start('cmd', ['/c', 'start', '', filePath]);
         result = await process.exitCode;
       } else if (Platform.isLinux) {
-        final process = await Process.start("$linuxDesktopName-open", [filePath]);
+        final process =
+            await Process.start("$linuxDesktopName-open", [filePath]);
         result = await process.exitCode;
       } else {
         throw UnsupportedError("Unsupported platform");

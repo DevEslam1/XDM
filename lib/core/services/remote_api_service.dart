@@ -50,9 +50,8 @@ class RemoteApiService {
       }
     }
 
-    _cachedTokenFilePath = dir.endsWith('/')
-        ? '$dir$_tokenFileName'
-        : '$dir/$_tokenFileName';
+    _cachedTokenFilePath =
+        dir.endsWith('/') ? '$dir$_tokenFileName' : '$dir/$_tokenFileName';
     return _cachedTokenFilePath!;
   }
 
@@ -93,7 +92,8 @@ class RemoteApiService {
       // its token file and heartbeat it; if alive, piggyback on it.
       final primary = await _readRemoteInfo();
       if (primary != null && await _isPrimaryAlive(primary.$2)) {
-        debugPrint('Remote API: existing server on port ${primary.$2} is alive');
+        debugPrint(
+            'Remote API: existing server on port ${primary.$2} is alive');
         return;
       }
       // No live primary — delete stale token file and retry bind

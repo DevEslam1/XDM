@@ -17,30 +17,40 @@ void main() {
       expect(BrowserDetector.detect('https://example.com/downloads/'), isNull);
     });
 
-    test('Download endpoints with queries are detected as unknown downloads', () {
-      final detected = BrowserDetector.detect('https://example.com/download?id=456');
+    test('Download endpoints with queries are detected as unknown downloads',
+        () {
+      final detected =
+          BrowserDetector.detect('https://example.com/download?id=456');
       expect(detected, isNotNull);
       expect(detected!.kind, DetectedMediaKind.unknown);
-      expect(BrowserDetector.isAutoDownloadable('https://example.com/download?id=456'), isFalse);
+      expect(
+          BrowserDetector.isAutoDownloadable(
+              'https://example.com/download?id=456'),
+          isFalse);
     });
 
     test('Images are detected but not auto-downloaded', () {
       final detected = BrowserDetector.detect('https://example.com/pic.png');
       expect(detected, isNotNull);
       expect(detected!.kind, DetectedMediaKind.image);
-      expect(BrowserDetector.isAutoDownloadable('https://example.com/pic.png'), isFalse);
+      expect(BrowserDetector.isAutoDownloadable('https://example.com/pic.png'),
+          isFalse);
     });
 
     test('Downloadable assets are detected and auto-downloaded', () {
       final mp4 = BrowserDetector.detect('https://example.com/video.mp4');
       expect(mp4, isNotNull);
       expect(mp4!.kind, DetectedMediaKind.video);
-      expect(BrowserDetector.isAutoDownloadable('https://example.com/video.mp4'), isTrue);
+      expect(
+          BrowserDetector.isAutoDownloadable('https://example.com/video.mp4'),
+          isTrue);
 
       final zip = BrowserDetector.detect('https://example.com/archive.zip');
       expect(zip, isNotNull);
       expect(zip!.kind, DetectedMediaKind.archive);
-      expect(BrowserDetector.isAutoDownloadable('https://example.com/archive.zip'), isTrue);
+      expect(
+          BrowserDetector.isAutoDownloadable('https://example.com/archive.zip'),
+          isTrue);
     });
   });
 }

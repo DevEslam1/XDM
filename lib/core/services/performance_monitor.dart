@@ -27,8 +27,7 @@ class PerformanceMonitor {
   int get jankyFrameCount => _jankyFrames;
   int get sampleCount => _buildSamples.length;
 
-  double get jankRatio =>
-      _totalFrames == 0 ? 0.0 : _jankyFrames / _totalFrames;
+  double get jankRatio => _totalFrames == 0 ? 0.0 : _jankyFrames / _totalFrames;
 
   /// Average build duration over the sample window (ms), or null when empty.
   double? get averageBuildMillis {

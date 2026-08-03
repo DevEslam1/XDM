@@ -240,7 +240,8 @@ class MediaSniffer {
           try {
             cleanResult = jsonDecode(cleanResult);
           } catch (e, st) {
-            Logger('media_sniffer').warning('[media_sniffer] operation failed', e, st);
+            Logger('media_sniffer')
+                .warning('[media_sniffer] operation failed', e, st);
             if (cleanResult.length > 2) {
               cleanResult = cleanResult.substring(1, cleanResult.length - 1);
             }
@@ -259,9 +260,8 @@ class MediaSniffer {
             .toList();
         if (safeSources.isNotEmpty) {
           _update(() {
-            detectedMediaSources[tab.id] = safeSources
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList();
+            detectedMediaSources[tab.id] =
+                safeSources.map((e) => Map<String, dynamic>.from(e)).toList();
             if (detectedDownloadUrls[tab.id] == null) {
               detectedDownloadUrls[tab.id] = safeSources.first['src'] as String;
             }

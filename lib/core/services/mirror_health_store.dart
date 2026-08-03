@@ -47,9 +47,8 @@ class MirrorHealthStore {
 
     // Blacklist if > 5 failures in the current session/window.
     if (state.failures >= 5) {
-      state.blacklistedUntil = DateTime.now()
-          .add(_blacklistTtl)
-          .millisecondsSinceEpoch;
+      state.blacklistedUntil =
+          DateTime.now().add(_blacklistTtl).millisecondsSinceEpoch;
       _log.warning(
         '[MirrorHealth] Blacklisted $url for ${_blacklistTtl.inHours}h',
       );
@@ -58,7 +57,8 @@ class MirrorHealthStore {
   }
 
   /// Record a success — resets the failure count and clears blacklist.
-  static Future<void> recordSuccess(String url, {required double speedBps}) async {
+  static Future<void> recordSuccess(String url,
+      {required double speedBps}) async {
     _cache ??= {};
     final state = _cache!.putIfAbsent(url, () => _PersistedMirrorState());
     state.failures = 0;
@@ -116,13 +116,13 @@ class _PersistedMirrorState {
       DateTime.now().millisecondsSinceEpoch > blacklistedUntil;
 
   Map<String, dynamic> toJson() => {
-    'failures': failures,
-    'lastFailure': lastFailure,
-    'lastSuccess': lastSuccess,
-    'lastStatusCode': lastStatusCode,
-    'blacklistedUntil': blacklistedUntil,
-    'averageSpeedBps': averageSpeedBps,
-  };
+        'failures': failures,
+        'lastFailure': lastFailure,
+        'lastSuccess': lastSuccess,
+        'lastStatusCode': lastStatusCode,
+        'blacklistedUntil': blacklistedUntil,
+        'averageSpeedBps': averageSpeedBps,
+      };
 
   factory _PersistedMirrorState.fromJson(Map<String, dynamic> json) {
     final s = _PersistedMirrorState();

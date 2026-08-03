@@ -25,9 +25,9 @@ class HttpDownloadEngine {
     ConnectionManager? connectionManager,
     BandwidthGovernor? bandwidthGovernor,
     DownloadJournal Function(String path)? journalFactory,
-  }) : connectionManager = connectionManager ?? ConnectionManager(),
-       bandwidthGovernor = bandwidthGovernor ?? BandwidthGovernor(0),
-       journalFactory = journalFactory ?? ((path) => DownloadJournal(path));
+  })  : connectionManager = connectionManager ?? ConnectionManager(),
+        bandwidthGovernor = bandwidthGovernor ?? BandwidthGovernor(0),
+        journalFactory = journalFactory ?? ((path) => DownloadJournal(path));
 
   int get currentThreads => _currentThreads;
 
@@ -165,10 +165,17 @@ class HttpDownloadEngine {
     required DownloadTask task,
     required CancelToken cancelToken,
     required void Function(double progress, int downloadedBytes, int speedBps)
-    onProgress,
+        onProgress,
     required PositionalFileWriter writer,
+    int threadCountOverride = 0, // ← NEW
   }) async {
-    startAdaptiveThreadMonitor(task);
+    final int effectiveThreads =
+        threadCountOverride > 0 ? threadCountOverride : task.threadCount;
+    if (threadCountOverride > 0) {
+      task = task.copyWith(threadCount: effectiveThreads);
+    }
+    startAdaptiveThreadMonitor(
+        task); // Note: monitor still uses task.threadCount for trend logic, but we can pass effectiveThreads if needed
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 30),
@@ -199,12 +206,25 @@ class HttpDownloadEngine {
           response: response,
         );
       }
+
+      // reject HTML responses (expired YouTube stream → error page)
+      final contentType =
+          response.headers.value('content-type')?.toLowerCase() ?? '';
+      if (contentType.contains('text/html') ||
+          contentType.contains('application/xhtml')) {
+        throw DioException(
+          requestOptions: response.requestOptions,
+          type: DioExceptionType.badResponse,
+          response: response,
+          message: 'HTML_INSTEAD_OF_MEDIA',
+        );
+      }
+
       if (offset > 0 && response.statusCode != 206) {
         throw StateError('Server rejected resume: expected HTTP 206.');
       }
 
-      final contentLength =
-          int.tryParse(
+      final contentLength = int.tryParse(
             response.headers.value(Headers.contentLengthHeader) ?? '',
           ) ??
           0;

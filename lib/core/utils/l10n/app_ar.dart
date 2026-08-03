@@ -161,7 +161,7 @@ const Map<String, String> arTranslations = {
   'bypass_ssl_dialog_title': 'تعطيل التحقق من SSL؟',
   'bypass_ssl_dialog_body':
       'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). '
-      'قم بتمكينه فقط على الشبكات الموثوقة.',
+          'قم بتمكينه فقط على الشبكات الموثوقة.',
   'bypass_ssl_dialog_confirm': 'أتفهم المخاطر',
   'settings_https_only': 'وضع HTTPS فقط',
   'settings_https_only_sub': 'ترقية كل روابط http:// إلى https:// عند الإمكان',

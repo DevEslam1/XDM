@@ -18,7 +18,8 @@ const String kDeveloperGithub = 'github.com/DevEslam1';
 const String kDeveloperLinkedin = 'linkedin.com/in/deveslam-mahmoud';
 const String kDeveloperPhone = '+20 112 229 9831';
 
-const String kDefaultBackendBaseUrl = 'https://xdm-backend-10763667121.europe-west1.run.app';
+const String kDefaultBackendBaseUrl =
+    'https://xdm-backend-10763667121.europe-west1.run.app';
 const List<String> kFallbackBackendBaseUrls = [
   'https://xdm-backend-10763667121.europe-west1.run.app',
   'https://xdm-backend-fallback.europe-west1.run.app',

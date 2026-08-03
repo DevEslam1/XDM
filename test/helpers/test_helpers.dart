@@ -101,7 +101,10 @@ DownloadTask createTestTask({
   String? errorMessage,
   DateTime? createdAt,
 }) {
-  final effectiveUrl = url ?? (isTorrent ? 'magnet:?xt=urn:btih:test' : 'https://example.com/test-file.zip');
+  final effectiveUrl = url ??
+      (isTorrent
+          ? 'magnet:?xt=urn:btih:test'
+          : 'https://example.com/test-file.zip');
 
   return DownloadTask(
     id: id,
@@ -128,12 +131,42 @@ DownloadTask createTestTask({
 /// Creates a list of mixed-status tasks for testing.
 List<DownloadTask> createMixedTaskList() {
   return [
-    createTestTask(id: 'dl-1', fileName: 'ubuntu.iso', status: DownloadStatus.downloading, progress: 0.65),
-    createTestTask(id: 'dl-2', fileName: 'movie.mp4', status: DownloadStatus.downloading, progress: 0.30),
-    createTestTask(id: 'dl-3', fileName: 'song.mp3', status: DownloadStatus.paused, progress: 0.50),
-    createTestTask(id: 'dl-4', fileName: 'doc.pdf', status: DownloadStatus.completed, progress: 1.0),
-    createTestTask(id: 'dl-5', fileName: 'archive.rar', status: DownloadStatus.queued, progress: 0.0),
-    createTestTask(id: 'dl-6', fileName: 'image.png', status: DownloadStatus.failed, progress: 0.15, errorMessage: 'Timeout'),
-    createTestTask(id: 'dl-7', fileName: 'game.torrent', status: DownloadStatus.downloading, progress: 0.80, isTorrent: true),
+    createTestTask(
+        id: 'dl-1',
+        fileName: 'ubuntu.iso',
+        status: DownloadStatus.downloading,
+        progress: 0.65),
+    createTestTask(
+        id: 'dl-2',
+        fileName: 'movie.mp4',
+        status: DownloadStatus.downloading,
+        progress: 0.30),
+    createTestTask(
+        id: 'dl-3',
+        fileName: 'song.mp3',
+        status: DownloadStatus.paused,
+        progress: 0.50),
+    createTestTask(
+        id: 'dl-4',
+        fileName: 'doc.pdf',
+        status: DownloadStatus.completed,
+        progress: 1.0),
+    createTestTask(
+        id: 'dl-5',
+        fileName: 'archive.rar',
+        status: DownloadStatus.queued,
+        progress: 0.0),
+    createTestTask(
+        id: 'dl-6',
+        fileName: 'image.png',
+        status: DownloadStatus.failed,
+        progress: 0.15,
+        errorMessage: 'Timeout'),
+    createTestTask(
+        id: 'dl-7',
+        fileName: 'game.torrent',
+        status: DownloadStatus.downloading,
+        progress: 0.80,
+        isTorrent: true),
   ];
 }

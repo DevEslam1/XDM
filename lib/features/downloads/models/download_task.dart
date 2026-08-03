@@ -12,8 +12,7 @@ abstract final class DownloadStatusMessages {
   static const pausedOrphaned =
       'Paused because XDM was closed during a foreground download.';
   static const ffmpegMergeFailed = 'FFmpeg merge failed: ';
-  static const mergeFailedVideoOnly =
-      'Merged audio failed - saved video only';
+  static const mergeFailedVideoOnly = 'Merged audio failed - saved video only';
   static const forbidden = 'Forbidden';
 }
 
@@ -296,9 +295,8 @@ class DownloadTask {
       localFilePath: localFilePath ?? this.localFilePath,
       tempFilePath: tempFilePath ?? this.tempFilePath,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      statusMessage: clearStatusMessage
-          ? null
-          : statusMessage ?? this.statusMessage,
+      statusMessage:
+          clearStatusMessage ? null : statusMessage ?? this.statusMessage,
       threadCount: threadCount ?? this.threadCount,
       chunks: chunks != null ? List.of(chunks) : List.of(this.chunks),
       createdAt: createdAt,
@@ -312,15 +310,14 @@ class DownloadTask {
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
       torrentFiles: torrentFiles != null
           ? [for (final m in torrentFiles) Map<String, dynamic>.from(m)]
-          : this.torrentFiles
-                ?.map((m) => Map<String, dynamic>.from(m))
-                .toList(),
-      downloadPageUrl: clearDownloadPageUrl
-          ? null
-          : downloadPageUrl ?? this.downloadPageUrl,
-      mergedAudioUrl: clearMergedAudioUrl
-          ? null
-          : mergedAudioUrl ?? this.mergedAudioUrl,
+          : this
+              .torrentFiles
+              ?.map((m) => Map<String, dynamic>.from(m))
+              .toList(),
+      downloadPageUrl:
+          clearDownloadPageUrl ? null : downloadPageUrl ?? this.downloadPageUrl,
+      mergedAudioUrl:
+          clearMergedAudioUrl ? null : mergedAudioUrl ?? this.mergedAudioUrl,
       audioSize: audioSize ?? this.audioSize,
       audioProgress: audioProgress ?? this.audioProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
@@ -480,12 +477,12 @@ class DownloadTask {
         seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
         torrentFiles: map['torrentFiles'] is List
             ? (map['torrentFiles'] as List)
-                  .map(
-                    (f) => f is Map
-                        ? Map<String, dynamic>.from(f)
-                        : <String, dynamic>{},
-                  )
-                  .toList()
+                .map(
+                  (f) => f is Map
+                      ? Map<String, dynamic>.from(f)
+                      : <String, dynamic>{},
+                )
+                .toList()
             : null,
         downloadPageUrl: map['downloadPageUrl'] as String?,
         mergedAudioUrl:
@@ -535,12 +532,12 @@ class DownloadTask {
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
       torrentFiles: map['torrentFiles'] is List
           ? (map['torrentFiles'] as List)
-                .map(
-                  (f) => f is Map
-                      ? Map<String, dynamic>.from(f)
-                      : <String, dynamic>{},
-                )
-                .toList()
+              .map(
+                (f) => f is Map
+                    ? Map<String, dynamic>.from(f)
+                    : <String, dynamic>{},
+              )
+              .toList()
           : null,
       downloadPageUrl: map['downloadPageUrl'] as String?,
       mergedAudioUrl:

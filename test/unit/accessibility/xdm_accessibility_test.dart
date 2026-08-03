@@ -16,7 +16,8 @@ void main() {
       );
     }
 
-    testWidgets('duration collapses to zero under reduced motion', (tester) async {
+    testWidgets('duration collapses to zero under reduced motion',
+        (tester) async {
       final full = const Duration(milliseconds: 240);
       Duration? measured;
       await tester.pumpWidget(
@@ -33,7 +34,8 @@ void main() {
       expect(measured, Duration.zero);
     });
 
-    testWidgets('duration keeps full value when motion is enabled', (tester) async {
+    testWidgets('duration keeps full value when motion is enabled',
+        (tester) async {
       final full = const Duration(milliseconds: 240);
       Duration? measured;
       await tester.pumpWidget(
@@ -50,7 +52,8 @@ void main() {
       expect(measured, full);
     });
 
-    testWidgets('pauseAmbient reflects the reduce-motion setting', (tester) async {
+    testWidgets('pauseAmbient reflects the reduce-motion setting',
+        (tester) async {
       bool? paused;
       await tester.pumpWidget(
         host(

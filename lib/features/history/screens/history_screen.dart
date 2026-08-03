@@ -36,20 +36,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Selector<SettingsProvider, bool>(
       selector: (_, s) => s.isDarkMode,
       builder: (context, isDark, _) {
-        final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-        final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+        final textClr =
+            isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+        final secClr =
+            isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
         final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
         final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
 
         return Selector<DownloadProvider, List<DownloadTask>>(
           selector: (_, provider) => provider.tasks.where((task) {
-            final isSeeding = task.status == DownloadStatus.completed && task.isTorrent && task.seedingEnabled;
-            return (task.status == DownloadStatus.completed || task.status == DownloadStatus.failed) && !isSeeding;
+            final isSeeding = task.status == DownloadStatus.completed &&
+                task.isTorrent &&
+                task.seedingEnabled;
+            return (task.status == DownloadStatus.completed ||
+                    task.status == DownloadStatus.failed) &&
+                !isSeeding;
           }).toList(),
           shouldRebuild: (prev, next) {
             if (prev.length != next.length) return true;
             for (int i = 0; i < prev.length; i++) {
-              if (prev[i].id != next[i].id || prev[i].status != next[i].status) {
+              if (prev[i].id != next[i].id ||
+                  prev[i].status != next[i].status) {
                 return true;
               }
             }
@@ -59,7 +66,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
             // Apply search query locally
             final historyTasks = historyTasksFromProvider.where((task) {
               if (_searchQuery.trim().isEmpty) return true;
-              return task.fileName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              return task.fileName
+                      .toLowerCase()
+                      .contains(_searchQuery.toLowerCase()) ||
                   task.url.toLowerCase().contains(_searchQuery.toLowerCase());
             }).toList();
 
@@ -72,18 +81,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       sigmaX: 12,
                       sigmaY: 12,
                       child: Container(
-                        color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(alpha: 0.5),
+                        color:
+                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                                .withValues(alpha: 0.5),
                       ),
                     ),
                   ),
                   title: Text(
                     'XDM',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: textClr,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.5,
-                      fontSize: 16,
-                    ),
+                          color: textClr,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                          fontSize: 16,
+                        ),
                   ),
                   automaticallyImplyLeading: false,
                   actions: [
@@ -124,10 +135,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               sigmaY: 8,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
+                                  color: isDark
+                                      ? const Color(0xFF0F0F16)
+                                      : const Color(0xFFF1F5F9),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: isDark ? const Color(0x15FFFFFF) : const Color(0x0D000000),
+                                    color: isDark
+                                        ? const Color(0x15FFFFFF)
+                                        : const Color(0x0D000000),
                                     width: 0.8,
                                   ),
                                 ),
@@ -138,7 +153,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     fontSize: 14,
                                   ),
                                   decoration: InputDecoration(
-                                    hintText: L10n.of(context, 'search_settings_hint'),
+                                    hintText: L10n.of(
+                                        context, 'search_settings_hint'),
                                     hintStyle: TextStyle(
                                       color: mutedClr,
                                       fontSize: 12,
@@ -159,7 +175,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     if (_debounceTimer?.isActive ?? false) {
                                       _debounceTimer!.cancel();
                                     }
-                                    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                                    _debounceTimer = Timer(
+                                        const Duration(milliseconds: 300), () {
                                       if (mounted) {
                                         setState(() {
                                           _searchQuery = value;
@@ -182,19 +199,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             children: [
                               Text(
                                 L10n.of(context, 'resolved_transmissions'),
-                                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: secClr,
-                                  fontSize: 9,
-                                  letterSpacing: 1.0,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: secClr,
+                                      fontSize: 9,
+                                      letterSpacing: 1.0,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                               ),
                               Text(
                                 '${historyTasks.length} ${L10n.of(context, 'records')}',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: mutedClr,
-                                  fontSize: 9,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: mutedClr,
+                                      fontSize: 9,
+                                    ),
                               ),
                             ],
                           ),
@@ -208,7 +231,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   context,
                                   isDark,
                                   isRtl,
-                                  hasRecords: historyTasksFromProvider.isNotEmpty,
+                                  hasRecords:
+                                      historyTasksFromProvider.isNotEmpty,
                                   hasQuery: _searchQuery.trim().isNotEmpty,
                                   onClearSearch: () {
                                     if (mounted) {
@@ -217,7 +241,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   },
                                 )
                               : ListView.builder(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16.0),
                                   physics: const BouncingScrollPhysics(),
                                   itemCount: historyTasks.length,
                                   itemBuilder: (context, index) {
@@ -248,10 +273,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     required bool hasQuery,
     required VoidCallback onClearSearch,
   }) {
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final glassBg = isDark ? AppTheme.glassBg : AppTheme.lightGlassBg;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final glassBorder =
+        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
 
     final isNoMatch = hasQuery && hasRecords;
@@ -277,7 +304,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   : null,
             ),
             child: Icon(
-              isNoMatch ? Icons.search_off_outlined : Icons.history_toggle_off_outlined,
+              isNoMatch
+                  ? Icons.search_off_outlined
+                  : Icons.history_toggle_off_outlined,
               size: 40,
               color: mutedClr,
             ),
@@ -288,11 +317,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? L10n.of(context, 'no_matching_records')
                 : L10n.of(context, 'no_completed_signals'),
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: secClr,
-              letterSpacing: 1.0,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
+                  color: secClr,
+                  letterSpacing: 1.0,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -300,9 +329,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? L10n.of(context, 'try_different_search')
                 : L10n.of(context, 'finished_logs_cataloged'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: mutedClr,
-              fontSize: 11,
-            ),
+                  color: mutedClr,
+                  fontSize: 11,
+                ),
           ),
           if (isNoMatch) ...[
             const SizedBox(height: 16),
@@ -326,9 +355,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
-    final glassBorder = isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
+    final glassBorder =
+        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     showDialog(
       context: context,
@@ -344,14 +375,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
             title: Text(
               L10n.of(context, 'clear_history_logs'),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: redClr,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
+                    color: redClr,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
             ),
             content: Text(
               '${L10n.of(context, 'clear_history_logs')} (${tasksToClear.length})',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: secClr),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: secClr),
             ),
             actions: [
               TextButton(
@@ -380,7 +414,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 ),
                 onPressed: () async {
-                  await provider.clearHistoryTasks(tasksToClear.map((t) => t.id).toList());
+                  await provider.clearHistoryTasks(
+                      tasksToClear.map((t) => t.id).toList());
                   if (context.mounted) {
                     Navigator.of(context).pop();
                   }

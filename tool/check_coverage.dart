@@ -52,6 +52,7 @@ void main(List<String> args) {
   }
 
   final pct = total == 0 ? 0.0 : (hit / total) * 100;
-  stdout.writeln('Core coverage: ${pct.toStringAsFixed(2)}% ($hit / $total lines)');
+  stdout.writeln(
+      'Core coverage: ${pct.toStringAsFixed(2)}% ($hit / $total lines)');
   exit(pct >= 38 ? 0 : 1);
 }

@@ -57,8 +57,8 @@ const Map<String, String> frTranslations = {
   'bypass_ssl_dialog_title': 'Désactiver la vérification SSL ?',
   'bypass_ssl_dialog_body':
       'Cela expose tous les téléchargements à des attaques '
-      'de l\u2019homme du milieu. À activer uniquement sur des '
-      'réseaux de confiance.',
+          'de l\u2019homme du milieu. À activer uniquement sur des '
+          'réseaux de confiance.',
   'bypass_ssl_dialog_confirm': 'Je comprends le risque',
   'settings_https_only': 'Mode HTTPS uniquement',
   'settings_https_only_sub':
@@ -130,5 +130,6 @@ const Map<String, String> frTranslations = {
   'clipboard_link_detected': 'Lien détecté dans le presse-papiers',
   'download_action': 'Télécharger',
   'start_btn': 'Démarrer',
-  'file_missing_msg': 'Fichier manquant sur le disque, déplacé vers l\'onglet Échecs',
+  'file_missing_msg':
+      'Fichier manquant sur le disque, déplacé vers l\'onglet Échecs',
 };

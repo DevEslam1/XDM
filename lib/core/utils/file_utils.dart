@@ -4,15 +4,33 @@ import 'package:dmx/core/services/logging_service.dart';
 import 'package:path/path.dart' as p;
 
 const List<String> videoExtensions = [
-  'mp4', 'mkv', 'avi', 'mov', 'webm', 'm4v',
+  'mp4',
+  'mkv',
+  'avi',
+  'mov',
+  'webm',
+  'm4v',
 ];
 
 const List<String> audioExtensions = [
-  'mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a',
+  'mp3',
+  'wav',
+  'flac',
+  'aac',
+  'ogg',
+  'm4a',
 ];
 
 const List<String> documentExtensions = [
-  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv',
+  'pdf',
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+  'ppt',
+  'pptx',
+  'txt',
+  'csv',
 ];
 
 const List<String> archiveExtensions = ['zip', 'rar', '7z', 'tar', 'gz', 'iso'];
@@ -165,7 +183,8 @@ int scanFolderBytesSync(String path) {
           // FIX(5): libtorrent pre-allocates files to full length, so a full-size file
           // is NOT evidence of completion. Only a short file is a reliable
           // lower bound; a full-size file is ambiguous and must not read 100%.
-          final storedDownloaded = (copy['downloadedBytes'] as num?)?.toInt() ?? 0;
+          final storedDownloaded =
+              (copy['downloadedBytes'] as num?)?.toInt() ?? 0;
           if (storedDownloaded > 0) {
             downloaded = storedDownloaded;
           } else if (diskLen > 0 && diskLen < length) {

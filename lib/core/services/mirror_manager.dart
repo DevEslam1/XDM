@@ -7,7 +7,7 @@ class MirrorManager {
   final List<MirrorStats> _mirrors;
 
   MirrorManager(List<String> urls)
-    : _mirrors = urls.map((u) => MirrorStats(u)).toList();
+      : _mirrors = urls.map((u) => MirrorStats(u)).toList();
 
   String? get primaryUrl => _mirrors.isNotEmpty ? _mirrors.first.url : null;
 

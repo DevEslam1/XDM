@@ -5,11 +5,13 @@ import 'adblock_filter_updater.dart';
 
 /// Centralised ad-blocking engine for the XDM browser.
 ///
-/// Three layers of defence:
+/// Four layers of defence:
 ///   1. **Domain blocking** – ad-network requests are killed at navigation.
-///   2. **CSS injection** – known ad containers are hidden via `display:none`.
+///   2. **CSS injection** – known ad containers are hidden via `visibility:hidden`.
 ///   3. **JS injection** – popups, overlays, video ads, and redirect chains
 ///      are neutralised at runtime.
+///   4. **Anti-detect stealth** – fakes ad SDK globals, intercepts fetch/XHR,
+///      wraps MutationObserver so sites cannot detect the blocker.
 ///
 /// Targets: YouTube, movie/streaming sites, mod-app/APK sites, and generic
 /// ad networks.
@@ -36,7 +38,8 @@ class AdBlockerService {
 
   AdBlockFilterUpdater get filterUpdater => _updater;
 
-  int get ruleCount => _updater.downloadedDomainCount + _updater.downloadedTrackingCount;
+  int get ruleCount =>
+      _updater.downloadedDomainCount + _updater.downloadedTrackingCount;
 
   Future<bool> updateFilters({bool force = true}) async {
     return await _updater.updateIfNeeded(force: force);
@@ -70,7 +73,10 @@ class AdBlockerService {
     }
 
     // Extract host from URL for exact domain matching
-    final normalized = lower.startsWith('http://') || lower.startsWith('https://') ? lower : 'https://$lower';
+    final normalized =
+        lower.startsWith('http://') || lower.startsWith('https://')
+            ? lower
+            : 'https://$lower';
     final uri = Uri.tryParse(normalized);
     final host = uri?.host ?? '';
     if (host.isEmpty) {
@@ -200,16 +206,37 @@ class AdBlockerService {
   };
 
   // ─────────────────────────────────────────────────────────────────────
-  // 2. CSS INJECTION – hide ad containers
+  // 2. CSS INJECTION – hide ad containers (stealthily)
   // ─────────────────────────────────────────────────────────────────────
 
   /// CSS injected on every page load to hide known ad elements.
+  /// Uses `visibility:hidden` instead of `display:none` so bait elements
+  /// retain their layout dimensions — avoiding JS-based detection.
   String get cssRules {
     final dynamicRules = _updater.cosmeticRules;
     if (dynamicRules.isEmpty) return _cssRules;
     final selectors = dynamicRules.take(2000).join(', ');
-    return '$_cssRules\n$selectors { display: none !important; }';
+    return '$_cssRules\n$selectors { visibility: hidden !important; height: 0 !important; overflow: hidden !important; pointer-events: none !important; }';
   }
+
+  /// Anti-detect CSS: makes bait elements visually invisible but JS-measurable
+  /// so `getComputedStyle` / `getBoundingClientRect` checks still see "ads".
+  String get antiDetectCss => _antiDetectCss;
+
+  static const String _antiDetectCss = '''
+/* ─── XDM Anti-Adblock: bait element stealth ─── */
+#ad-test, #adsbox, #ads, #ad, .adsbox, .ads, .adsbygoogle-noablate,
+[id="ad-test"], [id="adsbox"], [class="ads"], [class="adsbox"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: fixed !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+}
+''';
 
   static const String _cssRules = '''
 /* ═══ GENERIC AD CONTAINERS ═══ */
@@ -278,8 +305,9 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
 [class*="push-notification"], [class*="notification-prompt"],
 [class*="exit-intent"], [class*="exit-popup"],
 [class*="welcome-ad"], [class*="splash-ad"]
-{ display: none !important; visibility: hidden !important;
+{ visibility: hidden !important;
   height: 0 !important;
+  overflow: hidden !important;
   pointer-events: none !important; }
 ''';
 
@@ -288,13 +316,32 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   // ─────────────────────────────────────────────────────────────────────
 
   /// JS injected at `onPageStarted` to block popups and redirect chains
-  /// before the page even renders.
+  /// before the page even renders. Also blocks ad iframe/script creation.
   String get earlyJs => _earlyJs;
 
   static const String _earlyJs = '''
 (function() {
   if (window.__xdmAdBlockEarly) return;
   window.__xdmAdBlockEarly = true;
+
+  /* ── Shared ad-domain check ── */
+  var _adDomains = ['doubleclick','googlesyndication','googleadservices',
+    'adnxs','criteo','pubmatic','openx','taboola','outbrain',
+    'popads','popcash','exoclick','juicyads','trafficjunky',
+    'hilltopads','clickadu','adsterra','propellerads','onclickads',
+    'adskeeper','mgid','revcontent','adform','admob','adcolony',
+    'amazon-adsystem','applovin','bidswitch','casalemedia',
+    'quantserve','rubiconproject','smartadserver','yieldmo','zedo'];
+
+  function _isAdUrl(value) {
+    if (!value || typeof value !== 'string') return false;
+    var v = value.toLowerCase();
+    if (v.indexOf('recaptcha') !== -1 || v.indexOf('gstatic.com') !== -1) return false;
+    for (var i = 0; i < _adDomains.length; i++) {
+      if (v.indexOf(_adDomains[i]) !== -1) return true;
+    }
+    return false;
+  }
 
   /* ── Route window.open popups to new tabs ── */
   window.open = function(url) {
@@ -335,32 +382,25 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
     return origSetInterval.call(window, fn, delay);
   };
 
-  /* ── Block ad iframes from being created ── */
+  /* ── Block ad iframes AND ad script tags from being created ── */
   var origCreateElement = document.createElement.bind(document);
   document.createElement = function(tag) {
     var el = origCreateElement(tag);
-    if (tag.toLowerCase() === 'iframe') {
+    var tagLower = (tag || '').toLowerCase();
+    if (tagLower === 'iframe' || tagLower === 'script') {
       var origSetAttr = el.setAttribute.bind(el);
       el.setAttribute = function(name, value) {
-        if (name === 'src' && typeof value === 'string') {
-          var v = value.toLowerCase();
-          if (v.indexOf('recaptcha') !== -1 || v.indexOf('gstatic.com') !== -1) {
-            origSetAttr(name, value);
-            return;
-          }
-          var adDomains = ['doubleclick','googlesyndication','adnxs',
-            'criteo','pubmatic','openx','taboola','outbrain',
-            'popads','popcash','exoclick','juicyads','trafficjunky',
-            'hilltopads','clickadu','adsterra','propellerads',
-            'onclickads','adskeeper','mgid','revcontent'];
-          for (var i = 0; i < adDomains.length; i++) {
-            if (v.indexOf(adDomains[i]) !== -1) {
-              return; // silently drop
-            }
-          }
+        if (name === 'src' && _isAdUrl(value)) {
+          return; // silently drop
         }
         origSetAttr(name, value);
       };
+      /* Also intercept direct .src property assignment */
+      Object.defineProperty(el, 'src', {
+        get: function() { return el.getAttribute('src') || ''; },
+        set: function(v) { if (!_isAdUrl(v)) el.setAttribute('src', v); },
+        configurable: true
+      });
     }
     return el;
   };
@@ -369,6 +409,8 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
 
   /// JS injected at `onPageFinished` to clean up DOM-level ads that
   /// survived CSS hiding (dynamic injection, shadow DOM, etc.).
+  /// Uses stealth hiding (visibility:hidden) instead of .remove() to avoid
+  /// triggering site MutationObservers that watch for ad removal.
   String get lateJs => _lateJs;
 
   static const String _lateJs = '''
@@ -384,7 +426,20 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
     }
   } catch(e) {}
 
-  /* ── Remove ad elements by selector ── */
+  /* ── Stealth-hide: keeps element in DOM so MutationObservers
+     don't see removals, but element is invisible to users ── */
+  function _stealthHide(el) {
+    try {
+      el.style.setProperty('visibility', 'hidden', 'important');
+      el.style.setProperty('height', '0', 'important');
+      el.style.setProperty('overflow', 'hidden', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.style.setProperty('opacity', '0', 'important');
+      el.style.setProperty('max-height', '0', 'important');
+    } catch(e) {}
+  }
+
+  /* ── Stealth-hide ad elements by selector ── */
   var selectors = [
     /* generic */
     '[class*="ad-container"]','[class*="ad-wrapper"]','[class*="ad-banner"]',
@@ -419,12 +474,12 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
     try {
       var els = document.querySelectorAll(selectors[i]);
       for (var j = 0; j < els.length; j++) {
-        els[j].remove();
+        _stealthHide(els[j]);
       }
     } catch(e) {}
   }
 
-  /* ── Remove fixed/absolute overlays covering the page ── */
+  /* ── Stealth-hide fixed/absolute overlays covering the page ── */
   if (!isYoutube) {
     try {
       if (document.querySelectorAll('*').length <= 5000) {
@@ -438,13 +493,12 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
               st.display !== 'none' &&
               el.offsetWidth > window.innerWidth * 0.5 &&
               el.offsetHeight > window.innerHeight * 0.3) {
-            /* likely a full-page ad overlay */
             var text = (el.textContent || '').toLowerCase();
             if (text.indexOf('ad') !== -1 || text.indexOf('sponsor') !== -1 ||
                 text.indexOf('click here') !== -1 || text.indexOf('download now') !== -1 ||
                 text.indexOf('install') !== -1 ||
                 el.querySelector('iframe') !== null) {
-              el.remove();
+              _stealthHide(el);
             }
           }
         }
@@ -533,6 +587,304 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   } catch(e) {}
 })();
 ''';
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 4. ANTI-DETECT STEALTH LAYER
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO,
+  /// and neutralises bait elements.
+  String get antiDetectJs {
+    final base = _antiDetectJs;
+    final scriptlets = _updater.scriptletRules;
+    if (scriptlets.isEmpty) return base;
+
+    const iifeEnd = '})();';
+    final idx = base.lastIndexOf(iifeEnd);
+    final sb = StringBuffer();
+    if (idx != -1) {
+      sb.write(base.substring(0, idx));
+      sb.writeln('  /* ════ SCRIPTLETS ════ */');
+      for (final s in scriptlets) {
+        if (s.contains('set-constant')) {
+          final parts = s.split(',');
+          if (parts.length >= 3) {
+            final target = parts[1].trim();
+            final value = parts[2].trim();
+            sb.writeln('  try { window.$target = $value; } catch(e) {}');
+          }
+        }
+      }
+      sb.write(iifeEnd);
+      return sb.toString();
+    }
+
+    sb.write(base);
+    sb.writeln('\n  /* ════ SCRIPTLETS ════ */');
+    for (final s in scriptlets) {
+      if (s.contains('set-constant')) {
+        final parts = s.split(',');
+        if (parts.length >= 3) {
+          final target = parts[1].trim();
+          final value = parts[2].trim();
+          sb.writeln('  try { window.$target = $value; } catch(e) {}');
+        }
+      }
+    }
+    return sb.toString();
+  }
+
+  // ignore: prefer_single_quotes
+  static const String _antiDetectJs = r"""
+(function() {
+  if (window.__xdmAntiDetect) return;
+  window.__xdmAntiDetect = true;
+
+  /* ════ A. FAKE AD SDK GLOBALS ════
+     Sites check these to confirm "ads loaded ok". */
+  try {
+    if (!window.adsbygoogle) {
+      window.adsbygoogle = [];
+      window.adsbygoogle.loaded = true;
+      window.adsbygoogle.push = function(o) { return o; };
+    }
+    window.google_ad_client = 'ca-pub-0000000000000000';
+    window.google_adnum = 0;
+    window.google_tag_params = {};
+    window.google_ad_mod = true;
+    window.google_jobrunner = { run: function(o){ return o; } };
+    window.google_render_ad = function(){};
+    window.canRunAds = true;
+    window.adBlockEnabled = false;
+    window.adBlockDetected = false;
+    window.noAdBlock = true;
+    window.isAdBlocked = false;
+    window.__cmpLoaded = true;
+    window.__tcfapi = function(cmd, v, cb) {
+      if (typeof cb === 'function') cb({ cmpLoaded: true, gdprApplies: false }, true);
+    };
+    window.__uspapi = function(cmd, v, cb) {
+      if (typeof cb === 'function') cb('1---', true);
+    };
+    if (!window.pbjs) {
+      window.pbjs = { que: [], setConfig: function(){}, requestBids: function(){} };
+      window.pbjs.que.push = function(fn) { try { fn(); } catch(e) {} };
+    }
+    window.apstag = {
+      init: function(){}, fetchBids: function(c, cb) { if (cb) cb([]); },
+      setDisplayBids: function(){}, targetingKeys: function(){ return []; }
+    };
+    /* Stub common anti-adblock library flags */
+    window._0x2649 = function(){ return true; }; // used by some obfuscated detectors
+  } catch(e) {}
+
+  /* ════ B. INTERCEPT fetch() TO AD DOMAINS ════
+     Returns empty 200 so detector scripts think the ad loaded. */
+  try {
+    var _adDF = ['doubleclick','googlesyndication','googleadservices',
+      'adnxs','criteo','pubmatic','openx','taboola','outbrain',
+      'popads','popcash','exoclick','juicyads','trafficjunky',
+      'hilltopads','clickadu','adsterra','propellerads','onclickads',
+      'adskeeper','mgid','revcontent','adform','admob','adcolony',
+      'amazon-adsystem','applovin','bidswitch','casalemedia',
+      'quantserve','rubiconproject','smartadserver','yieldmo','zedo',
+      'moatads','hotjar','/ads/','prebid','googletag'];
+    function _isAD(url) {
+      if (!url || typeof url !== 'string') return false;
+      var u = url.toLowerCase();
+      if (u.indexOf('recaptcha') !== -1 || u.indexOf('gstatic.com') !== -1 ||
+          u.indexOf('accounts.google.com') !== -1) return false;
+      for (var i = 0; i < _adDF.length; i++) { if (u.indexOf(_adDF[i]) !== -1) return true; }
+      return false;
+    }
+    var _origFetch = window.fetch;
+    window.fetch = function(input, init) {
+      var url = (typeof input === 'string') ? input : (input && input.url) || '';
+      if (_isAD(url)) {
+        return Promise.resolve(new Response('', {
+          status: 200, statusText: 'OK',
+          headers: { 'Content-Type': 'text/plain' }
+        }));
+      }
+      return _origFetch.apply(this, arguments);
+    };
+    var _origOpen = XMLHttpRequest.prototype.open;
+    var _origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url) {
+      this.__xdmBlocked = _isAD(String(url || ''));
+      return _origOpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function() {
+      if (this.__xdmBlocked) {
+        Object.defineProperty(this, 'readyState',   { get: function() { return 4; }, configurable: true });
+        Object.defineProperty(this, 'status',       { get: function() { return 200; }, configurable: true });
+        Object.defineProperty(this, 'responseText', { get: function() { return ''; }, configurable: true });
+        try { if (typeof this.onload === 'function') this.onload({}); } catch(e) {}
+        try { if (typeof this.onreadystatechange === 'function') this.onreadystatechange(); } catch(e) {}
+        return;
+      }
+      return _origSend.apply(this, arguments);
+    };
+  } catch(e) {}
+
+  /* ════ C. NEUTRALISE BAIT-ELEMENT DETECTION ════
+     Sites inject a <div class="ad-banner"> then check
+     getComputedStyle().display or offsetHeight. */
+  try {
+    var _bait = ['adsbox','ad-banner','ads','ad-test','banner-ad',
+      'advertising','ad-slot','advert','sponsored-ad','native-ad'];
+    function _isBait(el) {
+      if (!el || !el.getAttribute) return false;
+      var cls = (el.getAttribute('class') || '').toLowerCase();
+      var id  = (el.getAttribute('id')    || '').toLowerCase();
+      for (var i = 0; i < _bait.length; i++) {
+        if (cls.indexOf(_bait[i]) !== -1 || id.indexOf(_bait[i]) !== -1) return true;
+      }
+      return false;
+    }
+    var _origGCS = window.getComputedStyle;
+    window.getComputedStyle = function(el, pseudo) {
+      var style = _origGCS.call(window, el, pseudo);
+      if (_isBait(el)) {
+        return new Proxy(style, {
+          get: function(target, prop) {
+            if (prop === 'display')    return 'block';
+            if (prop === 'visibility') return 'visible';
+            if (prop === 'height')     return '1px';
+            if (prop === 'width')      return '1px';
+            if (prop === 'opacity')    return '1';
+            var val = target[prop];
+            return (typeof val === 'function') ? val.bind(target) : val;
+          }
+        });
+      }
+      return style;
+    };
+    /* Also patch offsetHeight/Width and getBoundingClientRect */
+    var _patchProp = function(proto, prop, val) {
+      var desc = Object.getOwnPropertyDescriptor(proto, prop);
+      Object.defineProperty(proto, prop, {
+        get: function() {
+          if (_isBait(this)) return val;
+          return desc.get.call(this);
+        },
+        configurable: true
+      });
+    };
+    _patchProp(Element.prototype, 'offsetHeight', 1);
+    _patchProp(Element.prototype, 'offsetWidth',  1);
+    var _origGBR = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function() {
+      var rect = _origGBR.call(this);
+      if (_isBait(this)) {
+        return {
+          top: 0, left: 0, right: 1, bottom: 1,
+          width: 1, height: 1, x: 0, y: 0,
+          toJSON: function() { return this; }
+        };
+      }
+      return rect;
+    };
+  } catch(e) {}
+
+  /* ════ D. WRAP MutationObserver ════
+     Swallows mutations on ad-related elements so sites
+     cannot detect that our lateJs hid them. */
+  try {
+    var _OrigMO = window.MutationObserver;
+    window.MutationObserver = function(callback) {
+      var _wrapped = function(mutations, observer) {
+        var adTerms = ['ad-','ads-','advert','sponsor','popup-ad','popunder',
+          'overlay-ad','interstitial','ad-slot','adsbygoogle','adsbox'];
+        var filtered = mutations.filter(function(m) {
+          var target = m.target;
+          if (!target || !target.getAttribute) return true;
+          var cls = (target.getAttribute('class') || '').toLowerCase();
+          var id  = (target.getAttribute('id')    || '').toLowerCase();
+          for (var i = 0; i < adTerms.length; i++) {
+            if (cls.indexOf(adTerms[i]) !== -1 || id.indexOf(adTerms[i]) !== -1) return false;
+          }
+          return true;
+        });
+        if (filtered.length > 0) { try { callback(filtered, observer); } catch(e) {} }
+      };
+      return new _OrigMO(_wrapped);
+    };
+    MutationObserver.prototype = _OrigMO.prototype;
+  } catch(e) {}
+
+  /* ════ E. PATCH Performance.getEntries() ════
+     Removes ad-domain resource entries so sites cannot
+     detect blocked requests via PerformanceResourceTiming. */
+  try {
+    var _adDP = ['doubleclick','googlesyndication','adnxs',
+      'criteo','pubmatic','openx','taboola','popads','exoclick',
+      'trafficjunky','adsterra','propellerads','mgid'];
+    function _filterP(entries) {
+      return entries.filter(function(e) {
+        var n = (e.name || '').toLowerCase();
+        for (var i = 0; i < _adDP.length; i++) { if (n.indexOf(_adDP[i]) !== -1) return false; }
+        return true;
+      });
+    }
+    var _pGE   = performance.getEntries.bind(performance);
+    var _pGET  = performance.getEntriesByType.bind(performance);
+    var _pGEN  = performance.getEntriesByName.bind(performance);
+    performance.getEntries       = function() { return _filterP(_pGE()); };
+    performance.getEntriesByType = function(t) { return _filterP(_pGET(t)); };
+    performance.getEntriesByName = function(n, t) { return _filterP(_pGEN(n, t)); };
+  } catch(e) {}
+
+  /* ════ F. NEUTRALISE ANTI-ADBLOCK LIBRARIES ════
+     NOP known detector variables (BlockAdBlock, FuckAdBlock, etc.) */
+  try {
+    var _fakeABD = {
+      onDetected:    function() { return _fakeABD; },
+      onNotDetected: function(fn) { try { fn(); } catch(e) {} return _fakeABD; },
+      check:         function() { return _fakeABD; }
+    };
+    var _abNames = ['blockAdBlock','BlockAdBlock','fuckAdBlock','FuckAdBlock',
+      'adBlockDetector','adblock','AdBlock','adBlocker','AdBlocker',
+      'AdBlockerDetector','antiAdBlock','AntiAdBlock'];
+    for (var i = 0; i < _abNames.length; i++) {
+      try {
+        Object.defineProperty(window, _abNames[i], {
+          get: function() { return _fakeABD; },
+          set: function() {},
+          configurable: true
+        });
+      } catch(e) {}
+    }
+    /* Stub googletag (GPT) used by publishers to detect blocked ads */
+    if (!window.googletag) {
+      window.googletag = {
+        cmd: [],
+        defineSlot: function() { return { addService: function() { return this; } }; },
+        pubads:     function() { return { enableSingleRequest: function(){}, refresh: function(){}, addEventListener: function(){} }; },
+        enableServices: function(){},
+        display:    function(){}
+      };
+      window.googletag.cmd.push = function(fn) { try { fn(); } catch(e) {} };
+    }
+  } catch(e) {}
+
+  /* ════ G. STEALTH navigator.serviceWorker ════
+     Prevents sites from using service workers to probe
+     adblock state or bypass blockers. */
+  try {
+    if (navigator.serviceWorker) {
+      var _origRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+      navigator.serviceWorker.register = function(url, options) {
+        if (_isAD(String(url || ''))) {
+          return Promise.reject(new Error('ServiceWorker registration blocked by XDM'));
+        }
+        return _origRegister(url, options);
+      };
+    }
+  } catch(e) {}
+
+})();
+""";
 
   // ─────────────────────────────────────────────────────────────────────
   // Helpers

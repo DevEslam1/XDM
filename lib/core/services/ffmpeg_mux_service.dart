@@ -45,7 +45,8 @@ class FFmpegMuxService {
   static final Semaphore _mergeSemaphore = Semaphore(2);
 
   /// Checks if temporary input files exist and can be remuxed without re-downloading.
-  static Future<bool> canResumeMerge(String videoPath, String? audioPath) async {
+  static Future<bool> canResumeMerge(
+      String videoPath, String? audioPath) async {
     final video = File(videoPath);
     final audio = audioPath != null ? File(audioPath) : null;
     return await video.exists() && (audio == null || await audio.exists());
@@ -187,7 +188,8 @@ class FFmpegMuxService {
       final match = RegExp(r'duration=([\d.]+)').firstMatch(logs);
       final dur = double.tryParse(match?.group(1) ?? '');
       if (dur == null || dur <= 0) {
-        _log.severe('[Merge] Output validation failed: duration=$dur for $path');
+        _log.severe(
+            '[Merge] Output validation failed: duration=$dur for $path');
         return false;
       }
       return true;
@@ -268,9 +270,13 @@ class FFmpegMuxService {
 
       final session = await FFmpegKit.executeWithArguments(args);
       final pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-        if (onProgress == null || totalDuration == null || totalDuration.inSeconds == 0) return;
+        if (onProgress == null ||
+            totalDuration == null ||
+            totalDuration.inSeconds == 0) return;
         final logs = await session.getLogsAsString();
-        final match = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)').allMatches(logs).lastOrNull;
+        final match = RegExp(r'time=(\d+):(\d+):(\d+)\.(\d+)')
+            .allMatches(logs)
+            .lastOrNull;
         if (match != null) {
           final secs = int.parse(match.group(1)!) * 3600 +
               int.parse(match.group(2)!) * 60 +

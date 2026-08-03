@@ -29,10 +29,10 @@ class LoggingService {
     _initialized = true;
 
     // hierarchicalLoggingEnabled is a top-level setter. Access via Logger.root level.
-    pkg_logging.Logger.root.level = Level.ALL; // Enable all levels, filter in listener
+    pkg_logging.Logger.root.level =
+        Level.ALL; // Enable all levels, filter in listener
 
-    final level = overrideLevel ??
-        (kReleaseMode ? Level.WARNING : Level.ALL);
+    final level = overrideLevel ?? (kReleaseMode ? Level.WARNING : Level.ALL);
 
     pkg_logging.Logger.root.level = level;
 
@@ -48,9 +48,8 @@ class LoggingService {
           safeMsg,
           name: record.loggerName,
           level: record.level.value,
-          error: record.error == null
-              ? null
-              : sanitize(record.error.toString()),
+          error:
+              record.error == null ? null : sanitize(record.error.toString()),
         );
         return;
       }

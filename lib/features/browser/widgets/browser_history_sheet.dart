@@ -96,13 +96,15 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
     // FIX(5): visited_at is now INTEGER ms-epoch; keep parsing legacy ISO
     // strings for robustness.
     if (value is num) {
-      return _formatDateTime(DateTime.fromMillisecondsSinceEpoch(value.toInt()));
+      return _formatDateTime(
+          DateTime.fromMillisecondsSinceEpoch(value.toInt()));
     }
     if (value is String && value.isNotEmpty) {
       try {
         return _formatDateTime(DateTime.parse(value));
       } catch (e, st) {
-        Logger('browser_history_sheet').warning('[browser_history_sheet] operation failed', e, st);
+        Logger('browser_history_sheet')
+            .warning('[browser_history_sheet] operation failed', e, st);
         return '';
       }
     }
@@ -329,11 +331,10 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                         height: 42,
                         padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
-                          color:
-                              (isDark
-                                      ? AppTheme.background
-                                      : AppTheme.lightBackground)
-                                  .withValues(alpha: 0.5),
+                          color: (isDark
+                                  ? AppTheme.background
+                                  : AppTheme.lightBackground)
+                              .withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isDark
@@ -461,7 +462,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                                     context,
                                     'browser_search_history_hint',
                                   ),
-                                  hintStyle: TextStyle(color: muted, fontSize: 12),
+                                  hintStyle:
+                                      TextStyle(color: muted, fontSize: 12),
                                   border: InputBorder.none,
                                   enabledBorder: InputBorder.none,
                                   focusedBorder: InputBorder.none,
@@ -472,7 +474,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
                               GestureDetector(
                                 onTap: _searchController.clear,
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
                                   child: Icon(
                                     Icons.close_rounded,
                                     size: 17,
@@ -519,8 +522,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
             color: isSelected
                 ? accent
                 : (isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary),
+                    ? AppTheme.textSecondary
+                    : AppTheme.lightTextSecondary),
             fontSize: 10,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.8,
@@ -580,9 +583,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
   Widget _emptyState(bool isDark, {required bool isSurfing}) {
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     if (_searchQuery.isNotEmpty) {
       return Center(
@@ -676,9 +678,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         content: Text(
           L10n.of(context, 'browser_clear_history_desc'),
           style: TextStyle(
-            color: isDark
-                ? AppTheme.textSecondary
-                : AppTheme.lightTextSecondary,
+            color:
+                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
           ),
         ),
         actions: [
@@ -1048,11 +1049,10 @@ class _HeaderAction extends StatelessWidget {
             margin: const EdgeInsets.only(left: 4),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color:
-                  (danger
-                          ? color
-                          : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg))
-                      .withValues(alpha: danger ? 0.12 : 0.5),
+              color: (danger
+                      ? color
+                      : (isDark ? AppTheme.cardBg : AppTheme.lightCardBg))
+                  .withValues(alpha: danger ? 0.12 : 0.5),
               borderRadius: BorderRadius.circular(9),
               border: Border.all(
                 color: danger

@@ -240,14 +240,14 @@ void main() {
     await provider.load();
 
     final ids = await provider.addDownloadsBatch([
-      DownloadAddSpec(
+      const DownloadAddSpec(
         name: 'one.zip',
         url: 'https://example.com/one.zip',
         size: 0,
         category: 'Archive',
         savePath: '',
       ),
-      DownloadAddSpec(
+      const DownloadAddSpec(
         name: 'two.zip',
         url: 'https://example.com/two.zip',
         size: 0,

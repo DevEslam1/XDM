@@ -65,10 +65,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Selector<
-      SettingsProvider,
-      ({bool isDarkMode, bool classicUi, String languageCode})
-    >(
+    return Selector<SettingsProvider,
+        ({bool isDarkMode, bool classicUi, String languageCode})>(
       selector: (_, s) => (
         isDarkMode: s.isDarkMode,
         classicUi: s.classicUi,
@@ -77,9 +75,8 @@ class _HomeScreenState extends State<HomeScreen>
       builder: (context, settingsState, _) {
         final isDark = settingsState.isDarkMode;
         final classicUi = settingsState.classicUi;
-        final textClr = isDark
-            ? AppTheme.textPrimary
-            : AppTheme.lightTextPrimary;
+        final textClr =
+            isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
         final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
         final isRtl = L10n.isRtl(context);
 
@@ -125,31 +122,27 @@ class _HomeScreenState extends State<HomeScreen>
                                   horizontal: 16.0,
                                   vertical: 4.0,
                                 ),
-                                child:
-                                    Selector<
-                                      DownloadProvider,
-                                      Map<String, double>
-                                    >(
-                                      selector: (_, provider) =>
-                                          provider.categorySizes,
-                                      shouldRebuild: (prev, next) {
-                                        if (prev.length != next.length) {
-                                          return true;
-                                        }
-                                        for (final key in prev.keys) {
-                                          if (prev[key] != next[key]) {
-                                            return true;
-                                          }
-                                        }
-                                        return false;
-                                      },
-                                      builder: (context, categorySizes, _) =>
-                                          _RedesignedAnalyticsPanel(
-                                            categorySizes: categorySizes,
-                                            settings: context
-                                                .read<SettingsProvider>(),
-                                          ),
-                                    ),
+                                child: Selector<DownloadProvider,
+                                    Map<String, double>>(
+                                  selector: (_, provider) =>
+                                      provider.categorySizes,
+                                  shouldRebuild: (prev, next) {
+                                    if (prev.length != next.length) {
+                                      return true;
+                                    }
+                                    for (final key in prev.keys) {
+                                      if (prev[key] != next[key]) {
+                                        return true;
+                                      }
+                                    }
+                                    return false;
+                                  },
+                                  builder: (context, categorySizes, _) =>
+                                      _RedesignedAnalyticsPanel(
+                                    categorySizes: categorySizes,
+                                    settings: context.read<SettingsProvider>(),
+                                  ),
+                                ),
                               )
                             : const SizedBox.shrink(),
                       ),
@@ -268,11 +261,11 @@ class _HomeScreenState extends State<HomeScreen>
                 Text(
                   'XDM',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: textClr,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2.0,
-                    fontSize: 18,
-                  ),
+                        color: textClr,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2.0,
+                        fontSize: 18,
+                      ),
                 ),
               ],
             ),
@@ -378,8 +371,7 @@ class _HomeScreenState extends State<HomeScreen>
       builder: (context, allTasks, _) {
         final activeCount = allTasks.where(_isActiveTask).length;
         final historyCount = allTasks.where((DownloadTask t) {
-          final isSeeding =
-              t.status == DownloadStatus.completed &&
+          final isSeeding = t.status == DownloadStatus.completed &&
               t.isTorrent &&
               t.seedingEnabled;
           return (t.status == DownloadStatus.completed ||
@@ -438,8 +430,8 @@ class _HomeScreenState extends State<HomeScreen>
           decoration: BoxDecoration(
             color: selected
                 ? (index == 1
-                      ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                      : Theme.of(context).colorScheme.primary)
+                    ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
+                    : Theme.of(context).colorScheme.primary)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
           ),
@@ -467,8 +459,8 @@ class _HomeScreenState extends State<HomeScreen>
                     color: selected
                         ? Colors.white.withValues(alpha: 0.25)
                         : (isDark
-                              ? Colors.white.withValues(alpha: 0.10)
-                              : Colors.black.withValues(alpha: 0.08)),
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : Colors.black.withValues(alpha: 0.08)),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -497,9 +489,8 @@ class _HomeScreenState extends State<HomeScreen>
   }) {
     final provider = context.read<DownloadProvider>();
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return Padding(
@@ -526,7 +517,8 @@ class _HomeScreenState extends State<HomeScreen>
                       Text(
                         _selectedTab == 0
                             ? L10n.of(context, 'active_transmissions_header')
-                            : L10n.of(context, 'completed_transmissions_header'),
+                            : L10n.of(
+                                context, 'completed_transmissions_header'),
                         style: TextStyle(
                           color: textClr,
                           fontSize: 13,
@@ -740,14 +732,12 @@ class _HomeScreenState extends State<HomeScreen>
     final double bottomPadding;
     switch (screenType) {
       case ScreenType.phone:
-        bottomPadding = isNavbarVisible
-            ? (20.0 + safeAreaBottom)
-            : (16.0 + safeAreaBottom);
+        bottomPadding =
+            isNavbarVisible ? (20.0 + safeAreaBottom) : (16.0 + safeAreaBottom);
         break;
       case ScreenType.tablet:
-        bottomPadding = isNavbarVisible
-            ? (96.0 + safeAreaBottom)
-            : (16.0 + safeAreaBottom);
+        bottomPadding =
+            isNavbarVisible ? (96.0 + safeAreaBottom) : (16.0 + safeAreaBottom);
         break;
       case ScreenType.desktop:
         bottomPadding = 0.0;
@@ -809,20 +799,17 @@ class _HomeScreenState extends State<HomeScreen>
     bool isRtl,
   ) {
     final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
-    final glassBorder = isDark
-        ? AppTheme.glassBorder
-        : AppTheme.lightGlassBorder;
+    final glassBorder =
+        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     showDialog(
       context: context,
       builder: (ctx) {
         final tasksToClear = provider.filteredTasks.where((task) {
-          final isSeeding =
-              task.status == DownloadStatus.completed &&
+          final isSeeding = task.status == DownloadStatus.completed &&
               task.isTorrent &&
               task.seedingEnabled;
           return (task.status == DownloadStatus.completed ||
@@ -857,9 +844,9 @@ class _HomeScreenState extends State<HomeScreen>
                   child: Text(
                     L10n.of(context, 'clear_history'),
                     style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                      color: redClr,
-                      fontWeight: FontWeight.bold,
-                    ),
+                          color: redClr,
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                 ),
               ],
@@ -1007,9 +994,9 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
     final activeCategoryNames = hasNoData
         ? <String>[]
         : categoryCards
-              .where((card) => (sizes[card['name']] ?? 0.0) > 0)
-              .map<String>((card) => card['name'] as String)
-              .toList();
+            .where((card) => (sizes[card['name']] ?? 0.0) > 0)
+            .map<String>((card) => card['name'] as String)
+            .toList();
 
     final sections = hasNoData
         ? [
@@ -1024,16 +1011,14 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
         : activeCategoryNames.map((name) {
             final card = categoryCards.firstWhere((c) => c['name'] == name);
             final sizeMb = sizes[name] ?? 0.0;
-            final percentage = totalSizeMb > 0
-                ? (sizeMb / totalSizeMb) * 100
-                : 0.0;
+            final percentage =
+                totalSizeMb > 0 ? (sizeMb / totalSizeMb) * 100 : 0.0;
             return PieChartSectionData(
               color: card['color'] as Color,
               value: sizeMb,
               radius: 14,
-              title: percentage >= 12
-                  ? '${percentage.toStringAsFixed(0)}%'
-                  : '',
+              title:
+                  percentage >= 12 ? '${percentage.toStringAsFixed(0)}%' : '',
               titleStyle: const TextStyle(
                 color: Colors.white,
                 fontSize: 8,
@@ -1119,22 +1104,21 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                         pieTouchData: PieTouchData(
                           touchCallback:
                               (FlTouchEvent event, pieTouchResponse) {
-                                if (!event.isInterestedForInteractions ||
-                                    pieTouchResponse?.touchedSection == null) {
-                                  return;
-                                }
-                                final touchedIndex = pieTouchResponse!
-                                    .touchedSection!
-                                    .touchedSectionIndex;
-                                if (touchedIndex >= 0 &&
-                                    touchedIndex < activeCategoryNames.length) {
-                                  context
-                                      .read<DownloadProvider>()
-                                      .toggleCategoryFilter(
-                                        activeCategoryNames[touchedIndex],
-                                      );
-                                }
-                              },
+                            if (!event.isInterestedForInteractions ||
+                                pieTouchResponse?.touchedSection == null) {
+                              return;
+                            }
+                            final touchedIndex = pieTouchResponse!
+                                .touchedSection!.touchedSectionIndex;
+                            if (touchedIndex >= 0 &&
+                                touchedIndex < activeCategoryNames.length) {
+                              context
+                                  .read<DownloadProvider>()
+                                  .toggleCategoryFilter(
+                                    activeCategoryNames[touchedIndex],
+                                  );
+                            }
+                          },
                         ),
                         sections: sections,
                         centerSpaceRadius: 35,
@@ -1177,71 +1161,70 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                             .where((card) => (sizes[card['name']] ?? 0.0) > 0)
                             .take(4)
                             .map((card) {
-                              final name = card['name'] as String;
-                              final sizeMb = sizes[name] ?? 0.0;
-                              final pct = totalSizeMb > 0
-                                  ? (sizeMb / totalSizeMb) * 100
-                                  : 0.0;
-                              final sizeText = sizeMb >= 1024
-                                  ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
-                                  : '${sizeMb.toStringAsFixed(0)}M';
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 3,
+                          final name = card['name'] as String;
+                          final sizeMb = sizes[name] ?? 0.0;
+                          final pct = totalSizeMb > 0
+                              ? (sizeMb / totalSizeMb) * 100
+                              : 0.0;
+                          final sizeText = sizeMb >= 1024
+                              ? '${(sizeMb / 1024).toStringAsFixed(1)}G'
+                              : '${sizeMb.toStringAsFixed(0)}M';
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 3,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: card['color'] as Color,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: card['color'] as Color,
-                                        borderRadius: BorderRadius.circular(3),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      card['icon'] as IconData,
-                                      size: 11,
-                                      color: (card['color'] as Color)
-                                          .withValues(alpha: 0.7),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        isRtl ? _translateCat(name) : name,
-                                        style: TextStyle(
-                                          color: textClr,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${pct.toStringAsFixed(0)}%',
-                                      style: TextStyle(
-                                        color: card['color'] as Color,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        fontFamily: 'monospace',
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      sizeText,
-                                      style: TextStyle(
-                                        color: mutedClr,
-                                        fontSize: 9,
-                                        fontFamily: 'monospace',
-                                      ),
-                                    ),
-                                  ],
+                                const SizedBox(width: 8),
+                                Icon(
+                                  card['icon'] as IconData,
+                                  size: 11,
+                                  color: (card['color'] as Color)
+                                      .withValues(alpha: 0.7),
                                 ),
-                              );
-                            })
-                            .toList(),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    isRtl ? _translateCat(name) : name,
+                                    style: TextStyle(
+                                      color: textClr,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Text(
+                                  '${pct.toStringAsFixed(0)}%',
+                                  style: TextStyle(
+                                    color: card['color'] as Color,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sizeText,
+                                  style: TextStyle(
+                                    color: mutedClr,
+                                    fontSize: 9,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
                       ),
               ),
             ],
@@ -1292,14 +1275,14 @@ class _RenderItem {
     required String title,
     required List<DownloadTask> items,
   }) : this._(
-         isPlaylist: true,
-         playlistId: playlistId,
-         title: title,
-         items: items,
-       );
+          isPlaylist: true,
+          playlistId: playlistId,
+          title: title,
+          items: items,
+        );
 
   const _RenderItem.single({required DownloadTask task})
-    : this._(isPlaylist: false, task: task);
+      : this._(isPlaylist: false, task: task);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1342,8 +1325,7 @@ class _DownloadTaskList extends StatelessWidget {
       selector: (_, provider) => provider.filteredTasks,
       builder: (context, fullList, _) {
         final displayTasks = fullList.where((task) {
-          final isSeeding =
-              task.status == DownloadStatus.completed &&
+          final isSeeding = task.status == DownloadStatus.completed &&
               task.isTorrent &&
               task.seedingEnabled;
           if (selectedTab == 0) {
@@ -1401,8 +1383,8 @@ class _DownloadTaskList extends StatelessWidget {
           strokeWidth: 2.5,
           onRefresh: () async {
             await context.read<DownloadProvider>().load(
-              pauseOrphanDownloads: false,
-            );
+                  pauseOrphanDownloads: false,
+                );
             if (context.mounted) {
               ThemedSnackbar.show(
                 context,
@@ -1496,9 +1478,8 @@ class _EmptyState extends StatelessWidget {
               Text(
                 '${L10n.of(context, 'no_results_for')} "$query"',
                 style: TextStyle(
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -1524,11 +1505,11 @@ class _EmptyState extends StatelessWidget {
         : L10n.of(context, 'empty_transmissions');
     final subtitle = selectedTab == 1
         ? (isRtl
-              ? 'تظهر جميع التنزيلات المكتملة والفاشلة هنا.'
-              : 'Finished and failed downloads will be cataloged here.')
+            ? 'تظهر جميع التنزيلات المكتملة والفاشلة هنا.'
+            : 'Finished and failed downloads will be cataloged here.')
         : (isRtl
-              ? 'أدخل رابطاً لبدء التنزيل.'
-              : 'Insert a URL to start downloading.');
+            ? 'أدخل رابطاً لبدء التنزيل.'
+            : 'Insert a URL to start downloading.');
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
@@ -1548,84 +1529,86 @@ class _EmptyState extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: settings.classicUi
-                    ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                    : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
-                border: Border.all(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: settings.classicUi
-                      ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                      : (isDark
+                      ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                      : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
+                  border: Border.all(
+                    color: settings.classicUi
+                        ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                        : (isDark
                             ? AppTheme.glassBorder
                             : AppTheme.lightGlassBorder),
-                  width: 0.8,
+                    width: 0.8,
+                  ),
+                  boxShadow: isDark && !settings.classicUi
+                      ? [
+                          BoxShadow(
+                            color: accentClr.withValues(alpha: 0.04),
+                            blurRadius: 24,
+                            spreadRadius: 4,
+                          ),
+                        ]
+                      : null,
                 ),
-                boxShadow: isDark && !settings.classicUi
-                    ? [
-                        BoxShadow(
-                          color: accentClr.withValues(alpha: 0.04),
-                          blurRadius: 24,
-                          spreadRadius: 4,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Icon(
-                icon,
-                size: 40,
-                color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
-                    .withValues(alpha: 0.6),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: isDark
-                    ? AppTheme.textSecondary
-                    : AppTheme.lightTextSecondary,
-                letterSpacing: 0.5,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                  fontSize: 11,
-                  height: 1.4,
+                child: Icon(
+                  icon,
+                  size: 40,
+                  color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
+                      .withValues(alpha: 0.6),
                 ),
               ),
-            ),
-            if (selectedTab == 0) ...[
-              const SizedBox(height: 24),
-              NeonGlowButton(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => const AddDownloadDialog(),
-                  );
-                },
-                text: L10n.of(context, 'add_new_transmission'),
-                icon: Icons.add_rounded,
-                isFilled: true,
-                color: accentClr,
-                hasGlow: true,
+              const SizedBox(height: 20),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: isDark
+                          ? AppTheme.textSecondary
+                          : AppTheme.lightTextSecondary,
+                      letterSpacing: 0.5,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
               ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppTheme.textMuted
+                            : AppTheme.lightTextMuted,
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
+                ),
+              ),
+              if (selectedTab == 0) ...[
+                const SizedBox(height: 24),
+                NeonGlowButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => const AddDownloadDialog(),
+                    );
+                  },
+                  text: L10n.of(context, 'add_new_transmission'),
+                  icon: Icons.add_rounded,
+                  isFilled: true,
+                  color: accentClr,
+                  hasGlow: true,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
-    ),
     );
   }
 }

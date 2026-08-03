@@ -284,9 +284,12 @@ class _TelemetryStrip extends StatelessWidget {
                     _ => 'H1.1',
                   };
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.15),
+                      color:
+                          (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+                              .withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -294,7 +297,8 @@ class _TelemetryStrip extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        color:
+                            isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
                       ),
                     ),
                   );
@@ -484,9 +488,8 @@ class _ControlButtonState extends State<_ControlButton> {
             child: Icon(
               widget.icon,
               size: 18,
-              color: widget.filled
-                  ? AppTheme.inkOn(widget.color)
-                  : widget.color,
+              color:
+                  widget.filled ? AppTheme.inkOn(widget.color) : widget.color,
             ),
           ),
         ),
@@ -851,8 +854,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                       color: statusColor.withValues(alpha: 0.15),
                       width: 0.8,
                     ),
-                    image:
-                        task.thumbnailUrl != null &&
+                    image: task.thumbnailUrl != null &&
                             task.thumbnailUrl!.isNotEmpty
                         ? DecorationImage(
                             image: CachedNetworkImageProvider(
@@ -869,14 +871,14 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                   ),
                   child:
                       task.thumbnailUrl != null && task.thumbnailUrl!.isNotEmpty
-                      ? null
-                      : Icon(
-                          _isAudioOnly
-                              ? Icons.audiotrack_rounded
-                              : Icons.play_arrow_rounded,
-                          color: statusColor,
-                          size: compact ? 18 : 22,
-                        ),
+                          ? null
+                          : Icon(
+                              _isAudioOnly
+                                  ? Icons.audiotrack_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: statusColor,
+                              size: compact ? 18 : 22,
+                            ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1043,10 +1045,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final isMagnet = widget.task.url.startsWith('magnet:');
     final seeding = _isSeeding(widget.task);
 
-    return Selector<
-      DownloadProvider,
-      ({int seeds, int peers, double uploadSpeed})
-    >(
+    return Selector<DownloadProvider,
+        ({int seeds, int peers, double uploadSpeed})>(
       selector: (context, provider) => (
         seeds: provider.getTorrentSeeds(widget.task.id),
         peers: provider.getTorrentPeers(widget.task.id),
@@ -1054,8 +1054,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
       ),
       builder: (context, stats, _) {
         final fileCount = widget.task.torrentFiles?.length ?? 0;
-        final selectedCount =
-            widget.task.torrentFiles
+        final selectedCount = widget.task.torrentFiles
                 ?.where((f) => f['selected'] == true)
                 .length ??
             0;
@@ -1212,9 +1211,9 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                         onChanged: (val) {
                           triggerHaptic(settings);
                           context.read<DownloadProvider>().updateTaskSeeding(
-                            widget.task.id,
-                            enabled: val,
-                          );
+                                widget.task.id,
+                                enabled: val,
+                              );
                         },
                         activeThumbColor: violetClr,
                       ),
@@ -1269,8 +1268,8 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
       final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
       final effectiveDownloaded =
           widget.task.status == DownloadStatus.completed && selected
-          ? length
-          : downloaded;
+              ? length
+              : downloaded;
       return {...f, 'downloadedBytes': effectiveDownloaded};
     }).toList();
 
@@ -1278,9 +1277,8 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
         ? displayFiles
         : displayFiles.take(_collapsedFileCount).toList();
     final hiddenCount = displayFiles.length - visible.length;
-    final mutedClr = widget.isDark
-        ? AppTheme.textMuted
-        : AppTheme.lightTextMuted;
+    final mutedClr =
+        widget.isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1407,8 +1405,8 @@ class _TorrentFileRow extends StatelessWidget {
             done
                 ? Icons.check_circle_rounded
                 : selected
-                ? Icons.insert_drive_file_rounded
-                : Icons.block_rounded,
+                    ? Icons.insert_drive_file_rounded
+                    : Icons.block_rounded,
             size: 13,
             color: done ? greenClr : (selected ? accent : mutedClr),
           ),
@@ -1629,9 +1627,8 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
                 if (_anyDownloading)
                   _ControlButton(
                     icon: Icons.pause_rounded,
-                    color: isDark
-                        ? AppTheme.neonAmber
-                        : AppTheme.lightNeonAmber,
+                    color:
+                        isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
                     tooltip: isRtl ? 'إيقاف الكل' : 'Pause all',
                     onPressed: () {
                       triggerHaptic(settings);
@@ -1848,7 +1845,8 @@ void _showAdvancedControls(
                 title: Text('Open File', style: TextStyle(color: textClr)),
                 onTap: () async {
                   Navigator.pop(context);
-                  if (task.localFilePath.isNotEmpty && !_openingTaskIds.contains(task.id)) {
+                  if (task.localFilePath.isNotEmpty &&
+                      !_openingTaskIds.contains(task.id)) {
                     _openingTaskIds.add(task.id);
                     try {
                       await openFile(context, task.localFilePath, settings);
@@ -1947,14 +1945,12 @@ void _showTorrentProperties(
 
   // Resolve live torrent stats.
   final torrentId = provider.providerTorrentIds[task.id];
-  final TorrentUpdateInfo? stats = torrentId != null
-      ? provider.providerLatestTorrentStats[torrentId]
-      : null;
+  final TorrentUpdateInfo? stats =
+      torrentId != null ? provider.providerLatestTorrentStats[torrentId] : null;
 
   final dlSpeed = task.speed;
-  final ulSpeed = task.isTorrent
-      ? provider.getTorrentUploadSpeed(task.id)
-      : 0.0;
+  final ulSpeed =
+      task.isTorrent ? provider.getTorrentUploadSpeed(task.id) : 0.0;
   final seeds = provider.getTorrentSeeds(task.id);
   final peers = provider.getTorrentPeers(task.id);
 
@@ -2295,9 +2291,8 @@ Future<bool?> showDeleteConfirmationDialog(
                         height: 22,
                         child: Checkbox(
                           value: deleteFiles,
-                          activeColor: isDark
-                              ? AppTheme.neonRed
-                              : AppTheme.lightNeonRed,
+                          activeColor:
+                              isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
                           onChanged: (val) =>
                               setState(() => deleteFiles = val ?? false),
                         ),
@@ -2378,8 +2373,8 @@ class _TelemetryTile extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: isDark ? Colors.white54 : Colors.black54,
-              ),
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
               overflow: TextOverflow.ellipsis,
             ),
           ),

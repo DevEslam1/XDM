@@ -96,18 +96,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final currentAccent = _getAccentColor(isDark, _currentPage);
 
     return GeometricGridBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Directionality(
-          textDirection: L10n.isRtl(context)
-              ? TextDirection.rtl
-              : TextDirection.ltr,
+          textDirection:
+              L10n.isRtl(context) ? TextDirection.rtl : TextDirection.ltr,
           child: SafeArea(
             child: Column(
               children: [
@@ -390,7 +388,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         color: isActive
                             ? accent
                             : (isDark ? AppTheme.border : AppTheme.lightBorder)
-                                  .withValues(alpha: 0.5),
+                                .withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: isActive
                             ? [
@@ -418,11 +416,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       fontFamily: 'Space Grotesk',
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color:
-                          (isDark
-                                  ? AppTheme.textMuted
-                                  : AppTheme.lightTextMuted)
-                              .withValues(alpha: 0.7),
+                      color: (isDark
+                              ? AppTheme.textMuted
+                              : AppTheme.lightTextMuted)
+                          .withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -473,9 +470,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }) {
     final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     // Parallax offset based on page scroll
     final parallaxOffset = (_pageOffset - pageIndex) * 60;
@@ -595,12 +591,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Text(
                 title,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                  fontSize: 22,
-                  height: 1.3,
-                ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                      fontSize: 22,
+                      height: 1.3,
+                    ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -614,11 +610,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             child: Text(
               subtitle,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: secClr,
-                fontSize: 13.5,
-                height: 1.6,
-                letterSpacing: 0.2,
-              ),
+                    color: secClr,
+                    fontSize: 13.5,
+                    height: 1.6,
+                    letterSpacing: 0.2,
+                  ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -711,8 +707,7 @@ class _FloatingParticlesPainter extends CustomPainter {
       final y = baseY - (progress * size.height * speed * 0.15) % size.height;
       final adjustedY = y < 0 ? y + size.height : y;
 
-      final opacity =
-          p.baseOpacity *
+      final opacity = p.baseOpacity *
           (isDark ? 1.0 : 0.6) *
           (0.5 + 0.5 * sin(progress * pi * 2 + phase));
 
@@ -1133,8 +1128,7 @@ class _PlatformGridGraphicState extends State<_PlatformGridGraphic>
                   1.0,
                 );
                 final scale = 0.6 + fadeProgress * 0.4;
-                final isActive =
-                    (progress * _platforms.length).floor() %
+                final isActive = (progress * _platforms.length).floor() %
                         _platforms.length ==
                     index;
 
@@ -1181,11 +1175,10 @@ class _PlatformGridGraphicState extends State<_PlatformGridGraphic>
                               fontFamily: 'Space Grotesk',
                               fontSize: 7,
                               fontWeight: FontWeight.w700,
-                              color:
-                                  (isDark
-                                          ? AppTheme.textSecondary
-                                          : AppTheme.lightTextSecondary)
-                                      .withValues(alpha: fadeProgress),
+                              color: (isDark
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.lightTextSecondary)
+                                  .withValues(alpha: fadeProgress),
                             ),
                             textAlign: TextAlign.center,
                             maxLines: 1,
@@ -1382,11 +1375,10 @@ class _TorrentGraphicState extends State<_TorrentGraphic>
                           style: TextStyle(
                             fontFamily: 'Space Grotesk',
                             fontSize: 8,
-                            color:
-                                (isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted)
-                                    .withValues(alpha: 0.7),
+                            color: (isDark
+                                    ? AppTheme.textMuted
+                                    : AppTheme.lightTextMuted)
+                                .withValues(alpha: 0.7),
                           ),
                         ),
                         Text(
@@ -1394,11 +1386,10 @@ class _TorrentGraphicState extends State<_TorrentGraphic>
                           style: TextStyle(
                             fontFamily: 'Space Grotesk',
                             fontSize: 8,
-                            color:
-                                (isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted)
-                                    .withValues(alpha: 0.7),
+                            color: (isDark
+                                    ? AppTheme.textMuted
+                                    : AppTheme.lightTextMuted)
+                                .withValues(alpha: 0.7),
                           ),
                         ),
                       ],
@@ -1440,9 +1431,8 @@ class _TorrentGraphicState extends State<_TorrentGraphic>
                   fontFamily: 'Space Grotesk',
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: isDark
-                      ? AppTheme.textPrimary
-                      : AppTheme.lightTextPrimary,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
                 ),
               ),
             ],
@@ -1587,9 +1577,8 @@ class _ControlPanelGraphicState extends State<_ControlPanelGraphic>
   Widget build(BuildContext context) {
     final isDark = Provider.of<SettingsProvider>(context).isDarkMode;
     final color = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-    final secClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final secClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return AnimatedBuilder(
       animation: Listenable.merge([_cycleController, _toggleController]),
@@ -1608,8 +1597,7 @@ class _ControlPanelGraphicState extends State<_ControlPanelGraphic>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(_controls.length, (index) {
-                    final isActive =
-                        (progress * _controls.length).floor() %
+                    final isActive = (progress * _controls.length).floor() %
                             _controls.length ==
                         index;
                     return Padding(
@@ -1686,8 +1674,7 @@ class _ControlPanelGraphicState extends State<_ControlPanelGraphic>
                         children: List.generate(_categoryIcons.length, (index) {
                           final highlightStart = index * 0.18;
                           final highlightEnd = highlightStart + 0.15;
-                          final isHighlighted =
-                              progress >= highlightStart &&
+                          final isHighlighted = progress >= highlightStart &&
                               progress <= highlightEnd;
 
                           return AnimatedContainer(
@@ -1718,9 +1705,9 @@ class _ControlPanelGraphicState extends State<_ControlPanelGraphic>
                               color: isHighlighted
                                   ? color
                                   : (isDark
-                                            ? AppTheme.textMuted
-                                            : AppTheme.lightTextMuted)
-                                        .withValues(alpha: 0.4),
+                                          ? AppTheme.textMuted
+                                          : AppTheme.lightTextMuted)
+                                      .withValues(alpha: 0.4),
                               size: 16,
                             ),
                           );
@@ -1782,9 +1769,8 @@ class _ControlPanelGraphicState extends State<_ControlPanelGraphic>
               fontFamily: 'Space Grotesk',
               fontSize: 9,
               fontWeight: FontWeight.w500,
-              color: isDark
-                  ? AppTheme.textSecondary
-                  : AppTheme.lightTextSecondary,
+              color:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
             ),
           ),
         ),
@@ -1805,7 +1791,7 @@ class _ControlPanelGraphicState extends State<_ControlPanelGraphic>
               color: isOn
                   ? color.withValues(alpha: 0.5)
                   : (isDark ? AppTheme.border : AppTheme.lightBorder)
-                        .withValues(alpha: 0.3),
+                      .withValues(alpha: 0.3),
               width: 0.8,
             ),
           ),
@@ -1853,9 +1839,8 @@ class _QuickSetupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final labelClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final labelClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return SizedBox(
       width: double.infinity,
@@ -1865,85 +1850,85 @@ class _QuickSetupCard extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ─── Language ───
-            _buildLabel(
-              L10n.of(context, 'onboarding_setup_language'),
-              labelClr,
-            ),
-            const SizedBox(height: 6),
-            _SegmentedSelector(
-              accent: accentColor,
-              isDark: isDark,
-              selectedValue: settings.languageCode,
-              options: const [
-                _SegmentOption(value: 'en', label: 'English'),
-                _SegmentOption(value: 'ar', label: 'العربية'),
-              ],
-              onSelected: (v) {
-                settings.setLanguageCode(v);
-                _haptic(settings);
-              },
-            ),
-            const SizedBox(height: 10),
-            // ─── Theme ───
-            _buildLabel(L10n.of(context, 'onboarding_setup_theme'), labelClr),
-            const SizedBox(height: 6),
-            _SegmentedSelector(
-              accent: accentColor,
-              isDark: isDark,
-              selectedValue: settings.themeMode,
-              options: [
-                _SegmentOption(
-                  value: 'light',
-                  label: L10n.of(context, 'onboarding_theme_light'),
-                  icon: Icons.wb_sunny_rounded,
-                ),
-                _SegmentOption(
-                  value: 'dark',
-                  label: L10n.of(context, 'onboarding_theme_dark'),
-                  icon: Icons.nightlight_round,
-                ),
-                _SegmentOption(
-                  value: 'system',
-                  label: L10n.of(context, 'onboarding_theme_system'),
-                  icon: Icons.brightness_auto_rounded,
-                ),
-              ],
-              onSelected: (v) {
-                settings.setThemeMode(v);
-                _haptic(settings);
-              },
-            ),
-            const SizedBox(height: 10),
-            // ─── Interface mode ───
-            _buildLabel(L10n.of(context, 'onboarding_setup_mode'), labelClr),
-            const SizedBox(height: 6),
-            _SegmentedSelector(
-              accent: accentColor,
-              isDark: isDark,
-              selectedValue: settings.classicUi ? 'classic' : 'modern',
-              options: [
-                _SegmentOption(
-                  value: 'modern',
-                  label: L10n.of(context, 'onboarding_mode_modern'),
-                  icon: Icons.auto_awesome_rounded,
-                ),
-                _SegmentOption(
-                  value: 'classic',
-                  label: L10n.of(context, 'onboarding_mode_classic'),
-                  icon: Icons.crop_square_rounded,
-                ),
-              ],
-              onSelected: (v) {
-                settings.setClassicUi(v == 'classic');
-                _haptic(settings);
-              },
-            ),
-          ],
+            children: [
+              // ─── Language ───
+              _buildLabel(
+                L10n.of(context, 'onboarding_setup_language'),
+                labelClr,
+              ),
+              const SizedBox(height: 6),
+              _SegmentedSelector(
+                accent: accentColor,
+                isDark: isDark,
+                selectedValue: settings.languageCode,
+                options: const [
+                  _SegmentOption(value: 'en', label: 'English'),
+                  _SegmentOption(value: 'ar', label: 'العربية'),
+                ],
+                onSelected: (v) {
+                  settings.setLanguageCode(v);
+                  _haptic(settings);
+                },
+              ),
+              const SizedBox(height: 10),
+              // ─── Theme ───
+              _buildLabel(L10n.of(context, 'onboarding_setup_theme'), labelClr),
+              const SizedBox(height: 6),
+              _SegmentedSelector(
+                accent: accentColor,
+                isDark: isDark,
+                selectedValue: settings.themeMode,
+                options: [
+                  _SegmentOption(
+                    value: 'light',
+                    label: L10n.of(context, 'onboarding_theme_light'),
+                    icon: Icons.wb_sunny_rounded,
+                  ),
+                  _SegmentOption(
+                    value: 'dark',
+                    label: L10n.of(context, 'onboarding_theme_dark'),
+                    icon: Icons.nightlight_round,
+                  ),
+                  _SegmentOption(
+                    value: 'system',
+                    label: L10n.of(context, 'onboarding_theme_system'),
+                    icon: Icons.brightness_auto_rounded,
+                  ),
+                ],
+                onSelected: (v) {
+                  settings.setThemeMode(v);
+                  _haptic(settings);
+                },
+              ),
+              const SizedBox(height: 10),
+              // ─── Interface mode ───
+              _buildLabel(L10n.of(context, 'onboarding_setup_mode'), labelClr),
+              const SizedBox(height: 6),
+              _SegmentedSelector(
+                accent: accentColor,
+                isDark: isDark,
+                selectedValue: settings.classicUi ? 'classic' : 'modern',
+                options: [
+                  _SegmentOption(
+                    value: 'modern',
+                    label: L10n.of(context, 'onboarding_mode_modern'),
+                    icon: Icons.auto_awesome_rounded,
+                  ),
+                  _SegmentOption(
+                    value: 'classic',
+                    label: L10n.of(context, 'onboarding_mode_classic'),
+                    icon: Icons.crop_square_rounded,
+                  ),
+                ],
+                onSelected: (v) {
+                  settings.setClassicUi(v == 'classic');
+                  _haptic(settings);
+                },
+              ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -1985,9 +1970,8 @@ class _SegmentedSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unselectedClr = isDark
-        ? AppTheme.textSecondary
-        : AppTheme.lightTextSecondary;
+    final unselectedClr =
+        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
     return Container(
       padding: const EdgeInsets.all(4),

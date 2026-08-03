@@ -9,11 +9,18 @@ import 'package:logging/logging.dart';
 /// Owns the block decision and the ad-blocking script/CSS injection so the
 /// screen only wires WebView callbacks to it (REFACTOR B extraction from
 /// `_BrowserScreenState`).
+///
+/// Injection order per page load:
+///   1. `injectAntiDetect` — stealth layer (called first at onPageStarted)
+///   2. `injectEarly`      — popup/redirect blocker + iframe/script blocker
+///   3. *page renders*
+///   4. `injectInto`       — CSS hiding + late DOM cleanup + YouTube skipper
 class AdBlockerDelegate {
   AdBlockerDelegate({AdBlockerService? service})
-    : _adBlocker = service ?? AdBlockerService.instance;
+      : _adBlocker = service ?? AdBlockerService.instance;
 
   final AdBlockerService _adBlocker;
+  static final _log = Logger('ad_blocker_delegate');
 
   bool get isEnabled => _adBlocker.isEnabled;
 
@@ -28,10 +35,57 @@ class AdBlockerDelegate {
   bool shouldBlock(String url) =>
       _adBlocker.isEnabled && _adBlocker.shouldBlockUrl(url);
 
+  /// Injects the stealth anti-detection layer — must be called **first**,
+  /// before `injectEarly`, so fake ad globals are defined before any page
+  /// script runs.
+  void injectAntiDetect(BrowserTab tab) {
+    if (!_adBlocker.isEnabled) return;
+
+    // Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO
+    tab.controller.runJavaScript(_adBlocker.antiDetectJs).catchError((e, st) =>
+        _log.warning('[ad_blocker_delegate] antiDetectJs failed', e, st));
+
+    // Anti-detect CSS: keeps bait elements measurable but invisible.
+    // Retries until <head> exists (it may not yet at onPageStarted).
+    final cssJson = jsonEncode(_adBlocker.antiDetectCss);
+    tab.controller.runJavaScript('''
+      (function() {
+        var css = $cssJson;
+        var applied = false;
+        function apply() {
+          if (applied) return;
+          var s = document.getElementById('xdm-antidetect-css');
+          if (!s) {
+            s = document.createElement('style');
+            s.id = 'xdm-antidetect-css';
+            if (document.head) document.head.appendChild(s);
+          }
+          if (s.parentNode) {
+            if (s.textContent !== css) s.textContent = css;
+            applied = true;
+          }
+        }
+        apply();
+        if (!applied) {
+          var tries = 0;
+          var timer = setInterval(function() {
+            tries++;
+            if (applied || tries > 250) { clearInterval(timer); return; }
+            apply();
+          }, 20);
+        }
+      })();
+    ''').catchError((e,
+            st) =>
+        _log.warning('[ad_blocker_delegate] antiDetectCss failed', e, st));
+  }
+
   /// Injects the early-phase blocking script (call from `onPageStarted`).
+  /// Always call `injectAntiDetect` before this.
   void injectEarly(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
-    tab.controller.runJavaScript(_adBlocker.earlyJs).catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
+    tab.controller.runJavaScript(_adBlocker.earlyJs).catchError(
+        (e, st) => _log.warning('[ad_blocker_delegate] earlyJs failed', e, st));
   }
 
   /// Injects cosmetic CSS + late-phase scripts (call from `onPageFinished`).
@@ -40,8 +94,7 @@ class AdBlockerDelegate {
     final url = tab.url;
 
     final cssJson = jsonEncode(_adBlocker.cssRules);
-    tab.controller
-        .runJavaScript('''
+    tab.controller.runJavaScript('''
       (function() {
         var s = document.getElementById('xdm-adblock-css');
         if (!s) {
@@ -51,13 +104,16 @@ class AdBlockerDelegate {
         }
         s.textContent = $cssJson;
       })();
-    ''')
-        .catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
+    ''').catchError((e,
+            st) =>
+        _log.warning('[ad_blocker_delegate] CSS failed', e, st));
 
-    tab.controller.runJavaScript(_adBlocker.lateJs).catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
+    tab.controller.runJavaScript(_adBlocker.lateJs).catchError(
+        (e, st) => _log.warning('[ad_blocker_delegate] lateJs failed', e, st));
 
     if (AdBlockerService.isYoutubePage(url)) {
-      tab.controller.runJavaScript(_adBlocker.youtubeJs).catchError((e, st) { Logger('ad_blocker_delegate').warning('[ad_blocker_delegate] operation failed', e, st); });
+      tab.controller.runJavaScript(_adBlocker.youtubeJs).catchError((e, st) =>
+          _log.warning('[ad_blocker_delegate] youtubeJs failed', e, st));
     }
   }
 }

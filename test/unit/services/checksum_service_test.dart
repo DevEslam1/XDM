@@ -39,9 +39,11 @@ void main() {
       expect(hash, equals(expected));
     });
 
-    test('verify returns true for matching hashes and false for mismatch', () async {
+    test('verify returns true for matching hashes and false for mismatch',
+        () async {
       final sha256Val = await ChecksumService.sha256File(testFile.path);
-      final ok = await ChecksumService.verify(testFile.path, sha256Val, 'sha256');
+      final ok =
+          await ChecksumService.verify(testFile.path, sha256Val, 'sha256');
       expect(ok, isTrue);
 
       final okMd5 = await ChecksumService.verify(
@@ -51,10 +53,12 @@ void main() {
       );
       expect(okMd5, isTrue);
 
-      final fail = await ChecksumService.verify(testFile.path, 'invalid_hash', 'sha256');
+      final fail =
+          await ChecksumService.verify(testFile.path, 'invalid_hash', 'sha256');
       expect(fail, isFalse);
 
-      final unknownAlgo = await ChecksumService.verify(testFile.path, sha256Val, 'crc64');
+      final unknownAlgo =
+          await ChecksumService.verify(testFile.path, sha256Val, 'crc64');
       expect(unknownAlgo, isFalse);
     });
 
@@ -65,7 +69,8 @@ void main() {
       final emptyRes = ChecksumService.parseDigestHeader('   ');
       expect(emptyRes, isNull);
 
-      final sha256Header = ChecksumService.parseDigestHeader('SHA-256=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08');
+      final sha256Header = ChecksumService.parseDigestHeader(
+          'SHA-256=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08');
       expect(sha256Header, isNotNull);
       expect(sha256Header!.key, equals('sha256'));
 

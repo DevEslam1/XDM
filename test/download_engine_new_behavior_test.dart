@@ -13,7 +13,6 @@ import 'package:path/path.dart' as p;
 
 class MockDio extends Mock implements Dio {}
 
-
 void main() {
   group('BandwidthGovernor', () {
     test('updateLimit sets the limit', () {
@@ -948,10 +947,10 @@ void main() {
       );
 
       when(() => mockDio.head(
-        any(),
-        cancelToken: any(named: 'cancelToken'),
-        options: any(named: 'options'),
-      )).thenAnswer((_) async => response);
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            options: any(named: 'options'),
+          )).thenAnswer((_) async => response);
 
       final engine = DownloadEngine(enableCleanupTimer: false);
       final result = await engine.estimateOptimalThreads(
@@ -973,10 +972,10 @@ void main() {
       );
 
       when(() => mockDio.head(
-        any(),
-        cancelToken: any(named: 'cancelToken'),
-        options: any(named: 'options'),
-      )).thenAnswer((_) async => response);
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            options: any(named: 'options'),
+          )).thenAnswer((_) async => response);
 
       final engine = DownloadEngine(enableCleanupTimer: false);
       final result = await engine.estimateOptimalThreads(
@@ -998,10 +997,10 @@ void main() {
       );
 
       when(() => mockDio.head(
-        any(),
-        cancelToken: any(named: 'cancelToken'),
-        options: any(named: 'options'),
-      )).thenAnswer((_) async => response);
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            options: any(named: 'options'),
+          )).thenAnswer((_) async => response);
 
       final engine = DownloadEngine(enableCleanupTimer: false);
       final result = await engine.estimateOptimalThreads(
@@ -1015,10 +1014,10 @@ void main() {
 
     test('exception in HEAD request falls back to requestedThreads', () async {
       when(() => mockDio.head(
-        any(),
-        cancelToken: any(named: 'cancelToken'),
-        options: any(named: 'options'),
-      )).thenThrow(Exception('HEAD error'));
+            any(),
+            cancelToken: any(named: 'cancelToken'),
+            options: any(named: 'options'),
+          )).thenThrow(Exception('HEAD error'));
 
       final engine = DownloadEngine(enableCleanupTimer: false);
       final result = await engine.estimateOptimalThreads(
@@ -1035,7 +1034,7 @@ void main() {
     test('cleans up temporary and other orphan files', () async {
       final tempDir = Directory.systemTemp.createTempSync('dmx_cleanup_test');
       final baseTempPath = '${tempDir.path}/test_download.dmxpart';
-      
+
       final partFile = File(baseTempPath);
       final stateFile = File('${tempDir.path}/test_download.dmxstate');
       final journalFile = File('${tempDir.path}/test_download.journal');

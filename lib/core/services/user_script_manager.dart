@@ -63,8 +63,7 @@ class UserScriptManager extends ChangeNotifier {
   static const _storeKey = 'browser_user_scripts';
 
   static UserScriptManager? _instance;
-  static UserScriptManager get instance =>
-      _instance ??= UserScriptManager();
+  static UserScriptManager get instance => _instance ??= UserScriptManager();
 
   UserScriptManager();
 

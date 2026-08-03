@@ -53,8 +53,8 @@ class MirrorParallelEngine {
   }
 
   void _redistributeFromSlowMirror(String slowMirror) {
-    final fastest = _mirrorStates.entries.reduce(
-        (a, b) => a.value.averageSpeed > b.value.averageSpeed ? a : b);
+    final fastest = _mirrorStates.entries
+        .reduce((a, b) => a.value.averageSpeed > b.value.averageSpeed ? a : b);
     _log.info(
       '[MirrorParallel] Redistributing threads from slow mirror $slowMirror to ${fastest.key}',
     );

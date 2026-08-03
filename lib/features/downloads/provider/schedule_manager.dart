@@ -26,13 +26,13 @@ class ScheduleManager {
     required void Function() updateTorrentUploadLimit,
     required void Function() notifyListeners,
     required void Function() pumpQueue,
-  }) : _tasks = tasks,
-       _databaseService = databaseService,
-       _isDisposed = isDisposed,
-       _downloadingTasksCount = downloadingTasksCount,
-       _updateTorrentUploadLimit = updateTorrentUploadLimit,
-       _notifyListeners = notifyListeners,
-       _pumpQueue = pumpQueue;
+  })  : _tasks = tasks,
+        _databaseService = databaseService,
+        _isDisposed = isDisposed,
+        _downloadingTasksCount = downloadingTasksCount,
+        _updateTorrentUploadLimit = updateTorrentUploadLimit,
+        _notifyListeners = notifyListeners,
+        _pumpQueue = pumpQueue;
 
   final List<DownloadTask> Function() _tasks;
   final DatabaseService _databaseService;

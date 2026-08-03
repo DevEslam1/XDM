@@ -101,7 +101,8 @@ class FakePlatformWebViewController extends PlatformWebViewController {
 
   @override
   Future<void> setOnScrollPositionChange(
-    void Function(ScrollPositionChange scrollPositionChange)? onScrollPositionChange,
+    void Function(ScrollPositionChange scrollPositionChange)?
+        onScrollPositionChange,
   ) async {}
 
   @override
@@ -138,7 +139,8 @@ class FakeDatabaseService extends DatabaseService {
   final List<Bookmark> _bookmarks = [];
   final List<Map<String, dynamic>> _history = [];
 
-  FakeDatabaseService({List<DownloadTask>? initialTasks}) : super.forSubclass() {
+  FakeDatabaseService({List<DownloadTask>? initialTasks})
+      : super.forSubclass() {
     if (initialTasks != null) {
       _tasks.addAll(initialTasks);
     }

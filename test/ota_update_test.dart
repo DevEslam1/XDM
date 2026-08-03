@@ -6,7 +6,8 @@ void main() {
     final json = {
       "latestVersion": "3.1.0",
       "versionCode": 310,
-      "apkUrl": "https://raw.githubusercontent.com/DevEslam1/XDM/main/app-release.apk",
+      "apkUrl":
+          "https://raw.githubusercontent.com/DevEslam1/XDM/main/app-release.apk",
       "changelog": "Added OTA self-update feature",
       "mandatory": false,
       "minSupportedVersionCode": 200,
