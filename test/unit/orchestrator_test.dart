@@ -13,6 +13,9 @@ class _StubHost implements DownloadOrchestratorHost {
   void pushProgressTick(String taskId, double progress, double speed) {}
 
   @override
+  bool get enableBackgroundTimers => false;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

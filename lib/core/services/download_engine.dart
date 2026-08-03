@@ -1863,11 +1863,17 @@ class DownloadEngine {
             savedEtag = decoded['etag'] as String?;
             savedLastModified = decoded['lastModified'] as String?;
 
-            const sizeTolerance = 1024; // 1 KB tolerance
+            const sizeTolerance = 2048; // 2 KB tolerance for CDN Content-Length jitter
             final isSizeWithinTolerance =
                 (savedTotalSize - totalSize).abs() <= sizeTolerance;
 
             if (isSizeWithinTolerance && progressList != null) {
+              if (savedTotalSize != totalSize) {
+                debugPrint(
+                  '[DownloadEngine] Size drift detected: saved=$savedTotalSize, '
+                  'probed=$totalSize. Using saved value (tolerance=$sizeTolerance).',
+                );
+              }
               totalSize = savedTotalSize;
               if (savedThreadCount == threadCount &&
                   progressList.length == threadCount) {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
@@ -774,22 +775,38 @@ class DownloadOrchestrator {
     _host.downloadMetrics[task.id]?.effectiveThreads = runtimeThreadCount;
     int? ttfbTimestamp;
 
-    final tempFile = File(task.tempFilePath);
-    final audioFile =
-        hasAudio && audioTempPath != null ? File(audioTempPath) : null;
-    final tempLen = tempFile.existsSync() ? tempFile.lengthSync() : 0;
-    final audioLen = audioFile != null && audioFile.existsSync()
-        ? audioFile.lengthSync()
-        : 0;
+    int videoBytesFromDisk;
+    final stateFilePath = '${task.tempFilePath}.dmxstate';
+    final hasStateFile = await File(stateFilePath).exists();
 
-    int audioBytesSoFar = hasAudio && task.audioSize > 0
-        ? (task.audioProgress >= 1.0
-            ? task.audioSize
-            : max((task.audioProgress * task.audioSize).round(), audioLen))
-        : audioLen;
+    if (task.threadCount > 1 && hasStateFile) {
+      // Multi-threaded: file is pre-allocated, lengthSync is meaningless.
+      // Read actual chunk progress from .dmxstate.
+      videoBytesFromDisk = await _readDmxStateBytes(task.tempFilePath);
+    } else {
+      // Single-threaded: file grows incrementally, lengthSync is accurate.
+      final tempFile = File(task.tempFilePath);
+      videoBytesFromDisk = tempFile.existsSync() ? await tempFile.length() : 0;
+    }
+
+    // Also fix audio bytes — same pre-allocation issue applies
+    int audioBytesFromDisk = 0;
+    final audioTempPath = '${task.tempFilePath}.audio';
+    if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      final audioStatePath = '$audioTempPath.dmxstate';
+      if (await File(audioStatePath).exists()) {
+        audioBytesFromDisk = await _readDmxStateBytes(audioTempPath);
+      } else {
+        final audioFile = File(audioTempPath);
+        audioBytesFromDisk =
+            audioFile.existsSync() ? await audioFile.length() : 0;
+      }
+    }
+    int audioBytesSoFar = audioBytesFromDisk;
+
     int videoBytesSoFar = max(
-      tempLen,
-      (task.downloadedBytes - audioBytesSoFar).clamp(
+      videoBytesFromDisk,
+      (task.downloadedBytes - audioBytesFromDisk).clamp(
         0,
         task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
       ),
@@ -818,9 +835,8 @@ class DownloadOrchestrator {
       final effectiveVideoSize =
           videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
       final totalSize = effectiveVideoSize + audioContribution;
-      final totalDownloaded =
-          max(base.downloadedBytes, audioBytesSoFar + videoBytesSoFar)
-              .clamp(0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
+      final totalDownloaded = (audioBytesSoFar + videoBytesSoFar)
+          .clamp(0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
       final instantSpeed = audioSpeedNow + videoSpeedNow;
       final speedQueue = _host.speedHistories[task.id];
       if (speedQueue != null) {
@@ -860,10 +876,14 @@ class DownloadOrchestrator {
         chunks: chunksOverride ?? base.chunks,
         supportsResume: supportsResumeOverride ?? base.supportsResume,
         torrentFiles: torrentFilesOverride ?? base.torrentFiles,
-        statusMessage: (statusMessageOverride == 'Completed' && hasAudio)
+        statusMessage: (statusMessageOverride == 'Completed' &&
+                hasAudio &&
+                audioBytesSoFar < audioContribution)
             ? null
             : statusMessageOverride,
-        clearStatusMessage: (statusMessageOverride == 'Completed' && hasAudio),
+        clearStatusMessage: (statusMessageOverride == 'Completed' &&
+            hasAudio &&
+            audioBytesSoFar < audioContribution),
       );
 
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -2172,4 +2192,29 @@ class DownloadOrchestrator {
   }) async {
     await cleanupAllArtifacts(task, preserveParts: preserveParts);
   }
+
+  /// Reads actual downloaded bytes from a .dmxstate sidecar file.
+  /// Returns 0 if the file doesn't exist or is corrupted.
+  static Future<int> _readDmxStateBytes(String tempFilePath) async {
+    final stateFile = File('$tempFilePath.dmxstate');
+    if (!await stateFile.exists()) return 0;
+    try {
+      final content = await stateFile.readAsString();
+      final decoded = jsonDecode(content);
+      if (decoded is Map) {
+        final progressList = decoded['progress'] as List?;
+        if (progressList != null) {
+          BigInt total = BigInt.zero;
+          for (final chunk in progressList) {
+            total += BigInt.from((chunk as num).toInt());
+          }
+          return total.toInt();
+        }
+      }
+    } catch (e) {
+      debugPrint('[DMX] _readDmxStateBytes failed for $tempFilePath: $e');
+    }
+    return 0;
+  }
 }
+

@@ -511,9 +511,14 @@ class DownloadProvider extends ChangeNotifier
     int audioBytes = 0;
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
       final audioPath = '${task.tempFilePath}.audio';
-      final audioState = await _statPartialFileIsolate(audioPath);
-      if (audioState.exists) {
-        audioBytes = audioState.targetSize;
+      final audioStatePath = '$audioPath.dmxstate';
+      if (await File(audioStatePath).exists()) {
+        audioBytes = await _readDmxStateBytes(audioPath);
+      } else {
+        final audioState = await _statPartialFileIsolate(audioPath);
+        if (audioState.exists) {
+          audioBytes = audioState.targetSize;
+        }
       }
     }
 
@@ -1385,9 +1390,38 @@ class DownloadProvider extends ChangeNotifier
 
     _retryCounts.remove(id);
 
+    // ── FIX: Re-read actual bytes from .dmxstate (same as retryTask) ──
+    int realBytesOnDisk = task.downloadedBytes; // fallback
+    try {
+      final videoBytes = await _readDmxStateBytes(task.tempFilePath);
+      var audioBytes = 0;
+      if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+        audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+      }
+      if (videoBytes > 0 || audioBytes > 0) {
+        realBytesOnDisk = videoBytes + audioBytes;
+      }
+    } catch (e) {
+      debugPrint('[DMX] resumeTask .dmxstate read failed: $e');
+    }
+
+    // If no .dmxstate exists, reset chunks for fresh start
+    final hasState = await File('${task.tempFilePath}.dmxstate').exists();
+    final chunks = hasState
+        ? task.chunks
+        : List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
+
+    final videoStateBytes = await _readDmxStateBytes(task.tempFilePath);
+    final audioProgressVal = task.audioSize > 0 && (realBytesOnDisk - videoStateBytes) > 0
+        ? ((realBytesOnDisk - videoStateBytes) / task.audioSize).clamp(0.0, 1.0)
+        : task.audioProgress;
+
     await _setTask(
       task.copyWith(
         status: DownloadStatus.queued,
+        downloadedBytes: realBytesOnDisk,
+        chunks: chunks,
+        audioProgress: audioProgressVal,
         speed: 0,
         clearEta: true,
         clearError: true,
