@@ -1,33 +1,40 @@
 package com.example.dmx
 
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.ContentValues
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.os.StatFs
 import android.provider.MediaStore
 import android.util.Log
 import android.view.WindowManager
-import android.os.PowerManager
 import java.io.File
 import java.util.concurrent.Executors
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.example.dmx.widget.WidgetDataRepository
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.dmx/widget"
+    private val WIDGET_BRIDGE_CHANNEL = "com.dmx.app/widget_bridge"
     private val MEDIA_CHANNEL = "com.dmx.app/media"
     private val YOUTUBE_CHANNEL = "com.example.dmx/youtube_extractor"
     private val SAF_CHANNEL = "com.example.dmx/saf"
     private val WAKE_LOCK_CHANNEL = "com.dmx.app/wakelock"
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
     private var wakeLock: PowerManager.WakeLock? = null
+
+    private var widgetBridgeChannel: MethodChannel? = null
+    private var pendingDeepLink: String? = null
+    private var forwardAttempts = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
         return FlutterActivityLaunchConfigs.BackgroundMode.transparent
@@ -46,6 +53,50 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window?.attributes?.preferredRefreshRate = 120f
         }
+        // Smart launcher widget deep link (cold start)
+        handleDeepLink(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        val url = intent?.data?.toString() ?: return
+        if (!url.startsWith("dmx://")) return
+        if (widgetBridgeChannel != null && pendingDeepLink == null) {
+            forwardDeepLink(url)
+        } else {
+            pendingDeepLink = url
+        }
+    }
+
+    private fun forwardDeepLink(url: String) {
+        val channel = widgetBridgeChannel ?: return
+        channel.invokeMethod("onOpenUrl", url, object : MethodChannel.Result {
+            override fun success(result: Any?) {
+                pendingDeepLink = null
+                forwardAttempts = 0
+            }
+
+            override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                // Flutter side has not registered its handler yet — retry shortly.
+                if (forwardAttempts < 20) {
+                    forwardAttempts++
+                    mainHandler.postDelayed({ forwardDeepLink(url) }, 250)
+                } else {
+                    pendingDeepLink = null
+                    forwardAttempts = 0
+                }
+            }
+
+            override fun notImplemented() {
+                pendingDeepLink = null
+                forwardAttempts = 0
+            }
+        })
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -194,31 +245,37 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-            if (call.method == "updateWidget") {
-                val activeCount = call.argument<Int>("activeCount") ?: 0
-                val totalSpeed = call.argument<String>("totalSpeed") ?: "0 B/s"
-
-                val prefs = getSharedPreferences("DMX_WIDGET_PREFS", Context.MODE_PRIVATE)
-                prefs.edit().apply {
-                    putInt("active_count", activeCount)
-                    putString("total_speed", totalSpeed)
-                    apply()
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WIDGET_BRIDGE_CHANNEL).apply {
+            widgetBridgeChannel = this
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "pushDashboard" -> {
+                        val json = call.argument<String>("json")
+                        if (json == null) {
+                            result.error("INVALID_ARGS", "json is required", null)
+                            return@setMethodCallHandler
+                        }
+                        WidgetDataRepository.save(this@MainActivity, json)
+                        result.success(true)
+                    }
+                    "getFreeDiskSpace" -> {
+                        val path = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                            !Environment.isExternalStorageManager()
+                        ) {
+                            filesDir.absolutePath
+                        } else {
+                            Environment.getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_DOWNLOADS
+                            ).absolutePath
+                        }
+                        try {
+                            result.success(StatFs(path).availableBytes)
+                        } catch (e: Exception) {
+                            result.error("STAT_FAILED", e.message, null)
+                        }
+                    }
+                    else -> result.notImplemented()
                 }
-
-                // Broadcast update intent to DmxWidgetProvider
-                val intent = Intent(this, DmxWidgetProvider::class.java).apply {
-                    action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
-                    val ids = AppWidgetManager.getInstance(application).getAppWidgetIds(
-                        ComponentName(application, DmxWidgetProvider::class.java)
-                    )
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
-                }
-                sendBroadcast(intent)
-
-                result.success(true)
-            } else {
-                result.notImplemented()
             }
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WAKE_LOCK_CHANNEL).setMethodCallHandler { call, result ->

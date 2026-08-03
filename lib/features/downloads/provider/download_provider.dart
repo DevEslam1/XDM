@@ -8,7 +8,6 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/services/torrent_service.dart';
@@ -22,6 +21,7 @@ import '../../../core/services/download_metrics.dart';
 import '../../../core/services/logging_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../core/services/widget_data_bridge.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
 import '../../settings/provider/settings_provider.dart';
@@ -2011,18 +2011,82 @@ class DownloadProvider extends ChangeNotifier
   // ---------------------------------------------------------------------------
 
   void _updateTelemetryWidget() {
-    if (!kIsWeb && Platform.isAndroid) {
-      try {
-        const MethodChannel('com.example.dmx/widget')
-            .invokeMethod('updateWidget', {
-          'activeCount': downloadingTasksCount,
-          'totalSpeed': currentDownloadSpeedFormatted,
-        }).catchError((e) {
-          debugPrint('Failed to update telemetry widget via future: $e');
-        });
-      } catch (e) {
-        debugPrint('Failed to update telemetry widget: $e');
+    if (kIsWeb) return;
+    unawaited(_pushWidgetData());
+  }
+
+  /// Builds the widget dashboard from the current task list and pushes it to
+  /// the native launcher widgets (Android + iOS) via [WidgetDataBridge].
+  ///
+  /// Throttling is handled inside the bridge (max one push / 5 s). This is
+  /// invoked from the 5-second telemetry timer while downloads are active and
+  /// immediately after every state transition (add, pause, resume, complete,
+  /// fail, delete).
+  Future<void> _pushWidgetData() async {
+    try {
+      final bridge = WidgetDataBridge.instance;
+      final freeSpace = await bridge.fetchFreeDiskSpace();
+
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final summaries = <WidgetTaskSummary>[];
+
+      for (final task in _tasks) {
+        var status = task.status.name;
+        if (status == 'completed' && task.isTorrent && task.seedingEnabled) {
+          status = 'seeding';
+        }
+        final history =
+            _speedHistories[task.id]?.toList() ?? const <double>[];
+        final recentSamples =
+            history.where((s) => s > 0).map((s) => s.round()).toList();
+        final recent5 = recentSamples.length > 5
+            ? recentSamples.sublist(recentSamples.length - 5)
+            : recentSamples;
+        final trend = WidgetDataBridge.calculateSpeedTrend(recent5);
+
+        summaries.add(
+          WidgetTaskSummary(
+            id: task.id,
+            fileName: task.fileName,
+            status: status,
+            progress: task.progress,
+            speedBytesPerSec: task.status == DownloadStatus.downloading
+                ? task.speed.round()
+                : 0,
+            etaSeconds: task.eta,
+            fileSizeBytes: task.resolvedFileSize,
+            downloadedBytes: task.downloadedBytes,
+            category: task.category,
+            thumbnailUrl: task.thumbnailUrl,
+            playlistId: task.playlistId,
+            playlistTitle: task.playlistTitle,
+            errorMessage: task.errorMessage,
+            isTorrent: task.isTorrent,
+            priority: task.priority,
+            isAppUpdate: task.isAppUpdate,
+            speedTrend: trend,
+          ),
+        );
       }
+
+      final dashboard = WidgetDashboard.fromTasks(
+        summaries,
+        availableStorageBytes: freeSpace,
+        isOnWifi: _networkMonitor.hasWifiOrEthernet,
+        // The summary model doesn't carry completion timestamps, so the
+        // completed-today count is computed here from the raw tasks.
+        completedTodayCount: _tasks.where((t) {
+          final completedAt = t.completedAt;
+          return t.status == DownloadStatus.completed &&
+              completedAt != null &&
+              !completedAt.isBefore(todayStart);
+        }).length,
+      );
+
+      await bridge.pushDashboard(dashboard);
+    } catch (e) {
+      _log.fine('[download_provider] widget dashboard push failed: $e');
     }
   }
 

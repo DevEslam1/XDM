@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dmx_widget_description">Live download dashboard: progress, speed, ETA, storage warnings and quick actions.</string>
+</resources>

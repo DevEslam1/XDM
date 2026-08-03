@@ -15,6 +15,7 @@ import '../services/xdm_backend_client.dart';
 import '../services/update_service.dart';
 import '../services/single_instance_service.dart';
 import '../services/tracker_manager.dart';
+import '../services/widget_data_bridge.dart';
 
 final getIt = GetIt.instance;
 
@@ -41,4 +42,5 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SingleInstanceService>(
       () => SingleInstanceService());
   getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
+  getIt.registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
 }

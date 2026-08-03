@@ -34,6 +34,7 @@ import 'shared/accessibility/xdm_text_scaler.dart';
 import 'core/services/frame_watchdog.dart';
 import 'core/services/power_monitor.dart';
 import 'core/services/protocol_cache.dart';
+import 'core/services/widget_deep_link.dart';
 
 class _ScreenObserver with WidgetsBindingObserver {
   @override
@@ -274,6 +275,10 @@ Future<void> main(List<String> args) async {
       );
       WidgetsBinding.instance.addObserver(_AppLifecycleObserver());
 
+      // Widget deep links (dmx://) — must be registered after runApp so the
+      // navigator key is attached to the MaterialApp.
+      WidgetDeepLinkHandler.init(navigator: DmxApp.navigatorKey);
+
       // ── PHASE 5: Heavy init AFTER first frame ──
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
@@ -416,6 +421,10 @@ class DmxApp extends StatelessWidget {
     this.initialUrl,
   });
 
+  /// Global navigator key: lets widget deep links (`dmx://`) push screens
+  /// from a cold start (see [WidgetDeepLinkHandler]).
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
   final DatabaseService databaseService;
   final SettingsProvider settingsProvider;
   final DownloadProvider downloadProvider;
@@ -435,6 +444,7 @@ class DmxApp extends StatelessWidget {
           return MaterialApp(
             title: 'XDM - Download Manager X',
             debugShowCheckedModeBanner: false,
+            navigatorKey: DmxApp.navigatorKey,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: settings.currentThemeMode,

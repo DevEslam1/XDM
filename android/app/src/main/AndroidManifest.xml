@@ -76,6 +76,13 @@
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.torrent" />
             </intent-filter>
+            <!-- Smart launcher widget deep links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dmx" />
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -95,13 +102,25 @@
             android:name="id.flutter.flutter_background_service.IsolateService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
-        <receiver android:name=".DmxWidgetProvider" android:exported="true">
+        <receiver android:name=".widget.DMXWidgetProvider" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.example.dmx.UPDATE_WIDGETS" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/dmx_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.dmx.PAUSE_ALL" />
+                <action android:name="com.example.dmx.RESUME_ALL" />
+                <action android:name="com.example.dmx.TOGGLE_TASK" />
+            </intent-filter>
         </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
