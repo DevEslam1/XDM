@@ -22,6 +22,8 @@ import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/dmx_app_icon.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../browser/services/ad_blocker_service.dart';
+import '../../browser/services/custom_adblock_store.dart';
+import '../../../core/services/doh_resolver.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../provider/settings_provider.dart';
@@ -1272,6 +1274,60 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ),
                             ],
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _stagger(
+                    0.65,
+                    _ConsoleSection(
+                      index: '08b',
+                      title: L10n.isRtl(context)
+                          ? 'مضيفو حجب الإعلانات المخصصون'
+                          : 'CUSTOM AD-BLOCK HOSTS',
+                      accentColor:
+                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                      isDark: isDark,
+                      isExpanded: _expandedSections['custom_adblock'] ?? false,
+                      onToggle: () {
+                        triggerHaptic(settings);
+                        setState(() {
+                          _expandedSections['custom_adblock'] =
+                              !(_expandedSections['custom_adblock'] ?? false);
+                        });
+                      },
+                      children: [
+                        _CustomAdBlockModule(
+                          isDark: isDark,
+                          onRefresh: () => AdBlockerService.instance.refresh(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _stagger(
+                    0.655,
+                    _ConsoleSection(
+                      index: '08c',
+                      title: L10n.isRtl(context)
+                          ? 'إعدادات DNS المخصصة (DoH)'
+                          : 'CUSTOM DNS (DoH) SETTINGS',
+                      accentColor:
+                          isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                      isDark: isDark,
+                      isExpanded: _expandedSections['custom_dns'] ?? false,
+                      onToggle: () {
+                        triggerHaptic(settings);
+                        setState(() {
+                          _expandedSections['custom_dns'] =
+                              !(_expandedSections['custom_dns'] ?? false);
+                        });
+                      },
+                      children: [
+                        _CustomDnsModule(
+                          settings: settings,
+                          isDark: isDark,
                         ),
                       ],
                     ),
@@ -2664,6 +2720,365 @@ class _ContactTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CustomDnsModule extends StatefulWidget {
+  final SettingsProvider settings;
+  final bool isDark;
+
+  const _CustomDnsModule({
+    required this.settings,
+    required this.isDark,
+  });
+
+  @override
+  State<_CustomDnsModule> createState() => _CustomDnsModuleState();
+}
+
+class _CustomDnsModuleState extends State<_CustomDnsModule> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.settings.dnsProvider);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor =
+        widget.isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final isRtl = L10n.isRtl(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SwitchTile(
+          accentColor: accentColor,
+          title: isRtl ? 'تفعيل DNS المخصص (DoH)' : 'ENABLE CUSTOM DNS (DoH)',
+          subtitle: isRtl
+              ? 'تشفير طلبات DNS وتجاوز مزود الخدمة المحلي'
+              : 'Encrypt DNS queries and bypass local ISP resolvers',
+          value: widget.settings.dnsEnabled,
+          onChanged: (val) => widget.settings.setDnsEnabled(val),
+        ),
+        _Divider(isDark: widget.isDark),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _TextFieldTile(
+                accentColor: accentColor,
+                title: isRtl ? 'مزود DoH' : 'DoH PROVIDER',
+                subtitle: isRtl
+                    ? 'عنوان المضيف (مثلاً dns.adguard.com)'
+                    : 'Provider hostname (e.g. dns.adguard.com)',
+                controller: _controller,
+                onSubmitted: (val) => widget.settings.setDnsProvider(val),
+                onChanged: (val) => widget.settings.setDnsProvider(val),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _DnsChip(
+                    label: 'AdGuard',
+                    host: 'dns.adguard.com',
+                    selected: widget.settings.dnsProvider == 'dns.adguard.com',
+                    onTap: () {
+                      _controller.text = 'dns.adguard.com';
+                      widget.settings.setDnsProvider('dns.adguard.com');
+                      setState(() {});
+                    },
+                    isDark: widget.isDark,
+                  ),
+                  _DnsChip(
+                    label: 'Cloudflare',
+                    host: 'cloudflare-dns.com',
+                    selected:
+                        widget.settings.dnsProvider == 'cloudflare-dns.com',
+                    onTap: () {
+                      _controller.text = 'cloudflare-dns.com';
+                      widget.settings.setDnsProvider('cloudflare-dns.com');
+                      setState(() {});
+                    },
+                    isDark: widget.isDark,
+                  ),
+                  _DnsChip(
+                    label: 'Google',
+                    host: 'dns.google',
+                    selected: widget.settings.dnsProvider == 'dns.google',
+                    onTap: () {
+                      _controller.text = 'dns.google';
+                      widget.settings.setDnsProvider('dns.google');
+                      setState(() {});
+                    },
+                    isDark: widget.isDark,
+                  ),
+                  _DnsChip(
+                    label: 'Quad9',
+                    host: 'dns.quad9.net',
+                    selected: widget.settings.dnsProvider == 'dns.quad9.net',
+                    onTap: () {
+                      _controller.text = 'dns.quad9.net';
+                      widget.settings.setDnsProvider('dns.quad9.net');
+                      setState(() {});
+                    },
+                    isDark: widget.isDark,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              NeonGlowButton(
+                isFilled: false,
+                color: widget.isDark
+                    ? AppTheme.neonGreen
+                    : AppTheme.lightNeonGreen,
+                text: isRtl ? 'اختبار الاتصال' : 'TEST CONNECTION',
+                onPressed: () async {
+                  ThemedSnackbar.show(
+                    context,
+                    message: isRtl ? 'جاري اختبار الاتصال...' : 'Testing resolution...',
+                    color: accentColor,
+                    isDarkMode: widget.isDark,
+                    icon: Icons.sync,
+                  );
+                  final ip = await DohResolver.instance.resolve(
+                    'google.com',
+                    widget.settings.dnsProvider,
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    if (ip != null) {
+                      ThemedSnackbar.show(
+                        context,
+                        message: isRtl
+                            ? 'تم الاتصال! تم التحويل إلى $ip'
+                            : 'Success: Resolved to $ip',
+                        color: AppTheme.neonGreen,
+                        icon: Icons.check_circle_outline,
+                        isDarkMode: widget.isDark,
+                      );
+                    } else {
+                      ThemedSnackbar.show(
+                        context,
+                        message: isRtl
+                            ? 'فشل الاتصال عبر ${widget.settings.dnsProvider}'
+                            : 'Failed to resolve via ${widget.settings.dnsProvider}',
+                        color: AppTheme.neonRed,
+                        icon: Icons.error_outline,
+                        isDarkMode: widget.isDark,
+                      );
+                    }
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isRtl
+                    ? '* ينطبق هذا على التحميلات وتحديثات الفلاتر والمتصفح المدمج.'
+                    : '* This applies to downloads, filter updates, and the in-app browser.',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontFamily: 'Inter',
+                  color: widget.isDark
+                      ? AppTheme.textMuted
+                      : AppTheme.lightTextMuted,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DnsChip extends StatelessWidget {
+  final String label;
+  final String host;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool isDark;
+
+  const _DnsChip({
+    required this.label,
+    required this.host,
+    required this.selected,
+    required this.onTap,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    return ActionChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : color,
+          fontSize: 11,
+          fontFamily: 'Space Grotesk',
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      backgroundColor: selected
+          ? color
+          : (isDark ? AppTheme.surface : AppTheme.lightSurface),
+      side: BorderSide(color: color.withValues(alpha: 0.3)),
+      onPressed: onTap,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Custom Ad-Block Hosts Module
+// ─────────────────────────────────────────────────────────────
+class _CustomAdBlockModule extends StatefulWidget {
+  final bool isDark;
+  final VoidCallback onRefresh;
+
+  const _CustomAdBlockModule({
+    required this.isDark,
+    required this.onRefresh,
+  });
+
+  @override
+  State<_CustomAdBlockModule> createState() => _CustomAdBlockModuleState();
+}
+
+class _CustomAdBlockModuleState extends State<_CustomAdBlockModule> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = CustomAdBlockStore.instance;
+    final accentColor =
+        widget.isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+    final isRtl = L10n.isRtl(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SwitchTile(
+          accentColor: accentColor,
+          title: isRtl ? 'استخدام المضيفين المخصصين فقط' : 'USE CUSTOM ONLY',
+          subtitle: isRtl
+              ? 'تجاهل القوائم المحملة واستخدام المضيفين المذكورين أدناه فقط'
+              : 'Ignore downloaded lists and only use hosts listed below',
+          value: store.useCustomOnly,
+          onChanged: (val) async {
+            await store.setUseCustomOnly(val);
+            widget.onRefresh();
+            setState(() {});
+          },
+        ),
+        _Divider(isDark: widget.isDark),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _controller,
+                maxLines: 3,
+                style: TextStyle(
+                  color: widget.isDark
+                      ? AppTheme.textPrimary
+                      : AppTheme.lightTextPrimary,
+                  fontSize: 13,
+                  fontFamily: 'Inter',
+                ),
+                decoration: InputDecoration(
+                  hintText: isRtl
+                      ? 'أدخل النطاقات (فاصلة أو سطر جديد)...'
+                      : 'Enter domains (comma or newline separated)...',
+                  hintStyle: TextStyle(
+                    color: widget.isDark
+                        ? AppTheme.textMuted
+                        : AppTheme.lightTextMuted,
+                  ),
+                  filled: true,
+                  fillColor:
+                      widget.isDark ? AppTheme.surface : AppTheme.lightSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide:
+                        BorderSide(color: accentColor.withValues(alpha: 0.3)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: accentColor),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              NeonGlowButton(
+                color: accentColor,
+                text: isRtl ? 'إضافة المضيفين' : 'ADD HOSTS',
+                onPressed: () async {
+                  if (_controller.text.trim().isEmpty) return;
+                  await store.addHosts(_controller.text);
+                  _controller.clear();
+                  widget.onRefresh();
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+        ),
+        if (store.hosts.isNotEmpty) ...[
+          _Divider(isDark: widget.isDark),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 250),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: store.hosts.length,
+              itemBuilder: (context, index) {
+                final host = store.hosts.elementAt(index);
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    host,
+                    style: TextStyle(
+                      color: widget.isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontSize: 13,
+                      fontFamily: 'Space Grotesk',
+                    ),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    color: AppTheme.neonRed,
+                    onPressed: () async {
+                      await store.removeHost(host);
+                      widget.onRefresh();
+                      setState(() {});
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

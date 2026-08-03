@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'adblock_filter_updater.dart';
+import 'custom_adblock_store.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 /// Centralised ad-blocking engine for the XDM browser.
@@ -108,6 +109,7 @@ class AdBlockerService {
       _customRules
         ..clear()
         ..addAll(prefs.getStringList(_customRulesPrefKey) ?? []);
+      await CustomAdBlockStore.instance.init();
       await _updater.init();
       _refreshDomainCache();
       unawaited(_updater.updateIfNeeded().then((updated) {
@@ -123,9 +125,15 @@ class AdBlockerService {
 
   void _refreshDomainCache() {
     final set = <String>{};
-    set.addAll(_blockedDomains);
-    set.addAll(_updater.allBlockedDomains);
-    set.addAll(_updater.allTrackingDomains);
+    if (!CustomAdBlockStore.instance.useCustomOnly) {
+      set.addAll(_blockedDomains);
+      set.addAll(_updater.allBlockedDomains);
+      set.addAll(_updater.allTrackingDomains);
+    }
+    // We don't strictly NEED to add custom hosts to the cache if we check them
+    // separately in shouldBlockUrl, but adding them here makes the subdomain
+    // walk in shouldBlockUrl find them too.
+    set.addAll(CustomAdBlockStore.instance.hosts);
     _compiledDomainCache = set;
   }
 
@@ -153,12 +161,17 @@ class AdBlockerService {
     }
   }
 
-  AdBlockFilterUpdater get filterUpdater => _updater;
+  /// Refreshes the internal domain cache (e.g. after custom host changes).
+  void refresh() {
+    _refreshDomainCache();
+    _notifyListeners();
+  }
 
   int get ruleCount =>
       _blockedDomains.length +
       _updater.downloadedDomainCount +
-      _updater.downloadedTrackingCount;
+      _updater.downloadedTrackingCount +
+      CustomAdBlockStore.instance.hosts.length;
 
   Future<bool> updateFilters({bool force = true}) async {
     final res = await _updater.updateIfNeeded(force: force);
@@ -210,11 +223,15 @@ class AdBlockerService {
     final host = uri?.host ?? '';
     if (host.isEmpty) {
       // Fallback to substring match if URL can't be parsed
+      if (CustomAdBlockStore.instance.contains(lower)) return true;
       for (final domain in _compiledDomainCache) {
         if (lower.contains(domain)) return true;
       }
       return false;
     }
+
+    // Check custom store first
+    if (CustomAdBlockStore.instance.contains(host)) return true;
 
     // Fast-path subdomain walk check against compiled domain set
     var checkHost = host;
@@ -227,7 +244,7 @@ class AdBlockerService {
 
     // Check URL path patterns
     final path = Uri.tryParse(url)?.path ?? '';
-    if (path.isNotEmpty) {
+    if (path.isNotEmpty && !CustomAdBlockStore.instance.useCustomOnly) {
       for (final pattern in _updater.urlPatterns) {
         if (path.contains(pattern)) return true;
       }
@@ -350,7 +367,9 @@ class AdBlockerService {
       host = uri.host;
     } catch (_) {}
 
-    final dynamicRules = _updater.cosmeticRulesForHost(host);
+    final dynamicRules = CustomAdBlockStore.instance.useCustomOnly
+        ? <String>{}
+        : _updater.cosmeticRulesForHost(host);
     final custom = _customRules.join('\n');
     if (dynamicRules.isEmpty && custom.isEmpty) return _cssRules;
     final selectors = dynamicRules.take(2000).join(', ');

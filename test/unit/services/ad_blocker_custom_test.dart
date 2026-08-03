@@ -1,0 +1,48 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dmx/features/browser/services/ad_blocker_service.dart';
+import 'package:dmx/features/browser/services/custom_adblock_store.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('AdBlockerService with CustomAdBlockStore', () {
+    late AdBlockerService service;
+    late CustomAdBlockStore customStore;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      service = AdBlockerService.instance;
+      customStore = CustomAdBlockStore.instance;
+      await customStore.init();
+      await service.init();
+      
+      // Clear custom store state
+      for (var host in customStore.hosts.toList()) {
+        await customStore.removeHost(host);
+      }
+      await customStore.setUseCustomOnly(false);
+      service.refresh();
+    });
+
+    test('useCustomOnly correctly bypasses downloaded lists', () async {
+      // By default, it should have some blocked domains (static ones + downloaded if any)
+      expect(service.shouldBlockUrl('doubleclick.net'), isTrue);
+
+      await customStore.addHosts('my-custom-ad.com');
+      await customStore.setUseCustomOnly(true);
+      service.refresh();
+
+      // Should block custom one
+      expect(service.shouldBlockUrl('my-custom-ad.com'), isTrue);
+      
+      // Should NOT block standard ones anymore
+      expect(service.shouldBlockUrl('doubleclick.net'), isFalse);
+      
+      // Toggle back
+      await customStore.setUseCustomOnly(false);
+      service.refresh();
+      expect(service.shouldBlockUrl('doubleclick.net'), isTrue);
+    });
+  });
+}

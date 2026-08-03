@@ -1181,12 +1181,19 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
+    final parsed = Uri.tryParse(url);
+    final targetUrl = parsed != null ? parsed.toString() : url;
+
     setState(() {
       activeTab.isHome = false;
+      activeTab.url = targetUrl;
+      _urlController.text = targetUrl;
     });
-    final parsed = Uri.tryParse(url);
-    if (parsed != null) {
-      activeTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(parsed.toString())));
+
+    if (activeTab.controller != null) {
+      activeTab.controller?.loadUrl(
+        urlRequest: URLRequest(url: WebUri(targetUrl)),
+      );
     }
     _delayed(const Duration(milliseconds: 300), _updateNavState);
   }
@@ -3956,6 +3963,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                            onWebViewCreated: (controller) {
                                                              _configureController(tab, controller);
                                                              _hideWebViewFingerprints(tab);
+                                                             if (tab.url.isNotEmpty && tab.url != 'about:blank') { controller.loadUrl(urlRequest: URLRequest(url: WebUri(tab.url))); }
                                                            },
                                                            initialUserScripts: UnmodifiableListView<UserScript>([
                                                              UserScript(

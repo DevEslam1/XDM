@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:encrypt/encrypt.dart' as encrypt_lib;
-import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pointycastle/asymmetric/api.dart' show RSAPublicKey;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:logging/logging.dart';
 
 class UpdateInfo {
   final String latestVersion;
@@ -48,53 +48,100 @@ class UpdateService {
   static final UpdateService _instance = UpdateService._();
   factory UpdateService() => _instance;
 
+  // FIX(#5): Added structured logging
+  static final _log = Logger('UpdateService');
+  // FIX(#5): Secure storage instance for persisted public key
+  static const _secureStorage = FlutterSecureStorage();
+  // FIX(#5): Cached public key to avoid repeated storage reads
+  static String? _publicKeyPem;
+
   static const String kDefaultUpdateManifestUrl =
       'https://raw.githubusercontent.com/DevEslam1/XDM/main/version_manifest.json';
 
-  /// FIX(26): fallback sources for the update manifest, tried in order when
-  /// the primary source is unavailable.
   static const List<String> kUpdateManifestMirrors = [
     'https://cdn.jsdelivr.net/gh/DevEslam1/XDM@main/version_manifest.json',
   ];
 
-  /// FIX(26): PEM public key used to verify the manifest signature. This is a
-  /// placeholder — generate an RSA keypair, publish the public key here, and
-  /// sign `version_manifest.json` (canonical JSON without the `signature`
-  /// field) with the private key, embedding the base64 signature in the
-  /// manifest's `signature` field.
-  ///
-  /// Manifests WITHOUT a `signature` field are still accepted for backward
-  /// compatibility; once a real key is configured, signed manifests are
-  /// verified and forged/tampered ones are rejected.
-  static const String kUpdateManifestPublicKeyPem = '''
------BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyV1X9uWfC4h2+k+G+8rU
-7vY0Q1Z9Xw2M4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
-4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
-4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
-4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
-4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
-IDAQAB
------END PUBLIC KEY-----
-''';
+  // FIX(#5): Load public key from multiple secure sources in priority order
+  static Future<void> loadPublicKey() async {
+    if (_publicKeyPem != null) return;
+
+    // Priority 1: Compile-time define (Dart Environment)
+    const envKey = String.fromEnvironment('DMX_UPDATE_PUBLIC_KEY');
+    if (envKey.isNotEmpty) {
+      _publicKeyPem = envKey;
+      _log.info('Update signing key loaded from environment.');
+      return;
+    }
+
+    // Priority 2: Secure storage (Provisioned via provisionPublicKey)
+    try {
+      final storedKey = await _secureStorage.read(key: 'dmx_update_pub_key');
+      if (storedKey != null && storedKey.isNotEmpty) {
+        _publicKeyPem = storedKey;
+        _log.info('Update signing key loaded from secure storage.');
+        return;
+      }
+    } catch (e) {
+      _log.warning('Failed to read update key from secure storage: $e');
+    }
+
+    // Priority 3: No key available - FAIL CLOSED configuration
+    _log.warning(
+        'No update signing key configured. Updates will be rejected until a key is provisioned.');
+  }
+
+  // FIX(#5): Provision a new public key (admin only / first run)
+  static Future<bool> provisionPublicKey(String pem) async {
+    try {
+      // Validate it's a real RSA public key before storing
+      final parser = encrypt_lib.RSAKeyParser();
+      final key = parser.parse(pem);
+      if (key is! RSAPublicKey) {
+        _log.severe(
+            'Provisioning failed: Provided string is not an RSA public key.');
+        return false;
+      }
+
+      await _secureStorage.write(key: 'dmx_update_pub_key', value: pem);
+      _publicKeyPem = pem;
+      _log.info('New update signing key provisioned successfully.');
+      return true;
+    } catch (e) {
+      _log.severe('Key provisioning error: $e');
+      return false;
+    }
+  }
+
+  // FIX(#5): Defensive SHA-256 pinning check for manifest integrity
+  static bool _verifyManifestHash(String rawJson) {
+    const pinnedHash = String.fromEnvironment('DMX_UPDATE_MANIFEST_HASH');
+    if (pinnedHash.isEmpty) return true; // Pinning not configured
+
+    final actualHash = sha256.convert(utf8.encode(rawJson)).toString();
+    if (actualHash.toLowerCase() != pinnedHash.toLowerCase()) {
+      _log.severe('Manifest hash mismatch! Possible MITM or corruption.');
+      return false;
+    }
+    return true;
+  }
 
   /// Verifies an RSA-SHA256 signature over the canonical manifest JSON.
-  /// Returns true only if the signature matches the bundled public key.
+  /// Returns true only if the signature matches the loaded public key.
   static bool verifyManifestSignature(
     String canonicalJson,
     String signatureBase64,
   ) {
-    if (kUpdateManifestPublicKeyPem.trim().isEmpty) {
-      debugPrint(
-        '[UpdateService] No public key configured; rejecting signed manifest.',
-      );
+    // FIX(#5): FAIL CLOSED if no key is configured
+    if (_publicKeyPem == null || _publicKeyPem!.trim().isEmpty) {
+      _log.severe(
+          'Cannot verify manifest: no public key configured. Check rejected.');
       return false;
     }
+
     try {
       final parser = encrypt_lib.RSAKeyParser();
-      final publicKey = parser.parse(
-        kUpdateManifestPublicKeyPem,
-      ) as RSAPublicKey;
+      final publicKey = parser.parse(_publicKeyPem!) as RSAPublicKey;
       final signer = encrypt_lib.Signer(
         encrypt_lib.RSASigner(
           encrypt_lib.RSASignDigest.SHA256,
@@ -103,7 +150,7 @@ IDAQAB
       );
       return signer.verify64(canonicalJson, signatureBase64);
     } catch (e) {
-      debugPrint('[UpdateService] Manifest signature verification error: $e');
+      _log.severe('Manifest signature verification error: $e');
       return false;
     }
   }
@@ -111,6 +158,9 @@ IDAQAB
   /// Checks for an app update by downloading the update manifest JSON.
   /// Returns [UpdateInfo] if a newer version or mandatory update is available, null otherwise.
   Future<UpdateInfo?> checkForUpdate({String? manifestUrl}) async {
+    // FIX(#5): Ensure public key is loaded before proceeding
+    await loadPublicKey();
+
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 10),
@@ -127,33 +177,34 @@ IDAQAB
         try {
           final response = await dio.get<dynamic>(url);
           if (response.statusCode != 200 || response.data == null) continue;
-          final Map<String, dynamic> json;
+
+          final String rawData;
           if (response.data is String) {
-            json = Map<String, dynamic>.from(
-              jsonDecode(response.data as String),
-            );
-          } else if (response.data is Map) {
-            json = Map<String, dynamic>.from(response.data as Map);
+            rawData = response.data as String;
           } else {
+            rawData = jsonEncode(response.data);
+          }
+
+          // FIX(#5): Defense-in-depth hash pinning check
+          if (!_verifyManifestHash(rawData)) continue;
+
+          final Map<String, dynamic> json =
+              jsonDecode(rawData) as Map<String, dynamic>;
+
+          // FIX(#5): Enforce RSA signature check: manifests WITHOUT a valid signature are ALWAYS rejected.
+          final signature = json['signature'] as String?;
+          if (signature == null || signature.trim().isEmpty) {
+            _log.severe('Update manifest has no signature. Rejecting $url');
             continue;
           }
 
-          // Enforce RSA signature check: manifests without a valid signature are rejected.
-          final signature = json['signature'] as String?;
-          if (signature == null || signature.trim().isEmpty) {
-            debugPrint(
-              '[UpdateService] Update manifest has no signature. Rejecting $url',
-            );
-            continue;
-          }
           final canonical = jsonEncode(
             Map<String, dynamic>.from(json)..remove('signature'),
           );
+
           if (!verifyManifestSignature(canonical, signature.trim())) {
-            debugPrint(
-              '[UpdateService] Manifest signature invalid for $url; '
-              'trying next source.',
-            );
+            _log.severe(
+                'Manifest signature invalid for $url; rejecting version manifest.');
             continue;
           }
 
@@ -167,12 +218,12 @@ IDAQAB
           }
         } on DioException catch (e) {
           if (e.response?.statusCode == 404) {
-            debugPrint('[UpdateService] Update manifest not found (404): $url');
+            _log.warning('Update manifest not found (404): $url');
           } else {
-            debugPrint('[UpdateService] Failed to fetch manifest $url: $e');
+            _log.warning('Failed to fetch manifest $url: $e');
           }
         } catch (e) {
-          debugPrint('[UpdateService] Failed to check update from $url: $e');
+          _log.severe('Failed to check update from $url: $e');
         }
       }
     } finally {
@@ -217,9 +268,7 @@ IDAQAB
       if (expectedSize != null && expectedSize > 0) {
         final size = await apkFile.length();
         if (size != expectedSize) {
-          debugPrint(
-            '[UpdateService] File size mismatch: expected $expectedSize, got $size',
-          );
+          _log.warning('File size mismatch: expected $expectedSize, got $size');
           return false;
         }
       }
@@ -227,13 +276,13 @@ IDAQAB
       if (expectedSha256 != null && expectedSha256.trim().isNotEmpty) {
         final digest = await _computeSha256Streaming(apkFile);
         if (digest.toLowerCase() != expectedSha256.trim().toLowerCase()) {
-          debugPrint('[UpdateService] SHA256 mismatch');
+          _log.severe('SHA256 mismatch');
           return false;
         }
       }
       return true;
     } catch (e) {
-      debugPrint('[UpdateService] Integrity check error: $e');
+      _log.severe('Integrity check error: $e');
       return false;
     }
   }

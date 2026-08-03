@@ -10,6 +10,7 @@ import 'core/utils/url_utils.dart';
 import 'core/utils/constants.dart';
 import 'core/services/torrent_service.dart';
 import 'core/services/torrent_resume_store.dart';
+import 'core/http_overrides.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'core/app_theme.dart';
@@ -36,6 +37,7 @@ import 'core/services/frame_watchdog.dart';
 import 'core/services/power_monitor.dart';
 import 'core/services/protocol_cache.dart';
 import 'core/services/widget_deep_link.dart';
+import 'core/services/local_proxy_service.dart';
 
 class _ScreenObserver with WidgetsBindingObserver {
   @override
@@ -124,6 +126,10 @@ Future<void> main(List<String> args) async {
       final settingsProvider = SettingsProvider.instance;
       await settingsProvider.load();
       XdmBackendClient().refreshConfig();
+
+      // ── DoH Overrides ──
+      HttpOverrides.global = DohHttpOverrides(settingsProvider);
+      await LocalProxyService.instance.start();
 
       // ── Crash reporting: initializes Sentry when SENTRY_DSN is set ──
       // No-op otherwise; errors before this point go to the console logger.

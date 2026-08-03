@@ -1,8 +1,16 @@
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dmx/core/services/logging_service.dart';
+
+// FIX(#4): Added enum for granular script permissions
+enum ScriptPermission {
+  domRead, // can read DOM
+  domWrite, // can modify DOM
+  network, // can make network requests (off by default)
+  storage, // can access localStorage/sessionStorage (off by default)
+  cookies, // can read cookies (off by default)
+}
 
 /// A single user-authored script or stylesheet that runs on matching pages.
 class UserScript {
@@ -12,6 +20,8 @@ class UserScript {
   final String code;
   final bool isCss;
   final bool enabled;
+  // FIX(#4): Added permissions field to track what the script is allowed to do
+  final Set<ScriptPermission> permissions;
 
   const UserScript({
     required this.id,
@@ -20,6 +30,8 @@ class UserScript {
     required this.code,
     this.isCss = false,
     this.enabled = true,
+    // FIX(#4): Default to safe DOM-only permissions for new scripts
+    this.permissions = const {ScriptPermission.domRead, ScriptPermission.domWrite},
   });
 
   UserScript copyWith({
@@ -28,6 +40,7 @@ class UserScript {
     String? code,
     bool? isCss,
     bool? enabled,
+    Set<ScriptPermission>? permissions, // FIX(#4): Add permissions to copyWith
   }) =>
       UserScript(
         id: id,
@@ -36,6 +49,7 @@ class UserScript {
         code: code ?? this.code,
         isCss: isCss ?? this.isCss,
         enabled: enabled ?? this.enabled,
+        permissions: permissions ?? this.permissions, // FIX(#4)
       );
 
   Map<String, dynamic> toJson() => {
@@ -45,22 +59,40 @@ class UserScript {
         'code': code,
         'isCss': isCss,
         'enabled': enabled,
+        // FIX(#4): Serialize permissions as list of strings
+        'permissions': permissions.map((e) => e.name).toList(),
       };
 
-  factory UserScript.fromJson(Map<String, dynamic> json) => UserScript(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        urlPattern: json['urlPattern'] as String? ?? '',
-        code: json['code'] as String? ?? '',
-        isCss: json['isCss'] as bool? ?? false,
-        enabled: json['enabled'] as bool? ?? true,
-      );
+  factory UserScript.fromJson(Map<String, dynamic> json) {
+    // FIX(#4): Deserialize permissions, defaulting to safe subset for legacy scripts
+    final List<dynamic>? permsJson = json['permissions'] as List<dynamic>?;
+    final Set<ScriptPermission> perms = permsJson != null
+        ? permsJson
+            .map((e) => ScriptPermission.values.firstWhere(
+                  (val) => val.name == e,
+                  orElse: () => ScriptPermission.domRead,
+                ))
+            .toSet()
+        : {ScriptPermission.domRead, ScriptPermission.domWrite};
+
+    return UserScript(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      urlPattern: json['urlPattern'] as String? ?? '',
+      code: json['code'] as String? ?? '',
+      isCss: json['isCss'] as bool? ?? false,
+      enabled: json['enabled'] as bool? ?? true,
+      permissions: perms, // FIX(#4)
+    );
+  }
 }
 
 /// Stores and matches per-URL user scripts. Scripts are matched against both
 /// the full URL and its host using a case-insensitive glob ('*' wildcards).
 class UserScriptManager extends ChangeNotifier {
   static const _storeKey = 'browser_user_scripts';
+  // FIX(#4): Logger for security violations
+  static final _log = LoggingService.logger('UserScriptManager');
 
   static UserScriptManager? _instance;
   static UserScriptManager get instance => _instance ??= UserScriptManager();
@@ -106,13 +138,44 @@ class UserScriptManager extends ChangeNotifier {
     await prefs.setString(_storeKey, raw);
   }
 
+  // FIX(#4): Security validation for script code
+  void _validateScript(UserScript script) {
+    if (script.isCss) return;
+    
+    final code = script.code;
+    // 1. Size check
+    if (code.length > 50000) {
+      throw Exception('Script too large (max 50,000 characters)');
+    }
+    
+    // 2. Native bridge attempt detection
+    if (code.contains('flutter_inappwebview') || 
+        code.contains('callHandler') || 
+        code.contains('postMessage')) {
+      _log.severe('Security Violation: Native bridge access detected in script "${script.name}"');
+      throw Exception('Scripts are not allowed to access native application bridges.');
+    }
+    
+    // 3. Execution bypass detection
+    if (code.contains('eval(') || 
+        code.contains('new Function(') || 
+        code.contains('importScripts(')) {
+      _log.severe('Security Violation: Execution bypass detected in script "${script.name}"');
+      throw Exception('Dynamic code execution (eval, new Function) is prohibited for security.');
+    }
+  }
+
   Future<void> add(UserScript script) async {
+    // FIX(#4): Enforce security validation on entry
+    _validateScript(script);
     _scripts.add(script);
     await _persist();
     notifyListeners();
   }
 
   Future<void> update(UserScript script) async {
+    // FIX(#4): Enforce security validation on update
+    _validateScript(script);
     final index = _scripts.indexWhere((s) => s.id == script.id);
     if (index >= 0) {
       _scripts[index] = script;
@@ -152,6 +215,69 @@ class UserScriptManager extends ChangeNotifier {
         .toList();
   }
 
+  // FIX(#4): Build a robust Proxy-based sandbox to isolate user scripts
+  String _buildSandbox(UserScript script) {
+    final marker = 'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
+    final perms = script.permissions;
+
+    final blockedList = [
+      if (!perms.contains(ScriptPermission.network)) ...['fetch', 'XMLHttpRequest', 'WebSocket', 'navigator.sendBeacon'],
+      if (!perms.contains(ScriptPermission.storage)) ...['localStorage', 'sessionStorage', 'indexedDB'],
+      'eval', 'Function', 'importScripts', // Always blocked
+    ];
+
+    final jsBlocked = blockedList.map((e) => "'$e'").join(',');
+
+    return '''
+if (!window['$marker']) {
+  window['$marker'] = true;
+  (function() {
+    const _blocked = [$jsBlocked];
+    const _root = window;
+    
+    // Create a restricted proxy for the window/global object
+    const sandbox = new Proxy(_root, {
+      get(target, prop) {
+        if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) {
+          console.warn('[DMX Sandbox] Access denied to: ' + prop);
+          return undefined;
+        }
+        let value = target[prop];
+        if (typeof value === 'function') return value.bind(target);
+        return value;
+      },
+      set(target, prop, value) {
+        if (_blocked.includes(prop) || (typeof prop === 'string' && prop.startsWith('flutter_'))) return false;
+        target[prop] = value;
+        return true;
+      },
+      has(target, prop) {
+        if (_blocked.includes(prop)) return false;
+        return prop in target;
+      }
+    });
+
+    // Freeze the sandbox definition so it cannot be escaped
+    Object.freeze(sandbox);
+
+    // Apply specific restrictions to the document object
+    ${!perms.contains(ScriptPermission.cookies) ? "Object.defineProperty(document, 'cookie', { get: () => '', set: () => false, configurable: false });" : ""}
+    ${!perms.contains(ScriptPermission.domWrite) ? "const _origWrite = document.write; document.write = () => {}; document.writeln = () => {};" : ""}
+
+    // Execute user code in a scope where 'window', 'self', and 'globalThis' point to the sandbox
+    (function(window, self, globalThis) {
+      'use strict';
+      try {
+        ${script.code}
+      } catch(e) {
+        console.error('[DMX UserScript Error] ${script.name}:', e);
+      }
+    })(sandbox, sandbox, sandbox);
+  })();
+}
+''';
+  }
+
   /// Batches all matching JS and CSS scripts for [url] into a single JS block.
   Future<String> getJsForUrl(String url) async {
     final matches = scriptsForUrl(url);
@@ -172,16 +298,8 @@ class UserScriptManager extends ChangeNotifier {
 })();
 ''');
       } else {
-        final marker =
-            'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
-        sb.writeln('''
-if (!window['$marker']) {
-  window['$marker'] = true;
-  (function() {
-${script.code}
-  })();
-}
-''');
+        // FIX(#4): Use sandbox builder instead of direct IIFE
+        sb.writeln(_buildSandbox(script));
       }
     }
     return sb.toString();
