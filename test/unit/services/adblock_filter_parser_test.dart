@@ -36,7 +36,8 @@ void main() {
       final updater = AdBlockFilterUpdater();
       await updater.init();
 
-      final parsedDomains = await updater.parseFilterFile(file, FilterType.ads);
+      final result = await updater.parseFilterFile(file, FilterType.ads);
+      final parsedDomains = result.blocked.difference(result.excepted);
 
       // Verify domain blocking
       expect(parsedDomains.contains('example.com'), isTrue);
@@ -62,7 +63,8 @@ void main() {
       final updater = AdBlockFilterUpdater();
       await updater.init();
 
-      final parsedDomains = await updater.parseFilterFile(file, FilterType.ads);
+      final result = await updater.parseFilterFile(file, FilterType.ads);
+      final parsedDomains = result.blocked.difference(result.excepted);
 
       // Since the exception rule comes after (or gets processed), the domain should be removed/absent
       expect(parsedDomains.contains('block-me.com'), isFalse);

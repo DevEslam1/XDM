@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -57,7 +58,8 @@ class AdBlockFilterUpdater {
   static const _maxLineLength = 500;
 
   static const _patternsKey = 'adblock_url_patterns';
-  static const _cosmeticKey = 'adblock_cosmetic_rules';
+  static const _cosmeticKey = 'adblock_cosmetic_rules_v2';
+  static const _siteCosmeticKey = 'adblock_site_cosmetic_rules_v2';
   static const _scriptletsKey = 'adblock_scriptlet_rules';
 
   bool _initialized = false;
@@ -65,6 +67,7 @@ class AdBlockFilterUpdater {
   Set<String> _downloadedTrackingDomains = {};
   final Set<String> _urlPatterns = {};
   final Set<String> _cosmeticRules = {};
+  final Map<String, Set<String>> _siteCosmeticRules = {};
   final Set<String> _scriptletRules = {};
 
   Set<String> get allBlockedDomains => _downloadedDomains;
@@ -91,6 +94,19 @@ class AdBlockFilterUpdater {
     _urlPatterns.addAll(cachedPatterns);
     _cosmeticRules.addAll(cachedCosmetics);
     _scriptletRules.addAll(cachedScriptlets);
+
+    final siteCosmeticsStr = prefs.getString(_siteCosmeticKey);
+    if (siteCosmeticsStr != null) {
+      try {
+        final decoded = jsonDecode(siteCosmeticsStr) as Map<String, dynamic>;
+        for (final entry in decoded.entries) {
+          final rules = (entry.value as List).cast<String>();
+          _siteCosmeticRules[entry.key] = rules.toSet();
+        }
+      } catch (e) {
+        _log.warning('Failed to load site cosmetic rules', e);
+      }
+    }
   }
 
   Future<bool> updateIfNeeded({bool force = false}) async {
@@ -130,9 +146,8 @@ class AdBlockFilterUpdater {
       ),
     );
 
+    final prefs = await SharedPreferences.getInstance();
     final tempDir = await getTemporaryDirectory();
-    final newAds = <String>{};
-    final newTracking = <String>{};
 
     for (final source in _sources) {
       try {
@@ -140,30 +155,49 @@ class AdBlockFilterUpdater {
         await dio.download(source.url, tempPath);
 
         final file = File(tempPath);
-        final domains = await _parseFilterFile(file, source.type);
+        final result = await _parseFilterFile(file, source.type);
 
-        if (source.type == FilterType.ads) {
-          newAds.addAll(domains);
-        } else {
-          newTracking.addAll(domains);
-        }
+        // Save successfully parsed sets for this specific source
+        await prefs.setStringList(
+          'adblock_domains_blocked_${source.name}',
+          result.blocked.toList(),
+        );
+        await prefs.setStringList(
+          'adblock_domains_excepted_${source.name}',
+          result.excepted.toList(),
+        );
 
         if (await file.exists()) {
           await file.delete();
         }
       } catch (e) {
-        _log.warning('Failed to download ${source.name}', e);
+        _log.warning('Failed to download or parse source ${source.name}', e);
       }
     }
 
-    if (newAds.isNotEmpty) {
-      _downloadedDomains = newAds;
-    }
-    if (newTracking.isNotEmpty) {
-      _downloadedTrackingDomains = newTracking;
+    // Now re-combine all cached source sets (using whatever currently exists in cache)
+    final combinedAds = <String>{};
+    final combinedTracking = <String>{};
+    final combinedAdsExceptions = <String>{};
+    final combinedTrackingExceptions = <String>{};
+
+    for (final source in _sources) {
+      final blocked = prefs.getStringList('adblock_domains_blocked_${source.name}') ?? [];
+      final excepted = prefs.getStringList('adblock_domains_excepted_${source.name}') ?? [];
+
+      if (source.type == FilterType.ads) {
+        combinedAds.addAll(blocked);
+        combinedAdsExceptions.addAll(excepted);
+      } else {
+        combinedTracking.addAll(blocked);
+        combinedTrackingExceptions.addAll(excepted);
+      }
     }
 
-    final prefs = await SharedPreferences.getInstance();
+    _downloadedDomains = combinedAds.difference(combinedAdsExceptions);
+    _downloadedTrackingDomains = combinedTracking.difference(combinedTrackingExceptions);
+
+    // Save final merged sets
     await prefs.setStringList(
       '${_domainsKey}_ads',
       _downloadedDomains.take(_maxDomains).toList(),
@@ -180,18 +214,24 @@ class AdBlockFilterUpdater {
       _cosmeticKey,
       _cosmeticRules.take(5000).toList(),
     );
+
+    // Save site-cosmetic rules map to preferences
+    final siteCosmeticsJson = jsonEncode(_siteCosmeticRules.map((k, v) => MapEntry(k, v.toList())));
+    await prefs.setString(_siteCosmeticKey, siteCosmeticsJson);
+
     await prefs.setStringList(
       _scriptletsKey,
       _scriptletRules.take(1000).toList(),
     );
   }
 
-  Future<Set<String>> _parseFilterFile(File file, FilterType type) async {
-    final domains = <String>{};
+  Future<({Set<String> blocked, Set<String> excepted})> _parseFilterFile(File file, FilterType type) async {
+    final blocked = <String>{};
+    final excepted = <String>{};
     final lines = await file.readAsLines();
 
     for (final line in lines) {
-      if (domains.length >= _maxDomains) break;
+      if (blocked.length >= _maxDomains) break;
       if (line.isEmpty || line.length > _maxLineLength) continue;
 
       // Comments (ABP format uses !, hosts/plain lists use #)
@@ -210,7 +250,7 @@ class AdBlockFilterUpdater {
           r'^\|\|([a-zA-Z0-9.-]+)\^',
         ).firstMatch(inner);
         if (domainMatch != null) {
-          domains.remove(domainMatch.group(1)!.toLowerCase());
+          excepted.add(domainMatch.group(1)!.toLowerCase());
         }
         continue;
       }
@@ -232,11 +272,18 @@ class AdBlockFilterUpdater {
       // Cosmetic rules: ##.ad-container, ###sidebar-ad, site.com##.ad
       if (line.contains('##')) {
         final parts = line.split('##');
-        // Handle generic and site-specific cosmetic rules
-        // For site-specific (part[0] is domain), we strip domain for now
-        // to treat them as generic, but in the future we could filter them.
         if (parts.length == 2 && parts[1].isNotEmpty && parts[1].length < 100) {
-          _cosmeticRules.add(parts[1]);
+          final selector = parts[1];
+          if (parts[0].isEmpty) {
+            _cosmeticRules.add(selector);
+          } else {
+            final domainsList = parts[0].split(',');
+            for (var domain in domainsList) {
+              domain = domain.trim().toLowerCase();
+              if (domain.isEmpty || domain.startsWith('~')) continue;
+              _siteCosmeticRules.putIfAbsent(domain, () => {}).add(selector);
+            }
+          }
         }
         continue;
       }
@@ -248,7 +295,7 @@ class AdBlockFilterUpdater {
       if (domainMatch != null) {
         final domain = domainMatch.group(1)!.toLowerCase();
         if (domain.contains('.') && !domain.startsWith('.')) {
-          domains.add(domain);
+          blocked.add(domain);
         }
         continue;
       }
@@ -260,7 +307,7 @@ class AdBlockFilterUpdater {
           .hasMatch(trimmed)) {
         final domain = trimmed.toLowerCase();
         if (!domain.startsWith('.')) {
-          domains.add(domain);
+          blocked.add(domain);
         }
         continue;
       }
@@ -271,11 +318,11 @@ class AdBlockFilterUpdater {
       }
     }
 
-    return domains;
+    return (blocked: blocked, excepted: excepted);
   }
 
   @visibleForTesting
-  Future<Set<String>> parseFilterFile(File file, FilterType type) =>
+  Future<({Set<String> blocked, Set<String> excepted})> parseFilterFile(File file, FilterType type) =>
       _parseFilterFile(file, type);
 
   bool shouldBlock(String hostname) {
@@ -291,6 +338,25 @@ class AdBlockFilterUpdater {
       if (_downloadedTrackingDomains.contains(parent)) return true;
     }
     return false;
+  }
+
+  Set<String> cosmeticRulesForHost(String host) {
+    final rules = <String>{}..addAll(_cosmeticRules);
+    if (host.isEmpty) return rules;
+
+    final lowerHost = host.toLowerCase();
+    if (_siteCosmeticRules.containsKey(lowerHost)) {
+      rules.addAll(_siteCosmeticRules[lowerHost]!);
+    }
+
+    final parts = lowerHost.split('.');
+    for (var i = 1; i < parts.length - 1; i++) {
+      final parent = parts.sublist(i).join('.');
+      if (_siteCosmeticRules.containsKey(parent)) {
+        rules.addAll(_siteCosmeticRules[parent]!);
+      }
+    }
+    return rules;
   }
 
   Future<DateTime?> getLastUpdateTime() async {
@@ -315,9 +381,16 @@ class AdBlockFilterUpdater {
   Future<void> clearDownloadedDomains() async {
     _downloadedDomains.clear();
     _downloadedTrackingDomains.clear();
+    _siteCosmeticRules.clear();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('${_domainsKey}_ads');
     await prefs.remove('${_domainsKey}_tracking');
+    await prefs.remove(_cosmeticKey);
+    await prefs.remove(_siteCosmeticKey);
+    for (final source in _sources) {
+      await prefs.remove('adblock_domains_blocked_${source.name}');
+      await prefs.remove('adblock_domains_excepted_${source.name}');
+    }
     await prefs.remove(_lastUpdateKey);
   }
 }

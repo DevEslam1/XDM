@@ -404,6 +404,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   @override
   void initState() {
     super.initState();
+    _adBlocker.addListener(_updateAdBlockSettings);
     WidgetsBinding.instance.addObserver(this);
     _focusNode.addListener(() {
       setState(() {
@@ -423,6 +424,23 @@ class _BrowserScreenState extends State<BrowserScreen>
     _loadSnifferPref();
     _loadCustomJsCss();
     UserScriptManager.instance.load();
+  }
+
+  Future<void> _updateAdBlockSettings() async {
+    if (!mounted) return;
+    for (final tab in _tabs) {
+      if (tab.controller != null) {
+        try {
+          await tab.controller!.setSettings(
+            settings: InAppWebViewSettings(
+              contentBlockers: _adBlocker.contentBlockers,
+            ),
+          );
+        } catch (e) {
+          debugPrint('[Browser] Failed to update settings for tab ${tab.id}: $e');
+        }
+      }
+    }
     _dashboardScrollController.addListener(_onDashboardScroll);
     _adBlocker.init();
     _redirectGuard.init();
@@ -1122,6 +1140,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   @override
   void dispose() {
+    _adBlocker.removeListener(_updateAdBlockSettings);
     _inactivityTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     for (final timer in _loadingTimeoutTimers.values) {
@@ -4232,6 +4251,7 @@ ${script.code}
                                                              allowsInlineMediaPlayback: true,
                                                              mediaPlaybackRequiresUserGesture: false,
                                                              supportZoom: settings.desktopMode || settings.pinchToZoom,
+                                                             contentBlockers: _adBlocker.contentBlockers,
                                                            ),
                                                            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
                                                              Factory<VerticalDragGestureRecognizer>(

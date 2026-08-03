@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'adblock_filter_updater.dart';
@@ -42,6 +43,19 @@ class AdBlockerService {
     return blockers;
   }
 
+  final List<VoidCallback> _listeners = [];
+  void addListener(VoidCallback listener) => _listeners.add(listener);
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+  void _notifyListeners() {
+    for (final listener in List<VoidCallback>.from(_listeners)) {
+      try {
+        listener();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
   static const String _prefKey = 'adBlockerEnabled';
   static const String _customRulesPrefKey = 'adBlockerCustomRules';
   bool _enabled = true;
@@ -51,6 +65,11 @@ class AdBlockerService {
   Set<String> _compiledDomainCache = {};
 
   bool get isEnabled => _enabled;
+
+  String get dynamicDomainsJson {
+    final subset = _compiledDomainCache.take(2000).toList();
+    return jsonEncode(subset);
+  }
 
   /// User-added cosmetic rules (e.g. from the element picker), persisted.
   List<String> get customRules => List.unmodifiable(_customRules);
@@ -65,7 +84,10 @@ class AdBlockerService {
       await _updater.init();
       _refreshDomainCache();
       unawaited(_updater.updateIfNeeded().then((updated) {
-        if (updated) _refreshDomainCache();
+        if (updated) {
+          _refreshDomainCache();
+          _notifyListeners();
+        }
       }));
     } catch (e) {
       debugPrint('[AdBlocker] init error: $e');
@@ -113,12 +135,16 @@ class AdBlockerService {
 
   Future<bool> updateFilters({bool force = true}) async {
     final res = await _updater.updateIfNeeded(force: force);
-    if (res) _refreshDomainCache();
+    if (res) {
+      _refreshDomainCache();
+      _notifyListeners();
+    }
     return res;
   }
 
   Future<void> setEnabled(bool value) async {
     _enabled = value;
+    _notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefKey, value);
@@ -287,8 +313,17 @@ class AdBlockerService {
   /// CSS injected on every page load to hide known ad elements.
   /// Uses `visibility:hidden` instead of `display:none` so bait elements
   /// retain their layout dimensions — avoiding JS-based detection.
-  String get cssRules {
-    final dynamicRules = _updater.cosmeticRules;
+  @Deprecated('Use cssRulesForUrl(url) instead')
+  String get cssRules => cssRulesForUrl('');
+
+  String cssRulesForUrl(String url) {
+    String host = '';
+    try {
+      final uri = Uri.parse(url);
+      host = uri.host;
+    } catch (_) {}
+
+    final dynamicRules = _updater.cosmeticRulesForHost(host);
     final custom = _customRules.join('\n');
     if (dynamicRules.isEmpty && custom.isEmpty) return _cssRules;
     final selectors = dynamicRules.take(2000).join(', ');
@@ -429,6 +464,11 @@ body {
     if (!value || typeof value !== 'string') return false;
     var v = value.toLowerCase();
     if (v.indexOf('recaptcha') !== -1 || v.indexOf('gstatic.com') !== -1) return false;
+    if (window.__xdmDynamicAdDomains && Array.isArray(window.__xdmDynamicAdDomains)) {
+      for (var i = 0; i < window.__xdmDynamicAdDomains.length; i++) {
+        if (v.indexOf(window.__xdmDynamicAdDomains[i]) !== -1) return true;
+      }
+    }
     for (var i = 0; i < _adDomains.length; i++) {
       if (v.indexOf(_adDomains[i]) !== -1) return true;
     }
@@ -829,6 +869,11 @@ body {
       var u = url.toLowerCase();
       if (u.indexOf('recaptcha') !== -1 || u.indexOf('gstatic.com') !== -1 ||
           u.indexOf('accounts.google.com') !== -1) return false;
+      if (window.__xdmDynamicAdDomains && Array.isArray(window.__xdmDynamicAdDomains)) {
+        for (var i = 0; i < window.__xdmDynamicAdDomains.length; i++) {
+          if (u.indexOf(window.__xdmDynamicAdDomains[i]) !== -1) return true;
+        }
+      }
       for (var i = 0; i < _adDF.length; i++) { if (u.indexOf(_adDF[i]) !== -1) return true; }
       return false;
     }

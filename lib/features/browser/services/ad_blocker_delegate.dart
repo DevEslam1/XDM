@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../models/browser_tab.dart';
 import 'ad_blocker_service.dart';
@@ -26,6 +28,13 @@ class AdBlockerDelegate {
 
   List<String> get customRules => _adBlocker.customRules;
 
+  List<ContentBlocker> get contentBlockers => _adBlocker.contentBlockers;
+
+  String get dynamicDomainsJson => _adBlocker.dynamicDomainsJson;
+
+  void addListener(VoidCallback listener) => _adBlocker.addListener(listener);
+  void removeListener(VoidCallback listener) => _adBlocker.removeListener(listener);
+
   Future<void> init() => _adBlocker.init();
 
   Future<void> setEnabled(bool value) => _adBlocker.setEnabled(value);
@@ -47,9 +56,11 @@ class AdBlockerDelegate {
   /// script runs.
   void injectAntiDetect(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
+    
+    final setupScript = 'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
 
     // Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO
-    tab.controller?.evaluateJavascript(source: _adBlocker.antiDetectJs).catchError((e, st) =>
+    tab.controller?.evaluateJavascript(source: '$setupScript\n${_adBlocker.antiDetectJs}').catchError((e, st) =>
         _log.warning('[ad_blocker_delegate] antiDetectJs failed', e, st));
 
     // Anti-detect CSS: keeps bait elements measurable but invisible.
@@ -91,16 +102,19 @@ class AdBlockerDelegate {
   /// Always call `injectAntiDetect` before this.
   void injectEarly(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
-    tab.controller?.evaluateJavascript(source: _adBlocker.earlyJs).catchError(
+    final setupScript = 'window.__xdmDynamicAdDomains = ${_adBlocker.dynamicDomainsJson};';
+    tab.controller?.evaluateJavascript(source: '$setupScript\n${_adBlocker.earlyJs}').catchError(
         (e, st) => _log.warning('[ad_blocker_delegate] earlyJs failed', e, st));
   }
+
+  String cssRulesForUrl(String url) => _adBlocker.cssRulesForUrl(url);
 
   /// Injects cosmetic CSS + late-phase scripts (call from `onPageFinished`).
   void injectInto(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
     final url = tab.url;
 
-    final cssJson = jsonEncode(_adBlocker.cssRules);
+    final cssJson = jsonEncode(cssRulesForUrl(url));
     tab.controller?.evaluateJavascript(source: '''
       (function() {
         var s = document.getElementById('xdm-adblock-css');
