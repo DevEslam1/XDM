@@ -297,6 +297,10 @@ class DownloadProvider extends ChangeNotifier
   void providerNotifyListeners() => notifyListeners();
 
   @override
+  void pushProgressTick(String taskId, double progress, double speed) =>
+      _pushTick(taskId, progress, speed);
+
+  @override
   void providerStartWidgetTimer() => _startWidgetTimer();
 
   // ---------------------------------------------------------------------------
@@ -445,6 +449,7 @@ class DownloadProvider extends ChangeNotifier
     }
 
     final targetSize = fileState.targetSize;
+    int videoBytes = 0;
 
     if (task.threadCount > 1) {
       if (fileState.stateContent != null) {
@@ -471,12 +476,12 @@ class DownloadProvider extends ChangeNotifier
             }
 
             final totalInt = total.toInt();
-            return totalInt > targetSize ? targetSize : totalInt;
+            videoBytes = totalInt > targetSize ? targetSize : totalInt;
+          } else {
+            videoBytes = task.downloadedBytes > 0
+                ? task.downloadedBytes.clamp(0, targetSize)
+                : 0;
           }
-
-          return task.downloadedBytes > 0
-              ? task.downloadedBytes.clamp(0, targetSize)
-              : 0;
         } catch (e) {
           // State file corrupted — fall back to actual file size on disk
           debugPrint('[DMX] .dmxstate corrupted for ${task.id}, '
@@ -484,25 +489,35 @@ class DownloadProvider extends ChangeNotifier
           try {
             final partFile = File(task.tempFilePath);
             if (await partFile.exists()) {
-              return await partFile.length();
+              videoBytes = await partFile.length();
             }
           } catch (_) {}
-          return 0;
         }
+      } else {
+        // Multi-threaded: partial file may be pre-allocated to full size.
+        // Without .dmxstate, the file size is meaningless as progress.
+        videoBytes = task.downloadedBytes > 0
+            ? task.downloadedBytes.clamp(0, targetSize)
+            : 0;
       }
-
-      // Multi-threaded: partial file may be pre-allocated to full size.
-      // Without .dmxstate, the file size is meaningless as progress.
-      return task.downloadedBytes > 0
-          ? task.downloadedBytes.clamp(0, targetSize)
-          : 0;
+    } else {
+      if (task.downloadedBytes > 0 && task.downloadedBytes <= targetSize) {
+        videoBytes = task.downloadedBytes;
+      } else {
+        videoBytes = targetSize;
+      }
     }
 
-    if (task.downloadedBytes > 0 && task.downloadedBytes <= targetSize) {
-      return task.downloadedBytes;
+    int audioBytes = 0;
+    if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+      final audioPath = '${task.tempFilePath}.audio';
+      final audioState = await _statPartialFileIsolate(audioPath);
+      if (audioState.exists) {
+        audioBytes = audioState.targetSize;
+      }
     }
 
-    return targetSize;
+    return videoBytes + audioBytes;
   }
 
   Future<DownloadTask> _reconcilePartialProgress(DownloadTask task) async {

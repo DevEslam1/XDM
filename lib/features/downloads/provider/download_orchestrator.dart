@@ -92,6 +92,7 @@ abstract class DownloadOrchestratorHost {
   void providerStartWidgetTimer();
   void providerStopWidgetTimer();
   void providerNotifyListeners();
+  void pushProgressTick(String taskId, double progress, double speed);
   List<Map<String, dynamic>> markTorrentFilesCompleted(
     List<Map<String, dynamic>> files,
   );
@@ -818,7 +819,8 @@ class DownloadOrchestrator {
           videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
       final totalSize = effectiveVideoSize + audioContribution;
       final totalDownloaded =
-          max(base.downloadedBytes, audioBytesSoFar + videoBytesSoFar);
+          max(base.downloadedBytes, audioBytesSoFar + videoBytesSoFar)
+              .clamp(0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
       final instantSpeed = audioSpeedNow + videoSpeedNow;
       final speedQueue = _host.speedHistories[task.id];
       if (speedQueue != null) {
@@ -858,7 +860,10 @@ class DownloadOrchestrator {
         chunks: chunksOverride ?? base.chunks,
         supportsResume: supportsResumeOverride ?? base.supportsResume,
         torrentFiles: torrentFilesOverride ?? base.torrentFiles,
-        statusMessage: statusMessageOverride,
+        statusMessage: (statusMessageOverride == 'Completed' && hasAudio)
+            ? null
+            : statusMessageOverride,
+        clearStatusMessage: (statusMessageOverride == 'Completed' && hasAudio),
       );
 
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -866,6 +871,7 @@ class DownloadOrchestrator {
       if (now - lastUpdate >= 250) {
         _host.lastProgressUpdateTimes[task.id] = now;
         _host.providerTasks[index] = updated;
+        _host.pushProgressTick(task.id, updated.progress, updated.speed);
         _host.providerNotifyListeners();
 
         final progressPercent = totalSize > 0
@@ -882,6 +888,7 @@ class DownloadOrchestrator {
         unawaited(BackgroundService.sendHeartbeat());
       } else {
         _host.providerTasks[index] = updated;
+        _host.pushProgressTick(task.id, updated.progress, updated.speed);
         _host.pendingProgressUpdates.add(task.id);
       }
     }

@@ -1,20 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Neon linear progress bar -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Track -->
     <item android:id="@android:id/background">
         <shape>
-            <solid android:color="#1E1E2E" />
-            <corners android:radius="3dp" />
+            <solid android:color="#1A2330" />
+            <corners android:radius="4dp" />
         </shape>
     </item>
+    <!-- Progress fill with gradient -->
     <item android:id="@android:id/progress">
         <clip>
             <shape>
                 <gradient
                     android:startColor="#00D4FF"
-                    android:endColor="#00FF88"
+                    android:centerColor="#00FF88"
+                    android:endColor="#00D4FF"
                     android:angle="0" />
-                <corners android:radius="3dp" />
+                <corners android:radius="4dp" />
             </shape>
         </clip>
     </item>

@@ -4,11 +4,8 @@ import WidgetKit
 struct XDMMediumWidgetView: View {
     var entry: XDMWidgetEntry
 
-    @State private var activeTab: String = "downloading"
-
     private var currentTabTasks: [WidgetTaskSummaryItem] {
-        let selected = entry.selectedTab
-        if selected == "completed" {
+        if entry.selectedTab == "completed" {
             return entry.tasks.filter { $0.status == "completed" }
         } else {
             return entry.tasks.filter { $0.status != "completed" }
@@ -25,163 +22,291 @@ struct XDMMediumWidgetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // 2-Tab Header Bar
-            HStack(spacing: 8) {
-                // Downloading Tab button
-                Link(destination: URL(string: "dmx://downloads")!) {
-                    HStack(spacing: 4) {
-                        Text("DOWNLOADING (\(activeCount))")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(entry.selectedTab != "completed" ? Color(red: 59/255, green: 130/255, blue: 246/255) : Color(red: 154/255, green: 163/255, blue: 181/255))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(entry.selectedTab != "completed" ? Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.18) : Color.clear)
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(entry.selectedTab != "completed" ? Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.4) : Color(red: 30/255, green: 35/255, blue: 48/255), lineWidth: 0.8)
+            // ── Header: Tabs + Speed ──
+            HStack(spacing: 6) {
+                // Tab pills
+                HStack(spacing: 4) {
+                    TabPill(
+                        label: "DL (\(activeCount))",
+                        isActive: entry.selectedTab != "completed",
+                        color: .blue,
+                        url: "dmx://downloads"
                     )
-                }
-
-                // Completed Tab button
-                Link(destination: URL(string: "dmx://downloads")!) {
-                    HStack(spacing: 4) {
-                        Text("COMPLETED (\(completedCount))")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(entry.selectedTab == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 154/255, green: 163/255, blue: 181/255))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(entry.selectedTab == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.18) : Color.clear)
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(entry.selectedTab == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.4) : Color(red: 30/255, green: 35/255, blue: 48/255), lineWidth: 0.8)
+                    TabPill(
+                        label: "DONE (\(completedCount))",
+                        isActive: entry.selectedTab == "completed",
+                        color: .green,
+                        url: "dmx://downloads"
                     )
                 }
 
                 Spacer()
 
-                // Total Speed
+                // Total speed badge
                 if entry.totalSpeedBytesPerSec > 0 {
-                    Text(XDMWidgetDataLoader.formatSpeed(entry.totalSpeedBytesPerSec))
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.green)
+                        Text(XDMWidgetDataLoader.formatSpeed(entry.totalSpeedBytesPerSec))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.green)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.green.opacity(0.1))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.green.opacity(0.3), lineWidth: 0.5))
                 }
             }
 
-            Spacer()
+            // ── Failure banner ──
+            if entry.hasFailures && entry.selectedTab != "completed" {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 8))
+                    Text("\(entry.failedCount) download\(entry.failedCount == 1 ? "" : "s") failed")
+                        .font(.system(size: 8, weight: .bold))
+                    Spacer()
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.red.opacity(0.85))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
 
-            // Task List (up to 2 visible rows)
+            Spacer(minLength: 0)
+
+            // ── Task Rows (up to 2) ──
             let visibleTasks = Array(currentTabTasks.prefix(2))
             if !visibleTasks.isEmpty {
-                VStack(spacing: 6) {
+                VStack(spacing: 5) {
                     ForEach(visibleTasks) { task in
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 6) {
-                                    // Category Tag
-                                    Text(formatCategory(task))
-                                        .font(.system(size: 8, weight: .bold))
-                                        .foregroundColor(Color(red: 139/255, green: 92/255, blue: 246/255))
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(Color(red: 139/255, green: 92/255, blue: 246/255).opacity(0.18))
-                                        .cornerRadius(4)
-
-                                    // Filename
-                                    Text(task.fileName)
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .lineLimit(1)
-                                        .foregroundColor(Color(red: 242/255, green: 244/255, blue: 248/255))
-                                }
-
-                                HStack(spacing: 6) {
-                                    ProgressView(value: task.status == "completed" ? 1.0 : task.progress)
-                                        .tint(task.status == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255))
-
-                                    Text(task.status == "completed" ? XDMWidgetDataLoader.formatBytes(task.fileSizeBytes) : "\(Int(task.progress * 100))%")
-                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                                }
-                            }
-
-                            // Interactive per-item Action Button (Pause/Play/Open)
-                            if task.status == "completed" {
-                                Link(destination: URL(string: "dmx://open/\(task.id)")!) {
-                                    Text("OPEN")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 5)
-                                        .background(Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.18))
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke(Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.4), lineWidth: 0.8)
-                                        )
-                                }
-                            } else {
-                                let isPaused = task.status == "paused" || task.status == "failed"
-                                Link(destination: URL(string: "dmx://toggle/\(task.id)")!) {
-                                    Text(isPaused ? "▶" : "❚❚")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 5)
-                                        .background((isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255)).opacity(0.18))
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke((isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255)).opacity(0.4), lineWidth: 0.8)
-                                        )
-                                }
-                            }
-                        }
+                        MediumTaskRow(task: task)
                     }
                 }
             } else {
                 VStack(spacing: 4) {
-                    Text("ALL CLEAR")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                    Image(systemName: "tray")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.gray.opacity(0.5))
                     Text(entry.selectedTab == "completed" ? "No completed downloads" : "No active downloads")
                         .font(.system(size: 10))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.gray)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // Footer
+            // ── Footer: Storage + Wifi ──
             HStack {
-                Text("\(activeCount) active · \(completedCount) completed")
-                    .font(.system(size: 8))
-                    .foregroundColor(.secondary)
+                if entry.totalActiveCount > 0 {
+                    HStack(spacing: 3) {
+                        Circle().fill(.blue).frame(width: 4, height: 4)
+                        Text("\(entry.totalActiveCount) active")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.gray)
+                    }
+                }
 
                 Spacer()
+
+                if entry.isOnWifi {
+                    Image(systemName: "wifi")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.blue.opacity(0.6))
+                }
 
                 if entry.availableStorageBytes >= 0 {
                     Text("\(XDMWidgetDataLoader.formatBytes(entry.availableStorageBytes)) free")
                         .font(.system(size: 8))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(entry.isStorageLow ? .orange : .gray)
                 }
             }
         }
         .padding(12)
-        .background(Color(red: 15/255, green: 17/255, blue: 23/255))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.24), lineWidth: 1.2)
-        )
+        .background(widgetBackground)
     }
 
-    private func formatCategory(_ task: WidgetTaskSummaryItem) -> String {
-        if task.isTorrent { return "TORRENT" }
-        if task.isAppUpdate { return "UPDATE" }
-        let cat = task.category.uppercased()
-        return cat.isEmpty || cat == "OTHER" ? "FILE" : cat
+    private var widgetBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Color(red: 0.06, green: 0.07, blue: 0.09))
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.15)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+    }
+}
+
+// MARK: - Task Row Component
+
+struct MediumTaskRow: View {
+    let task: WidgetTaskSummaryItem
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Status dot
+            Circle()
+                .fill(task.statusColor)
+                .frame(width: 6, height: 6)
+                .shadow(color: task.statusColor.opacity(0.6), radius: 3)
+
+            VStack(alignment: .leading, spacing: 3) {
+                // Name + category
+                HStack(spacing: 4) {
+                    Image(systemName: task.categoryIcon)
+                        .font(.system(size: 8))
+                        .foregroundStyle(task.categoryColor)
+
+                    Text(task.fileName)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Spacer(minLength: 0)
+
+                    // Percentage
+                    Text(task.isCompleted ? "100%" : "\(Int(task.progress * 100))%")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(task.statusColor)
+                }
+
+                // Progress bar + speed/ETA
+                HStack(spacing: 6) {
+                    // Gradient progress bar
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.08))
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [task.statusColor.opacity(0.7), task.statusColor],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: geo.size.width * (task.isCompleted ? 1.0 : task.progress))
+                        }
+                    }
+                    .frame(height: 4)
+
+                    // Speed or ETA
+                    if task.status == "downloading" {
+                        Text(XDMWidgetDataLoader.formatSpeed(task.speedBytesPerSec))
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.blue)
+                            .frame(width: 52, alignment: .trailing)
+
+                        Text(XDMWidgetDataLoader.formatEta(task.etaSeconds))
+                            .font(.system(size: 8))
+                            .foregroundStyle(.gray)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+            }
+
+            // Action button
+            TaskActionButton(task: task, size: .small)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - Tab Pill
+
+struct TabPill: View {
+    let label: String
+    let isActive: Bool
+    let color: Color
+    let url: String
+
+    var body: some View {
+        Link(destination: URL(string: url)!) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(isActive ? color : .gray)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(isActive ? color.opacity(0.15) : Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(isActive ? color.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 0.6)
+                )
+        }
+    }
+}
+
+// MARK: - Action Button
+
+struct TaskActionButton: View {
+    let task: WidgetTaskSummaryItem
+    var size: ButtonSize = .medium
+
+    enum ButtonSize { case small, medium }
+
+    var body: some View {
+        let isSmall = size == .small
+        let iconSize: CGFloat = isSmall ? 9 : 11
+        let padding: CGFloat = isSmall ? 5 : 7
+
+        if task.isCompleted {
+            Link(destination: URL(string: "dmx://open/\(task.id)")!) {
+                Image(systemName: "folder")
+                    .font(.system(size: iconSize, weight: .bold))
+                    .foregroundStyle(.green)
+                    .frame(width: padding * 2 + iconSize, height: padding * 2 + iconSize)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: isSmall ? 6 : 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: isSmall ? 6 : 8)
+                            .stroke(Color.green.opacity(0.3), lineWidth: 0.5)
+                    )
+            }
+        } else if task.status == "downloading" || task.status == "queued" {
+            Link(destination: URL(string: "dmx://toggle/\(task.id)")!) {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: iconSize, weight: .bold))
+                    .foregroundStyle(.blue)
+                    .frame(width: padding * 2 + iconSize, height: padding * 2 + iconSize)
+                    .background(Color.blue.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: isSmall ? 6 : 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: isSmall ? 6 : 8)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 0.5)
+                    )
+            }
+        } else {
+            Link(destination: URL(string: "dmx://toggle/\(task.id)")!) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: iconSize, weight: .bold))
+                    .foregroundStyle(.green)
+                    .frame(width: padding * 2 + iconSize, height: padding * 2 + iconSize)
+                    .background(Color.green.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: isSmall ? 6 : 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: isSmall ? 6 : 8)
+                            .stroke(Color.green.opacity(0.3), lineWidth: 0.5)
+                    )
+            }
+        }
     }
 }

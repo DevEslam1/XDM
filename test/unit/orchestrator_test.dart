@@ -10,6 +10,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// [DownloadOrchestrator] and exercise its @visibleForTesting helpers.
 class _StubHost implements DownloadOrchestratorHost {
   @override
+  void pushProgressTick(String taskId, double progress, double speed) {}
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 4x1 wide widget: category tag + file name + linear progress bar + live speed/ETA -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -7,7 +6,7 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/widget_background"
-    android:padding="8dp"
+    android:padding="10dp"
     android:layoutDirection="locale">
 
     <LinearLayout
@@ -17,9 +16,10 @@
         android:orientation="vertical"
         android:gravity="center_vertical"
         android:background="@drawable/widget_surface"
-        android:paddingHorizontal="12dp"
+        android:paddingHorizontal="14dp"
         android:paddingVertical="8dp">
 
+        <!-- Top row: tag + name + speed badge -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -32,11 +32,9 @@
                 android:layout_height="wrap_content"
                 android:text="VIDEO"
                 android:textColor="#8B5CF6"
-                android:textSize="9sp"
+                android:textSize="7sp"
                 android:textStyle="bold"
                 android:background="@drawable/widget_category_chip"
-                android:paddingHorizontal="6dp"
-                android:paddingVertical="1dp"
                 android:layout_marginEnd="6dp"
                 android:visibility="gone" />
 
@@ -50,29 +48,68 @@
                 android:textSize="12sp"
                 android:textStyle="bold"
                 android:maxLines="1"
-                android:ellipsize="middle"
-                android:textDirection="locale" />
+                android:ellipsize="middle" />
+
+            <!-- Speed trend badge -->
+            <TextView
+                android:id="@+id/widget_wide_speed_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="↑ 2.4 MB/s"
+                android:textColor="#10B981"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:background="@drawable/widget_speed_badge"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp" />
         </LinearLayout>
 
+        <!-- Progress bar -->
         <ProgressBar
             android:id="@+id/widget_wide_progress"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
-            android:layout_height="8dp"
+            android:layout_height="6dp"
             android:progress="0"
             android:max="100"
             android:progressDrawable="@drawable/widget_progress_bar"
-            android:layout_marginTop="5dp" />
+            android:layout_marginTop="6dp" />
 
-        <TextView
-            android:id="@+id/widget_wide_stats"
+        <!-- Bottom row: ETA + percentage -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="0 B/s · -- · 0%"
-            android:textColor="#3B82F6"
-            android:textSize="10sp"
-            android:layout_marginTop="3dp"
-            android:textDirection="locale" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/widget_wide_eta"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="~2m 30s remaining"
+                android:textColor="#5F6B82"
+                android:textSize="9sp" />
+
+            <TextView
+                android:id="@+id/widget_wide_percent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="47%"
+                android:textColor="#10B981"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+        </LinearLayout>
+
+        <!-- Hidden elements for compatibility -->
+        <TextView
+            android:id="@+id/widget_wide_stats"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/widget_wide_clear"
@@ -80,7 +117,7 @@
             android:layout_height="wrap_content"
             android:text="ALL CLEAR"
             android:textColor="#10B981"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold"
             android:gravity="center"
             android:visibility="gone" />

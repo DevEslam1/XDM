@@ -3,113 +3,168 @@ import WidgetKit
 
 struct XDMSmallWidgetView: View {
     var entry: XDMWidgetEntry
+    @Environment(\.widgetFamily) private var family
 
-    private var topTask: WidgetTaskSummaryItem? {
-        entry.tasks.first
-    }
+    private var task: WidgetTaskSummaryItem? { entry.featuredTask }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Header
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row: brand + speed
             HStack {
                 Text("XDM")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundColor(Color(red: 59/255, green: 130/255, blue: 246/255)) // #3B82F6
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
 
                 Spacer()
 
                 if entry.totalSpeedBytesPerSec > 0 {
-                    Text(XDMWidgetDataLoader.formatSpeed(entry.totalSpeedBytesPerSec))
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255)) // #10B981
-                }
-            }
-
-            Spacer()
-
-            if let task = topTask {
-                // Category pill
-                Text(formatCategory(task))
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(Color(red: 139/255, green: 92/255, blue: 246/255))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color(red: 139/255, green: 92/255, blue: 246/255).opacity(0.18))
-                    .cornerRadius(4)
-
-                // Title
-                Text(task.fileName)
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(2)
-                    .foregroundColor(Color(red: 242/255, green: 244/255, blue: 248/255))
-
-                // Progress bar
-                ProgressView(value: task.status == "completed" ? 1.0 : task.progress)
-                    .tint(task.status == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255))
-
-                // Action / Stats row
-                HStack {
-                    if task.status == "completed" {
-                        Text("Completed · \(XDMWidgetDataLoader.formatBytes(task.fileSizeBytes))")
-                            .font(.system(size: 9))
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Link(destination: URL(string: "dmx://open/\(task.id)")!) {
-                            Text("OPEN")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.2))
-                                .cornerRadius(4)
-                        }
-                    } else {
-                        Text("\(Int(task.progress * 100))%")
+                    HStack(spacing: 3) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.green)
+                        Text(XDMWidgetDataLoader.formatSpeed(entry.totalSpeedBytesPerSec))
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                        Spacer()
-                        let isPaused = task.status == "paused" || task.status == "failed"
-                        Link(destination: URL(string: "dmx://toggle/\(task.id)")!) {
-                            Text(isPaused ? "▶" : "❚❚")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background((isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255)).opacity(0.2))
-                                .cornerRadius(4)
-                        }
+                            .foregroundStyle(.green)
                     }
                 }
+            }
+            .padding(.bottom, 8)
+
+            Spacer(minLength: 0)
+
+            if let task = task {
+                // Category badge + progress ring
+                HStack(alignment: .center, spacing: 10) {
+                    // Progress ring
+                    ZStack {
+                        // Background ring
+                        Circle()
+                            .stroke(Color.white.opacity(0.08), lineWidth: 5)
+
+                        // Progress ring
+                        Circle()
+                            .trim(from: 0, to: task.isCompleted ? 1.0 : task.progress)
+                            .stroke(
+                                AngularGradient(
+                                    colors: [
+                                        task.statusColor.opacity(0.7),
+                                        task.statusColor
+                                    ],
+                                    center: .center,
+                                    startAngle: .degrees(-90),
+                                    endAngle: .degrees(270)
+                                ),
+                                style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                            )
+                            .rotationEffect(.degrees(-90))
+
+                        // Center content
+                        VStack(spacing: 1) {
+                            Text(task.isCompleted ? "100%" : "\(Int(task.progress * 100))%")
+                                .font(.system(size: 13, weight: .black, design: .monospaced))
+                                .foregroundStyle(.white)
+
+                            Text(task.isCompleted ? "DONE" : task.status.uppercased().prefix(4).uppercased())
+                                .font(.system(size: 6, weight: .bold))
+                                .foregroundStyle(task.statusColor)
+                        }
+                    }
+                    .frame(width: 56, height: 56)
+
+                    // Right side: file info
+                    VStack(alignment: .leading, spacing: 3) {
+                        // Category chip
+                        HStack(spacing: 3) {
+                            Image(systemName: task.categoryIcon)
+                                .font(.system(size: 8))
+                            Text(task.category.uppercased().prefix(5).uppercased())
+                                .font(.system(size: 7, weight: .bold))
+                        }
+                        .foregroundStyle(task.categoryColor)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(task.categoryColor.opacity(0.15))
+                        .clipShape(Capsule())
+
+                        // File name
+                        Text(task.fileName)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+
+                        // Size info
+                        Text(XDMWidgetDataLoader.formatBytes(task.fileSizeBytes))
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.gray)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             } else {
-                Text("ALL CLEAR")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                Text("No active downloads")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                // Empty state
+                VStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.green.opacity(0.8))
+                    Text("ALL CLEAR")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.green)
+                    Text("No active downloads")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.gray)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // Footer
+            // Footer: active count + storage
             HStack {
-                Text("\(entry.totalActiveCount) active · \(entry.completedTodayCount) done")
-                    .font(.system(size: 8))
-                    .foregroundColor(.secondary)
+                if entry.totalActiveCount > 0 {
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(.blue)
+                            .frame(width: 5, height: 5)
+                        Text("\(entry.totalActiveCount) active")
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(.gray)
+                    }
+                }
+
+                Spacer()
+
+                if entry.availableStorageBytes >= 0 {
+                    Text("\(XDMWidgetDataLoader.formatBytes(entry.availableStorageBytes)) free")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(entry.isStorageLow ? .orange : .gray)
+                }
             }
+            .padding(.top, 8)
         }
-        .padding(11)
-        .background(Color(red: 15/255, green: 17/255, blue: 23/255))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.24), lineWidth: 1.2)
-        )
+        .padding(12)
+        .background(widgetBackground)
     }
 
-    private func formatCategory(_ task: WidgetTaskSummaryItem) -> String {
-        if task.isTorrent { return "TORRENT" }
-        if task.isAppUpdate { return "UPDATE" }
-        let cat = task.category.uppercased()
-        return cat.isEmpty || cat == "OTHER" ? "FILE" : cat
+    private var widgetBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Color(red: 0.06, green: 0.07, blue: 0.09))
+
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.15)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
     }
 }

@@ -1,8 +1,10 @@
 import WidgetKit
 import Foundation
+import SwiftUI
 
 // MARK: - Data Models
-struct WidgetTaskSummaryItem: Identifiable, Codable {
+
+struct WidgetTaskSummaryItem: Identifiable, Codable, Hashable {
     let id: String
     let fileName: String
     let status: String // queued | downloading | paused | completed | failed | seeding
@@ -14,6 +16,50 @@ struct WidgetTaskSummaryItem: Identifiable, Codable {
     let category: String
     let isTorrent: Bool
     let isAppUpdate: Bool
+
+    var isActive: Bool { status == "downloading" || status == "seeding" }
+    var isFailed: Bool { status == "failed" }
+    var isPaused: Bool { status == "paused" }
+    var isQueued: Bool { status == "queued" }
+    var isCompleted: Bool { status == "completed" }
+
+    /// Status dot color for live indicator
+    var statusColor: Color {
+        switch status {
+        case "downloading": return .blue
+        case "seeding":     return .green
+        case "paused":      return .orange
+        case "queued":      return .purple
+        case "failed":      return .red
+        case "completed":   return .green
+        default:            return .gray
+        }
+    }
+
+    /// Category badge color
+    var categoryColor: Color {
+        switch category.lowercased() {
+        case "video":    return .blue
+        case "audio":    return .green
+        case "document": return .orange
+        case "archive":  return .purple
+        case "apk":      return .pink
+        case "torrent":  return .purple
+        default:         return .gray
+        }
+    }
+
+    /// Category icon name (SF Symbol)
+    var categoryIcon: String {
+        switch category.lowercased() {
+        case "video":    return "movie"
+        case "audio":    return "waveform"
+        case "document": return "doc.text"
+        case "archive":  return "shippingbox"
+        case "apk":      return "iphone"
+        default:         return "doc"
+        }
+    }
 }
 
 struct XDMWidgetEntry: TimelineEntry {
@@ -26,9 +72,29 @@ struct XDMWidgetEntry: TimelineEntry {
     let availableStorageBytes: Int64
     let isOnWifi: Bool
     let selectedTab: String // "downloading" or "completed"
+
+    /// Overall progress across all active tasks
+    var overallProgress: Double {
+        let active = tasks.filter { $0.status == "downloading" }
+        guard !active.isEmpty else { return 0 }
+        return active.map(\.progress).reduce(0, +) / Double(active.count)
+    }
+
+    /// Primary task to feature (first downloading or first in list)
+    var featuredTask: WidgetTaskSummaryItem? {
+        tasks.first { $0.status == "downloading" } ?? tasks.first
+    }
+
+    /// Whether storage is critically low (< 500 MB)
+    var isStorageLow: Bool {
+        availableStorageBytes >= 0 && availableStorageBytes < 500 * 1024 * 1024
+    }
+
+    var hasFailures: Bool { failedCount > 0 }
 }
 
 // MARK: - Shared Data Loader
+
 struct XDMWidgetDataLoader {
     static let appGroupId = "group.com.dmx.app"
     static let statsFileName = "xdm_widget_stats.json"
@@ -101,6 +167,8 @@ struct XDMWidgetDataLoader {
         )
     }
 
+    // MARK: - Formatting Helpers
+
     static func formatSpeed(_ bytesPerSec: Int64) -> String {
         if bytesPerSec <= 0 { return "0 B/s" }
         let units = ["B/s", "KB/s", "MB/s", "GB/s"]
@@ -131,8 +199,9 @@ struct XDMWidgetDataLoader {
 
     static func formatEta(_ etaSeconds: Int?) -> String {
         guard let seconds = etaSeconds, seconds > 0 else { return "--" }
-        if seconds < 60 { return "Almost done" }
-        if seconds < 300 { return "~\(seconds / 60) min" }
+        if seconds < 10 { return "Almost done" }
+        if seconds < 60 { return "\(seconds)s left" }
+        if seconds < 300 { return "~\(seconds / 60)m left" }
         if seconds < 3600 {
             let m = seconds / 60
             let s = seconds % 60
@@ -141,5 +210,15 @@ struct XDMWidgetDataLoader {
         let h = seconds / 3600
         let m = (seconds % 3600) / 60
         return m == 0 ? "~\(h)h" : "~\(h)h \(m)m"
+    }
+
+    /// Smart speed trend indicator based on current speed
+    static func speedTrend(_ task: WidgetTaskSummaryItem) -> (icon: String, color: Color) {
+        let speed = task.speedBytesPerSec
+        if speed <= 0 { return ("pause.circle", .gray) }
+        if speed > 10 * 1024 * 1024 { return ("bolt.fill", .green) }
+        if speed > 1 * 1024 * 1024 { return ("arrow.down.circle.fill", .blue) }
+        if speed > 100 * 1024 { return ("arrow.down.right.circle.fill", .orange) }
+        return ("arrow.down.slow", .red)
     }
 }

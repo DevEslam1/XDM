@@ -1816,7 +1816,7 @@ class DownloadEngine {
       var chunkProgress = List<int>.filled(threadCount, 0);
       final chunkSizes = List<int>.filled(threadCount, 0);
 
-      final totalSize = resolvedFileSize;
+      var totalSize = resolvedFileSize;
       final partSize = (totalSize / threadCount).floor();
 
       final targetFile = File(currentTempFilePath);
@@ -1863,7 +1863,12 @@ class DownloadEngine {
             savedEtag = decoded['etag'] as String?;
             savedLastModified = decoded['lastModified'] as String?;
 
-            if (savedTotalSize == totalSize && progressList != null) {
+            const sizeTolerance = 1024; // 1 KB tolerance
+            final isSizeWithinTolerance =
+                (savedTotalSize - totalSize).abs() <= sizeTolerance;
+
+            if (isSizeWithinTolerance && progressList != null) {
+              totalSize = savedTotalSize;
               if (savedThreadCount == threadCount &&
                   progressList.length == threadCount) {
                 loadedState = progressList.cast<int>();

@@ -1,21 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 4x3 dashboard widget: 2-tab header (Downloading / Completed) + 5 rows with per-item action controls + banners + quick actions -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="8dp"
+    android:padding="10dp"
     android:layoutDirection="locale">
 
-    <!-- 2-Tab Header: DOWNLOADING vs COMPLETED -->
+    <!-- ═══ Header: Tabs + Speed ═══ -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="28dp"
+        android:layout_height="32dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="4dp">
+        android:layout_marginBottom="6dp">
 
         <TextView
             android:id="@+id/widget_tab_downloading"
@@ -26,9 +25,10 @@
             android:textColor="#3B82F6"
             android:textSize="9sp"
             android:textStyle="bold"
+            android:letterSpacing="0.05"
             android:gravity="center"
             android:background="@drawable/widget_tab_active_cyan"
-            android:layout_marginEnd="3dp" />
+            android:layout_marginEnd="4dp" />
 
         <TextView
             android:id="@+id/widget_tab_completed"
@@ -39,21 +39,44 @@
             android:textColor="#9AA3B5"
             android:textSize="9sp"
             android:textStyle="bold"
+            android:letterSpacing="0.05"
             android:gravity="center"
             android:background="@drawable/widget_tab_inactive"
-            android:layout_marginStart="3dp" />
+            android:layout_marginStart="4dp" />
 
-        <TextView
-            android:id="@+id/widget_dash_speed"
+        <!-- Live speed badge -->
+        <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="0 B/s"
-            android:textColor="#10B981"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:layout_marginStart="6dp" />
+            android:layout_height="24dp"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/widget_speed_badge"
+            android:paddingHorizontal="8dp"
+            android:layout_marginStart="6dp">
+
+            <TextView
+                android:id="@+id/widget_dash_speed_icon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="↓"
+                android:textColor="#10B981"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_dash_speed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0 B/s"
+                android:textColor="#10B981"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:layout_marginStart="3dp" />
+        </LinearLayout>
     </LinearLayout>
 
+    <!-- ═══ Failure Banner ═══ -->
     <TextView
         android:id="@+id/widget_dash_failures"
         android:layout_width="match_parent"
@@ -62,12 +85,13 @@
         android:textColor="#FFFFFF"
         android:textSize="10sp"
         android:textStyle="bold"
-        android:paddingHorizontal="6dp"
-        android:paddingVertical="3dp"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
         android:background="#EF4444"
-        android:layout_marginBottom="3dp"
+        android:layout_marginBottom="4dp"
         android:visibility="gone" />
 
+    <!-- ═══ Task Rows ═══ -->
     <LinearLayout
         android:id="@+id/widget_dash_rows"
         android:layout_width="match_parent"
@@ -75,6 +99,7 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
+        <!-- Row 1 -->
         <LinearLayout
             android:id="@+id/widget_dash_row1"
             android:layout_width="match_parent"
@@ -82,7 +107,14 @@
             android:layout_weight="1"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="1dp">
+            android:paddingVertical="2dp">
+
+            <View
+                android:id="@+id/widget_dash_row1_dot"
+                android:layout_width="5dp"
+                android:layout_height="5dp"
+                android:background="@drawable/widget_status_dot"
+                android:layout_marginEnd="6dp" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -102,12 +134,11 @@
                         android:layout_height="wrap_content"
                         android:text="VIDEO"
                         android:textColor="#8B5CF6"
-                        android:textSize="8sp"
+                        android:textSize="7sp"
                         android:textStyle="bold"
+                        android:letterSpacing="0.08"
                         android:background="@drawable/widget_category_chip"
-                        android:paddingHorizontal="4dp"
-                        android:paddingVertical="1dp"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="5dp"
                         android:visibility="gone" />
 
                     <TextView
@@ -118,9 +149,9 @@
                         android:text="File name"
                         android:textColor="#F2F4F8"
                         android:textSize="11sp"
+                        android:textStyle="bold"
                         android:maxLines="1"
-                        android:ellipsize="middle"
-                        android:textDirection="locale" />
+                        android:ellipsize="middle" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -128,13 +159,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="2dp">
+                    android:layout_marginTop="3dp">
 
                     <ProgressBar
                         android:id="@+id/widget_dash_row1_progress"
                         style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="0dp"
-                        android:layout_height="5dp"
+                        android:layout_height="4dp"
                         android:layout_weight="1"
                         android:progress="0"
                         android:max="100"
@@ -142,29 +173,59 @@
 
                     <TextView
                         android:id="@+id/widget_dash_row1_percent"
-                        android:layout_width="wrap_content"
+                        android:layout_width="36dp"
                         android:layout_height="wrap_content"
                         android:text="0%"
                         android:textColor="#10B981"
                         android:textSize="9sp"
                         android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
+                        android:fontFamily="monospace"
+                        android:gravity="end"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/widget_dash_row1_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="2dp">
+
+                    <TextView
+                        android:id="@+id/widget_dash_row1_speed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="2.4 MB/s"
+                        android:textColor="#3B82F6"
+                        android:textSize="8sp"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/widget_dash_row1_eta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="~2m 30s"
+                        android:textColor="#5F6B82"
+                        android:textSize="8sp"
+                        android:layout_marginStart="8dp" />
                 </LinearLayout>
             </LinearLayout>
 
             <TextView
                 android:id="@+id/widget_dash_row1_action"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:text="❚❚"
                 android:textColor="#3B82F6"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:background="@drawable/widget_button_pause"
                 android:layout_marginStart="6dp" />
         </LinearLayout>
 
+        <!-- Row 2 -->
         <LinearLayout
             android:id="@+id/widget_dash_row2"
             android:layout_width="match_parent"
@@ -172,7 +233,14 @@
             android:layout_weight="1"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="1dp">
+            android:paddingVertical="2dp">
+
+            <View
+                android:id="@+id/widget_dash_row2_dot"
+                android:layout_width="5dp"
+                android:layout_height="5dp"
+                android:background="@drawable/widget_status_dot"
+                android:layout_marginEnd="6dp" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -192,12 +260,11 @@
                         android:layout_height="wrap_content"
                         android:text="AUDIO"
                         android:textColor="#8B5CF6"
-                        android:textSize="8sp"
+                        android:textSize="7sp"
                         android:textStyle="bold"
+                        android:letterSpacing="0.08"
                         android:background="@drawable/widget_category_chip"
-                        android:paddingHorizontal="4dp"
-                        android:paddingVertical="1dp"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="5dp"
                         android:visibility="gone" />
 
                     <TextView
@@ -208,9 +275,9 @@
                         android:text="File name"
                         android:textColor="#F2F4F8"
                         android:textSize="11sp"
+                        android:textStyle="bold"
                         android:maxLines="1"
-                        android:ellipsize="middle"
-                        android:textDirection="locale" />
+                        android:ellipsize="middle" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -218,13 +285,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="2dp">
+                    android:layout_marginTop="3dp">
 
                     <ProgressBar
                         android:id="@+id/widget_dash_row2_progress"
                         style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="0dp"
-                        android:layout_height="5dp"
+                        android:layout_height="4dp"
                         android:layout_weight="1"
                         android:progress="0"
                         android:max="100"
@@ -232,29 +299,59 @@
 
                     <TextView
                         android:id="@+id/widget_dash_row2_percent"
-                        android:layout_width="wrap_content"
+                        android:layout_width="36dp"
                         android:layout_height="wrap_content"
                         android:text="0%"
                         android:textColor="#10B981"
                         android:textSize="9sp"
                         android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
+                        android:fontFamily="monospace"
+                        android:gravity="end"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/widget_dash_row2_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="2dp">
+
+                    <TextView
+                        android:id="@+id/widget_dash_row2_speed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1.2 MB/s"
+                        android:textColor="#3B82F6"
+                        android:textSize="8sp"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/widget_dash_row2_eta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="~1m 15s"
+                        android:textColor="#5F6B82"
+                        android:textSize="8sp"
+                        android:layout_marginStart="8dp" />
                 </LinearLayout>
             </LinearLayout>
 
             <TextView
                 android:id="@+id/widget_dash_row2_action"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:text="❚❚"
                 android:textColor="#3B82F6"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:background="@drawable/widget_button_pause"
                 android:layout_marginStart="6dp" />
         </LinearLayout>
 
+        <!-- Row 3 -->
         <LinearLayout
             android:id="@+id/widget_dash_row3"
             android:layout_width="match_parent"
@@ -262,7 +359,14 @@
             android:layout_weight="1"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="1dp">
+            android:paddingVertical="2dp">
+
+            <View
+                android:id="@+id/widget_dash_row3_dot"
+                android:layout_width="5dp"
+                android:layout_height="5dp"
+                android:background="@drawable/widget_status_dot"
+                android:layout_marginEnd="6dp" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -282,12 +386,11 @@
                         android:layout_height="wrap_content"
                         android:text="ZIP"
                         android:textColor="#8B5CF6"
-                        android:textSize="8sp"
+                        android:textSize="7sp"
                         android:textStyle="bold"
+                        android:letterSpacing="0.08"
                         android:background="@drawable/widget_category_chip"
-                        android:paddingHorizontal="4dp"
-                        android:paddingVertical="1dp"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="5dp"
                         android:visibility="gone" />
 
                     <TextView
@@ -298,9 +401,9 @@
                         android:text="File name"
                         android:textColor="#F2F4F8"
                         android:textSize="11sp"
+                        android:textStyle="bold"
                         android:maxLines="1"
-                        android:ellipsize="middle"
-                        android:textDirection="locale" />
+                        android:ellipsize="middle" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -308,13 +411,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="2dp">
+                    android:layout_marginTop="3dp">
 
                     <ProgressBar
                         android:id="@+id/widget_dash_row3_progress"
                         style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="0dp"
-                        android:layout_height="5dp"
+                        android:layout_height="4dp"
                         android:layout_weight="1"
                         android:progress="0"
                         android:max="100"
@@ -322,29 +425,59 @@
 
                     <TextView
                         android:id="@+id/widget_dash_row3_percent"
-                        android:layout_width="wrap_content"
+                        android:layout_width="36dp"
                         android:layout_height="wrap_content"
                         android:text="0%"
                         android:textColor="#10B981"
                         android:textSize="9sp"
                         android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
+                        android:fontFamily="monospace"
+                        android:gravity="end"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/widget_dash_row3_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="2dp">
+
+                    <TextView
+                        android:id="@+id/widget_dash_row3_speed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="500 KB/s"
+                        android:textColor="#3B82F6"
+                        android:textSize="8sp"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/widget_dash_row3_eta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="~45s"
+                        android:textColor="#5F6B82"
+                        android:textSize="8sp"
+                        android:layout_marginStart="8dp" />
                 </LinearLayout>
             </LinearLayout>
 
             <TextView
                 android:id="@+id/widget_dash_row3_action"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:text="❚❚"
                 android:textColor="#3B82F6"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:background="@drawable/widget_button_pause"
                 android:layout_marginStart="6dp" />
         </LinearLayout>
 
+        <!-- Row 4 -->
         <LinearLayout
             android:id="@+id/widget_dash_row4"
             android:layout_width="match_parent"
@@ -352,7 +485,14 @@
             android:layout_weight="1"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="1dp">
+            android:paddingVertical="2dp">
+
+            <View
+                android:id="@+id/widget_dash_row4_dot"
+                android:layout_width="5dp"
+                android:layout_height="5dp"
+                android:background="@drawable/widget_status_dot"
+                android:layout_marginEnd="6dp" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -372,12 +512,11 @@
                         android:layout_height="wrap_content"
                         android:text="APK"
                         android:textColor="#8B5CF6"
-                        android:textSize="8sp"
+                        android:textSize="7sp"
                         android:textStyle="bold"
+                        android:letterSpacing="0.08"
                         android:background="@drawable/widget_category_chip"
-                        android:paddingHorizontal="4dp"
-                        android:paddingVertical="1dp"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="5dp"
                         android:visibility="gone" />
 
                     <TextView
@@ -388,9 +527,9 @@
                         android:text="File name"
                         android:textColor="#F2F4F8"
                         android:textSize="11sp"
+                        android:textStyle="bold"
                         android:maxLines="1"
-                        android:ellipsize="middle"
-                        android:textDirection="locale" />
+                        android:ellipsize="middle" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -398,13 +537,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="2dp">
+                    android:layout_marginTop="3dp">
 
                     <ProgressBar
                         android:id="@+id/widget_dash_row4_progress"
                         style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="0dp"
-                        android:layout_height="5dp"
+                        android:layout_height="4dp"
                         android:layout_weight="1"
                         android:progress="0"
                         android:max="100"
@@ -412,29 +551,59 @@
 
                     <TextView
                         android:id="@+id/widget_dash_row4_percent"
-                        android:layout_width="wrap_content"
+                        android:layout_width="36dp"
                         android:layout_height="wrap_content"
                         android:text="0%"
                         android:textColor="#10B981"
                         android:textSize="9sp"
                         android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
+                        android:fontFamily="monospace"
+                        android:gravity="end"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/widget_dash_row4_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="2dp">
+
+                    <TextView
+                        android:id="@+id/widget_dash_row4_speed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="2.0 MB/s"
+                        android:textColor="#3B82F6"
+                        android:textSize="8sp"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/widget_dash_row4_eta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="~10s"
+                        android:textColor="#5F6B82"
+                        android:textSize="8sp"
+                        android:layout_marginStart="8dp" />
                 </LinearLayout>
             </LinearLayout>
 
             <TextView
                 android:id="@+id/widget_dash_row4_action"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:text="❚❚"
                 android:textColor="#3B82F6"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:background="@drawable/widget_button_pause"
                 android:layout_marginStart="6dp" />
         </LinearLayout>
 
+        <!-- Row 5 -->
         <LinearLayout
             android:id="@+id/widget_dash_row5"
             android:layout_width="match_parent"
@@ -442,7 +611,14 @@
             android:layout_weight="1"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="1dp">
+            android:paddingVertical="2dp">
+
+            <View
+                android:id="@+id/widget_dash_row5_dot"
+                android:layout_width="5dp"
+                android:layout_height="5dp"
+                android:background="@drawable/widget_status_dot"
+                android:layout_marginEnd="6dp" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -462,12 +638,11 @@
                         android:layout_height="wrap_content"
                         android:text="DOC"
                         android:textColor="#8B5CF6"
-                        android:textSize="8sp"
+                        android:textSize="7sp"
                         android:textStyle="bold"
+                        android:letterSpacing="0.08"
                         android:background="@drawable/widget_category_chip"
-                        android:paddingHorizontal="4dp"
-                        android:paddingVertical="1dp"
-                        android:layout_marginEnd="4dp"
+                        android:layout_marginEnd="5dp"
                         android:visibility="gone" />
 
                     <TextView
@@ -478,9 +653,9 @@
                         android:text="File name"
                         android:textColor="#F2F4F8"
                         android:textSize="11sp"
+                        android:textStyle="bold"
                         android:maxLines="1"
-                        android:ellipsize="middle"
-                        android:textDirection="locale" />
+                        android:ellipsize="middle" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -488,13 +663,13 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center_vertical"
-                    android:layout_marginTop="2dp">
+                    android:layout_marginTop="3dp">
 
                     <ProgressBar
                         android:id="@+id/widget_dash_row5_progress"
                         style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="0dp"
-                        android:layout_height="5dp"
+                        android:layout_height="4dp"
                         android:layout_weight="1"
                         android:progress="0"
                         android:max="100"
@@ -502,23 +677,52 @@
 
                     <TextView
                         android:id="@+id/widget_dash_row5_percent"
-                        android:layout_width="wrap_content"
+                        android:layout_width="36dp"
                         android:layout_height="wrap_content"
                         android:text="0%"
                         android:textColor="#10B981"
                         android:textSize="9sp"
                         android:textStyle="bold"
-                        android:layout_marginStart="4dp" />
+                        android:fontFamily="monospace"
+                        android:gravity="end"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/widget_dash_row5_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="2dp">
+
+                    <TextView
+                        android:id="@+id/widget_dash_row5_speed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="3.5 MB/s"
+                        android:textColor="#3B82F6"
+                        android:textSize="8sp"
+                        android:fontFamily="monospace" />
+
+                    <TextView
+                        android:id="@+id/widget_dash_row5_eta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="~5s"
+                        android:textColor="#5F6B82"
+                        android:textSize="8sp"
+                        android:layout_marginStart="8dp" />
                 </LinearLayout>
             </LinearLayout>
 
             <TextView
                 android:id="@+id/widget_dash_row5_action"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:text="❚❚"
                 android:textColor="#3B82F6"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:background="@drawable/widget_button_pause"
@@ -526,6 +730,7 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- ═══ +N more indicator ═══ -->
     <TextView
         android:id="@+id/widget_dash_more"
         android:layout_width="wrap_content"
@@ -534,9 +739,10 @@
         android:textColor="#8B5CF6"
         android:textSize="9sp"
         android:textStyle="bold"
-        android:paddingTop="2dp"
+        android:paddingTop="3dp"
         android:visibility="gone" />
 
+    <!-- ═══ Storage Warning ═══ -->
     <TextView
         android:id="@+id/widget_dash_storage"
         android:layout_width="match_parent"
@@ -545,52 +751,56 @@
         android:textColor="#FFFFFF"
         android:textSize="10sp"
         android:textStyle="bold"
-        android:paddingHorizontal="6dp"
-        android:paddingVertical="3dp"
-        android:layout_marginTop="3dp"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
+        android:layout_marginTop="4dp"
         android:visibility="gone" />
 
+    <!-- ═══ Quick Actions ═══ -->
     <LinearLayout
         android:id="@+id/widget_dash_actions"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingTop="5dp">
+        android:paddingTop="6dp">
 
         <TextView
             android:id="@+id/widget_dash_pause"
             android:layout_width="0dp"
-            android:layout_height="30dp"
+            android:layout_height="32dp"
             android:layout_weight="1"
             android:text="❚❚ PAUSE ALL"
             android:textColor="#3B82F6"
-            android:textSize="10sp"
+            android:textSize="9sp"
             android:textStyle="bold"
+            android:letterSpacing="0.05"
             android:gravity="center"
             android:background="@drawable/widget_button_pause"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginEnd="5dp" />
 
         <TextView
             android:id="@+id/widget_dash_resume"
             android:layout_width="0dp"
-            android:layout_height="30dp"
+            android:layout_height="32dp"
             android:layout_weight="1"
             android:text="▶ RESUME ALL"
             android:textColor="#10B981"
-            android:textSize="10sp"
+            android:textSize="9sp"
             android:textStyle="bold"
+            android:letterSpacing="0.05"
             android:gravity="center"
             android:background="@drawable/widget_button_resume"
-            android:layout_marginStart="4dp" />
+            android:layout_marginStart="5dp" />
     </LinearLayout>
 
+    <!-- ═══ Empty State ═══ -->
     <TextView
         android:id="@+id/widget_dash_clear"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:text="ALL CLEAR"
         android:textColor="#10B981"
-        android:textSize="15sp"
+        android:textSize="14sp"
         android:textStyle="bold"
         android:gravity="center"
         android:visibility="gone" />

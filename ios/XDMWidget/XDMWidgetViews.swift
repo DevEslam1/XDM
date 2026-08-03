@@ -1,7 +1,6 @@
 import SwiftUI
 import WidgetKit
 
-// MARK: - Large Widget View (.systemLarge)
 struct XDMWidgetLargeView: View {
     var entry: XDMWidgetEntry
 
@@ -22,208 +21,262 @@ struct XDMWidgetLargeView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Header Bar
-            HStack {
-                HStack(spacing: 6) {
-                    Text("XDM SIGNAL DECK")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(red: 59/255, green: 130/255, blue: 246/255))
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            // ── Header ──
+            HStack(spacing: 6) {
+                // Brand
+                Text("XDM")
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
 
                 Spacer()
 
+                // Tab pills
+                TabPill(label: "DL (\(activeCount))", isActive: entry.selectedTab != "completed", color: .blue, url: "dmx://downloads")
+                TabPill(label: "DONE (\(completedCount))", isActive: entry.selectedTab == "completed", color: .green, url: "dmx://downloads")
+
+                // Speed
                 if entry.totalSpeedBytesPerSec > 0 {
-                    Text(XDMWidgetDataLoader.formatSpeed(entry.totalSpeedBytesPerSec))
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                    HStack(spacing: 3) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.green)
+                        Text(XDMWidgetDataLoader.formatSpeed(entry.totalSpeedBytesPerSec))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.green)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.green.opacity(0.08))
+                    .clipShape(Capsule())
                 }
             }
 
-            // Failure Banner
-            if entry.failedCount > 0 && entry.selectedTab != "completed" {
-                HStack {
-                    Text("⚠️ \(entry.failedCount) download\(entry.failedCount == 1 ? "" : "s") failed")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white)
+            // ── Failure banner ──
+            if entry.hasFailures && entry.selectedTab != "completed" {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 8))
+                    Text("\(entry.failedCount) download\(entry.failedCount == 1 ? "" : "s") failed")
+                        .font(.system(size: 8, weight: .bold))
                     Spacer()
                 }
+                .foregroundStyle(.white)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color(red: 239/255, green: 68/255, blue: 68/255))
-                .cornerRadius(4)
+                .background(Color.red.opacity(0.85))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
-            // 2-Tab Header Bar
-            HStack(spacing: 8) {
-                // Downloading Tab button
-                Link(destination: URL(string: "dmx://downloads")!) {
-                    HStack(spacing: 4) {
-                        Text("DOWNLOADING (\(activeCount))")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(entry.selectedTab != "completed" ? Color(red: 59/255, green: 130/255, blue: 246/255) : Color(red: 154/255, green: 163/255, blue: 181/255))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(entry.selectedTab != "completed" ? Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.18) : Color.clear)
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(entry.selectedTab != "completed" ? Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.4) : Color(red: 30/255, green: 35/255, blue: 48/255), lineWidth: 0.8)
-                    )
+            // ── Storage warning ──
+            if entry.isStorageLow {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 8))
+                    Text("Low storage: \(XDMWidgetDataLoader.formatBytes(entry.availableStorageBytes)) free")
+                        .font(.system(size: 8, weight: .bold))
+                    Spacer()
                 }
-
-                // Completed Tab button
-                Link(destination: URL(string: "dmx://downloads")!) {
-                    HStack(spacing: 4) {
-                        Text("COMPLETED (\(completedCount))")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(entry.selectedTab == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 154/255, green: 163/255, blue: 181/255))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(entry.selectedTab == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.18) : Color.clear)
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(entry.selectedTab == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.4) : Color(red: 30/255, green: 35/255, blue: 48/255), lineWidth: 0.8)
-                    )
-                }
-
-                Spacer()
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.orange.opacity(0.85))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
-            Spacer()
+            Spacer(minLength: 2)
 
-            // Up to 5 task rows
+            // ── Task Rows (up to 5) ──
             let visibleTasks = Array(currentTabTasks.prefix(5))
             if !visibleTasks.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 4) {
                     ForEach(visibleTasks) { task in
-                        HStack(spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 6) {
-                                    Text(formatCategory(task))
-                                        .font(.system(size: 8, weight: .bold))
-                                        .foregroundColor(Color(red: 139/255, green: 92/255, blue: 246/255))
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(Color(red: 139/255, green: 92/255, blue: 246/255).opacity(0.18))
-                                        .cornerRadius(4)
-
-                                    Text(task.fileName)
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .lineLimit(1)
-                                        .foregroundColor(Color(red: 242/255, green: 244/255, blue: 248/255))
-                                }
-
-                                HStack(spacing: 6) {
-                                    ProgressView(value: task.status == "completed" ? 1.0 : task.progress)
-                                        .tint(task.status == "completed" ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255))
-
-                                    Text(task.status == "completed" ? XDMWidgetDataLoader.formatBytes(task.fileSizeBytes) : "\(Int(task.progress * 100))%")
-                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                                }
-                            }
-
-                            // Interactive per-item Action Button (Pause/Play/Open)
-                            if task.status == "completed" {
-                                Link(destination: URL(string: "dmx://open/\(task.id)")!) {
-                                    Text("OPEN")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 5)
-                                        .background(Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.18))
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke(Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.4), lineWidth: 0.8)
-                                        )
-                                }
-                            } else {
-                                let isPaused = task.status == "paused" || task.status == "failed"
-                                Link(destination: URL(string: "dmx://toggle/\(task.id)")!) {
-                                    Text(isPaused ? "▶" : "❚❚")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 5)
-                                        .background((isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255)).opacity(0.18))
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke((isPaused ? Color(red: 16/255, green: 185/255, blue: 129/255) : Color(red: 59/255, green: 130/255, blue: 246/255)).opacity(0.4), lineWidth: 0.8)
-                                        )
-                                }
-                            }
-                        }
+                        LargeTaskRow(task: task)
                     }
                 }
             } else {
-                VStack(spacing: 4) {
-                    Text("ALL CLEAR")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
+                VStack(spacing: 6) {
+                    Image(systemName: "tray")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.gray.opacity(0.4))
                     Text(entry.selectedTab == "completed" ? "No completed downloads" : "No active downloads")
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.gray)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
             }
 
-            Spacer()
+            Spacer(minLength: 2)
 
-            // Quick Actions Bar
-            HStack(spacing: 8) {
+            // ── Quick Actions ──
+            HStack(spacing: 6) {
                 Link(destination: URL(string: "dmx://pause_all")!) {
-                    HStack {
-                        Spacer()
-                        Text("❚❚ PAUSE ALL")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(Color(red: 59/255, green: 130/255, blue: 246/255))
-                        Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "pause.fill")
+                            .font(.system(size: 8, weight: .bold))
+                        Text("PAUSE ALL")
+                            .font(.system(size: 8, weight: .bold))
                     }
-                    .padding(.vertical, 6)
-                    .background(Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.18))
-                    .cornerRadius(6)
+                    .foregroundStyle(.blue)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(Color.blue.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.4), lineWidth: 0.8)
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 0.6)
                     )
                 }
 
                 Link(destination: URL(string: "dmx://resume_all")!) {
-                    HStack {
-                        Spacer()
-                        Text("▶ RESUME ALL")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(Color(red: 16/255, green: 185/255, blue: 129/255))
-                        Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 8, weight: .bold))
+                        Text("RESUME ALL")
+                            .font(.system(size: 8, weight: .bold))
                     }
-                    .padding(.vertical, 6)
-                    .background(Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.18))
-                    .cornerRadius(6)
+                    .foregroundStyle(.green)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(Color.green.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(red: 16/255, green: 185/255, blue: 129/255).opacity(0.4), lineWidth: 0.8)
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.green.opacity(0.3), lineWidth: 0.6)
                     )
+                }
+            }
+
+            // ── Footer ──
+            HStack {
+                if entry.totalActiveCount > 0 {
+                    HStack(spacing: 3) {
+                        Circle().fill(.blue).frame(width: 4, height: 4)
+                        Text("\(entry.totalActiveCount) active · \(entry.completedTodayCount) done today")
+                            .font(.system(size: 7))
+                            .foregroundStyle(.gray)
+                    }
+                }
+                Spacer()
+                if entry.availableStorageBytes >= 0 {
+                    Text("\(XDMWidgetDataLoader.formatBytes(entry.availableStorageBytes)) free")
+                        .font(.system(size: 7))
+                        .foregroundStyle(entry.isStorageLow ? .orange : .gray)
                 }
             }
         }
         .padding(13)
-        .background(Color(red: 15/255, green: 17/255, blue: 23/255))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.24), lineWidth: 1.2)
-        )
+        .background(widgetBackground)
     }
 
-    private func formatCategory(_ task: WidgetTaskSummaryItem) -> String {
-        if task.isTorrent { return "TORRENT" }
-        if task.isAppUpdate { return "UPDATE" }
-        let cat = task.category.uppercased()
-        return cat.isEmpty || cat == "OTHER" ? "FILE" : cat
+    private var widgetBackground: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Color(red: 0.06, green: 0.07, blue: 0.09))
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.3), Color.purple.opacity(0.15)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+    }
+}
+
+// MARK: - Large Task Row
+
+struct LargeTaskRow: View {
+    let task: WidgetTaskSummaryItem
+
+    var body: some View {
+        HStack(spacing: 7) {
+            // Status dot
+            Circle()
+                .fill(task.statusColor)
+                .frame(width: 5, height: 5)
+                .shadow(color: task.statusColor.opacity(0.5), radius: 2)
+
+            VStack(alignment: .leading, spacing: 2) {
+                // Row 1: category + name + percent
+                HStack(spacing: 4) {
+                    Image(systemName: task.categoryIcon)
+                        .font(.system(size: 8))
+                        .foregroundStyle(task.categoryColor)
+
+                    Text(task.fileName)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Spacer(minLength: 2)
+
+                    Text(task.isCompleted ? "100%" : "\(Int(task.progress * 100))%")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(task.statusColor)
+                }
+
+                // Row 2: progress bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.08))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [task.statusColor.opacity(0.6), task.statusColor],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: geo.size.width * (task.isCompleted ? 1.0 : task.progress))
+                    }
+                }
+                .frame(height: 3)
+
+                // Row 3: speed + ETA (only for downloading)
+                if task.status == "downloading" {
+                    HStack(spacing: 8) {
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 6))
+                            Text(XDMWidgetDataLoader.formatSpeed(task.speedBytesPerSec))
+                                .font(.system(size: 7, weight: .medium, design: .monospaced))
+                        }
+                        .foregroundStyle(.blue)
+
+                        Text(XDMWidgetDataLoader.formatEta(task.etaSeconds))
+                            .font(.system(size: 7))
+                            .foregroundStyle(.gray)
+
+                        Spacer()
+
+                        Text(XDMWidgetDataLoader.formatBytes(task.downloadedBytes) + " / " + XDMWidgetDataLoader.formatBytes(task.fileSizeBytes))
+                            .font(.system(size: 7, design: .monospaced))
+                            .foregroundStyle(.gray)
+                    }
+                }
+            }
+
+            // Action button
+            TaskActionButton(task: task, size: .small)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Color.white.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9)
+                .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
+        )
     }
 }
