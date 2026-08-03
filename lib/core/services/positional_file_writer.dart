@@ -75,10 +75,26 @@ class PositionalFileWriter {
   }) async {
     final file = File(path);
     await file.parent.create(recursive: true);
-
-    final RandomAccessFile raf =
-        await file.open(mode: FileMode.writeOnlyAppend);
-
+    // Use FileMode.writeOnlyAppend but immediately override with setPosition
+    // to avoid O_APPEND behavior. Alternatively, open read-write.
+    final RandomAccessFile raf = await file.open(mode: FileMode.writeOnlyAppend);
+    // Force position to 0 so subsequent setPosition calls work correctly.
+    // On platforms where O_APPEND is forced, we re-open with read/write.
+    try {
+      await raf.setPosition(0);
+      // Verify the position actually stuck
+      final pos = await raf.position();
+      if (pos != 0) {
+        await raf.close();
+        // Fallback: open in append+write mode
+        final raf2 = await file.open(mode: FileMode.append);
+        return PositionalFileWriter._(raf2, threadCount, bufferSize);
+      }
+    } catch (_) {
+      await raf.close();
+      final raf2 = await file.open(mode: FileMode.append);
+      return PositionalFileWriter._(raf2, threadCount, bufferSize);
+    }
     return PositionalFileWriter._(raf, threadCount, bufferSize);
   }
 

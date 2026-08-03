@@ -118,16 +118,23 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _checkClipboard();
     if (state == AppLifecycleState.paused) {
-      unawaited(
+      _saveTorrentResumeStateWithTimeout();
+    }
+  }
+
+  Future<void> _saveTorrentResumeStateWithTimeout() async {
+    try {
+      await Future.any([
         TorrentResumeStore.saveAll(
           TorrentService.activeTorrentIds,
           TorrentService.progressFor,
-        ).catchError((e) {
-          LoggingService.logger('MainNavigationContainer').warning(
-            '[MainNavigationContainer] saving torrent resume state failed',
-            e,
-          );
-        }),
+        ),
+        Future.delayed(const Duration(seconds: 3)),
+      ]);
+    } catch (e) {
+      LoggingService.logger('MainNavigationContainer').warning(
+        '[MainNavigationContainer] saving torrent resume state failed',
+        e,
       );
     }
   }

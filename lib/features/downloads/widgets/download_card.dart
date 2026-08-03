@@ -1215,77 +1215,90 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
 
   @override
   Widget build(BuildContext context) {
-    final files = widget.task.torrentFiles ?? [];
-    final displayFiles = files.map((f) {
-      final selected = f['selected'] == true;
-      final length = (f['length'] as num?)?.toInt() ?? 0;
-      final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      final effectiveDownloaded =
-          widget.task.status == DownloadStatus.completed && selected
-              ? length
-              : downloaded;
-      return {...f, 'downloadedBytes': effectiveDownloaded};
-    }).toList();
+    try {
+      final files = widget.task.torrentFiles ?? [];
+      final displayFiles = files.map((f) {
+        final selected = f['selected'] == true;
+        final length = (f['length'] as num?)?.toInt() ?? 0;
+        final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        final effectiveDownloaded =
+            widget.task.status == DownloadStatus.completed && selected
+                ? length
+                : downloaded;
+        return {...f, 'downloadedBytes': effectiveDownloaded};
+      }).toList();
 
-    final visible = _showAllFiles
-        ? displayFiles
-        : displayFiles.take(_collapsedFileCount).toList();
-    final hiddenCount = displayFiles.length - visible.length;
-    final mutedClr =
-        widget.isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+      final visible = _showAllFiles
+          ? displayFiles
+          : displayFiles.take(_collapsedFileCount).toList();
+      final hiddenCount = displayFiles.length - visible.length;
+      final mutedClr =
+          widget.isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            'FILES • ${files.where((f) => f['selected'] == true).length}/${files.length}',
-            style: AppTheme.microLabel(isDark: widget.isDark, size: 8),
-          ),
-        ),
-        ...visible.map(
-          (f) => _TorrentFileRow(
-            file: f,
-            isDark: widget.isDark,
-            accent: widget.accent,
-          ),
-        ),
-        if (hiddenCount > 0 || _showAllFiles)
-          GestureDetector(
-            onTap: () {
-              triggerHaptic(context.read<SettingsProvider>());
-              setState(() => _showAllFiles = !_showAllFiles);
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _showAllFiles
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 14,
-                    color: mutedClr,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _showAllFiles
-                        ? 'SHOW LESS'
-                        : '+$hiddenCount MORE FILE${hiddenCount == 1 ? '' : 'S'}',
-                    style: AppTheme.microLabel(
-                      isDark: widget.isDark,
-                      color: mutedClr,
-                      size: 8.5,
-                    ),
-                  ),
-                ],
-              ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'FILES • ${files.where((f) => f['selected'] == true).length}/${files.length}',
+              style: AppTheme.microLabel(isDark: widget.isDark, size: 8),
             ),
           ),
-      ],
-    );
+          ...visible.map(
+            (f) => _TorrentFileRow(
+              file: f,
+              isDark: widget.isDark,
+              accent: widget.accent,
+            ),
+          ),
+          if (hiddenCount > 0 || _showAllFiles)
+            GestureDetector(
+              onTap: () {
+                triggerHaptic(context.read<SettingsProvider>());
+                setState(() => _showAllFiles = !_showAllFiles);
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _showAllFiles
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 14,
+                      color: mutedClr,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _showAllFiles
+                          ? 'SHOW LESS'
+                          : '+$hiddenCount MORE FILE${hiddenCount == 1 ? '' : 'S'}',
+                      style: AppTheme.microLabel(
+                        isDark: widget.isDark,
+                        color: mutedClr,
+                        size: 8.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      );
+    } catch (e) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 12, bottom: 8),
+        child: Text(
+          'Corrupted torrent file list',
+          style: AppTheme.microLabel(
+            isDark: widget.isDark,
+            color: widget.isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -1342,6 +1355,17 @@ class _TorrentFileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nameRaw = file['name'] as String?;
+    if (file.isEmpty || nameRaw == null) {
+      final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+      return Padding(
+        padding: const EdgeInsets.only(left: 12, bottom: 8),
+        child: Text(
+          'Unknown file',
+          style: AppTheme.microLabel(isDark: isDark, color: mutedClr, size: 8.5),
+        ),
+      );
+    }
     final selected = file['selected'] == true;
     final length = (file['length'] as num?)?.toInt() ?? 0;
     final downloaded = (file['downloadedBytes'] as num?)?.toInt() ?? 0;

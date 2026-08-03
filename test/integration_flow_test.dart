@@ -61,6 +61,7 @@ class FakeDownloadEngine extends DownloadEngine {
 
   @override
   Future<void> download({
+    required String taskId,
     required String url,
     required String tempFilePath,
     required String localFilePath,

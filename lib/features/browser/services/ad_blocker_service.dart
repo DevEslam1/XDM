@@ -25,6 +25,8 @@ class AdBlockerService {
   final List<String> _customRules = [];
   final AdBlockFilterUpdater _updater = AdBlockFilterUpdater();
 
+  Set<String> _compiledDomainCache = {};
+
   bool get isEnabled => _enabled;
 
   /// User-added cosmetic rules (e.g. from the element picker), persisted.
@@ -38,10 +40,21 @@ class AdBlockerService {
         ..clear()
         ..addAll(prefs.getStringList(_customRulesPrefKey) ?? []);
       await _updater.init();
-      unawaited(_updater.updateIfNeeded());
+      _refreshDomainCache();
+      unawaited(_updater.updateIfNeeded().then((updated) {
+        if (updated) _refreshDomainCache();
+      }));
     } catch (e) {
       debugPrint('[AdBlocker] init error: $e');
     }
+  }
+
+  void _refreshDomainCache() {
+    final set = <String>{};
+    set.addAll(_blockedDomains);
+    set.addAll(_updater.allBlockedDomains);
+    set.addAll(_updater.allTrackingDomains);
+    _compiledDomainCache = set;
   }
 
   /// Adds a user cosmetic rule (e.g. `selector { display: none !important; }`).
@@ -71,10 +84,14 @@ class AdBlockerService {
   AdBlockFilterUpdater get filterUpdater => _updater;
 
   int get ruleCount =>
-      _updater.downloadedDomainCount + _updater.downloadedTrackingCount;
+      _blockedDomains.length +
+      _updater.downloadedDomainCount +
+      _updater.downloadedTrackingCount;
 
   Future<bool> updateFilters({bool force = true}) async {
-    return await _updater.updateIfNeeded(force: force);
+    final res = await _updater.updateIfNeeded(force: force);
+    if (res) _refreshDomainCache();
+    return res;
   }
 
   Future<void> setEnabled(bool value) async {
@@ -104,6 +121,10 @@ class AdBlockerService {
       return false;
     }
 
+    if (_compiledDomainCache.isEmpty) {
+      _refreshDomainCache();
+    }
+
     // Extract host from URL for exact domain matching
     final normalized =
         lower.startsWith('http://') || lower.startsWith('https://')
@@ -113,20 +134,19 @@ class AdBlockerService {
     final host = uri?.host ?? '';
     if (host.isEmpty) {
       // Fallback to substring match if URL can't be parsed
-      for (final domain in _blockedDomains) {
+      for (final domain in _compiledDomainCache) {
         if (lower.contains(domain)) return true;
       }
       return false;
     }
 
-    for (final domain in _blockedDomains) {
-      if (host == domain || host.endsWith('.$domain')) return true;
-    }
-
-    // Check dynamically updated domains from AdBlockFilterUpdater
-    if (_updater.allBlockedDomains.contains(host) ||
-        _updater.allTrackingDomains.contains(host)) {
-      return true;
+    // Fast-path subdomain walk check against compiled domain set
+    var checkHost = host;
+    while (checkHost.isNotEmpty) {
+      if (_compiledDomainCache.contains(checkHost)) return true;
+      final dotIdx = checkHost.indexOf('.');
+      if (dotIdx == -1 || dotIdx == checkHost.length - 1) break;
+      checkHost = checkHost.substring(dotIdx + 1);
     }
 
     // Check URL path patterns

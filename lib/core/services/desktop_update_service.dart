@@ -116,8 +116,22 @@ class DesktopUpdateService {
         final valid = await _verifySha256(downloadPath, info.sha256);
         if (!valid) {
           _log.severe('SHA-256 mismatch for desktop update file');
+          try {
+            await File(downloadPath).delete();
+          } catch (_) {}
           return false;
         }
+      }
+
+      final sigValid = await _verifyCodeSignature(downloadPath);
+      if (!sigValid) {
+        _log.severe(
+          'Code signature verification failed for desktop update file',
+        );
+        try {
+          await File(downloadPath).delete();
+        } catch (_) {}
+        return false;
       }
 
       if (Platform.isWindows) {
@@ -140,6 +154,38 @@ class DesktopUpdateService {
       _log.severe('Desktop update download or install failed', e);
       return false;
     }
+  }
+
+  Future<bool> _verifyCodeSignature(String filePath) async {
+    try {
+      if (Platform.isWindows) {
+        final result = await Process.run('powershell', [
+          '-Command',
+          '(Get-AuthenticodeSignature "$filePath").Status',
+        ]);
+        return result.stdout.toString().trim() == 'Valid';
+      } else if (Platform.isMacOS) {
+        final result = await Process.run('codesign', [
+          '--verify',
+          '--deep',
+          '--strict',
+          filePath,
+        ]);
+        return result.exitCode == 0;
+      } else if (Platform.isLinux) {
+        final sigFile = '$filePath.sig';
+        if (!await File(sigFile).exists()) return true;
+        final result = await Process.run('gpg', [
+          '--verify',
+          sigFile,
+          filePath,
+        ]);
+        return result.exitCode == 0;
+      }
+    } catch (e) {
+      _log.warning('Code signature verification failed: $e');
+    }
+    return false;
   }
 
   Future<bool> _verifySha256(String filePath, String expectedSha256) async {

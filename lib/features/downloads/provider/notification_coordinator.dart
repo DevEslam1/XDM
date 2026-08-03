@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:math';
 
 // ignore_for_file: prefer_initializing_formals
@@ -6,6 +8,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:open_filex/open_filex.dart' as open_filex;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/background_service.dart';
 import '../../../core/services/notification_service.dart';
@@ -65,46 +68,85 @@ class NotificationCoordinator {
   static const int _groupSummaryId = 9001;
   DateTime _lastSummaryPost = DateTime.fromMillisecondsSinceEpoch(0);
 
-  // FIX(18): notification payloads carry an opaque handle instead of the raw
-  // task id, so the OS-visible payload never leaks internal identifiers and a
-  // forged/duplicated payload cannot be used to target a task directly.
-  final Map<String, String> _opaqueHandles = {};
+  // ignore: prefer_collection_literals
+  final Map<String, String> _opaqueHandles = LinkedHashMap<String, String>();
   final Map<String, String> _taskToHandle = {};
   static final Random _handleRandom = Random.secure();
   static const int _maxOpaqueHandles = 512;
+  static const String _handleMapKey = 'dmx_opaque_handle_map';
+
+  Future<void> _loadPersistedHandles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_handleMapKey);
+      if (raw != null) {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        _opaqueHandles.clear();
+        _taskToHandle.clear();
+        map.forEach((handle, taskId) {
+          if (taskId is String) {
+            _opaqueHandles[handle] = taskId;
+            _taskToHandle[taskId] = handle;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('[NotificationCoordinator] Failed to load handle map: $e');
+    }
+  }
+
+  Future<void> _persistHandles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_handleMapKey, jsonEncode(_opaqueHandles));
+    } catch (e) {
+      debugPrint('[NotificationCoordinator] Failed to persist handle map: $e');
+    }
+  }
 
   /// Issues an opaque handle for [taskId] to embed in a notification payload.
   /// Safe to call repeatedly; returns the stable handle if it exists.
   String opaqueHandleFor(String taskId) {
     final existing = _taskToHandle[taskId];
-    if (existing != null) return existing;
+    if (existing != null) {
+      // Move to end (most recently used)
+      _opaqueHandles.remove(existing);
+      _opaqueHandles[existing] = taskId;
+      return existing;
+    }
 
     final handle = 't${_handleRandom.nextInt(1 << 31).toRadixString(16)}'
         '${_handleRandom.nextInt(1 << 31).toRadixString(16)}';
     _opaqueHandles[handle] = taskId;
     _taskToHandle[taskId] = handle;
     if (_opaqueHandles.length > _maxOpaqueHandles) {
-      // Oldest handles are dropped first; the action stream replay + nonce
-      // validation make a dropped handle harmless (the action is ignored).
-      final oldestHandle = _opaqueHandles.keys.first;
+      final oldestHandle = _opaqueHandles.keys.first; // Now LRU
       final oldestTaskId = _opaqueHandles[oldestHandle];
       _opaqueHandles.remove(oldestHandle);
       if (oldestTaskId != null) {
         _taskToHandle.remove(oldestTaskId);
       }
     }
+    unawaited(_persistHandles());
     return handle;
   }
 
   String? _resolveOpaqueHandle(String? handle) {
     if (handle == null) return null;
     final resolved = _opaqueHandles[handle];
-    if (resolved != null) return resolved;
+    if (resolved != null) {
+      // Move to end on access (LRU)
+      _opaqueHandles.remove(handle);
+      _opaqueHandles[handle] = resolved;
+      return resolved;
+    }
     if (_findTask(handle) != null) return handle;
     return null;
   }
 
   void init() {
+    unawaited(_loadPersistedHandles());
+    _actionSubscription?.cancel();
     _actionSubscription = _notificationService.onActionTapped.listen(
       _handleNotificationAction,
     );
@@ -135,6 +177,7 @@ class NotificationCoordinator {
     final handle = _taskToHandle.remove(taskId);
     if (handle != null) {
       _opaqueHandles.remove(handle);
+      unawaited(_persistHandles());
     }
     return _notificationIds.remove(taskId);
   }
@@ -223,7 +266,6 @@ class NotificationCoordinator {
     required String payload,
   }) {
     if (!_settingsProvider.notificationsEnabled) return;
-    _notificationService.startPollingPendingActions();
     final activeCount = _downloadingTasksCount();
     final multiple = activeCount > 1;
     _notificationService.showDownloadProgress(
@@ -289,5 +331,6 @@ class NotificationCoordinator {
   void dispose() {
     _actionSubscription?.cancel();
     _notificationIds.clear();
+    _notificationService.stopPollingPendingActions();
   }
 }

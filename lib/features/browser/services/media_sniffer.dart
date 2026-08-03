@@ -137,7 +137,8 @@ class MediaSniffer {
     }
     if (YoutubeService.isPlaylistUrl(scannedUrl)) {
       try {
-        final info = await YoutubeService.getPlaylistInfo(scannedUrl);
+        final info = await YoutubeService.getPlaylistInfo(scannedUrl)
+            .timeout(const Duration(seconds: 3));
         if (info != null && isActive() && tab.url == scannedUrl) {
           final count = info['videoCount'] as int? ?? 0;
           _update(() {
@@ -150,7 +151,8 @@ class MediaSniffer {
       }
       if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
         try {
-          final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
+          final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
+              .timeout(const Duration(seconds: 3));
           if (youtubeStreams.isNotEmpty &&
               isActive() &&
               tab.url == scannedUrl) {
@@ -166,7 +168,8 @@ class MediaSniffer {
     }
     if (YoutubeService.isYoutubeVideoUrl(scannedUrl)) {
       try {
-        final youtubeStreams = await YoutubeService.getStreams(scannedUrl);
+        final youtubeStreams = await YoutubeService.getStreams(scannedUrl)
+            .timeout(const Duration(seconds: 3));
         if (youtubeStreams.isNotEmpty && isActive() && tab.url == scannedUrl) {
           _update(() {
             detectedMediaSources[tab.id] = youtubeStreams;
@@ -194,7 +197,8 @@ class MediaSniffer {
       }
     }
     try {
-      final result = await tab.controller.runJavaScriptReturningResult('''
+      final result = await tab.controller
+          .runJavaScriptReturningResult('''
 (function() {
   var sources = [];
   var videos = document.getElementsByTagName('video');
@@ -241,7 +245,8 @@ class MediaSniffer {
   }
   return JSON.stringify(sources);
 })();
-''');
+''').timeout(const Duration(seconds: 8));
+      if (!isActive() || !containsTab(tab)) return;
       if (result is String && result.isNotEmpty && result != 'null') {
         var cleanResult = result;
         if (cleanResult.startsWith('"') && cleanResult.endsWith('"')) {
@@ -276,11 +281,20 @@ class MediaSniffer {
           });
         }
       }
+    } on TimeoutException {
+      debugPrint('[DMX Browser] Media scan JS injection timed out for tab ${tab.id}');
+      if (isActive() && containsTab(tab)) {
+        _update(() {
+          mediaScanFailed[tab.id] = true;
+        });
+      }
     } catch (e) {
       debugPrint('[DMX Browser] Failed to run media scan JavaScript: $e');
-      _update(() {
-        mediaScanFailed[tab.id] = true;
-      });
+      if (isActive() && containsTab(tab)) {
+        _update(() {
+          mediaScanFailed[tab.id] = true;
+        });
+      }
     }
   }
 }

@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'core/app_theme.dart';
 import 'core/services/crash_reporting_service.dart';
+import 'core/services/diagnostic_service.dart';
 import 'core/services/logging_service.dart';
 import 'core/services/mirror_health_store.dart';
 import 'core/services/background_service.dart';
@@ -75,134 +76,26 @@ Future<void> main(List<String> args) async {
     await ProtocolCache.init();
     WidgetsBinding.instance.addObserver(_ScreenObserver());
 
-    // Custom error widget builder for better UX
+    // Custom error widget builder for better UX & transient error retry
     ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData.dark(),
-        home: Scaffold(
-          backgroundColor: const Color(0xFF0F1117),
-          body: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 440),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161A22),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.3),
-                      width: 1.2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                        border: Border.all(
-                            color:
-                                const Color(0xFFEF4444).withValues(alpha: 0.3)),
-                      ),
-                      child: const Icon(Icons.warning_amber_rounded,
-                          size: 36, color: Color(0xFFEF4444)),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'SIGNAL DIAGNOSTIC ERROR',
-                      style: TextStyle(
-                        fontFamily: 'Space Grotesk',
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                        color: Color(0xFFF2F4F8),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      kDebugMode
-                          ? errorDetails.exceptionAsString()
-                          : 'An unexpected application exception occurred.',
-                      textAlign: TextAlign.center,
-                      maxLines: 4,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 12,
-                        color: Color(0xFF9AA3B5),
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(
-                                ClipboardData(text: errorDetails.toString()),
-                              );
-                            },
-                            icon: const Icon(Icons.copy_rounded, size: 14),
-                            label: const Text('COPY DIAGNOSTICS'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF9AA3B5),
-                              side: const BorderSide(color: Color(0xFF2A3040)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              textStyle: const TextStyle(
-                                fontFamily: 'Space Grotesk',
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: () => exit(0),
-                            icon: const Icon(Icons.refresh_rounded, size: 14),
-                            label: const Text('RELOAD APP'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF3B82F6),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              textStyle: const TextStyle(
-                                fontFamily: 'Space Grotesk',
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
+      return _AppErrorBoundaryWidget(errorDetails: errorDetails);
     };
 
+    String? lastErrorHash;
+    DateTime? lastErrorTime;
+
     PlatformDispatcher.instance.onError = (error, stack) {
+      final errorKey =
+          '${error.toString()}_${stack.toString().split('\n').first}';
+      final now = DateTime.now();
+      if (lastErrorHash == errorKey &&
+          lastErrorTime != null &&
+          now.difference(lastErrorTime!) < const Duration(seconds: 2)) {
+        return true;
+      }
+      lastErrorHash = errorKey;
+      lastErrorTime = now;
+
       debugPrint('Platform error: $error\n$stack');
       unawaited(
         CrashReportingService.recordError(
@@ -213,7 +106,7 @@ Future<void> main(List<String> args) async {
           Logger('main').warning('[main] operation failed', e, st);
         }),
       );
-      return false;
+      return true;
     };
 
     try {
@@ -494,6 +387,17 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(NotificationService().processPendingBackgroundActions());
+    }
+
+    if (state == AppLifecycleState.detached) {
+      // App is being terminated — release wake lock
+      unawaited(BackgroundService.releaseWakeLock().catchError((e) {
+        debugPrint('Failed to release wake lock on detach: $e');
+      }));
+    }
+
     if (!TorrentService.isSupported) return;
 
     switch (state) {
@@ -543,5 +447,178 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
     } finally {
       _transitionInProgress = false;
     }
+  }
+}
+
+class _AppErrorBoundaryWidget extends StatefulWidget {
+  final FlutterErrorDetails errorDetails;
+  const _AppErrorBoundaryWidget({required this.errorDetails});
+
+  @override
+  State<_AppErrorBoundaryWidget> createState() =>
+      _AppErrorBoundaryWidgetState();
+}
+
+class _AppErrorBoundaryWidgetState extends State<_AppErrorBoundaryWidget> {
+  static int _consecutiveFailures = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _consecutiveFailures++;
+    DiagnosticService.instance.record(
+      'ui_build_error',
+      widget.errorDetails.exceptionAsString(),
+      error: widget.errorDetails.exception,
+      details:
+          'library=${widget.errorDetails.library} context=${widget.errorDetails.context} failures=$_consecutiveFailures',
+    );
+  }
+
+  void _retry() {
+    if (_consecutiveFailures < 3) {
+      setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canRetry = _consecutiveFailures < 3;
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(),
+      home: Scaffold(
+        backgroundColor: const Color(0xFF0F1117),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 440),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161A22),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      size: 36,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'SIGNAL DIAGNOSTIC ERROR',
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                      color: Color(0xFFF2F4F8),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    kDebugMode
+                        ? widget.errorDetails.exceptionAsString()
+                        : 'An unexpected application exception occurred.',
+                    textAlign: TextAlign.center,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      color: Color(0xFF9AA3B5),
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(
+                              ClipboardData(
+                                text: widget.errorDetails.toString(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy_rounded, size: 14),
+                          label: const Text('COPY DIAGNOSTICS'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF9AA3B5),
+                            side: const BorderSide(color: Color(0xFF2A3040)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            textStyle: const TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: canRetry ? _retry : () => exit(0),
+                          icon: Icon(
+                            canRetry
+                                ? Icons.refresh_rounded
+                                : Icons.power_settings_new_rounded,
+                            size: 14,
+                          ),
+                          label: Text(canRetry ? 'RETRY' : 'RELOAD APP'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: canRetry
+                                ? const Color(0xFF3B82F6)
+                                : const Color(0xFFEF4444),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            textStyle: const TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

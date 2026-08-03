@@ -38,6 +38,7 @@ mixin DownloadBackupMixin {
   /// DEPRECATED: This legacy XOR cipher helper is insecure (XDMCRYPT v1 format).
   /// Kept solely for backwards compatibility to allow legacy imports. New backups
   /// must be encrypted with encryptBackup (AES-256).
+  @Deprecated('Legacy XDMCRYPT v1 XOR cipher is insecure. Use AES-256.')
   List<int> _xorCipher(List<int> data, List<int> key) {
     final List<int> result = List<int>.filled(data.length, 0);
     for (int i = 0; i < data.length; i++) {
@@ -131,7 +132,7 @@ mixin DownloadBackupMixin {
 
       if (isLegacy) {
         debugPrint(
-          '[XDM Security Warning] Decrypting legacy insecure XDMCRYPT v1 backup format using XOR cipher. Please re-export your backup to update to AES-GCM format.',
+          '[XDM Security Warning] Decrypting legacy insecure XDMCRYPT v1 backup format using XOR cipher. Please re-export your backup to update to AES-GCM/CBC format.',
         );
         final cipherBytes = bytes.sublist(legacyMagic.length);
         final keyBytes = sha256.convert(utf8.encode(password)).bytes;
@@ -194,7 +195,15 @@ mixin DownloadBackupMixin {
   // ---------------------------------------------------------------------------
   String exportBackupJson({String? password}) {
     final list = providerTasks.map((t) => t.toMap()).toList();
-    final jsonStr = jsonEncode(list);
+    final tasksJson = jsonEncode(list);
+    final checksum = sha256.convert(utf8.encode(tasksJson)).toString();
+    final envelope = {
+      'version': 2,
+      'checksum': checksum,
+      'exportedAt': DateTime.now().toIso8601String(),
+      'tasks': list,
+    };
+    final jsonStr = jsonEncode(envelope);
     if (password != null && password.isNotEmpty) {
       return encryptBackup(jsonStr, password);
     }
@@ -237,7 +246,31 @@ mixin DownloadBackupMixin {
         jsonStr = decrypted;
       }
 
-      final list = jsonDecode(jsonStr) as List;
+      final decoded = jsonDecode(jsonStr);
+      final List list;
+      if (decoded is Map && decoded.containsKey('tasks')) {
+        // v2 Envelope format
+        final tasks = decoded['tasks'] as List;
+        final expectedChecksum = decoded['checksum'] as String?;
+        if (expectedChecksum != null && expectedChecksum.isNotEmpty) {
+          final tasksJson = jsonEncode(tasks);
+          final actualChecksum =
+              sha256.convert(utf8.encode(tasksJson)).toString();
+          if (actualChecksum != expectedChecksum) {
+            debugPrint(
+              '[Backup Checksum Error] Expected $expectedChecksum, got $actualChecksum',
+            );
+            return false;
+          }
+        }
+        list = tasks;
+      } else if (decoded is List) {
+        // Legacy v1 bare array format
+        list = decoded;
+      } else {
+        return false;
+      }
+
       for (final item in list) {
         if (item is! Map) return false;
         if (!item.containsKey('id') ||

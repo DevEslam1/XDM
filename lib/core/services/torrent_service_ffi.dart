@@ -232,7 +232,10 @@ class TorrentService {
                   downloadPayloadRate: value.downloadRate,
                   uploadPayloadRate: value.uploadRate,
                   totalPayloadDownload: value.totalDone,
-                  totalPayloadUpload: 0,
+                  totalPayloadUpload:
+                      (value as dynamic).totalPayloadUpload as int? ??
+                          (value as dynamic).totalUpload as int? ??
+                          0,
                   currentTracker: '',
                   nextAnnounceSeconds: 0,
                   distributedCopies: 0.0,

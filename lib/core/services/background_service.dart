@@ -42,6 +42,8 @@ class BackgroundService {
   );
   static bool _wakeLockHeld = false;
   static Timer? _wakeLockRenewalTimer;
+  static Timer? _wakeLockSafetyTimer;
+  static const Duration _maxWakeLockHold = Duration(hours: 4);
 
   /// Returns true only on Android. On iOS, background Dart execution is not
   /// supported without a native BGTaskScheduler plugin.
@@ -135,7 +137,15 @@ class BackgroundService {
 
   static Future<void> start() async {
     if (!isSupported) {
-      _log.fine('BackgroundService.start() skipped (iOS or unsupported)');
+      if (Platform.isIOS) {
+        _log.warning(
+          'iOS does not support background Dart execution. '
+          'Downloads will pause when the app is backgrounded. '
+          'A native BGTaskScheduler implementation is required.',
+        );
+      } else {
+        _log.fine('BackgroundService.start() skipped (iOS or unsupported)');
+      }
       return;
     }
     final service = FlutterBackgroundService();
@@ -180,6 +190,15 @@ class BackgroundService {
       _wakeLockHeld = true;
       _log.fine('Wake lock acquired');
 
+      // Safety net: auto-release after max hold duration
+      _wakeLockSafetyTimer?.cancel();
+      _wakeLockSafetyTimer = Timer(_maxWakeLockHold, () async {
+        if (_wakeLockHeld) {
+          _log.warning('Wake lock held for ${_maxWakeLockHold.inHours}h. Auto-releasing.');
+          await releaseWakeLock();
+        }
+      });
+
       // Start periodic renewal every 15 minutes to prevent native timeout expiry
       _wakeLockRenewalTimer?.cancel();
       _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 15), (
@@ -208,6 +227,8 @@ class BackgroundService {
     try {
       _wakeLockRenewalTimer?.cancel();
       _wakeLockRenewalTimer = null;
+      _wakeLockSafetyTimer?.cancel();
+      _wakeLockSafetyTimer = null;
       await _wakeLockChannel.invokeMethod<void>('release');
       _wakeLockHeld = false;
       _log.fine('Wake lock released');

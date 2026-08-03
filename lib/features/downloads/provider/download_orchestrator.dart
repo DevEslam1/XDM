@@ -141,13 +141,23 @@ class DownloadOrchestrator {
   /// Records a classified, bounded diagnostic entry for [taskId]'s failure.
   void _recordDownloadFailure(String taskId, Object error) {
     final classification = ErrorTaxonomy.classify(error);
+    final task = _host.findTaskById(taskId);
+    final retryCount = _host.retryCounts[taskId] ?? 0;
+    final metrics = _host.downloadMetrics[taskId];
+    final elapsedMs = metrics != null ? metrics.elapsed.inMilliseconds : 0;
+    final host = task != null ? (Uri.tryParse(task.url)?.host ?? '-') : '-';
+    final threadCount = task?.threadCount ?? 1;
+    final fileSize = task?.fileSize ?? 0;
+
     DiagnosticService.instance.record(
       'download',
       classification.message,
       error: error,
       details: 'task=$taskId family=${classification.family.name} '
           'status=${classification.httpStatus ?? '-'} '
-          'retryable=${classification.retryable}',
+          'retryable=${classification.retryable} '
+          'retries=$retryCount elapsedMs=$elapsedMs '
+          'host=$host threads=$threadCount fileSize=$fileSize',
     );
   }
 
@@ -985,6 +995,7 @@ class DownloadOrchestrator {
 
             debugPrint('[DMX] Parallel download: starting audio stream.');
             await _host.downloadEngine.download(
+              taskId: task.id,
               url: liveAudioTask.mergedAudioUrl!,
               tempFilePath: liveAudioTempPath,
               localFilePath: liveAudioTempPath,
@@ -1076,6 +1087,7 @@ class DownloadOrchestrator {
             debugPrint('[DMX] Parallel download: starting video stream.');
             try {
               await _host.downloadEngine.download(
+                taskId: task.id,
                 url: task.url,
                 tempFilePath: task.tempFilePath,
                 localFilePath: task.localFilePath,
@@ -1299,6 +1311,7 @@ class DownloadOrchestrator {
                   await _host.setTaskState(task);
 
                   await _host.downloadEngine.download(
+                    taskId: task.id,
                     url: task.url,
                     tempFilePath: task.tempFilePath,
                     localFilePath: task.localFilePath,
@@ -1708,10 +1721,10 @@ class DownloadOrchestrator {
     }
 
     if (videoTransferSize <= 0 && hasAudio && task.fileSize > 0) {
-      videoTransferSize = 1;
+      videoTransferSize = 0; // Let the engine probe the actual size
       debugPrint(
         '[DMX] videoTransferSize was 0 (fileSize=${task.fileSize}, '
-        'audioSize=${task.audioSize}); floored to 1',
+        'audioSize=${task.audioSize}); left at 0 for engine probe',
       );
     }
 
@@ -1979,7 +1992,9 @@ class DownloadOrchestrator {
   @visibleForTesting
   bool isRetryableError(Object error) {
     final msg = error.toString().toLowerCase();
-    if (error is DownloadIntegrityException) {
+    if (error is DownloadIntegrityException ||
+        msg.contains('file changed on server') ||
+        msg.contains('filechangedonserver')) {
       return false;
     }
     if (msg.contains('merge') ||

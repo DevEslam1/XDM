@@ -15,6 +15,9 @@ class MediaDownloadEngine {
     required void Function(double progress, int downloadedBytes, int speedBps)
         onProgress,
   }) async {
-    // Delegate component
+    throw UnimplementedError(
+      'MediaDownloadEngine.download is not yet implemented. '
+      'Use DownloadEngine for HTTP downloads with FFmpegMuxService for merging.',
+    );
   }
 }

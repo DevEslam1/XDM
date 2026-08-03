@@ -9,6 +9,9 @@ class TorrentDownloadEngine {
     required void Function(double progress, int downloadedBytes, int speedBps)
         onProgress,
   }) async {
-    // Engine execution stub — wrapped by orchestrator DownloadEngine
+    throw UnimplementedError(
+      'TorrentDownloadEngine.download is not yet implemented. '
+      'Torrent downloads are handled via TorrentService FFI in DownloadEngine._handleTorrentDownload.',
+    );
   }
 }

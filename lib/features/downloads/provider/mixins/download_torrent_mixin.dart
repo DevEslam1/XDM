@@ -431,7 +431,8 @@ mixin DownloadTorrentMixin {
       if (settings.shareRatioLimit > 0) {
         final totalDown = stats.totalPayloadDownload > 0
             ? stats.totalPayloadDownload
-            : (task.fileSize > 0 ? task.fileSize : 1);
+            : (task.fileSize > 0 ? task.fileSize : 0);
+        if (totalDown <= 0) continue;
         final ratio = stats.totalPayloadUpload / totalDown;
         if (ratio >= settings.shareRatioLimit) {
           debugPrint(

@@ -160,10 +160,22 @@ class DownloadProvider extends ChangeNotifier
 
   Timer? _torrentInitTimer;
 
+  bool _isLoadingTasks = true;
+  bool get isLoadingTasks => _isLoadingTasks;
+
+  int _torrentInitRetries = 0;
+  static const int _maxTorrentInitRetries = 15;
+
   void _initTorrentSubscription() {
     if (_torrentUpdatesSubscription != null) return;
-
     if (!TorrentService.isInitialized) {
+      _torrentInitRetries++;
+      if (_torrentInitRetries >= _maxTorrentInitRetries) {
+        _log.warning(
+          'TorrentService.init never completed after $_maxTorrentInitRetries retries. Giving up.',
+        );
+        return;
+      }
       _torrentInitTimer?.cancel();
       _torrentInitTimer = Timer(const Duration(seconds: 2), () {
         if (_disposed) return;
@@ -171,12 +183,18 @@ class DownloadProvider extends ChangeNotifier
       });
       return;
     }
-
-    _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen((
-      torrents,
-    ) {
-      _latestTorrentStats = torrents;
-    });
+    _torrentInitRetries = 0;
+    _torrentUpdatesSubscription = TorrentService.torrentUpdates.listen(
+      (torrents) {
+        _latestTorrentStats = torrents;
+        // Prune stats for torrents that were removed
+        if (_latestTorrentStats.length > torrents.length + 50) {
+          _latestTorrentStats.removeWhere(
+            (id, _) => !torrents.containsKey(id),
+          );
+        }
+      },
+    );
   }
 
   StreamSubscription? _torrentUpdatesSubscription;
@@ -212,6 +230,10 @@ class DownloadProvider extends ChangeNotifier
   /// FIX(R2): Surfaces the most recent DB-save failure without crashing the zone.
   /// Callers (e.g. UI snackbars) can listen to this to warn the user.
   final ValueNotifier<String?> lastSaveError = ValueNotifier<String?>(null);
+
+  void clearLastSaveError() {
+    lastSaveError.value = null;
+  }
 
   final Map<String, int> _ytLowSpeedCounts = {};
   final Map<String, bool> _ytThrottlingRefreshing = {};
@@ -572,6 +594,7 @@ class DownloadProvider extends ChangeNotifier
   /// On user-triggered reload, we must preserve currently active downloads.
   Future<void> load({bool pauseOrphanDownloads = true}) async {
     _generation++;
+    _isLoadingTasks = true;
 
     // Cancel stale notifications from previous sessions
     await _notifications.cancelAll();
@@ -638,6 +661,7 @@ class DownloadProvider extends ChangeNotifier
       ..clear()
       ..addAll(loaded);
 
+    _isLoadingTasks = false;
     filteredTasksDirty = true;
 
     for (final task in toDelete) {
@@ -646,6 +670,30 @@ class DownloadProvider extends ChangeNotifier
     }
 
     await _databaseService.saveTasks(_tasks);
+
+    // In load(), after loading tasks:
+    if (Platform.isIOS && !kIsWeb) {
+      final activeDownloads = _tasks.where(
+        (t) => t.status == DownloadStatus.downloading,
+      ).length;
+      if (activeDownloads > 0) {
+        _log.warning(
+          'iOS: $activeDownloads download(s) were active but iOS does not '
+          'support background execution. They will pause.',
+        );
+        // Mark them as paused so the UI reflects reality
+        for (var i = 0; i < _tasks.length; i++) {
+          if (_tasks[i].status == DownloadStatus.downloading) {
+            _tasks[i] = _tasks[i].copyWith(
+              status: DownloadStatus.paused,
+              speed: 0,
+              clearEta: true,
+              errorMessage: 'Paused: iOS does not support background downloads',
+            );
+          }
+        }
+      }
+    }
 
     // Automatically restart seeding for completed torrents with seeding enabled
     for (final task in _tasks) {
@@ -727,7 +775,18 @@ class DownloadProvider extends ChangeNotifier
 
     // Always pump the queue so queued-downloads (including newly
     // auto-resumed ones) start without requiring user interaction.
-    pumpQueue();
+    Future<void> safePumpQueue() async {
+      if (TorrentService.isSupported && !TorrentService.isInitialized) {
+        // Wait up to 10s for torrent init
+        final stopwatch = Stopwatch()..start();
+        while (!TorrentService.isInitialized &&
+            stopwatch.elapsed < const Duration(seconds: 10)) {
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
+      }
+      pumpQueue();
+    }
+    unawaited(safePumpQueue());
 
     _updateTelemetryWidget(force: true);
 
@@ -1913,6 +1972,7 @@ class DownloadProvider extends ChangeNotifier
 
     try {
       await _databaseService.saveTask(updated);
+      lastSaveError.value = null;
 
       // Notify AFTER successful DB write to keep UI and persistence in sync.
       notifyListeners();
@@ -2730,6 +2790,7 @@ class DownloadProvider extends ChangeNotifier
       _downloadEngine.close();
     }
 
+    _latestTorrentStats.clear();
     super.dispose();
   }
 }

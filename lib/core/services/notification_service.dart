@@ -29,25 +29,35 @@ void _onBackgroundNotificationResponse(NotificationResponse response) {
 
 Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
   try {
+    if (payload == null || payload.isEmpty) {
+      debugPrint('[NotificationService] WARNING: null or empty payload for action $actionId');
+    }
     final prefs = await SharedPreferences.getInstance();
     final nonce = prefs.getString(_nonceKey);
     final port = IsolateNameServer.lookupPortByName('dmx_notification_port');
+
+    bool portSendSucceeded = false;
     if (port != null) {
-      port.send({'action': actionId, 'taskId': payload, 'nonce': nonce});
+      try {
+        port.send({'action': actionId, 'taskId': payload, 'nonce': nonce});
+        portSendSucceeded = true;
+      } catch (e) {
+        debugPrint('[NotificationService] Port send failed: $e');
+      }
     }
 
-    // Always persist to SharedPreferences as a fallback so that main isolate
-    // / foreground service or app startup can process it even if IsolateNameServer
-    // port lookup fails across engine boundaries (e.g. on ColorOS / Android background).
-    final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
-    final actionJson = jsonEncode({
-      'action': actionId,
-      'taskId': payload,
-      'nonce': nonce,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    });
-    rawList.add(actionJson);
-    await prefs.setStringList(_pendingActionsKey, rawList);
+    // Only persist to SharedPreferences as a fallback if port send failed
+    if (!portSendSucceeded) {
+      final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
+      final actionJson = jsonEncode({
+        'action': actionId,
+        'taskId': payload,
+        'nonce': nonce,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+      rawList.add(actionJson);
+      await prefs.setStringList(_pendingActionsKey, rawList);
+    }
   } catch (e) {
     debugPrint('[NotificationService] Background action forward failed: $e');
   }
@@ -59,9 +69,28 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
 String? _nonce;
 
 class NotificationService {
-  NotificationService._();
+  NotificationService._() {
+    unawaited(_ensureNoncePersisted());
+  }
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
+
+  Future<void> _ensureNoncePersisted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      var persistedNonce = prefs.getString(_nonceKey);
+      if (persistedNonce == null || persistedNonce.isEmpty) {
+        final rand = Random.secure();
+        persistedNonce = base64Encode(
+          List<int>.generate(16, (_) => rand.nextInt(256)),
+        );
+        await prefs.setString(_nonceKey, persistedNonce);
+      }
+      _nonce = persistedNonce;
+    } catch (e) {
+      debugPrint('[NotificationService] Failed to ensure nonce: $e');
+    }
+  }
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -212,6 +241,7 @@ class NotificationService {
   }
 
   void startPollingPendingActions() {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
     if (_pollTimer != null && _pollTimer!.isActive) return;
     _pollTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
       unawaited(processPendingBackgroundActions());
@@ -254,23 +284,7 @@ class NotificationService {
       _receivePort?.close();
       _receivePort = null;
 
-      // Load (or create) the persistent nonce so that actions fired from a
-      // previous process lifetime can still be validated. Never rotate here —
-      // the background isolate reads the same persisted value.
-      final prefs = await SharedPreferences.getInstance();
-      var persistedNonce = prefs.getString(_nonceKey);
-      if (persistedNonce == null || persistedNonce.isEmpty) {
-        final rand = Random.secure();
-        persistedNonce = base64Encode(
-          List<int>.generate(16, (_) => rand.nextInt(256)),
-        );
-        try {
-          await prefs.setString(_nonceKey, persistedNonce);
-        } catch (e) {
-          debugPrint('[NotificationService] Failed to persist nonce: $e');
-        }
-      }
-      _nonce = persistedNonce;
+      await _ensureNoncePersisted();
 
       if (_actionStreamController.isClosed) {
         _actionStreamController = _createActionStreamController(
@@ -316,6 +330,11 @@ class NotificationService {
               _addAction({'action': action});
             } else if (taskId != null && _isValidTaskId(taskId)) {
               _addAction({'action': action, 'taskId': taskId});
+            } else {
+              debugPrint(
+                '[NotificationService] Dropped action "$action": '
+                'taskId=${taskId ?? "null"} failed validation',
+              );
             }
           }
         }
@@ -331,6 +350,11 @@ class NotificationService {
             _addAction({'action': actionId});
           } else if (payload != null && _isValidTaskId(payload)) {
             _addAction({'action': actionId, 'taskId': payload});
+          } else {
+            debugPrint(
+              '[NotificationService] Dropped response action "$actionId": '
+              'payload=${payload ?? "null"} failed validation',
+            );
           }
           unawaited(processPendingBackgroundActions());
         },
@@ -374,6 +398,7 @@ class NotificationService {
         );
       }
       await processPendingBackgroundActions();
+      startPollingPendingActions();
       _initialized = true;
       completer.complete();
     } catch (e) {

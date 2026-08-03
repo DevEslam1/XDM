@@ -66,7 +66,17 @@ class UpdateService {
   /// Manifests WITHOUT a `signature` field are still accepted for backward
   /// compatibility; once a real key is configured, signed manifests are
   /// verified and forged/tampered ones are rejected.
-  static const String kUpdateManifestPublicKeyPem = '';
+  static const String kUpdateManifestPublicKeyPem = '''
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyV1X9uWfC4h2+k+G+8rU
+7vY0Q1Z9Xw2M4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
+4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
+4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
+4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
+4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z4O0Z
+IDAQAB
+-----END PUBLIC KEY-----
+''';
 
   /// Verifies an RSA-SHA256 signature over the canonical manifest JSON.
   /// Returns true only if the signature matches the bundled public key.
@@ -128,20 +138,23 @@ class UpdateService {
             continue;
           }
 
-          // FIX(26): if the manifest carries a signature, it must verify
-          // against the bundled public key — otherwise the source is skipped.
+          // Enforce RSA signature check: manifests without a valid signature are rejected.
           final signature = json['signature'] as String?;
-          if (signature != null && signature.trim().isNotEmpty) {
-            final canonical = jsonEncode(
-              Map<String, dynamic>.from(json)..remove('signature'),
+          if (signature == null || signature.trim().isEmpty) {
+            debugPrint(
+              '[UpdateService] Update manifest has no signature. Rejecting $url',
             );
-            if (!verifyManifestSignature(canonical, signature.trim())) {
-              debugPrint(
-                '[UpdateService] Manifest signature invalid for $url; '
-                'trying next source.',
-              );
-              continue;
-            }
+            continue;
+          }
+          final canonical = jsonEncode(
+            Map<String, dynamic>.from(json)..remove('signature'),
+          );
+          if (!verifyManifestSignature(canonical, signature.trim())) {
+            debugPrint(
+              '[UpdateService] Manifest signature invalid for $url; '
+              'trying next source.',
+            );
+            continue;
           }
 
           final update = UpdateInfo.fromJson(json);

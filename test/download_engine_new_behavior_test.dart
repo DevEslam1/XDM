@@ -357,6 +357,7 @@ void main() {
 
       final progress = <DownloadProgress>[];
       await engine.download(
+        taskId: 'test_task_id',
         url: url,
         tempFilePath: tempFile.path,
         localFilePath: localFile.path,
@@ -404,6 +405,7 @@ void main() {
 
         try {
           await engine.download(
+            taskId: 'test_task_id',
             url: url,
             tempFilePath: tempFile.path,
             localFilePath: localFile.path,
@@ -463,6 +465,7 @@ void main() {
 
       final progress = <DownloadProgress>[];
       await engine.download(
+        taskId: 'test_task_id',
         url: url,
         tempFilePath: tempFile.path,
         localFilePath: localFile.path,
@@ -505,6 +508,7 @@ void main() {
 
       engine.updateSpeedLimit(1024 * 1024, 1);
       await engine.download(
+        taskId: 'test_task_id',
         url: url,
         tempFilePath: tempFile.path,
         localFilePath: localFile.path,
@@ -772,6 +776,7 @@ void main() {
 
         try {
           await engine.download(
+            taskId: 'test_task_id',
             url: url,
             tempFilePath: tempFile.path,
             localFilePath: localFile.path,
@@ -838,6 +843,7 @@ void main() {
         Future.delayed(const Duration(milliseconds: 150), () => ct.cancel());
         try {
           await engine.download(
+            taskId: 'test_task_id',
             url: url,
             tempFilePath: tempFile.path,
             localFilePath: localFile.path,
@@ -854,6 +860,7 @@ void main() {
 
       final progress = <DownloadProgress>[];
       await engine.download(
+        taskId: 'test_task_id',
         url: url,
         tempFilePath: tempFile.path,
         localFilePath: localFile.path,

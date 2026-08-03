@@ -38,6 +38,7 @@ void main() {
 
     final progress = <DownloadProgress>[];
     await engine.download(
+      taskId: 'test_task_id',
       url: url,
       tempFilePath: tempFile.path,
       localFilePath: localFile.path,
@@ -79,6 +80,7 @@ void main() {
 
     try {
       await engine.download(
+        taskId: 'test_task_id',
         url: url,
         tempFilePath: tempFile.path,
         localFilePath: localFile.path,

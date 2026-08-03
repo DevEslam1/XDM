@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -75,8 +76,27 @@ class _SettingsScreenState extends State<SettingsScreen>
       ..forward();
   }
 
+  Timer? _backendUrlDebounce;
+
+  void _saveBackendUrl(String val, SettingsProvider settings) {
+    final trimmed = val.trim();
+    if (trimmed.isEmpty ||
+        trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://')) {
+      settings.setBackendUrl(trimmed);
+    }
+  }
+
+  void _onBackendUrlChanged(String val, SettingsProvider settings) {
+    _backendUrlDebounce?.cancel();
+    _backendUrlDebounce = Timer(const Duration(milliseconds: 600), () {
+      _saveBackendUrl(val, settings);
+    });
+  }
+
   @override
   void dispose() {
+    _backendUrlDebounce?.cancel();
     _uaController.dispose();
     _proxyHostController.dispose();
     _proxyPortController.dispose();
@@ -801,8 +821,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? 'عنوان الخادم الخلفي لـ yt-dlp (http/https)'
                               : 'Backend URL for yt-dlp (http:// or https://)',
                           controller: _backendUrlController,
-                          onSubmitted: (val) =>
-                              settings.setBackendUrl(val.trim()),
+                          onChanged: (val) => _onBackendUrlChanged(val, settings),
+                          onSubmitted: (val) => _saveBackendUrl(val, settings),
                         ),
                         _Divider(isDark: isDark),
                         Padding(
@@ -2154,6 +2174,7 @@ class _TextFieldTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final TextEditingController controller;
+  final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final Color accentColor;
 
@@ -2161,6 +2182,7 @@ class _TextFieldTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.controller,
+    this.onChanged,
     this.onSubmitted,
     required this.accentColor,
   });
@@ -2227,6 +2249,7 @@ class _TextFieldTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 child: TextField(
                   controller: controller,
+                  onChanged: onChanged,
                   onSubmitted: onSubmitted,
                   style: TextStyle(
                     color: isDark
@@ -3413,6 +3436,22 @@ abstract final class _BackupHelper {
     );
     if (replace == null) return;
     final file = File(result.files.single.path!);
+    final fileSize = await file.length();
+    const maxSizeBytes = 50 * 1024 * 1024;
+    if (fileSize > maxSizeBytes) {
+      if (context.mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: isRtl
+              ? 'حجم ملف النسخة الاحتياطية كبير جداً (الحد الأقصى 50 ميجابايت)'
+              : 'Backup file is too large (maximum 50 MB)',
+          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          icon: Icons.error_outline,
+          isDarkMode: isDark,
+        );
+      }
+      return;
+    }
     final jsonStr = await file.readAsString();
     bool isEncrypted = false;
     try {

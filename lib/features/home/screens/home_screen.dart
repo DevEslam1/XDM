@@ -138,9 +138,11 @@ class _HomeScreenState extends State<HomeScreen>
                                     return false;
                                   },
                                   builder: (context, categorySizes, _) =>
-                                      _RedesignedAnalyticsPanel(
-                                    categorySizes: categorySizes,
-                                    settings: context.read<SettingsProvider>(),
+                                      RepaintBoundary(
+                                    child: _RedesignedAnalyticsPanel(
+                                      categorySizes: categorySizes,
+                                      settings: context.read<SettingsProvider>(),
+                                    ),
                                   ),
                                 ),
                               )
@@ -180,6 +182,11 @@ class _HomeScreenState extends State<HomeScreen>
                           isDark: isDark,
                           isRtl: isRtl,
                           settings: context.read<SettingsProvider>(),
+                          onClearSearch: () {
+                            _searchController.clear();
+                            context.read<DownloadProvider>().setSearchQuery('');
+                            setState(() {});
+                          },
                         ),
                       ),
                     ],
@@ -340,8 +347,10 @@ class _HomeScreenState extends State<HomeScreen>
                 contentPadding: EdgeInsets.zero,
                 isDense: true,
               ),
-              onChanged: (val) =>
-                  context.read<DownloadProvider>().setSearchQuery(val),
+              onChanged: (val) {
+                setState(() {});
+                context.read<DownloadProvider>().setSearchQuery(val);
+              },
             ),
           ),
           if (_searchController.text.isNotEmpty)
@@ -349,9 +358,10 @@ class _HomeScreenState extends State<HomeScreen>
               onTap: () {
                 _searchController.clear();
                 context.read<DownloadProvider>().setSearchQuery('');
+                setState(() {});
               },
               child: Icon(
-                Icons.close_rounded,
+                Icons.clear_rounded,
                 size: 16,
                 color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
               ),
@@ -1293,16 +1303,96 @@ class _DownloadTaskList extends StatelessWidget {
   final bool isDark;
   final bool isRtl;
   final SettingsProvider settings;
+  final VoidCallback? onClearSearch;
 
   const _DownloadTaskList({
     required this.selectedTab,
     required this.isDark,
     required this.isRtl,
     required this.settings,
+    this.onClearSearch,
   });
+
+  Widget _buildLoadingSkeleton(bool isDark, BuildContext context) {
+    final cardBg = isDark ? AppTheme.surface : AppTheme.lightSurface;
+    final baseShimmer = isDark ? Colors.white10 : Colors.black12;
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
+      itemCount: 3,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (_, __) => Container(
+        height: 110,
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: isDark ? AppTheme.border : AppTheme.lightBorder,
+            width: 0.8,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: baseShimmer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 140,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: baseShimmer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: 80,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: baseShimmer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Container(
+                height: 6,
+                decoration: BoxDecoration(
+                  color: baseShimmer,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (context.watch<DownloadProvider>().isLoadingTasks) {
+      return _buildLoadingSkeleton(isDark, context);
+    }
+
     return Selector<DownloadProvider, List<DownloadTask>>(
       shouldRebuild: (prev, next) {
         if (prev.length != next.length) return true;
@@ -1374,6 +1464,7 @@ class _DownloadTaskList extends StatelessWidget {
             isDark: isDark,
             isRtl: isRtl,
             settings: settings,
+            onClearSearch: onClearSearch,
           );
         }
 
@@ -1440,12 +1531,14 @@ class _EmptyState extends StatelessWidget {
   final bool isDark;
   final bool isRtl;
   final SettingsProvider settings;
+  final VoidCallback? onClearSearch;
 
   const _EmptyState({
     required this.selectedTab,
     required this.isDark,
     required this.isRtl,
     required this.settings,
+    this.onClearSearch,
   });
 
   @override
@@ -1486,7 +1579,10 @@ class _EmptyState extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               TextButton.icon(
-                onPressed: () => provider.setSearchQuery(''),
+                onPressed: () {
+                  onClearSearch?.call();
+                  provider.setSearchQuery('');
+                },
                 icon: const Icon(Icons.clear_rounded, size: 16),
                 label: Text(L10n.of(context, 'clear_search')),
                 style: TextButton.styleFrom(foregroundColor: accentClr),

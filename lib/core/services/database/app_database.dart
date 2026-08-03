@@ -234,6 +234,9 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(
             'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)',
           );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks (created_at)',
+          );
         },
         onUpgrade: (m, from, to) async {
           debugPrint('AppDatabase: Upgrading schema from $from to $to');
@@ -481,6 +484,9 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'ALTER TABLE bookmarks_new RENAME TO bookmarks',
             );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks (created_at)',
+            );
 
             // --- browser_history ---
             await customStatement('''
@@ -503,13 +509,15 @@ class AppDatabase extends _$AppDatabase {
             )
           FROM browser_history
         ''');
+            await customStatement(
+              'DROP INDEX IF EXISTS idx_browser_history_visited_at',
+            );
             await customStatement('DROP TABLE browser_history');
             await customStatement(
               'ALTER TABLE browser_history_new RENAME TO browser_history',
             );
             await customStatement(
-              'CREATE INDEX IF NOT EXISTS idx_browser_history_visited_at '
-              'ON browser_history (visited_at)',
+              'CREATE INDEX idx_browser_history_visited_at ON browser_history (visited_at)',
             );
 
             // Post-migration recovery for bookmarks: fix rows stuck at 0 or negative timestamps

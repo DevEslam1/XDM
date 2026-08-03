@@ -527,6 +527,19 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> setProxyAddress(String value) async {
     final trimmed = value.trim();
+    if (trimmed.isNotEmpty) {
+      final validFormat = RegExp(r'^[\w.-]+:\d{1,5}$').hasMatch(trimmed);
+      if (!validFormat) {
+        _log.warning('Invalid proxy address format: $trimmed');
+        return;
+      }
+      final parts = trimmed.split(':');
+      final port = int.tryParse(parts[1]);
+      if (port == null || port <= 0 || port > 65535) {
+        _log.warning('Invalid proxy port in address: $trimmed');
+        return;
+      }
+    }
     proxyAddress = trimmed;
     await _prefs.setString(_proxyAddressKey, trimmed);
     notifyListeners();
@@ -925,6 +938,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _autoStartKey,
       _maxDownloadsKey,
       _speedLimitKey,
+      _bandwidthScheduleEnabledKey,
+      _scheduleStartTimeKey,
+      _scheduleEndTimeKey,
+      _scheduleSpeedLimitMbKey,
       _enableGlowKey,
       _gridOpacityKey,
       _soundNotificationKey,
@@ -962,6 +979,9 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _batterySaverModeKey,
       _saveBrowserHistoryKey,
       _notificationsEnabledKey,
+      _quietHoursEnabledKey,
+      _quietHoursStartKey,
+      _quietHoursEndKey,
       _proxyHostKey,
       _proxyPortKey,
       _proxyUsernameKey,
@@ -973,6 +993,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _batteryOptimizationPromptedKey,
       _maxTotalConnectionsKey,
       _backendUrlKey,
+      _backendTokenKey,
       _sendBrowserCookiesToBackendKey,
       _useRemoteBackendKey,
     ];
