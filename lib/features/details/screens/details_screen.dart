@@ -444,6 +444,8 @@ class _TelemetryHero extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         etaText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTheme.dataStyle(
                           isDark: isDark,
                           size: 12,
@@ -453,7 +455,8 @@ class _TelemetryHero extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       // Transferred / size
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             task.downloadedSizeFormatted,

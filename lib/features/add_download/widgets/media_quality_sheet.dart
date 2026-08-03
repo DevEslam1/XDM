@@ -523,6 +523,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                     Expanded(
                       child: ListView(
                         controller: scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
                           if (_selectedTabIndex == 0) ...[

@@ -82,7 +82,6 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   String? _note;
   String _qualityPreset = 'best_combined';
   String _searchQuery = '';
-  final ScrollController _scrollController = ScrollController();
 
   List<Map<String, dynamic>> get _filteredVideos {
     if (_searchQuery.isEmpty) return _videos;
@@ -110,22 +109,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     _fetchPlaylist();
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      _loadMoreVideos();
-    }
   }
 
   Future<void> _loadMoreVideos() async {
@@ -689,260 +673,274 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
 
                     // Video list
                     Expanded(
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        itemCount: _filteredVideos.length +
-                            (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == _filteredVideos.length) {
-                            return _isLoadingMore
-                                ? const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (ScrollNotification scrollInfo) {
+                          if (scrollInfo.metrics.pixels >=
+                              scrollInfo.metrics.maxScrollExtent - 200) {
+                            _loadMoreVideos();
+                          }
+                          return false;
+                        },
+                        child: ListView.builder(
+                          controller: scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          itemCount: _filteredVideos.length +
+                              (_hasMoreVideos && _searchQuery.isEmpty ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _filteredVideos.length) {
+                              return _isLoadingMore
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(16),
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  )
-                                : const SizedBox.shrink();
-                          }
-                          final video = _filteredVideos[index];
-                          final isSelected = video['selected'] as bool? ?? true;
-                          final title =
-                              video['title'] as String? ?? 'Video ${index + 1}';
-                          final duration = video['duration'] as int? ?? 0;
-                          final author = video['author'] as String? ?? '';
-                          final thumbnailUrl = video['thumbnailUrl'] as String?;
+                                    )
+                                  : const SizedBox.shrink();
+                            }
+                            final video = _filteredVideos[index];
+                            final isSelected =
+                                video['selected'] as bool? ?? true;
+                            final title = video['title'] as String? ??
+                                'Video ${index + 1}';
+                            final duration = video['duration'] as int? ?? 0;
+                            final author = video['author'] as String? ?? '';
+                            final thumbnailUrl =
+                                video['thumbnailUrl'] as String?;
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: GlassCard(
-                              borderRadius: 14,
-                              padding: EdgeInsets.zero,
-                              isDarkMode: isDark,
-                              child: Material(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(14),
-                                clipBehavior: Clip.antiAlias,
-                                child: InkWell(
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: GlassCard(
+                                borderRadius: 14,
+                                padding: EdgeInsets.zero,
+                                isDarkMode: isDark,
+                                child: Material(
+                                  color: Colors.transparent,
                                   borderRadius: BorderRadius.circular(14),
-                                  onTap: () {
-                                    runHaptic(settings);
-                                    final originalIndex = _videos.indexOf(
-                                      video,
-                                    );
-                                    if (originalIndex != -1) {
-                                      setState(() {
-                                        _videos[originalIndex] = {
-                                          ...video,
-                                          'selected': !isSelected,
-                                        };
-                                      });
-                                    }
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        // Checkbox
-                                        SizedBox(
-                                          width: 24,
-                                          height: 24,
-                                          child: Checkbox(
-                                            value: isSelected,
-                                            activeColor: accent,
-                                            side: BorderSide(
-                                              color: glassBorder,
-                                              width: 0.8,
-                                            ),
-                                            onChanged: (val) {
-                                              if (val != null) {
-                                                final originalIndex =
-                                                    _videos.indexOf(video);
-                                                if (originalIndex != -1) {
-                                                  setState(() {
-                                                    _videos[originalIndex] = {
-                                                      ...video,
-                                                      'selected': val,
-                                                    };
-                                                  });
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () {
+                                      runHaptic(settings);
+                                      final originalIndex = _videos.indexOf(
+                                        video,
+                                      );
+                                      if (originalIndex != -1) {
+                                        setState(() {
+                                          _videos[originalIndex] = {
+                                            ...video,
+                                            'selected': !isSelected,
+                                          };
+                                        });
+                                      }
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          // Checkbox
+                                          SizedBox(
+                                            width: 24,
+                                            height: 24,
+                                            child: Checkbox(
+                                              value: isSelected,
+                                              activeColor: accent,
+                                              side: BorderSide(
+                                                color: glassBorder,
+                                                width: 0.8,
+                                              ),
+                                              onChanged: (val) {
+                                                if (val != null) {
+                                                  final originalIndex =
+                                                      _videos.indexOf(video);
+                                                  if (originalIndex != -1) {
+                                                    setState(() {
+                                                      _videos[originalIndex] = {
+                                                        ...video,
+                                                        'selected': val,
+                                                      };
+                                                    });
+                                                  }
                                                 }
-                                              }
-                                            },
+                                              },
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 10),
+                                          const SizedBox(width: 10),
 
-                                        // Thumbnail
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: SizedBox(
-                                            width: 72,
-                                            height: 42,
-                                            child: thumbnailUrl != null &&
-                                                    thumbnailUrl.isNotEmpty
-                                                ? CachedNetworkImage(
-                                                    imageUrl: thumbnailUrl
-                                                            .startsWith(
-                                                      '//',
-                                                    )
-                                                        ? 'https:$thumbnailUrl'
-                                                        : thumbnailUrl,
-                                                    fit: BoxFit.cover,
-                                                    memCacheWidth: 144,
-                                                    placeholder: (
-                                                      context,
-                                                      url,
-                                                    ) =>
-                                                        Container(
-                                                      color: (isDark
-                                                              ? AppTheme
-                                                                  .background
-                                                              : AppTheme
-                                                                  .lightBackground)
-                                                          .withValues(
-                                                        alpha: 0.6,
-                                                      ),
-                                                      child: Icon(
-                                                        Icons
-                                                            .play_circle_outline,
-                                                        color: mutedClr,
-                                                        size: 24,
-                                                      ),
-                                                    ),
-                                                    errorWidget: (
-                                                      context,
-                                                      url,
-                                                      error,
-                                                    ) =>
-                                                        Container(
-                                                      color: (isDark
-                                                              ? AppTheme
-                                                                  .background
-                                                              : AppTheme
-                                                                  .lightBackground)
-                                                          .withValues(
-                                                        alpha: 0.6,
-                                                      ),
-                                                      child: Icon(
-                                                        Icons
-                                                            .play_circle_outline,
-                                                        color: mutedClr,
-                                                        size: 24,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : Container(
-                                                    color: (isDark
-                                                            ? AppTheme
-                                                                .background
-                                                            : AppTheme
-                                                                .lightBackground)
-                                                        .withValues(
-                                                      alpha: 0.6,
-                                                    ),
-                                                    child: Icon(
-                                                      Icons.play_circle_outline,
-                                                      color: mutedClr,
-                                                      size: 24,
-                                                    ),
-                                                  ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-
-                                        // Title & info
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                title,
-                                                style: TextStyle(
-                                                  color: isSelected
-                                                      ? textClr
-                                                      : secClr,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  decoration: isSelected
-                                                      ? null
-                                                      : TextDecoration
-                                                          .lineThrough,
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              const SizedBox(height: 3),
-                                              Row(
-                                                children: [
-                                                  if (author.isNotEmpty) ...[
-                                                    Flexible(
-                                                      child: Text(
-                                                        author,
-                                                        style: TextStyle(
-                                                          color: mutedClr,
-                                                          fontSize: 9,
+                                          // Thumbnail
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            child: SizedBox(
+                                              width: 72,
+                                              height: 42,
+                                              child: thumbnailUrl != null &&
+                                                      thumbnailUrl.isNotEmpty
+                                                  ? CachedNetworkImage(
+                                                      imageUrl: thumbnailUrl
+                                                              .startsWith(
+                                                        '//',
+                                                      )
+                                                          ? 'https:$thumbnailUrl'
+                                                          : thumbnailUrl,
+                                                      fit: BoxFit.cover,
+                                                      memCacheWidth: 144,
+                                                      placeholder: (
+                                                        context,
+                                                        url,
+                                                      ) =>
+                                                          Container(
+                                                        color: (isDark
+                                                                ? AppTheme
+                                                                    .background
+                                                                : AppTheme
+                                                                    .lightBackground)
+                                                            .withValues(
+                                                          alpha: 0.6,
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
+                                                        child: Icon(
+                                                          Icons
+                                                              .play_circle_outline,
+                                                          color: mutedClr,
+                                                          size: 24,
+                                                        ),
+                                                      ),
+                                                      errorWidget: (
+                                                        context,
+                                                        url,
+                                                        error,
+                                                      ) =>
+                                                          Container(
+                                                        color: (isDark
+                                                                ? AppTheme
+                                                                    .background
+                                                                : AppTheme
+                                                                    .lightBackground)
+                                                            .withValues(
+                                                          alpha: 0.6,
+                                                        ),
+                                                        child: Icon(
+                                                          Icons
+                                                              .play_circle_outline,
+                                                          color: mutedClr,
+                                                          size: 24,
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : Container(
+                                                      color: (isDark
+                                                              ? AppTheme
+                                                                  .background
+                                                              : AppTheme
+                                                                  .lightBackground)
+                                                          .withValues(
+                                                        alpha: 0.6,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons
+                                                            .play_circle_outline,
+                                                        color: mutedClr,
+                                                        size: 24,
                                                       ),
                                                     ),
-                                                    const SizedBox(width: 8),
-                                                  ],
-                                                  Icon(
-                                                    Icons.access_time,
-                                                    size: 10,
-                                                    color: mutedClr,
-                                                  ),
-                                                  const SizedBox(width: 3),
-                                                  Text(
-                                                    YoutubeService
-                                                        .formatDuration(
-                                                      duration,
-                                                    ),
-                                                    style: TextStyle(
-                                                      color: mutedClr,
-                                                      fontSize: 9,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
+                                            ),
                                           ),
-                                        ),
+                                          const SizedBox(width: 10),
 
-                                        // Index number
-                                        Text(
-                                          '#${index + 1}',
-                                          style: TextStyle(
-                                            color: mutedClr,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
+                                          // Title & info
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  title,
+                                                  style: TextStyle(
+                                                    color: isSelected
+                                                        ? textClr
+                                                        : secClr,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    decoration: isSelected
+                                                        ? null
+                                                        : TextDecoration
+                                                            .lineThrough,
+                                                  ),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Row(
+                                                  children: [
+                                                    if (author.isNotEmpty) ...[
+                                                      Flexible(
+                                                        child: Text(
+                                                          author,
+                                                          style: TextStyle(
+                                                            color: mutedClr,
+                                                            fontSize: 9,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                    ],
+                                                    Icon(
+                                                      Icons.access_time,
+                                                      size: 10,
+                                                      color: mutedClr,
+                                                    ),
+                                                    const SizedBox(width: 3),
+                                                    Text(
+                                                      YoutubeService
+                                                          .formatDuration(
+                                                        duration,
+                                                      ),
+                                                      style: TextStyle(
+                                                        color: mutedClr,
+                                                        fontSize: 9,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      ],
+
+                                          // Index number
+                                          Text(
+                                            '#${index + 1}',
+                                            style: TextStyle(
+                                              color: mutedClr,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
                     ),
 

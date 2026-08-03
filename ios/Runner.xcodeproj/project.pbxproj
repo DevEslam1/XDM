@@ -9,10 +9,19 @@
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
+		331C9002294A63AB00263BE5 /* IosBackgroundDownloadHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C9001294A618700263BE5 /* IosBackgroundDownloadHandlerTests.swift */; };
+		331C9004294A63AB00263BE5 /* XDMSpotlightServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C9003294A618700263BE5 /* XDMSpotlightServiceTests.swift */; };
+		331C9006294A63AB00263BE5 /* XDMTorrentBackgroundManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C9005294A618700263BE5 /* XDMTorrentBackgroundManagerTests.swift */; };
+		331C9008294A63AB00263BE5 /* XDMWidgetDataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C9007294A618700263BE5 /* XDMWidgetDataStoreTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		7884E86A2EC3CC0700C636F2 /* XDMTorrentBackgroundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8692EC3CC0400C636F2 /* XDMTorrentBackgroundManager.swift */; };
+		7884E86C2EC3CC0700C636F2 /* IosBackgroundDownloadHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E86B2EC3CC0400C636F2 /* IosBackgroundDownloadHandler.swift */; };
+		7884E86E2EC3CC0700C636F2 /* XDMBackgroundDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E86D2EC3CC0400C636F2 /* XDMBackgroundDownloadManager.swift */; };
+		7884E8702EC3CC0700C636F2 /* XDMWidgetDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E86F2EC3CC0400C636F2 /* XDMWidgetDataStore.swift */; };
+		7884E8722EC3CC0700C636F2 /* XDMAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8712EC3CC0400C636F2 /* XDMAppIntents.swift */; };
+		7884E8742EC3CC0700C636F2 /* XDMSpotlightService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8732EC3CC0400C636F2 /* XDMSpotlightService.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
@@ -49,6 +58,10 @@
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		2729DED47636CE0ACB720390 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
+		331C9001294A618700263BE5 /* IosBackgroundDownloadHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundDownloadHandlerTests.swift; sourceTree = "<group>"; };
+		331C9003294A618700263BE5 /* XDMSpotlightServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMSpotlightServiceTests.swift; sourceTree = "<group>"; };
+		331C9005294A618700263BE5 /* XDMTorrentBackgroundManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMTorrentBackgroundManagerTests.swift; sourceTree = "<group>"; };
+		331C9007294A618700263BE5 /* XDMWidgetDataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMWidgetDataStoreTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		449565860A8C149AA963B563 /* Pods-RunnerTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.release.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.release.xcconfig"; sourceTree = "<group>"; };
@@ -57,6 +70,11 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		7884E8692EC3CC0400C636F2 /* XDMTorrentBackgroundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMTorrentBackgroundManager.swift; sourceTree = "<group>"; };
+		7884E86B2EC3CC0400C636F2 /* IosBackgroundDownloadHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosBackgroundDownloadHandler.swift; sourceTree = "<group>"; };
+		7884E86D2EC3CC0400C636F2 /* XDMBackgroundDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMBackgroundDownloadManager.swift; sourceTree = "<group>"; };
+		7884E86F2EC3CC0400C636F2 /* XDMWidgetDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMWidgetDataStore.swift; sourceTree = "<group>"; };
+		7884E8712EC3CC0400C636F2 /* XDMAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMAppIntents.swift; sourceTree = "<group>"; };
+		7884E8732EC3CC0400C636F2 /* XDMSpotlightService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XDMSpotlightService.swift; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		78F257B5270918F2EAA1E1FB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -98,6 +116,10 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				331C9001294A618700263BE5 /* IosBackgroundDownloadHandlerTests.swift */,
+				331C9003294A618700263BE5 /* XDMSpotlightServiceTests.swift */,
+				331C9005294A618700263BE5 /* XDMTorrentBackgroundManagerTests.swift */,
+				331C9007294A618700263BE5 /* XDMWidgetDataStoreTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -169,6 +191,11 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				7884E8692EC3CC0400C636F2 /* XDMTorrentBackgroundManager.swift */,
+				7884E86B2EC3CC0400C636F2 /* IosBackgroundDownloadHandler.swift */,
+				7884E86D2EC3CC0400C636F2 /* XDMBackgroundDownloadManager.swift */,
+				7884E86F2EC3CC0400C636F2 /* XDMWidgetDataStore.swift */,
+				7884E8712EC3CC0400C636F2 /* XDMAppIntents.swift */,
+				7884E8732EC3CC0400C636F2 /* XDMSpotlightService.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -385,6 +412,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				331C9002294A63AB00263BE5 /* IosBackgroundDownloadHandlerTests.swift in Sources */,
+				331C9004294A63AB00263BE5 /* XDMSpotlightServiceTests.swift in Sources */,
+				331C9006294A63AB00263BE5 /* XDMTorrentBackgroundManagerTests.swift in Sources */,
+				331C9008294A63AB00263BE5 /* XDMWidgetDataStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -396,6 +427,11 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				7884E86A2EC3CC0700C636F2 /* XDMTorrentBackgroundManager.swift in Sources */,
+				7884E86C2EC3CC0700C636F2 /* IosBackgroundDownloadHandler.swift in Sources */,
+				7884E86E2EC3CC0700C636F2 /* XDMBackgroundDownloadManager.swift in Sources */,
+				7884E8702EC3CC0700C636F2 /* XDMWidgetDataStore.swift in Sources */,
+				7884E8722EC3CC0700C636F2 /* XDMAppIntents.swift in Sources */,
+				7884E8742EC3CC0700C636F2 /* XDMSpotlightService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
