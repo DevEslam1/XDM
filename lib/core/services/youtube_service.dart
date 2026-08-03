@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:webview_cookie_manager/webview_cookie_manager.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'xdm_backend_client.dart';
 import 'xdm_backend_exceptions.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -63,7 +62,7 @@ class YoutubeService {
     _oauthToken = null;
     await resetClient();
     try {
-      await WebviewCookieManager().clearCookies();
+      await CookieManager.instance().deleteAllCookies();
       await _secureStorage.delete(key: _cookiesStorageKey);
     } catch (e) {
       debugPrint(
@@ -88,7 +87,7 @@ class YoutubeService {
 
   static Future<void> fetchCookiesFromWebView() async {
     try {
-      final cookieManager = WebviewCookieManager();
+      final cookieManager = CookieManager.instance();
       final urls = [
         'https://www.youtube.com',
         'https://youtube.com',
@@ -99,10 +98,10 @@ class YoutubeService {
 
       for (final u in urls) {
         try {
-          final cookies = await cookieManager.getCookies(u);
+          final cookies = await cookieManager.getCookies(url: WebUri(u));
           for (final c in cookies) {
-            if (c.name.isNotEmpty && c.value.isNotEmpty) {
-              allCookies[c.name] = c.value;
+            if (c.name.isNotEmpty && c.value != null && c.value.toString().isNotEmpty) {
+              allCookies[c.name] = c.value.toString();
             }
           }
         } catch (e) {

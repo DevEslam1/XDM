@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'adblock_filter_updater.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 /// Centralised ad-blocking engine for the XDM browser.
 ///
@@ -18,6 +19,28 @@ import 'adblock_filter_updater.dart';
 class AdBlockerService {
   AdBlockerService._();
   static final AdBlockerService instance = AdBlockerService._();
+
+  List<ContentBlocker> get contentBlockers {
+    final blockers = <ContentBlocker>[];
+    if (!_enabled) return blockers;
+    for (final domain in _compiledDomainCache) {
+      if (domain.trim().isEmpty) continue;
+      final escaped = RegExp.escape(domain).replaceAll(r'\.', r'\.');
+      blockers.add(ContentBlocker(
+        trigger: ContentBlockerTrigger(
+          urlFilter: '.*$escaped.*',
+          resourceType: const [
+            ContentBlockerTriggerResourceType.IMAGE,
+            ContentBlockerTriggerResourceType.SCRIPT,
+            ContentBlockerTriggerResourceType.STYLE_SHEET,
+            ContentBlockerTriggerResourceType.RAW,
+          ],
+        ),
+        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+      ));
+    }
+    return blockers;
+  }
 
   static const String _prefKey = 'adBlockerEnabled';
   static const String _customRulesPrefKey = 'adBlockerCustomRules';

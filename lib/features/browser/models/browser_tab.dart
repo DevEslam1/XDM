@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:logging/logging.dart';
 
 class BrowserTab {
   final String id;
-  late final WebViewController controller;
+  InAppWebViewController? controller;
   String url;
   String title;
   bool isIncognito;
   bool isLoading;
   bool hasCrashed;
   bool isTimedOut;
+  bool isSuspended;
   final ValueNotifier<double> progressNotifier;
   bool isHome;
   bool canGoBack;
@@ -18,13 +19,14 @@ class BrowserTab {
 
   BrowserTab({
     required this.id,
-    required this.controller,
+    this.controller,
     required this.url,
     required this.title,
     this.isIncognito = false,
     this.isLoading = false,
     this.hasCrashed = false,
     this.isTimedOut = false,
+    this.isSuspended = false,
     double progress = 0.0,
     this.isHome = true,
     this.canGoBack = false,

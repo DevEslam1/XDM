@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 import 'package:dmx/core/services/database_service.dart';
 import 'package:dmx/features/downloads/provider/download_provider.dart';
 import 'package:dmx/features/settings/provider/settings_provider.dart';
@@ -18,7 +17,6 @@ Widget createTestApp({
   ThemeData? theme,
   Locale? locale,
 }) {
-  WebViewPlatform.instance = FakeWebViewPlatform();
 
   final db = databaseService ?? FakeDatabaseService();
   final provider = downloadProvider ?? createMockDownloadProvider(db: db);

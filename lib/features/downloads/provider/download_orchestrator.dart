@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' hide Cookie;
 import 'dart:isolate';
 import 'dart:math';
 
@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import 'package:webview_cookie_manager/webview_cookie_manager.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../../core/services/background_service.dart';
 import '../../../core/services/checksum_service.dart';
@@ -198,7 +198,7 @@ class DownloadOrchestrator {
             now.difference(cached.timestamp) < const Duration(minutes: 5)) {
           cookieString = cached.cookie;
         } else {
-          final cookies = await WebviewCookieManager().getCookies(origin);
+          final cookies = await CookieManager.instance().getCookies(url: WebUri(origin));
           cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
           _cookieCache[origin] = (cookie: cookieString, timestamp: now);
           if (_cookieCache.length >= _cookieCacheMaxSize) {

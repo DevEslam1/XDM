@@ -197,7 +197,7 @@ class MediaSniffer {
       }
     }
     try {
-      final result = await tab.controller.runJavaScriptReturningResult('''
+      final result = await tab.controller?.evaluateJavascript(source: '''
 (function() {
   var sources = [];
   var videos = document.getElementsByTagName('video');

@@ -49,13 +49,13 @@ class AdBlockerDelegate {
     if (!_adBlocker.isEnabled) return;
 
     // Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO
-    tab.controller.runJavaScript(_adBlocker.antiDetectJs).catchError((e, st) =>
+    tab.controller?.evaluateJavascript(source: _adBlocker.antiDetectJs).catchError((e, st) =>
         _log.warning('[ad_blocker_delegate] antiDetectJs failed', e, st));
 
     // Anti-detect CSS: keeps bait elements measurable but invisible.
     // Retries until <head> exists (it may not yet at onPageStarted).
     final cssJson = jsonEncode(_adBlocker.antiDetectCss);
-    tab.controller.runJavaScript('''
+    tab.controller?.evaluateJavascript(source: '''
       (function() {
         var css = $cssJson;
         var applied = false;
@@ -91,7 +91,7 @@ class AdBlockerDelegate {
   /// Always call `injectAntiDetect` before this.
   void injectEarly(BrowserTab tab) {
     if (!_adBlocker.isEnabled) return;
-    tab.controller.runJavaScript(_adBlocker.earlyJs).catchError(
+    tab.controller?.evaluateJavascript(source: _adBlocker.earlyJs).catchError(
         (e, st) => _log.warning('[ad_blocker_delegate] earlyJs failed', e, st));
   }
 
@@ -101,7 +101,7 @@ class AdBlockerDelegate {
     final url = tab.url;
 
     final cssJson = jsonEncode(_adBlocker.cssRules);
-    tab.controller.runJavaScript('''
+    tab.controller?.evaluateJavascript(source: '''
       (function() {
         var s = document.getElementById('xdm-adblock-css');
         if (!s) {
@@ -115,11 +115,11 @@ class AdBlockerDelegate {
             st) =>
         _log.warning('[ad_blocker_delegate] CSS failed', e, st));
 
-    tab.controller.runJavaScript(_adBlocker.lateJs).catchError(
+    tab.controller?.evaluateJavascript(source: _adBlocker.lateJs).catchError(
         (e, st) => _log.warning('[ad_blocker_delegate] lateJs failed', e, st));
 
     if (AdBlockerService.isYoutubePage(url)) {
-      tab.controller.runJavaScript(_adBlocker.youtubeJs).catchError((e, st) =>
+      tab.controller?.evaluateJavascript(source: _adBlocker.youtubeJs).catchError((e, st) =>
           _log.warning('[ad_blocker_delegate] youtubeJs failed', e, st));
     }
   }

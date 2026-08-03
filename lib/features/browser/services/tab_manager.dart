@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
@@ -252,7 +253,7 @@ class TabManager {
         final active = activeTab;
         if (active != null && active.url.isNotEmpty && !active.isHome) {
           try {
-            active.controller.loadRequest(Uri.parse(active.url));
+            active.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(active.url)));
           } catch (e) {
             debugPrint('[Browser] Restored active tab load error: $e');
           }

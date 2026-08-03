@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -10,12 +11,12 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/permission_service.dart';
-import '../../../core/services/user_script_manager.dart';
+import '../../../core/services/user_script_manager.dart' hide UserScript;
 import '../../../core/services/youtube_service.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
@@ -49,6 +50,11 @@ import '../widgets/browser_history_sheet.dart';
 import '../widgets/browser_home_page.dart';
 import '../widgets/redirect_sheet.dart';
 import 'package:logging/logging.dart';
+
+class JavaScriptMessage {
+  final String message;
+  const JavaScriptMessage({required this.message});
+}
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -290,12 +296,13 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   final List<String> _lruTabIds = [];
   final Map<String, Timer> _loadingTimeoutTimers = {};
+  PullToRefreshController? _pullToRefresh;
 
   void _pauseTabMedia(BrowserTab tab) {
     if (!tab.isHome) {
       try {
-        tab.controller.runJavaScript(
-          "try { document.querySelectorAll('video,audio').forEach(function(m){m.pause();}); } catch(e){}",
+        tab.controller?.evaluateJavascript(
+          source: "try { document.querySelectorAll('video,audio').forEach(function(m){m.pause();}); } catch(e){}",
         );
       } catch (e) {
         debugPrint('[Browser] Pause media on switch error: $e');
@@ -332,13 +339,14 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (!newTab.isHome &&
           newTab.url.isNotEmpty &&
           newTab.url != 'about:blank') {
-        newTab.controller.currentUrl().then((currentUrl) {
+        newTab.controller?.getUrl().then((webUri) {
+          final currentUrl = webUri?.toString();
           if (mounted &&
               (currentUrl == null ||
                   currentUrl.isEmpty ||
                   currentUrl == 'about:blank')) {
             try {
-              newTab.controller.loadRequest(Uri.parse(newTab.url));
+              newTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(newTab.url)));
             } catch (e, st) {
               Logger('browser_screen')
                   .warning('[browser_screen] operation failed', e, st);
@@ -347,7 +355,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         }).catchError((_) {
           if (mounted) {
             try {
-              newTab.controller.loadRequest(Uri.parse(newTab.url));
+              newTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(newTab.url)));
             } catch (e, st) {
               Logger('browser_screen')
                   .warning('[browser_screen] operation failed', e, st);
@@ -452,7 +460,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         final tab = _tabs[i];
         if (!tab.isHome) {
           try {
-            tab.controller.runJavaScript('try { window.stop(); } catch(e){}');
+            tab.controller?.evaluateJavascript(source: 'try { window.stop(); } catch(e){}');
           } catch (_) {}
         }
       }
@@ -508,10 +516,8 @@ class _BrowserScreenState extends State<BrowserScreen>
         : initialUrl;
     final tabId = id ??
         '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(999999)}';
-    final controller = WebViewController();
     final tab = BrowserTab(
       id: tabId,
-      controller: controller,
       url: cleanInitialUrl == 'about:blank' ? '' : cleanInitialUrl,
       title: cleanInitialUrl == 'about:blank'
           ? L10n.of(context, 'browser_new_tab')
@@ -519,151 +525,164 @@ class _BrowserScreenState extends State<BrowserScreen>
       isIncognito: isIncognito,
       isHome: cleanInitialUrl == 'about:blank',
     );
+    return tab;
+  }
+
+  void _configureController(BrowserTab tab, InAppWebViewController controller) {
+    tab.controller = controller;
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    controller
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.transparent)
-      ..addJavaScriptChannel(
-        _longPressChannel,
-        onMessageReceived: (msg) => _handleLongPressMessageForTab(tab, msg),
-      )
-      ..addJavaScriptChannel(
-        _popupsChannel,
-        onMessageReceived: (msg) => _handlePopupMessageForTab(tab, msg),
-      )
-      ..addJavaScriptChannel(
-        _pickerChannel,
-        onMessageReceived: (msg) => _handlePickerMessageForTab(tab, msg),
-      )
-      ..setUserAgent(
-        _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
-      )
-      ..enableZoom(settings.desktopMode || settings.pinchToZoom)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onWebResourceError: (WebResourceError error) {
-            debugPrint(
-              '[Browser] WebResourceError on tab ${tab.id}: ${error.description}',
-            );
-            if (mounted && error.isForMainFrame == true) {
-              setState(() {
-                tab.isLoading = false;
-                tab.hasCrashed = true;
-              });
+
+    // Register JS handlers (channels)
+    controller.addJavaScriptHandler(
+      handlerName: _longPressChannel,
+      callback: (args) {
+        final msg = args.isNotEmpty ? args.first.toString() : '';
+        _handleLongPressMessageForTab(tab, JavaScriptMessage(message: msg));
+      },
+    );
+    controller.addJavaScriptHandler(
+      handlerName: _popupsChannel,
+      callback: (args) {
+        final msg = args.isNotEmpty ? args.first.toString() : '';
+        _handlePopupMessageForTab(tab, JavaScriptMessage(message: msg));
+      },
+    );
+    controller.addJavaScriptHandler(
+      handlerName: _pickerChannel,
+      callback: (args) {
+        final msg = args.isNotEmpty ? args.first.toString() : '';
+        _handlePickerMessageForTab(tab, JavaScriptMessage(message: msg));
+      },
+    );
+
+    // Configure user agent and zoom
+    controller.setSettings(settings: InAppWebViewSettings(
+      userAgent: _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
+      supportZoom: settings.desktopMode || settings.pinchToZoom,
+    ));
+
+    // Initialize PullToRefresh
+    _pullToRefresh = PullToRefreshController(
+      settings: PullToRefreshSettings(color: AppTheme.neonBlue),
+      onRefresh: () => controller.reload(),
+    );
+  }
+
+  void _onPageStart(BrowserTab tab, String url) {
+    tab.hasCrashed = false;
+    tab.isTimedOut = false;
+    _loadingTimeoutTimers[tab.id]?.cancel();
+    _loadingTimeoutTimers[tab.id] = Timer(
+      const Duration(seconds: 25),
+      () {
+        if (mounted && tab.isLoading) {
+          setState(() {
+            tab.isTimedOut = true;
+          });
+        }
+      },
+    );
+    if (url.contains('accounts.google.com') ||
+        url.contains('google.com/ServiceLogin') ||
+        url.contains('google.com/accounts')) {
+      tab.controller?.setSettings(settings: InAppWebViewSettings(
+        userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+      ));
+      _hideWebViewFingerprints(tab);
+    }
+    if (mounted) {
+      final downloadProvider = Provider.of<DownloadProvider>(
+        context,
+        listen: false,
+      );
+      setState(() {
+        tab.isLoading = true;
+        tab.progress = 0.0;
+        tab.url = _cleanUrl(url);
+        if (url != 'about:blank') {
+          tab.isHome = false;
+        }
+        _showBars = true;
+        _lastScrollY = 0;
+        if (_currentTabIndex >= 0 &&
+            _currentTabIndex < _tabs.length &&
+            _tabs[_currentTabIndex].id == tab.id) {
+          _urlController.text = tab.url;
+        }
+        _detectedDownloadUrls.remove(tab.id);
+        _detectedPlaylistUrls.remove(tab.id);
+        _detectedMediaSources.remove(tab.id);
+        _mediaScanTimers[tab.id]?.cancel();
+      });
+      downloadProvider.setNavbarVisible(true);
+    }
+    _injectTimerSpeedScript(tab);
+    _adBlocker.injectAntiDetect(tab);
+    _adBlocker.injectEarly(tab);
+    _injectLongPressScriptToTab(tab);
+    _injectCustomJsCss(tab);
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    _injectDesktopModeScript(tab, settings);
+    _updateNavState();
+    _delayed(const Duration(milliseconds: 500), _updateNavState);
+  }
+
+  void _onPageStop(BrowserTab tab, String url) {
+    _loadingTimeoutTimers[tab.id]?.cancel();
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    _injectDesktopModeScript(tab, settings);
+    _adBlocker.injectInto(tab);
+    _injectUserScripts(tab, url);
+    
+    // Inject scroll fix for all pages
+    tab.controller?.evaluateJavascript(source: '''
+      (function() {
+        try {
+          // Fix any overflow:hidden that blocks scrolling
+          var body = document.body;
+          var html = document.documentElement;
+          if (body && window.getComputedStyle(body).overflow === 'hidden') {
+            body.style.setProperty('overflow-y', 'auto', 'important');
+          }
+          if (html && window.getComputedStyle(html).overflow === 'hidden') {
+            html.style.setProperty('overflow-y', 'auto', 'important');
+          }
+          // Fix position:fixed overlays that block scroll
+          var fixed = document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]');
+          for (var i = 0; i < fixed.length; i++) {
+            var el = fixed[i];
+            if (el.offsetWidth >= window.innerWidth * 0.9 && 
+                el.offsetHeight >= window.innerHeight * 0.9) {
+              el.style.setProperty('pointer-events', 'none', 'important');
             }
-          },
-          onPageStarted: (url) {
-            tab.hasCrashed = false;
-            tab.isTimedOut = false;
-            _loadingTimeoutTimers[tab.id]?.cancel();
-            _loadingTimeoutTimers[tab.id] = Timer(
-              const Duration(seconds: 25),
-              () {
-                if (mounted && tab.isLoading) {
-                  setState(() {
-                    tab.isTimedOut = true;
-                  });
-                }
-              },
-            );
-            if (url.contains('accounts.google.com') ||
-                url.contains('google.com/ServiceLogin') ||
-                url.contains('google.com/accounts')) {
-              tab.controller.setUserAgent(
-                'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-              );
-              _hideWebViewFingerprints(tab);
-            }
-            if (mounted) {
-              final downloadProvider = Provider.of<DownloadProvider>(
-                context,
-                listen: false,
-              );
-              setState(() {
-                tab.isLoading = true;
-                tab.progress = 0.0;
-                tab.url = _cleanUrl(url);
-                if (url != 'about:blank') {
-                  tab.isHome = false;
-                }
-                _showBars = true;
-                _lastScrollY = 0;
-                if (_currentTabIndex >= 0 &&
-                    _currentTabIndex < _tabs.length &&
-                    _tabs[_currentTabIndex].id == tab.id) {
-                  _urlController.text = tab.url;
-                }
-                _detectedDownloadUrls.remove(tab.id);
-                _detectedPlaylistUrls.remove(tab.id);
-                _detectedMediaSources.remove(tab.id);
-                _mediaScanTimers[tab.id]?.cancel();
-              });
-              downloadProvider.setNavbarVisible(true);
-            }
-            _injectTimerSpeedScript(tab);
-            _adBlocker.injectAntiDetect(tab);
-            _adBlocker.injectEarly(tab);
-            _injectLongPressScriptToTab(tab);
-            _injectCustomJsCss(tab);
-            _injectDesktopModeScript(tab, settings);
-            _updateNavState();
-            _delayed(const Duration(milliseconds: 500), _updateNavState);
-          },
-          onPageFinished: (url) {
-            _loadingTimeoutTimers[tab.id]?.cancel();
-            _injectDesktopModeScript(tab, settings);
-            _adBlocker.injectInto(tab);
-            _injectUserScripts(tab, url);
-            
-            // Inject scroll fix for all pages
-            tab.controller.runJavaScript('''
-              (function() {
-                try {
-                  // Fix any overflow:hidden that blocks scrolling
-                  var body = document.body;
-                  var html = document.documentElement;
-                  if (body && window.getComputedStyle(body).overflow === 'hidden') {
-                    body.style.setProperty('overflow-y', 'auto', 'important');
-                  }
-                  if (html && window.getComputedStyle(html).overflow === 'hidden') {
-                    html.style.setProperty('overflow-y', 'auto', 'important');
-                  }
-                  // Fix position:fixed overlays that block scroll
-                  var fixed = document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]');
-                  for (var i = 0; i < fixed.length; i++) {
-                    var el = fixed[i];
-                    if (el.offsetWidth >= window.innerWidth * 0.9 && 
-                        el.offsetHeight >= window.innerHeight * 0.9) {
-                      el.style.setProperty('pointer-events', 'none', 'important');
-                    }
-                  }
-                } catch(e) {}
-              })();
-            ''').catchError((e) => debugPrint('[Browser] Scroll-fix failed: \$e'));
-            if (mounted) {
-              setState(() {
-                tab.isLoading = false;
-                tab.isTimedOut = false;
-                _detectedDownloadUrls.remove(tab.id);
-                _detectedMediaSources.remove(tab.id);
-              });
-              tab.controller.getTitle().then((t) {
-                if (t != null && t.isNotEmpty && mounted) {
-                  setState(() {
-                    tab.title = t;
-                  });
-                  if (!tab.isIncognito &&
-                      !settings.incognitoEnabled &&
-                      settings.saveBrowserHistory) {
-                    _recordHistory(url, title: t);
-                  }
-                }
-              });
-            }
-            if (url.contains('accounts.google.com') ||
-                url.contains('google.com/ServiceLogin') ||
-                url.contains('google.com/accounts')) {
-              tab.controller.runJavaScript('''
+          }
+        } catch(e) {}
+      })();
+    ''').catchError((e) => debugPrint('[Browser] Scroll-fix failed: \$e'));
+    if (mounted) {
+      setState(() {
+        tab.isLoading = false;
+        tab.isTimedOut = false;
+        _detectedDownloadUrls.remove(tab.id);
+        _detectedMediaSources.remove(tab.id);
+      });
+      tab.controller?.getTitle().then((t) {
+        if (t != null && t.isNotEmpty && mounted) {
+          setState(() {
+            tab.title = t;
+          });
+          if (!tab.isIncognito &&
+              !settings.incognitoEnabled &&
+              settings.saveBrowserHistory) {
+            _recordHistory(url, title: t);
+          }
+        }
+      });
+    }
+    if (url.contains('accounts.google.com') ||
+        url.contains('google.com/ServiceLogin') ||
+        url.contains('google.com/accounts')) {
+      tab.controller?.evaluateJavascript(source: '''
 (function() {
   var style = document.createElement('style');
   style.textContent = 'body, html { padding-bottom: 350px !important; }';
@@ -687,140 +706,76 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 })();
 ''');
-            }
-            if (!tab.isIncognito && !settings.incognitoEnabled) {
-              final isYoutubeDomain = url.contains('youtube.com') ||
-                  url.contains('accounts.google.com') ||
-                  url.contains('google.com');
-              if (isYoutubeDomain) {
-                final now = DateTime.now();
-                final lastAuth = _lastYoutubeAuthTimes[tab.id];
-                if (lastAuth == null ||
-                    now.difference(lastAuth) > _youtubeAuthCooldown) {
-                  _lastYoutubeAuthTimes[tab.id] = now;
-                  YoutubeService.authenticateFromBrowser();
-                }
-              }
-            }
-            _updateNavState();
-            _delayed(const Duration(milliseconds: 500), _updateNavState);
-            _delayed(const Duration(milliseconds: 1200), _updateNavState);
-            _mediaScanTimers[tab.id]?.cancel();
-            if (!_isYoutubeHost(tab.url)) {
-              _mediaScanTimers[tab.id] = Timer(
-                const Duration(milliseconds: 1500),
-                () {
-                  _scanPageMedia(tab);
-                },
-              );
-            }
-          },
-          onProgress: (progress) {
-            tab.progress = progress / 100;
-          },
-          onUrlChange: (change) {
-            if (change.url != null) {
-              final cleanUrl = _cleanUrl(change.url!);
-              if (mounted) {
-                setState(() {
-                  tab.url = cleanUrl;
-                  if (cleanUrl.isNotEmpty) {
-                    tab.isHome = false;
-                  }
-                  if (_currentTabIndex >= 0 &&
-                      _currentTabIndex < _tabs.length &&
-                      _tabs[_currentTabIndex].id == tab.id) {
-                    _urlController.text = tab.url;
-                  }
-                });
-                _detectedDownloadUrls.remove(tab.id);
-                _detectedPlaylistUrls.remove(tab.id);
-                _detectedMediaSources.remove(tab.id);
-                _ytDetectionFailed.remove(tab.url);
-                _mediaScanTimers[tab.id]?.cancel();
-                if (!_isYoutubeHost(tab.url)) {
-                  _mediaScanTimers[tab.id] = Timer(
-                    const Duration(milliseconds: 1500),
-                    () {
-                      _scanPageMedia(tab);
-                    },
-                  );
-                }
-                _delayed(const Duration(milliseconds: 1000), () {
-                  if (mounted) {
-                    tab.controller.getTitle().then((t) {
-                      if (t != null && t.isNotEmpty && mounted) {
-                        setState(() {
-                          tab.title = t;
-                        });
-                      }
-                    });
-                  }
-                });
-                _updateNavState();
-                _delayed(const Duration(milliseconds: 500), _updateNavState);
-                _delayed(const Duration(milliseconds: 1200), _updateNavState);
-              }
-            }
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            if (settings.httpsOnly &&
-                request.isMainFrame == true &&
-                request.url.startsWith('http://')) {
-              final upgraded = request.url.replaceFirst('http://', 'https://');
-              debugPrint(
-                  '[Browser] HTTPS-only: upgrading ${request.url} ? $upgraded');
-              tab.controller.loadRequest(Uri.parse(upgraded));
-              return NavigationDecision.prevent;
-            }
-            if (_adBlocker.shouldBlock(request.url)) {
-              debugPrint('[AdBlocker] Blocked: ${request.url}');
-              return NavigationDecision.prevent;
-            }
-            if (_interceptor.consumeBypass(request.url)) {
-              return NavigationDecision.navigate;
-            }
-            if (_interceptor.shouldIntercept(
-              tabUrl: tab.url,
-              requestUrl: request.url,
-            )) {
-              setState(() {
-                _detectedDownloadUrls[tab.id] = request.url;
-              });
-              _showInterceptionSheet(context, request.url);
-              return NavigationDecision.prevent;
-            }
-            if (_redirectGuard.consumeUserInitiated(request.url)) {
-              return NavigationDecision.navigate;
-            }
-            if (_redirectGuard.isAlwaysNewTab(request.url)) {
-              _openInNewTab(request.url, isIncognito: tab.isIncognito);
-              return NavigationDecision.prevent;
-            }
-            if (_redirectGuard.isSuspiciousRedirect(
-              currentTabUrl: tab.url,
-              targetUrl: request.url,
-            )) {
-              _handleRedirectIntercept(tab, request.url);
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
-        ),
-      )
-      ..setOnScrollPositionChange((ScrollPositionChange change) {
-        if (mounted &&
-            _currentTabIndex >= 0 &&
+    }
+    if (!tab.isIncognito && !settings.incognitoEnabled) {
+      final isYoutubeDomain = url.contains('youtube.com') ||
+          url.contains('accounts.google.com') ||
+          url.contains('google.com');
+      if (isYoutubeDomain) {
+        final now = DateTime.now();
+        final lastAuth = _lastYoutubeAuthTimes[tab.id];
+        if (lastAuth == null ||
+            now.difference(lastAuth) > _youtubeAuthCooldown) {
+          _lastYoutubeAuthTimes[tab.id] = now;
+          YoutubeService.authenticateFromBrowser();
+        }
+      }
+    }
+    _updateNavState();
+    _delayed(const Duration(milliseconds: 500), _updateNavState);
+    _delayed(const Duration(milliseconds: 1200), _updateNavState);
+    _mediaScanTimers[tab.id]?.cancel();
+    if (!_isYoutubeHost(tab.url)) {
+      _mediaScanTimers[tab.id] = Timer(
+        const Duration(milliseconds: 1500),
+        () {
+          _scanPageMedia(tab);
+        },
+      );
+    }
+  }
+
+  void _onUrlChange(BrowserTab tab, String url) {
+    final cleanUrl = _cleanUrl(url);
+    if (mounted) {
+      setState(() {
+        tab.url = cleanUrl;
+        if (cleanUrl.isNotEmpty) {
+          tab.isHome = false;
+        }
+        if (_currentTabIndex >= 0 &&
             _currentTabIndex < _tabs.length &&
             _tabs[_currentTabIndex].id == tab.id) {
-          _handleScroll(change.y.toDouble());
+          _urlController.text = tab.url;
         }
       });
-
-    if (autoLoad && cleanInitialUrl != 'about:blank') {
-      controller.loadRequest(Uri.parse(cleanInitialUrl));
+      _detectedDownloadUrls.remove(tab.id);
+      _detectedPlaylistUrls.remove(tab.id);
+      _detectedMediaSources.remove(tab.id);
+      _ytDetectionFailed.remove(tab.url);
+      _mediaScanTimers[tab.id]?.cancel();
+      if (!_isYoutubeHost(tab.url)) {
+        _mediaScanTimers[tab.id] = Timer(
+          const Duration(milliseconds: 1500),
+          () {
+            _scanPageMedia(tab);
+          },
+        );
+      }
+      _delayed(const Duration(milliseconds: 1000), () {
+        if (mounted) {
+          tab.controller?.getTitle().then((t) {
+            if (t != null && t.isNotEmpty && mounted) {
+              setState(() {
+                tab.title = t;
+              });
+            }
+          });
+        }
+      });
+      _updateNavState();
+      _delayed(const Duration(milliseconds: 500), _updateNavState);
     }
-    return tab;
   }
 
   void _recordHistory(String url, {String? title}) =>
@@ -861,7 +816,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     // banking, WebSocket, and session-management pages.
     if (!_isMediaDomain(tab.url)) return;
     try {
-      await tab.controller.runJavaScript(_kTimerSpeedScript);
+      await tab.controller?.evaluateJavascript(source: _kTimerSpeedScript);
     } catch (e) {
       debugPrint('[DMX Browser] Failed to inject timer speed script: $e');
     }
@@ -873,7 +828,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     // right-click / context menus on banking and productivity pages.
     if (!_isMediaDomain(tab.url)) return;
     try {
-      await tab.controller.runJavaScript(_kLongPressScript);
+      await tab.controller?.evaluateJavascript(source: _kLongPressScript);
     } catch (e) {
       debugPrint('[DMX Browser] Failed to inject long press script: $e');
     }
@@ -909,8 +864,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     SettingsProvider settings,
   ) async {
     try {
-      await tab.controller.setUserAgent(
-        _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
+      await tab.controller?.setSettings(
+        settings: InAppWebViewSettings(
+          userAgent: _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
+        ),
       );
     } catch (e) {
       debugPrint('[DMX Browser] UA apply failed for tab ${tab.id}: $e');
@@ -920,7 +877,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _injectDesktopModeScript(BrowserTab tab, SettingsProvider settings) {
     if (!settings.desktopMode) return;
     try {
-      tab.controller.runJavaScript(_kDesktopModeScript);
+      tab.controller?.evaluateJavascript(source: _kDesktopModeScript);
     } catch (e) {
       debugPrint('[DMX Browser] Error injecting desktop script: $e');
     }
@@ -1048,7 +1005,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                   isDarkMode: settings.isDarkMode,
                 );
                 if (!tab.isHome) {
-                  await tab.controller.reload();
+                  await tab.controller?.reload();
                 }
               }
             },
@@ -1116,7 +1073,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         break;
       case RedirectAction.allowInSameTab:
         _redirectGuard.markUserInitiated(targetUrl);
-        parentTab.controller.loadRequest(Uri.parse(targetUrl));
+        parentTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(targetUrl)));
         break;
     }
   }
@@ -1186,8 +1143,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     for (final tab in _tabs) {
       if (tab.isIncognito) {
         try {
-          tab.controller.clearCache();
-          tab.controller.clearLocalStorage();
+          unawaited(InAppWebViewController.clearAllCache());
+          tab.controller?.evaluateJavascript(source: 'window.localStorage.clear(); window.sessionStorage.clear();');
         } catch (e) {
           // ignore
         }
@@ -1271,9 +1228,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     final activeTab = _tabs[_currentTabIndex];
     if (activeTab.isHome && _homeReturnUrl != null) return;
     try {
-      final canBack = await activeTab.controller.canGoBack();
-      final canForward = await activeTab.controller.canGoForward();
-      final currentUrl = await activeTab.controller.currentUrl();
+      final canBack = await activeTab.controller?.canGoBack() ?? false;
+      final canForward = await activeTab.controller?.canGoForward() ?? false;
+      final webUri = await activeTab.controller?.getUrl();
+      final currentUrl = webUri?.toString();
       if (mounted) {
         setState(() {
           if (currentUrl != null && currentUrl.isNotEmpty) {
@@ -1316,7 +1274,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final activeTab = _tabs[_currentTabIndex];
     if (activeTab.canGoBack) {
       _homeReturnUrl = null;
-      unawaited(activeTab.controller.goBack());
+      unawaited(activeTab.controller?.goBack() ?? Future.value());
       _updateNavState();
     } else if (!activeTab.isHome && activeTab.url.isNotEmpty) {
       if (mounted) {
@@ -1330,7 +1288,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         });
         // Clear the WebView so stale page content doesn't flash when the
         // user navigates to a new page from the Home dashboard.
-        activeTab.controller.loadRequest(Uri.parse('about:blank'));
+        activeTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri('about:blank')));
       }
     }
   }
@@ -1356,7 +1314,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       _navigateToUrl(returnUrl);
       return;
     }
-    unawaited(activeTab.controller.goForward());
+    unawaited(activeTab.controller?.goForward() ?? Future.value());
     _updateNavState();
   }
 
@@ -1392,7 +1350,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     });
     final parsed = Uri.tryParse(url);
     if (parsed != null) {
-      activeTab.controller.loadRequest(parsed);
+      activeTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(parsed.toString())));
     }
     _delayed(const Duration(milliseconds: 300), _updateNavState);
   }
@@ -1449,7 +1407,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         break;
       case 'reload':
         if (!activeTab.isHome) {
-          await activeTab.controller.reload();
+          await activeTab.controller?.reload();
         }
         break;
       case 'bookmark':
@@ -1525,8 +1483,10 @@ class _BrowserScreenState extends State<BrowserScreen>
             _tabs.map((t) async {
               await _applyUserAgent(t, settings);
               try {
-                await t.controller.enableZoom(
-                  settings.desktopMode || settings.pinchToZoom,
+                await t.controller?.setSettings(
+                  settings: InAppWebViewSettings(
+                    supportZoom: settings.desktopMode || settings.pinchToZoom,
+                  ),
                 );
               } catch (e, st) {
                 Logger('browser_screen')
@@ -1537,7 +1497,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           for (final t in _tabs) {
             if (!t.isHome) {
               try {
-                await t.controller.reload();
+                await t.controller?.reload();
               } catch (e) {
                 debugPrint('[DMX Browser] Reload failed after mode switch: $e');
               }
@@ -1577,7 +1537,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             isDarkMode: settings.isDarkMode,
           );
           if (!activeTab.isHome) {
-            await activeTab.controller.reload();
+            await activeTab.controller?.reload();
           }
         }
         break;
@@ -1596,11 +1556,10 @@ class _BrowserScreenState extends State<BrowserScreen>
             isDarkMode: settings.isDarkMode,
           );
           if (settings.incognitoEnabled) {
-            final cookieManager = WebViewCookieManager();
-            await cookieManager.clearCookies();
+            await CookieManager.instance().deleteAllCookies();
             for (final t in _tabs) {
-              await t.controller.clearCache();
-              await t.controller.clearLocalStorage();
+              await InAppWebViewController.clearAllCache();
+              await t.controller?.evaluateJavascript(source: 'window.localStorage.clear(); window.sessionStorage.clear();');
             }
           }
         }
@@ -1628,12 +1587,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (activeTab.isHome || activeTab.url.isEmpty) return;
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final ok = await ReaderModeService.activateReaderMode(
-      activeTab.controller,
+    final ok = activeTab.controller == null ? false : await ReaderModeService.activateReaderMode(
+      activeTab.controller!,
       (htmlUrl) {
         if (mounted) {
           activeTab.controller
-              .loadRequest(Uri.parse(htmlUrl))
+              ?.loadUrl(urlRequest: URLRequest(url: WebUri(htmlUrl)))
               .catchError((e, st) {
             Logger('browser_screen')
                 .warning('[browser_screen] reader mode load failed', e, st);
@@ -1657,7 +1616,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (activeTab.isHome) return;
     try {
       await activeTab.controller
-          .runJavaScript(ElementPickerService.pickerScript);
+          ?.evaluateJavascript(source: ElementPickerService.pickerScript);
     } catch (e) {
       debugPrint('[DMX Browser] Failed to start element picker: $e');
       return;
@@ -1906,8 +1865,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                       _currentTabIndex < _tabs.length) {
                                     final activeTab = _tabs[_currentTabIndex];
                                     _interceptor.addBypass(downloadUrl);
-                                    activeTab.controller.loadRequest(
-                                      Uri.parse(downloadUrl),
+                                    activeTab.controller?.loadUrl(
+                                      urlRequest: URLRequest(url: WebUri(downloadUrl)),
                                     );
                                   }
                                 },
@@ -2399,7 +2358,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 })();
 ''';
     try {
-      await tab.controller.runJavaScript(js);
+      await tab.controller?.evaluateJavascript(source: js);
     } catch (e) {
       debugPrint('Failed to inject anti-detection JS: $e');
     }
@@ -2417,7 +2376,7 @@ $_customJs
   })();
 }
 """;
-        await tab.controller.runJavaScript(jsWrapper);
+        await tab.controller?.evaluateJavascript(source: jsWrapper);
       } catch (e) {
         debugPrint('[DMX Browser] Failed to inject custom JS: $e');
       }
@@ -2436,7 +2395,7 @@ $_customJs
   style.textContent = $jsonCss;
 })();
 """;
-        await tab.controller.runJavaScript(cssScript);
+        await tab.controller?.evaluateJavascript(source: cssScript);
       } catch (e) {
         debugPrint('[DMX Browser] Failed to inject custom CSS: $e');
       }
@@ -2464,7 +2423,7 @@ $_customJs
   style.textContent = $jsonCss;
 })();
 """;
-          await tab.controller.runJavaScript(cssScript);
+          await tab.controller?.evaluateJavascript(source: cssScript);
         } else {
           final marker =
               'xdm_user_script_${script.id.replaceAll(RegExp('[^A-Za-z0-9_]'), '_')}';
@@ -2476,7 +2435,7 @@ ${script.code}
   })();
 }
 """;
-          await tab.controller.runJavaScript(jsWrapper);
+          await tab.controller?.evaluateJavascript(source: jsWrapper);
         }
       } catch (e) {
         debugPrint(
@@ -2491,8 +2450,8 @@ ${script.code}
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     triggerHaptic(settings);
     try {
-      final result = await tab.controller.runJavaScriptReturningResult(
-        "document.documentElement.outerHTML",
+      final result = await tab.controller?.evaluateJavascript(
+        source: "document.documentElement.outerHTML",
       );
       String rawHtml = '';
       if (result is String) {
@@ -3487,7 +3446,11 @@ ${script.code}
     if (settings.pinchToZoom != _lastZoomEnabled) {
       _lastZoomEnabled = settings.pinchToZoom;
       for (final tab in _tabs) {
-        tab.controller.enableZoom(settings.pinchToZoom);
+        tab.controller?.setSettings(
+          settings: InAppWebViewSettings(
+            supportZoom: settings.pinchToZoom,
+          ),
+        );
       }
     }
     return Listener(
@@ -3512,7 +3475,7 @@ ${script.code}
             return;
           }
           final activeTab = _tabs[_currentTabIndex];
-          final canGoBack = await activeTab.controller.canGoBack();
+          final canGoBack = await activeTab.controller?.canGoBack() ?? false;
           if (canGoBack) {
             await _goBack();
           } else {
@@ -3727,8 +3690,8 @@ ${script.code}
                                                     triggerHaptic(settings);
                                                     if (activeTab.isLoading) {
                                                       activeTab.controller
-                                                          .runJavaScript(
-                                                        'window.stop();',
+                                                          ?.evaluateJavascript(
+                                                        source: 'window.stop();',
                                                       );
                                                       setState(() {
                                                         activeTab.isLoading =
@@ -3740,7 +3703,7 @@ ${script.code}
                                                     } else {
                                                       if (!activeTab.isHome) {
                                                         activeTab.controller
-                                                            .reload();
+                                                            ?.reload();
                                                       }
                                                     }
                                                   },
@@ -4141,7 +4104,7 @@ ${script.code}
                                                   : AppTheme.lightNeonBlue,
                                               onRefresh: () async {
                                                 tab.hasCrashed = false;
-                                                await tab.controller.reload();
+                                                await tab.controller?.reload();
                                               },
                                               child: tab.hasCrashed
                                                   ? Container(
@@ -4216,7 +4179,7 @@ ${script.code}
                                                                       false;
                                                                 });
                                                                 tab.controller
-                                                                    .reload();
+                                                                    ?.reload();
                                                               },
                                                               icon: const Icon(
                                                                 Icons
@@ -4232,18 +4195,143 @@ ${script.code}
                                                     )
                                                   : Stack(
                                                       children: [
-                                                        WebViewWidget(
-                                                          controller:
-                                                              tab.controller,
-                                                          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                                                            Factory<VerticalDragGestureRecognizer>(
-                                                              () => VerticalDragGestureRecognizer(),
-                                                            ),
-                                                            Factory<HorizontalDragGestureRecognizer>(
-                                                              () => HorizontalDragGestureRecognizer(),
-                                                            ),
-                                                          },
-                                                        ),
+                                                        InAppWebView(
+                                                           initialUrlRequest: tab.url.isEmpty
+                                                               ? null
+                                                               : URLRequest(url: WebUri(tab.url)),
+                                                           onWebViewCreated: (controller) {
+                                                             _configureController(tab, controller);
+                                                             _hideWebViewFingerprints(tab);
+                                                           },
+                                                           initialUserScripts: UnmodifiableListView<UserScript>([
+                                                             UserScript(
+                                                               source: '''
+                                                                 window.XDM_LongPress = {
+                                                                   postMessage: function(msg) {
+                                                                     window.flutter_inappwebview.callHandler('XDM_LongPress', msg);
+                                                                   }
+                                                                 };
+                                                                 window.XDM_Popups = {
+                                                                   postMessage: function(msg) {
+                                                                     window.flutter_inappwebview.callHandler('XDM_Popups', msg);
+                                                                   }
+                                                                 };
+                                                                 window.XdmPickerChannel = {
+                                                                   postMessage: function(msg) {
+                                                                     window.flutter_inappwebview.callHandler('XdmPickerChannel', msg);
+                                                                   }
+                                                                 };
+                                                               ''',
+                                                               injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+                                                             ),
+                                                           ]),
+                                                           initialSettings: InAppWebViewSettings(
+                                                             useHybridComposition: true,
+                                                             useShouldInterceptRequest: true,
+                                                             transparentBackground: true,
+                                                             allowsInlineMediaPlayback: true,
+                                                             mediaPlaybackRequiresUserGesture: false,
+                                                             supportZoom: settings.desktopMode || settings.pinchToZoom,
+                                                           ),
+                                                           gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                                                             Factory<VerticalDragGestureRecognizer>(
+                                                               () => VerticalDragGestureRecognizer(),
+                                                             ),
+                                                             Factory<HorizontalDragGestureRecognizer>(
+                                                               () => HorizontalDragGestureRecognizer(),
+                                                             ),
+                                                           },
+                                                           pullToRefreshController: _pullToRefresh,
+                                                           onScrollChanged: (controller, x, y) {
+                                                             if (mounted &&
+                                                                 _currentTabIndex >= 0 &&
+                                                                 _currentTabIndex < _tabs.length &&
+                                                                 _tabs[_currentTabIndex].id == tab.id) {
+                                                               _handleScroll(y.toDouble());
+                                                             }
+                                                           },
+                                                           onLoadStart: (controller, url) {
+                                                             _onPageStart(tab, url?.toString() ?? '');
+                                                           },
+                                                           onLoadStop: (controller, url) {
+                                                             _onPageStop(tab, url?.toString() ?? '');
+                                                           },
+                                                           onProgressChanged: (controller, progress) {
+                                                             tab.progress = progress / 100;
+                                                           },
+                                                           onUpdateVisitedHistory: (controller, url, isReload) {
+                                                             if (url != null) {
+                                                               _onUrlChange(tab, url.toString());
+                                                             }
+                                                           },
+                                                           onReceivedError: (controller, request, error) {
+                                                             debugPrint(
+                                                               '[Browser] WebResourceError on tab ${tab.id}: ${error.description}',
+                                                             );
+                                                             if (mounted && request.isForMainFrame == true) {
+                                                               setState(() {
+                                                                 tab.isLoading = false;
+                                                                 tab.hasCrashed = true;
+                                                               });
+                                                             }
+                                                           },
+                                                           shouldInterceptRequest: (controller, request) async {
+                                                             final url = request.url.toString();
+                                                             if (_adBlocker.shouldBlock(url)) {
+                                                               return WebResourceResponse(
+                                                                 contentType: 'text/plain',
+                                                                 contentEncoding: 'utf-8',
+                                                                 statusCode: 204,
+                                                                 reasonPhrase: 'Blocked',
+                                                                 data: Uint8List(0),
+                                                               );
+                                                             }
+                                                             return null;
+                                                           },
+                                                           shouldOverrideUrlLoading: (controller, navigationAction) async {
+                                                             final url = navigationAction.request.url?.toString() ?? '';
+                                                             if (navigationAction.isForMainFrame == true) {
+                                                               if (settings.httpsOnly && url.startsWith('http://')) {
+                                                                 final upgraded = url.replaceFirst('http://', 'https://');
+                                                                 debugPrint('[Browser] HTTPS-only: upgrading $url -> $upgraded');
+                                                                 controller.loadUrl(urlRequest: URLRequest(url: WebUri(upgraded)));
+                                                                 return NavigationActionPolicy.CANCEL;
+                                                               }
+                                                               if (_adBlocker.shouldBlock(url)) {
+                                                                 debugPrint('[AdBlocker] Blocked: $url');
+                                                                 return NavigationActionPolicy.CANCEL;
+                                                               }
+                                                               if (_interceptor.consumeBypass(url)) {
+                                                                 return NavigationActionPolicy.ALLOW;
+                                                               }
+                                                               if (_interceptor.shouldIntercept(
+                                                                 tabUrl: tab.url,
+                                                                 requestUrl: url,
+                                                               )) {
+                                                                 setState(() {
+                                                                   _detectedDownloadUrls[tab.id] = url;
+                                                                 });
+                                                                 _showInterceptionSheet(context, url);
+                                                                 return NavigationActionPolicy.CANCEL;
+                                                               }
+                                                               if (_redirectGuard.consumeUserInitiated(url)) {
+                                                                 return NavigationActionPolicy.ALLOW;
+                                                               }
+                                                               if (_redirectGuard.isAlwaysNewTab(url)) {
+                                                                 _openInNewTab(url, isIncognito: tab.isIncognito);
+                                                                 return NavigationActionPolicy.CANCEL;
+                                                               }
+                                                               if (_redirectGuard.isSuspiciousRedirect(
+                                                                 currentTabUrl: tab.url,
+                                                                 targetUrl: url,
+                                                               )) {
+                                                                 _handleRedirectIntercept(tab, url);
+                                                                 return NavigationActionPolicy.CANCEL;
+                                                               }
+                                                             }
+                                                             return NavigationActionPolicy.ALLOW;
+                                                           },
+                                                         ),
                                                         if (tab.isTimedOut &&
                                                             tab.isLoading)
                                                           Positioned(
@@ -4290,10 +4378,7 @@ ${script.code}
                                                                   ),
                                                                   GestureDetector(
                                                                     onTap: () {
-                                                                      tab.controller
-                                                                          .runJavaScript(
-                                                                        'window.stop();',
-                                                                      );
+                                                                      tab.controller?.evaluateJavascript(source: 'window.stop();');
                                                                       setState(
                                                                           () {
                                                                         tab.isLoading =
@@ -4332,8 +4417,7 @@ ${script.code}
                                                                         tab.isTimedOut =
                                                                             false;
                                                                       });
-                                                                      tab.controller
-                                                                          .reload();
+                                                                      tab.controller?.reload();
                                                                     },
                                                                     child:
                                                                         const Padding(
@@ -5926,3 +6010,4 @@ body {
     );
   }
 }
+

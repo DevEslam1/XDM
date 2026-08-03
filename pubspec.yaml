@@ -47,10 +47,7 @@ dependencies:
   flutter_background_service: ^5.0.0
 
   # WebView
-  webview_flutter: ^4.14.1
-  webview_flutter_platform_interface: ^2.10.0
-  webview_cookie_manager:
-    path: packages/webview_cookie_manager
+  flutter_inappwebview: ^6.0.0
 
   # Media / torrent
   libtorrent_flutter: 1.9.2 # exact pin: no saveResumeData API in this version
@@ -76,12 +73,7 @@ dependencies:
   sentry_flutter: ^9.26.0
   fake_async: ^1.3.3
 
-dependency_overrides:
-  # webview_cookie_manager 2.0.6 on pub.dev still uses the removed v1
-  # embedding API (PluginRegistry.Registrar) and fails to compile on
-  # current Flutter. Use the local patched copy (v2 FlutterPlugin embedding).
-  webview_cookie_manager:
-    path: packages/webview_cookie_manager
+
 
 dev_dependencies:
   flutter_test:
