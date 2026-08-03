@@ -24,7 +24,7 @@ class TorrentService {
   }) =>
       -1;
   static void removeTorrent(int id, {bool deleteFiles = false}) {}
-  static void pauseTorrent(int id) {}
+  static Future<void> pauseTorrent(int id) async {}
   static void resumeTorrent(int id) {}
   static Uint8List? saveResumeData(int id) => null;
   static bool loadResumeData(int id, List<int> data) => false;

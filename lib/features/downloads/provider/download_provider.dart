@@ -210,6 +210,7 @@ class DownloadProvider extends ChangeNotifier
 
   final List<DownloadTask> _tasks = [];
   final Map<String, CancelToken> _cancelTokens = {};
+  final Map<String, bool> _resumeRejectionRestarts = {};
   final Map<String, Queue<double>> _speedHistories = {};
   final Map<String, Future<void>> _dbSaveQueues = {};
 
@@ -332,6 +333,9 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Map<String, CancelToken> get cancelTokens => _cancelTokens;
+
+  @override
+  Map<String, bool> get resumeRejectionRestarts => _resumeRejectionRestarts;
 
   @override
   Map<String, Future<void>> get activeFutures => _activeFutures;
@@ -1368,7 +1372,7 @@ class DownloadProvider extends ChangeNotifier
     if (task.status == DownloadStatus.downloading) {
       final torrentId = _torrentIds[id];
       if (torrentId != null) {
-        TorrentService.pauseTorrent(torrentId);
+        await TorrentService.pauseTorrent(torrentId);
       }
 
       // Cancel the token only.
@@ -1451,7 +1455,11 @@ class DownloadProvider extends ChangeNotifier
   @override
   Future<void> resumeTask(String id) async {
     final task = _findTask(id);
-    if (task == null || task.status == DownloadStatus.completed) return;
+    if (task == null) return;
+    if (task.status != DownloadStatus.paused &&
+        task.status != DownloadStatus.failed) {
+      return;
+    }
 
     _retryCounts.remove(id);
 
@@ -2422,6 +2430,15 @@ class DownloadProvider extends ChangeNotifier
     if (wasDownloading) {
       await pauseTask(taskId);
 
+      final activeFuture = _activeFutures[taskId];
+      if (activeFuture != null) {
+        try {
+          await activeFuture;
+        } catch (e) {
+          debugPrint('[DMX] activeFuture error in updateTaskUrl: $e');
+        }
+      }
+
       final updatedIdx = _tasks.indexWhere((t) => t.id == taskId);
       if (updatedIdx != -1) {
         task = _tasks[updatedIdx];
@@ -2546,16 +2563,22 @@ class DownloadProvider extends ChangeNotifier
 
     if (!sizeChanged && !isYoutube && task.downloadedBytes > 0) {
       try {
-        final meta = await _downloadEngine.resolveMetadata(url: cleanUrl);
+        final int resolvedMetaSize;
+        if (metadata != null) {
+          resolvedMetaSize = metadata.fileSize;
+        } else {
+          final meta = await _downloadEngine.resolveMetadata(url: cleanUrl);
+          resolvedMetaSize = meta.fileSize;
+        }
 
-        if (meta.fileSize > 0 &&
+        if (resolvedMetaSize > 0 &&
             task.fileSize > 0 &&
-            (meta.fileSize - task.fileSize).abs() > 1024) {
+            (resolvedMetaSize - task.fileSize).abs() > 1024) {
           sizeChanged = true;
 
           debugPrint(
             '[DMX] URL update: size changed ${task.fileSize} → '
-            '${meta.fileSize}, resetting progress',
+            '$resolvedMetaSize, resetting progress',
           );
         }
       } catch (e) {
@@ -2638,6 +2661,7 @@ class DownloadProvider extends ChangeNotifier
     }
   }
 
+  @override
   Future<void> startOverTask(
     String id,
     String newUrl, {
@@ -2646,6 +2670,7 @@ class DownloadProvider extends ChangeNotifier
     bool fromError = false,
     int? newFileSize,
     int? newAudioSize,
+    bool deleteTempFiles = false,
   }) async {
     final task = _findTask(id);
     if (task == null) return;
@@ -2672,7 +2697,7 @@ class DownloadProvider extends ChangeNotifier
 
     // Preserve any existing partial bytes and state so a restart can resume
     // from the current temp file instead of discarding it.
-    await cleanupPartFiles(task, preserveParts: true);
+    await cleanupPartFiles(task, preserveParts: !deleteTempFiles);
 
     try {
       final localFile = File(task.localFilePath);
@@ -2681,6 +2706,31 @@ class DownloadProvider extends ChangeNotifier
       }
     } catch (e) {
       debugPrint('Failed to delete completed file during start over: $e');
+    }
+
+    if (deleteTempFiles) {
+      try {
+        final tempFile = File(task.tempFilePath);
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+        final dmxStateFile = File('${task.tempFilePath}.dmxstate');
+        if (await dmxStateFile.exists()) {
+          await dmxStateFile.delete();
+        }
+        if (task.mergedAudioUrl != null) {
+          final audioTempFile = File('${task.tempFilePath}.audio');
+          if (await audioTempFile.exists()) {
+            await audioTempFile.delete();
+          }
+          final audioDmxStateFile = File('${task.tempFilePath}.audio.dmxstate');
+          if (await audioDmxStateFile.exists()) {
+            await audioDmxStateFile.delete();
+          }
+        }
+      } catch (e) {
+        debugPrint('Failed to delete temp files: $e');
+      }
     }
 
     final videoBytes = await _readDmxStateBytes(task.tempFilePath);

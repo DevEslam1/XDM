@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../provider/download_provider.dart';
+import '../models/download_task.dart';
 
 /// Modal bottom sheet allowing users to perform bulk actions on selected tasks.
 class BatchOperationsSheet extends StatefulWidget {
@@ -101,8 +102,15 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             onTap: () async {
               final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
+              final resumableIds = widget.selectedTaskIds.where((id) {
+                final matches = provider.tasks.where((t) => t.id == id);
+                if (matches.isEmpty) return false;
+                final status = matches.first.status;
+                return status == DownloadStatus.paused ||
+                    status == DownloadStatus.failed;
+              }).toList();
               try {
-                await provider.resumeMultipleTasks(widget.selectedTaskIds);
+                await provider.resumeMultipleTasks(resumableIds);
               } catch (e) {
                 debugPrint('[BatchOperations] Resume failed: $e');
               }

@@ -58,6 +58,7 @@ abstract class DownloadOrchestratorHost {
   Map<String, int> get providerTorrentIds;
   Map<String, int> get effectiveThreadOverrides;
   Map<int, TorrentUpdateInfo> get providerLatestTorrentStats;
+  Map<String, bool> get resumeRejectionRestarts;
   bool get providerDisposed;
   Map<String, DownloadMetrics> get downloadMetrics;
   bool get enableBackgroundTimers;
@@ -99,6 +100,16 @@ abstract class DownloadOrchestratorHost {
   );
   Future<void> cleanupPartFiles(DownloadTask task,
       {bool preserveParts = false});
+  Future<void> startOverTask(
+    String id,
+    String newUrl, {
+    String? newAudioUrl,
+    bool clearAudioUrl = false,
+    bool fromError = false,
+    int? newFileSize,
+    int? newAudioSize,
+    bool deleteTempFiles = false,
+  });
 }
 
 /// Owns the download start/execute/merge/finalize lifecycle.
@@ -1751,6 +1762,24 @@ class DownloadOrchestrator {
       await _finalizeDownload(task.id, notificationId);
     }).catchError((Object error, StackTrace stackTrace) async {
       final realError = error;
+
+      final errStr = error.toString();
+      final isResumeRejection = errStr.contains('Server rejected resume: expected HTTP 206.');
+      if (isResumeRejection) {
+        final alreadyRestarted = _host.resumeRejectionRestarts[task.id] ?? false;
+        if (!alreadyRestarted) {
+          _host.resumeRejectionRestarts[task.id] = true;
+          debugPrint('[DMX] Server rejected HTTP 206 resume. Performing a full restart from byte 0 for task: ${task.id}');
+          _host.notifications.cancelNotification(notificationId);
+          await _host.startOverTask(
+            task.id,
+            task.url,
+            fromError: true,
+            deleteTempFiles: true,
+          );
+          return;
+        }
+      }
 
       debugPrint('================= DOWNLOAD ERROR =================');
       debugPrint('Task ID: ${task.id}');
