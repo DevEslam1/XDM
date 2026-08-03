@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -612,6 +614,32 @@ class _BrowserScreenState extends State<BrowserScreen>
             _injectDesktopModeScript(tab, settings);
             _adBlocker.injectInto(tab);
             _injectUserScripts(tab, url);
+            
+            // Inject scroll fix for all pages
+            tab.controller.runJavaScript('''
+              (function() {
+                try {
+                  // Fix any overflow:hidden that blocks scrolling
+                  var body = document.body;
+                  var html = document.documentElement;
+                  if (body && window.getComputedStyle(body).overflow === 'hidden') {
+                    body.style.setProperty('overflow-y', 'auto', 'important');
+                  }
+                  if (html && window.getComputedStyle(html).overflow === 'hidden') {
+                    html.style.setProperty('overflow-y', 'auto', 'important');
+                  }
+                  // Fix position:fixed overlays that block scroll
+                  var fixed = document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]');
+                  for (var i = 0; i < fixed.length; i++) {
+                    var el = fixed[i];
+                    if (el.offsetWidth >= window.innerWidth * 0.9 && 
+                        el.offsetHeight >= window.innerHeight * 0.9) {
+                      el.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                  }
+                } catch(e) {}
+              })();
+            ''').catchError((e) => debugPrint('[Browser] Scroll-fix failed: \$e'));
             if (mounted) {
               setState(() {
                 tab.isLoading = false;
@@ -4207,6 +4235,14 @@ ${script.code}
                                                         WebViewWidget(
                                                           controller:
                                                               tab.controller,
+                                                          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                                                            Factory<VerticalDragGestureRecognizer>(
+                                                              () => VerticalDragGestureRecognizer(),
+                                                            ),
+                                                            Factory<HorizontalDragGestureRecognizer>(
+                                                              () => HorizontalDragGestureRecognizer(),
+                                                            ),
+                                                          },
                                                         ),
                                                         if (tab.isTimedOut &&
                                                             tab.isLoading)

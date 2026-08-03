@@ -344,8 +344,10 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
 [class*="ad-player-overlay"], [class*="preloader"],
 [class*="pre-roll"], [class*="preroll"], [class*="midroll"],
 [class*="countdown-overlay"], [class*="skip-ad"],
-[class*="ad-overlay"], [class*="ad-layer"],
-[class*="pop-overlay"], [class*="modal-ad"],
+div[class*="ad-overlay"]:not(#page-manager):not(ytd-app),
+div[class*="ad-layer"]:not(#page-manager):not(ytd-app),
+div[class*="pop-overlay"]:not(#page-manager),
+div[class*="modal-ad"]:not(#page-manager),
 [class*="lightbox-ad"], [class*="full-page-ad"],
 /* ═══ MOD-APP / APK SITES ═══ */
 [class*="download-ad"], [class*="dl-ad"],
@@ -364,6 +366,18 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   height: 0 !important;
   overflow: hidden !important;
   pointer-events: none !important; }
+
+/* Never hide YouTube's main scroll containers */
+ytd-app,
+#page-manager,
+ytd-browse,
+ytd-watch-flexy,
+html,
+body {
+  display: block !important;
+  visibility: visible !important;
+  overflow-y: auto !important;
+}
 ''';
 
   // ─────────────────────────────────────────────────────────────────────
@@ -577,16 +591,25 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
   } catch(e) {}
 
   /* ── Unblock page scroll (ad overlays often set overflow:hidden) ── */
-  if (!isYoutube) {
-    try {
-      if (window.getComputedStyle(document.body).overflow === 'hidden') {
-        document.body.style.setProperty('overflow', 'auto', 'important');
+  try {
+    if (window.getComputedStyle(document.body).overflow === 'hidden') {
+      document.body.style.setProperty('overflow', 'auto', 'important');
+      document.body.style.setProperty('overflow-y', 'scroll', 'important');
+    }
+    if (window.getComputedStyle(document.documentElement).overflow === 'hidden') {
+      document.documentElement.style.setProperty('overflow', 'auto', 'important');
+      document.documentElement.style.setProperty('overflow-y', 'scroll', 'important');
+    }
+    // Also fix YouTube-specific scroll containers
+    var ytdApp = document.querySelector('ytd-app, #page-manager, ytd-browse');
+    if (ytdApp) {
+      var st = window.getComputedStyle(ytdApp);
+      if (st.overflow === 'hidden' || st.overflowY === 'hidden') {
+        ytdApp.style.setProperty('overflow', 'auto', 'important');
+        ytdApp.style.setProperty('overflow-y', 'auto', 'important');
       }
-      if (window.getComputedStyle(document.documentElement).overflow === 'hidden') {
-        document.documentElement.style.setProperty('overflow', 'auto', 'important');
-      }
-    } catch(e) {}
-  }
+    }
+  } catch(e) {}
 })();
 ''';
 
@@ -640,6 +663,40 @@ ytd-rich-section-renderer:has(ytd-ad-slot-renderer),
       childList: true, subtree: true
     });
   } catch(e) {}
+
+  /* ── Restore YouTube page scroll ── */
+  try {
+    // Fix body/html overflow
+    if (window.getComputedStyle(document.body).overflow === 'hidden') {
+      document.body.style.setProperty('overflow', 'auto', 'important');
+      document.body.style.setProperty('overflow-y', 'scroll', 'important');
+    }
+    if (window.getComputedStyle(document.documentElement).overflow === 'hidden') {
+      document.documentElement.style.setProperty('overflow', 'auto', 'important');
+    }
+    // Fix ytd-app scroll container
+    var scrollContainers = document.querySelectorAll(
+      'ytd-app, #page-manager, ytd-browse, ytd-watch-flexy, .html5-video-container'
+    );
+    for (var i = 0; i < scrollContainers.length; i++) {
+      var el = scrollContainers[i];
+      var cs = window.getComputedStyle(el);
+      if (cs.overflow === 'hidden' || cs.overflowY === 'hidden') {
+        el.style.setProperty('overflow-y', 'auto', 'important');
+      }
+    }
+    // Ensure html element allows scroll
+    document.documentElement.style.setProperty('overflow-y', 'auto', 'important');
+  } catch(e) {}
+
+  // Run periodically since YouTube dynamically changes overflow
+  var scrollFixInterval = setInterval(function() {
+    try {
+      if (document.body && window.getComputedStyle(document.body).overflow === 'hidden') {
+        document.body.style.setProperty('overflow', 'auto', 'important');
+      }
+    } catch(e) {}
+  }, 3000);
 })();
 ''';
 
