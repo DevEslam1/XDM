@@ -180,7 +180,7 @@ class AdBlockFilterUpdater {
         // ── Integrity check 3: reject suspicious size regressions ──────────
         final sizeKey = 'adblock_last_size_${source.name}';
         final lastSize = prefs.getInt(sizeKey) ?? 0;
-        if (lastSize > 0 && fileSize < (lastSize * 0.30).round()) {
+        if (lastSize > 0 && fileSize < (lastSize * 0.50).round()) {
           _log.warning(
             'Filter ${source.name}: rejected suspiciously small file '
             '($fileSize bytes vs last good $lastSize bytes)',

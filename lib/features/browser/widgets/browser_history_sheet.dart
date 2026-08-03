@@ -17,6 +17,7 @@ import '../../settings/provider/settings_provider.dart';
 import 'package:logging/logging.dart';
 
 class BrowserHistorySheet extends StatefulWidget {
+  static final _log = Logger('BrowserHistorySheet');
   const BrowserHistorySheet({super.key});
 
   static Future<String?> show(BuildContext context) {
@@ -166,7 +167,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       if (!mounted) return;
       setState(() => _surfingHistory = h);
     } catch (e) {
-      debugPrint('[HistorySheet] Error: $e');
+      BrowserHistorySheet._log.warning('[HistorySheet] Error: $e');
       if (!mounted) return;
       setState(() => _surfingHistory = []);
     }
@@ -178,7 +179,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       await db.deleteBrowserHistory(id);
       _loadSurfingHistory();
     } catch (e) {
-      debugPrint('[HistorySheet] Error: $e');
+      BrowserHistorySheet._log.warning('[HistorySheet] Error: $e');
     }
   }
 
@@ -188,7 +189,7 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
       await db.clearBrowserHistory();
       _loadSurfingHistory();
     } catch (e) {
-      debugPrint('[HistorySheet] Error: $e');
+      BrowserHistorySheet._log.warning('[HistorySheet] Error: $e');
     }
   }
 

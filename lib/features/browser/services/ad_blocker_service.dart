@@ -813,6 +813,12 @@ body {
     return false;
   }
 
+  /// Validates a `set-constant` scriptlet target path against JS identifier rules.
+  /// Allowed: valid property path like `google_ad_client` or `a.b.c`.
+  static bool _isValidScriptletTarget(String target) {
+    return RegExp(r'^[a-zA-Z_$][a-zA-Z0-9_$.]*$').hasMatch(target);
+  }
+
   /// Anti-detect JS: fakes ad SDK globals, intercepts fetch/XHR/MO,
   /// and neutralises bait elements.
   String get antiDetectJs {
@@ -832,10 +838,12 @@ body {
           if (parts.length >= 3) {
             final target = parts[1].trim();
             final value = parts[2].trim();
-            if (_isValidScriptletValue(value)) {
-              sb.writeln('  try { window.$target = $value; } catch(e) {}');
-            } else {
+            if (!_isValidScriptletTarget(target)) {
+              _log.warning('set-constant: rejected unsafe target "$target"');
+            } else if (!_isValidScriptletValue(value)) {
               _log.warning('set-constant: rejected unsafe value "$value" for target "$target"');
+            } else {
+              sb.writeln('  try { window.$target = $value; } catch(e) {}');
             }
           }
         }
@@ -852,10 +860,12 @@ body {
         if (parts.length >= 3) {
           final target = parts[1].trim();
           final value = parts[2].trim();
-          if (_isValidScriptletValue(value)) {
-            sb.writeln('  try { window.$target = $value; } catch(e) {}');
-          } else {
+          if (!_isValidScriptletTarget(target)) {
+            _log.warning('set-constant: rejected unsafe target "$target"');
+          } else if (!_isValidScriptletValue(value)) {
             _log.warning('set-constant: rejected unsafe value "$value" for target "$target"');
+          } else {
+            sb.writeln('  try { window.$target = $value; } catch(e) {}');
           }
         }
       }

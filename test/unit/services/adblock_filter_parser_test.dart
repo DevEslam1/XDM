@@ -76,6 +76,6 @@ void main() {
 bool _isIntegrityOk(int fileSize, List<int> sample, int lastSize) {
   if (fileSize == 0) return false;
   if (sample.contains(0x00)) return false;
-  if (lastSize > 0 && fileSize < (lastSize * 0.30).round()) return false;
+  if (lastSize > 0 && fileSize < (lastSize * 0.50).round()) return false;
   return true;
 }

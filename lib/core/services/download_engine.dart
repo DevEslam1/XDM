@@ -3012,15 +3012,12 @@ class DownloadEngine {
     final completer = Completer<void>();
     StreamSubscription? sub;
     Timer? t;
-
     String? lastSeenState;
 
     sub = TorrentService.torrentUpdates.listen((torrents) {
       final tor = torrents[id];
-
       if (tor != null) {
         lastSeenState = tor.stateLabel;
-
         if (predicate(tor.stateLabel.toLowerCase())) {
           if (!completer.isCompleted) completer.complete();
         }
@@ -3030,9 +3027,8 @@ class DownloadEngine {
     t = Timer(timeout, () {
       if (!completer.isCompleted) {
         debugPrint(
-          '[DMX] _waitForState timed out after ${timeout.inMinutes} min '
-          'for torrent $id (last state: "${lastSeenState ?? "unknown"}"). '
-          'Pausing torrent — piece verification may be incomplete.',
+          '[DMX] _waitForState timed out after ${timeout.inSeconds}s. '
+          'Last seen state: "$lastSeenState".',
         );
         // FIX(8): Do NOT proceed with incomplete verification. Pause the
         // torrent so later file-priority changes / resumes cannot corrupt
@@ -3040,9 +3036,11 @@ class DownloadEngine {
         try {
           TorrentService.pauseTorrent(id);
         } catch (e, st) {
-          Logger(
-            'download_engine',
-          ).warning('[download_engine] operation failed', e, st);
+          Logger('download_engine').warning(
+            '[download_engine] operation failed',
+            e,
+            st,
+          );
         }
         completer.completeError(
           DioException(

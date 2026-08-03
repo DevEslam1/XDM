@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:logging/logging.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
@@ -10,6 +11,7 @@ import '../../settings/provider/settings_provider.dart';
 import '../models/bookmark.dart';
 
 class BookmarkManagerScreen extends StatefulWidget {
+  static final _log = Logger('BookmarkManagerScreen');
   const BookmarkManagerScreen({super.key});
 
   @override
@@ -35,7 +37,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
         _bookmarks = bms;
       });
     } catch (e) {
-      debugPrint('[BookmarkManager] Failed to load bookmarks: $e');
+      BookmarkManagerScreen._log.warning('[BookmarkManager] Failed to load bookmarks: $e');
       if (mounted) setState(() => _bookmarks = []);
     }
   }
@@ -87,7 +89,7 @@ class _BookmarkManagerScreenState extends State<BookmarkManagerScreen> {
       await db.deleteBookmark(bm.id);
       await _load();
     } catch (e) {
-      debugPrint('[BookmarkManager] Failed to delete bookmark: $e');
+      BookmarkManagerScreen._log.warning('[BookmarkManager] Failed to delete bookmark: $e');
     }
   }
 

@@ -75,6 +75,32 @@ void main() {
       expect(_isValid('eval("code")'), isFalse);
     });
   });
+
+  group('AdBlockerService scriptlet target validation', () {
+    test('simple identifier is valid target', () {
+      expect(_isValidTarget('google_ad_client'), isTrue);
+    });
+
+    test('nested property path is valid target', () {
+      expect(_isValidTarget('adsbygoogle.loaded'), isTrue);
+    });
+
+    test(r'identifier starting with $ or _ is valid target', () {
+      expect(_isValidTarget('\$custom_var._prop'), isTrue);
+    });
+
+    test('target starting with number is rejected', () {
+      expect(_isValidTarget('123bad'), isFalse);
+    });
+
+    test('target with semicolon injection is rejected', () {
+      expect(_isValidTarget('target; fetch("https://evil.com")'), isFalse);
+    });
+
+    test('target with spaces or parentheses is rejected', () {
+      expect(_isValidTarget('foo.bar()'), isFalse);
+    });
+  });
 }
 
 /// Mirror of AdBlockerService._isValidScriptletValue for test verification.
@@ -89,4 +115,8 @@ bool _isValid(String value) {
   if (RegExp(r'^-?\d+(\.\d+)?$').hasMatch(value)) return true;
   if (RegExp(r'^"[^"\\]*"$').hasMatch(value)) return true;
   return false;
+}
+
+bool _isValidTarget(String target) {
+  return RegExp(r'^[a-zA-Z_$][a-zA-Z0-9_$.]*$').hasMatch(target);
 }
