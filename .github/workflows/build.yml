@@ -97,8 +97,5 @@ jobs:
         working-directory: ios
         run: pod install --repo-update
 
-      - name: Resolve Swift Package Manager Dependencies
-        run: xcodebuild -resolvePackageDependencies -workspace ios/Runner.xcworkspace -scheme Runner
-
       - name: Build iOS (no codesign)
         run: flutter build ios --no-codesign --debug

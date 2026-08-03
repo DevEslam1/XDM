@@ -65,9 +65,14 @@ class PositionalFileWriter {
 
   /// Opens an existing partial file for resume WITHOUT truncating it.
   ///
-  /// - Uses [FileMode.writeOnly] so existing content is preserved without truncating
-  ///   and positional writes via [setPosition] + [writeFrom] work correctly across
-  ///   all platforms (avoiding OS-level O_APPEND behavior of FileMode.append).
+  /// Uses [FileMode.writeOnlyAppend] so existing content is preserved
+  /// (no truncation). Immediately after opening, `setPosition(0)` is called
+  /// to override any OS-level `O_APPEND` behavior, ensuring that subsequent
+  /// positional writes via [setPosition] + [writeFrom] land at the correct
+  /// byte offsets across all platforms.
+  ///
+  /// **Do NOT change this to [FileMode.writeOnly] or [FileMode.write]** —
+  /// both truncate the file and would destroy all downloaded data.
   static Future<PositionalFileWriter> openForResume(
     String path, {
     required int threadCount,
@@ -75,8 +80,9 @@ class PositionalFileWriter {
   }) async {
     final file = File(path);
     await file.parent.create(recursive: true);
-    // Use FileMode.writeOnlyAppend but immediately override with setPosition
-    // to avoid O_APPEND behavior. Alternatively, open read-write.
+    // writeOnlyAppend preserves existing bytes (no truncation).
+    // We immediately call setPosition to neutralise O_APPEND so that
+    // positional writes work correctly.
     final RandomAccessFile raf = await file.open(mode: FileMode.writeOnlyAppend);
     // Force position to 0 so subsequent setPosition calls work correctly.
     // On platforms where O_APPEND is forced, we re-open with read/write.
