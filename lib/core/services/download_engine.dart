@@ -1863,12 +1863,21 @@ class DownloadEngine {
             savedEtag = decoded['etag'] as String?;
             savedLastModified = decoded['lastModified'] as String?;
 
-            if (savedTotalSize == totalSize &&
-                savedThreadCount == threadCount &&
-                progressList != null &&
-                progressList.length == threadCount) {
-              loadedState = progressList.cast<int>();
-              canResume = true;
+            if (savedTotalSize == totalSize && progressList != null) {
+              if (savedThreadCount == threadCount &&
+                  progressList.length == threadCount) {
+                loadedState = progressList.cast<int>();
+                canResume = true;
+              } else if (savedThreadCount > 0 &&
+                  progressList.length == savedThreadCount) {
+                debugPrint(
+                  '[DownloadEngine] Resuming state with saved thread count '
+                  '$savedThreadCount (requested thread count was $threadCount)',
+                );
+                threadCount = savedThreadCount;
+                loadedState = progressList.cast<int>();
+                canResume = true;
+              }
             }
           }
         } catch (e) {
@@ -2522,22 +2531,41 @@ class DownloadEngine {
 
     var resumeFrom = 0;
 
-    if (supportsResume && await tempFile.exists()) {
+    if (await tempFile.exists()) {
       final partSize = await tempFile.length();
 
-      if (knownFileSize > 0 && partSize <= knownFileSize) {
-        resumeFrom = partSize;
-      } else if (knownFileSize == 0) {
-        resumeFrom = partSize;
-      } else {
+      if (knownFileSize > 0 && partSize >= knownFileSize) {
         debugPrint(
-          '[DownloadEngine] Single-threaded resume validation failed: '
-          'file size $partSize exceeds expected $knownFileSize. Restarting from 0.',
+          '[DownloadEngine] Single-threaded file already fully downloaded '
+          '($partSize >= $knownFileSize bytes). Skipping download.',
         );
-        await tempFile.delete();
+        onProgress(DownloadProgress(
+          downloadedBytes: partSize,
+          fileSize: knownFileSize,
+          speed: 0.0,
+          eta: 0,
+          statusMessage: 'Completed',
+          chunks: null,
+          supportsResume: true,
+          torrentFiles: null,
+          fileName: resolvedFileName,
+        ));
+        return;
       }
-    } else if (await tempFile.exists()) {
-      await tempFile.delete();
+
+      if (supportsResume) {
+        if (knownFileSize > 0 && partSize < knownFileSize) {
+          resumeFrom = partSize;
+        } else if (knownFileSize == 0) {
+          resumeFrom = partSize;
+        } else {
+          debugPrint(
+            '[DownloadEngine] Single-threaded resume validation failed: '
+            'file size $partSize exceeds expected $knownFileSize. Restarting from 0.',
+          );
+          await tempFile.delete();
+        }
+      }
     }
 
     final headers = <String, dynamic>{};
@@ -2570,6 +2598,24 @@ class DownloadEngine {
 
     if (response.statusCode == 416) {
       if (await tempFile.exists()) {
+        final partLen = await tempFile.length();
+        if (knownFileSize > 0 && partLen >= knownFileSize) {
+          debugPrint(
+            '[DownloadEngine] 416 returned because file is complete ($partLen >= $knownFileSize).',
+          );
+          onProgress(DownloadProgress(
+            downloadedBytes: partLen,
+            fileSize: knownFileSize,
+            speed: 0.0,
+            eta: 0,
+            statusMessage: 'Completed',
+            chunks: null,
+            supportsResume: true,
+            torrentFiles: null,
+            fileName: resolvedFileName,
+          ));
+          return;
+        }
         await tempFile.delete();
       }
 

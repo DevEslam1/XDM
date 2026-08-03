@@ -11,11 +11,11 @@ import com.example.dmx.R
 
 /**
  * Builds neon-themed [RemoteViews] for every widget size with adaptive
- * content:
+ * content matching the XDM Signal Deck app theme:
  *   - no tasks        → "All clear"
  *   - failures        → red alert banner
- *   - 1-2 active      → compact detail rows
- *   - 4+ active       → top rows + "N more"
+ *   - 1-2 active      → compact detail rows with category chips
+ *   - 4+ active       → top rows + "+N more"
  *   - storage low     → amber warning bar
  */
 object DMXRemoteViewsFactory {
@@ -24,16 +24,16 @@ object DMXRemoteViewsFactory {
     const val SIZE_LIST = "list"
     const val SIZE_DASHBOARD = "dashboard"
 
-    // ── Neon palette (matches lib/core/app_theme.dart) ──
-    const val COLOR_BG = 0xFF0D0D14.toInt()
-    const val COLOR_SURFACE = 0xFF1A1A2E.toInt()
-    const val COLOR_NEON_GREEN = 0xFF00FF88.toInt()
-    const val COLOR_NEON_BLUE = 0xFF00D4FF.toInt()
-    const val COLOR_NEON_RED = 0xFFFF3366.toInt()
-    const val COLOR_NEON_VIOLET = 0xFFBB86FC.toInt()
-    const val COLOR_NEON_AMBER = 0xFFFFB800.toInt()
-    const val COLOR_TEXT_PRIMARY = 0xFFE0E0E0.toInt()
-    const val COLOR_TEXT_SECONDARY = 0xFF878787.toInt()
+    // ── Neon palette matching lib/core/app_theme.dart ──
+    const val COLOR_BG = 0xFF0F1117.toInt()
+    const val COLOR_SURFACE = 0xFF161A22.toInt()
+    const val COLOR_NEON_GREEN = 0xFF10B981.toInt()
+    const val COLOR_NEON_BLUE = 0xFF3B82F6.toInt()
+    const val COLOR_NEON_RED = 0xFFEF4444.toInt()
+    const val COLOR_NEON_VIOLET = 0xFF8B5CF6.toInt()
+    const val COLOR_NEON_AMBER = 0xFFF59E0B.toInt()
+    const val COLOR_TEXT_PRIMARY = 0xFFF2F4F8.toInt()
+    const val COLOR_TEXT_SECONDARY = 0xFF9AA3B5.toInt()
 
     /** Maps the widget's current min-width (dp) to a size class. */
     fun sizeClassFromWidth(minWidthDp: Int): String = when {
@@ -85,6 +85,9 @@ object DMXRemoteViewsFactory {
 
     private fun applyMini(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
         val top = dashboard.tasks.first()
+        views.setViewVisibility(R.id.widget_mini_name, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_mini_stats, View.VISIBLE)
+        applyCategoryTag(views, R.id.widget_mini_tag, top)
         views.setTextViewText(R.id.widget_mini_name, top.fileName)
         if (top.status == "downloading") {
             views.setTextViewText(
@@ -112,6 +115,11 @@ object DMXRemoteViewsFactory {
 
     private fun applyWide(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
         val top = dashboard.tasks.first()
+        views.setViewVisibility(R.id.widget_wide_clear, View.GONE)
+        views.setViewVisibility(R.id.widget_wide_name, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_wide_progress, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_wide_stats, View.VISIBLE)
+        applyCategoryTag(views, R.id.widget_wide_tag, top)
         views.setTextViewText(R.id.widget_wide_name, top.fileName)
         setProgress(views, R.id.widget_wide_progress, top.progress)
         views.setTextViewText(R.id.widget_wide_stats, buildStatsLine(top))
@@ -122,9 +130,13 @@ object DMXRemoteViewsFactory {
     }
 
     private fun applyList(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
+        views.setViewVisibility(R.id.widget_list_clear, View.GONE)
+        views.setViewVisibility(R.id.widget_list_rows, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_list_footer, View.VISIBLE)
+
         views.setTextViewText(
             R.id.widget_list_title,
-            "DMX DOWNLOADS",
+            "XDM SIGNAL DECK",
         )
         views.setTextViewText(
             R.id.widget_list_speed,
@@ -137,6 +149,7 @@ object DMXRemoteViewsFactory {
             val visibleId = rowVisibleId(index)
             views.setViewVisibility(visibleId, if (task != null) View.VISIBLE else View.GONE)
             if (task != null) {
+                applyCategoryTag(views, rowTagId(index), task)
                 views.setTextViewText(rowNameId(index), task.fileName)
                 setProgress(views, rowProgressId(index), task.progress)
                 views.setTextViewText(
@@ -152,13 +165,16 @@ object DMXRemoteViewsFactory {
 
         val footer = buildFooter(dashboard)
         views.setTextViewText(R.id.widget_list_footer, footer)
-        views.setViewVisibility(R.id.widget_list_clear, View.GONE)
     }
 
     private fun applyDashboard(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
+        views.setViewVisibility(R.id.widget_dash_clear, View.GONE)
+        views.setViewVisibility(R.id.widget_dash_rows, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_dash_actions, View.VISIBLE)
+
         views.setTextViewText(
             R.id.widget_dash_title,
-            "DMX DOWNLOADS",
+            "XDM SIGNAL DECK",
         )
         views.setTextViewText(
             R.id.widget_dash_speed,
@@ -171,6 +187,7 @@ object DMXRemoteViewsFactory {
             val visibleId = dashRowVisibleId(index)
             views.setViewVisibility(visibleId, if (task != null) View.VISIBLE else View.GONE)
             if (task != null) {
+                applyCategoryTag(views, dashRowTagId(index), task)
                 views.setTextViewText(dashRowNameId(index), task.fileName)
                 setProgress(views, dashRowProgressId(index), task.progress)
                 views.setTextViewText(
@@ -243,6 +260,19 @@ object DMXRemoteViewsFactory {
     // Helpers
     // ─────────────────────────────────────────────────────────────────────
 
+    private fun formatCategoryTag(task: WidgetTaskSummary): String {
+        if (task.isTorrent) return "TORRENT"
+        if (task.isAppUpdate) return "UPDATE"
+        val cat = task.category.uppercase()
+        return if (cat.isNotEmpty() && cat != "OTHER") cat else "FILE"
+    }
+
+    private fun applyCategoryTag(views: RemoteViews, tagViewId: Int, task: WidgetTaskSummary) {
+        val tagText = formatCategoryTag(task)
+        views.setTextViewText(tagViewId, tagText)
+        views.setViewVisibility(tagViewId, View.VISIBLE)
+    }
+
     private fun applyAllClear(views: RemoteViews, size: String, dashboard: WidgetDashboard?) {
         val clearId = when (size) {
             SIZE_MINI -> R.id.widget_mini_clear
@@ -254,7 +284,7 @@ object DMXRemoteViewsFactory {
 
         val doneCount = dashboard?.completedTodayCount ?: 0
         val text = if (dashboard == null) {
-            "ALL CLEAR\nOpen DMX to start downloading"
+            "ALL CLEAR\nOpen XDM to start downloading"
         } else if (doneCount > 0) {
             "ALL CLEAR\n$doneCount completed today"
         } else {
@@ -265,10 +295,12 @@ object DMXRemoteViewsFactory {
         when (size) {
             SIZE_MINI -> {
                 views.setViewVisibility(R.id.widget_mini_ring, View.GONE)
+                views.setViewVisibility(R.id.widget_mini_tag, View.GONE)
                 views.setViewVisibility(R.id.widget_mini_name, View.GONE)
                 views.setViewVisibility(R.id.widget_mini_stats, View.GONE)
             }
             SIZE_WIDE -> {
+                views.setViewVisibility(R.id.widget_wide_tag, View.GONE)
                 views.setViewVisibility(R.id.widget_wide_name, View.GONE)
                 views.setViewVisibility(R.id.widget_wide_progress, View.GONE)
                 views.setViewVisibility(R.id.widget_wide_stats, View.GONE)
@@ -402,6 +434,12 @@ object DMXRemoteViewsFactory {
         else -> R.id.widget_row3
     }
 
+    private fun rowTagId(index: Int) = when (index) {
+        0 -> R.id.widget_row1_tag
+        1 -> R.id.widget_row2_tag
+        else -> R.id.widget_row3_tag
+    }
+
     private fun rowNameId(index: Int) = when (index) {
         0 -> R.id.widget_row1_name
         1 -> R.id.widget_row2_name
@@ -427,6 +465,14 @@ object DMXRemoteViewsFactory {
         2 -> R.id.widget_dash_row3
         3 -> R.id.widget_dash_row4
         else -> R.id.widget_dash_row5
+    }
+
+    private fun dashRowTagId(index: Int) = when (index) {
+        0 -> R.id.widget_dash_row1_tag
+        1 -> R.id.widget_dash_row2_tag
+        2 -> R.id.widget_dash_row3_tag
+        3 -> R.id.widget_dash_row4_tag
+        else -> R.id.widget_dash_row5_tag
     }
 
     private fun dashRowNameId(index: Int) = when (index) {

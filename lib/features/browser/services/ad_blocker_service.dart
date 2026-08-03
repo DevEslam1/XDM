@@ -249,10 +249,9 @@ class AdBlockerService {
     final custom = _customRules.join('\n');
     if (dynamicRules.isEmpty && custom.isEmpty) return _cssRules;
     final selectors = dynamicRules.take(2000).join(', ');
-    final base = '$selectors { visibility: hidden !important; height: 0 !important; overflow: hidden !important; pointer-events: none !important; }';
-    return custom.isEmpty
-        ? '$_cssRules\n$base'
-        : '$_cssRules\n$base\n$custom';
+    final base =
+        '$selectors { visibility: hidden !important; height: 0 !important; overflow: hidden !important; pointer-events: none !important; }';
+    return custom.isEmpty ? '$_cssRules\n$base' : '$_cssRules\n$base\n$custom';
   }
 
   /// Anti-detect CSS: makes bait elements visually invisible but JS-measurable

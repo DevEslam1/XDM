@@ -423,7 +423,8 @@ class DmxApp extends StatelessWidget {
 
   /// Global navigator key: lets widget deep links (`dmx://`) push screens
   /// from a cold start (see [WidgetDeepLinkHandler]).
-  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   final DatabaseService databaseService;
   final SettingsProvider settingsProvider;

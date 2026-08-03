@@ -96,8 +96,13 @@ class NotificationCoordinator {
     return handle;
   }
 
-  String? _resolveOpaqueHandle(String? handle) =>
-      handle == null ? null : _opaqueHandles[handle];
+  String? _resolveOpaqueHandle(String? handle) {
+    if (handle == null) return null;
+    final resolved = _opaqueHandles[handle];
+    if (resolved != null) return resolved;
+    if (_findTask(handle) != null) return handle;
+    return null;
+  }
 
   void init() {
     _actionSubscription = _notificationService.onActionTapped.listen(
@@ -218,6 +223,7 @@ class NotificationCoordinator {
     required String payload,
   }) {
     if (!_settingsProvider.notificationsEnabled) return;
+    _notificationService.startPollingPendingActions();
     final activeCount = _downloadingTasksCount();
     final multiple = activeCount > 1;
     _notificationService.showDownloadProgress(

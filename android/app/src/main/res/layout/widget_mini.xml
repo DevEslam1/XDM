@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 2x2 mini widget: spinning ring + file name + speed/ETA -->
+<!-- 2x2 mini widget: spinning ring/badge + category pill + file name + live speed/ETA -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -17,23 +17,38 @@
         android:orientation="vertical"
         android:gravity="center"
         android:background="@drawable/widget_surface"
-        android:padding="8dp">
+        android:padding="10dp">
 
         <ProgressBar
             android:id="@+id/widget_mini_ring"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:indeterminate="true"
             android:indeterminateDrawable="@drawable/widget_progress_ring"
-            android:layout_marginBottom="6dp" />
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/widget_mini_tag"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="VIDEO"
+            android:textColor="#8B5CF6"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:background="@drawable/widget_category_chip"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="1dp"
+            android:layout_marginBottom="4dp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/widget_mini_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Downloading…"
-            android:textColor="#E0E0E0"
+            android:textColor="#F2F4F8"
             android:textSize="11sp"
+            android:textStyle="bold"
             android:maxLines="2"
             android:ellipsize="end"
             android:gravity="center"
@@ -44,18 +59,18 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="0 B/s · --"
-            android:textColor="#00FF88"
+            android:textColor="#10B981"
             android:textSize="10sp"
             android:textStyle="bold"
             android:gravity="center"
-            android:layout_marginTop="2dp" />
+            android:layout_marginTop="3dp" />
 
         <TextView
             android:id="@+id/widget_mini_clear"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="ALL CLEAR"
-            android:textColor="#00D4FF"
+            android:textColor="#3B82F6"
             android:textSize="12sp"
             android:textStyle="bold"
             android:gravity="center"

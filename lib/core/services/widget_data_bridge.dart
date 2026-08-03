@@ -11,7 +11,8 @@ import 'package:logging/logging.dart';
 class WidgetTaskSummary {
   final String id;
   final String fileName;
-  final String status; // queued | downloading | paused | completed | failed | seeding
+  final String
+      status; // queued | downloading | paused | completed | failed | seeding
   final double progress; // 0.0 - 1.0
   final int speedBytesPerSec;
   final int? etaSeconds;
@@ -102,8 +103,10 @@ class WidgetDashboard {
 
   bool get hasActiveDownloads => totalActiveCount > 0;
   bool get hasFailures => failedCount > 0;
-  bool get isStorageLow => availableStorageBytes >= 0 && availableStorageBytes < 500 * 1024 * 1024;
-  bool get isStorageCritical => availableStorageBytes >= 0 && availableStorageBytes < 100 * 1024 * 1024;
+  bool get isStorageLow =>
+      availableStorageBytes >= 0 && availableStorageBytes < 500 * 1024 * 1024;
+  bool get isStorageCritical =>
+      availableStorageBytes >= 0 && availableStorageBytes < 100 * 1024 * 1024;
 
   Map<String, dynamic> toJson() => {
         'tasks': tasks.map((t) => t.toJson()).toList(),
@@ -200,7 +203,8 @@ class WidgetDataBridge {
   /// Process-wide singleton.
   static final WidgetDataBridge instance = WidgetDataBridge();
 
-  static const MethodChannel channel = MethodChannel('com.dmx.app/widget_bridge');
+  static const MethodChannel channel =
+      MethodChannel('com.dmx.app/widget_bridge');
 
   static const Duration minPushInterval = Duration(seconds: 5);
 
@@ -216,7 +220,8 @@ class WidgetDataBridge {
   /// Regular pushes are throttled to one per [minPushInterval]. Pass
   /// [force] = `true` for state transitions (pause, resume, complete, fail)
   /// that must appear on the widget immediately.
-  Future<void> pushDashboard(WidgetDashboard dashboard, {bool force = false}) async {
+  Future<void> pushDashboard(WidgetDashboard dashboard,
+      {bool force = false}) async {
     if (kIsWeb) return;
     _pendingTimer?.cancel();
     _pendingTimer = null;

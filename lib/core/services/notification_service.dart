@@ -13,6 +13,7 @@ import 'package:dmx/core/services/logging_service.dart';
 /// Persistent key holding the notification-action nonce so that action
 /// intents fired after a process restart can still be validated.
 const String _nonceKey = 'dmx_notification_nonce';
+const String _pendingActionsKey = 'dmx_pending_notification_actions';
 
 @pragma('vm:entry-point')
 void _onBackgroundNotificationResponse(NotificationResponse response) {
@@ -34,8 +35,21 @@ Future<void> _forwardBackgroundAction(String actionId, String? payload) async {
     if (port != null) {
       port.send({'action': actionId, 'taskId': payload, 'nonce': nonce});
     }
+
+    // Always persist to SharedPreferences as a fallback so that main isolate
+    // / foreground service or app startup can process it even if IsolateNameServer
+    // port lookup fails across engine boundaries (e.g. on ColorOS / Android background).
+    final rawList = prefs.getStringList(_pendingActionsKey) ?? <String>[];
+    final actionJson = jsonEncode({
+      'action': actionId,
+      'taskId': payload,
+      'nonce': nonce,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+    rawList.add(actionJson);
+    await prefs.setStringList(_pendingActionsKey, rawList);
   } catch (e) {
-    debugPrint('[NotificationService] Background nonce read failed: $e');
+    debugPrint('[NotificationService] Background action forward failed: $e');
   }
 }
 
@@ -148,6 +162,66 @@ class NotificationService {
   ReceivePort? _receivePort;
   StreamSubscription<dynamic>? _receivePortSub;
   Future<void>? _initFuture;
+  Timer? _pollTimer;
+
+  /// Process any pending notification actions stored in SharedPreferences.
+  Future<void> processPendingBackgroundActions() async {
+    if (!isSupported) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rawList = prefs.getStringList(_pendingActionsKey);
+      if (rawList == null || rawList.isEmpty) return;
+
+      // Clear list first to prevent duplicated execution
+      await prefs.remove(_pendingActionsKey);
+
+      for (final rawJson in rawList) {
+        try {
+          final map = jsonDecode(rawJson) as Map<String, dynamic>;
+          final action = map['action'] as String?;
+          final taskId = map['taskId'] as String?;
+          final receivedNonce = map['nonce'] as String?;
+
+          if (_nonce != null &&
+              receivedNonce != null &&
+              receivedNonce != _nonce) {
+            debugPrint(
+              '[NotificationService] Invalid nonce in pending action - ignoring',
+            );
+            continue;
+          }
+
+          if (action != null) {
+            if (_groupActions.contains(action)) {
+              _addAction({'action': action});
+            } else if (taskId != null && _isValidTaskId(taskId)) {
+              _addAction({'action': action, 'taskId': taskId});
+            }
+          }
+        } catch (e) {
+          debugPrint(
+            '[NotificationService] Error decoding pending action: $e',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint(
+        '[NotificationService] Failed to process pending background actions: $e',
+      );
+    }
+  }
+
+  void startPollingPendingActions() {
+    if (_pollTimer != null && _pollTimer!.isActive) return;
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
+      unawaited(processPendingBackgroundActions());
+    });
+  }
+
+  void stopPollingPendingActions() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
 
   Future<void> init({bool requestPermission = true}) async {
     if (!isSupported) return;
@@ -157,6 +231,7 @@ class NotificationService {
       // Only reset if the port is genuinely missing (crash recovery)
       if (_receivePort != null &&
           IsolateNameServer.lookupPortByName('dmx_notification_port') != null) {
+        unawaited(processPendingBackgroundActions());
         return _initFuture!;
       }
       // Port is missing — need to re-init, but wait for any in-flight init first (with timeout)
@@ -244,6 +319,7 @@ class NotificationService {
             }
           }
         }
+        unawaited(processPendingBackgroundActions());
       });
 
       await _plugin.initialize(
@@ -256,6 +332,7 @@ class NotificationService {
           } else if (payload != null && _isValidTaskId(payload)) {
             _addAction({'action': actionId, 'taskId': payload});
           }
+          unawaited(processPendingBackgroundActions());
         },
         onDidReceiveBackgroundNotificationResponse:
             _onBackgroundNotificationResponse,
@@ -296,6 +373,7 @@ class NotificationService {
           ),
         );
       }
+      await processPendingBackgroundActions();
       _initialized = true;
       completer.complete();
     } catch (e) {
@@ -515,6 +593,8 @@ class NotificationService {
   }
 
   Future<void> dispose() async {
+    _pollTimer?.cancel();
+    _pollTimer = null;
     await _receivePortSub?.cancel();
     _receivePortSub = null;
     _receivePort?.close();

@@ -270,7 +270,7 @@ class _YoutubePlaylistSheetState extends State<YoutubePlaylistSheet> {
         chunks: List<double>.filled(settings.defaultThreadCount, 0.0),
         createdAt: now,
         updatedAt: now,
-        supportsResume: false,
+        supportsResume: true,
         speedLimitKbps: 0,
         seedingEnabled: false,
         seedingLimited: false,

@@ -250,7 +250,7 @@ class MainActivity : FlutterActivity() {
             setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pushDashboard" -> {
-                        val json = call.argument<String>("json")
+                        val json = call.arguments as? String
                         if (json == null) {
                             result.error("INVALID_ARGS", "json is required", null)
                             return@setMethodCallHandler

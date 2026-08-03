@@ -283,7 +283,8 @@ class DownloadProvider extends ChangeNotifier
   void startTaskFromQueue(DownloadTask task) => _orchestrator.startTask(task);
 
   @override
-  void updateTelemetryWidget() => _updateTelemetryWidget();
+  void updateTelemetryWidget({bool force = false}) =>
+      _updateTelemetryWidget(force: force);
 
   @override
   bool isTaskWaitingForRetry(String taskId) => _retryTimers.containsKey(taskId);
@@ -613,6 +614,8 @@ class DownloadProvider extends ChangeNotifier
       ..clear()
       ..addAll(loaded);
 
+    filteredTasksDirty = true;
+
     for (final task in toDelete) {
       await _databaseService.deleteTask(task.id);
       await cleanupPartFiles(task);
@@ -691,6 +694,7 @@ class DownloadProvider extends ChangeNotifier
       }
 
       if (pausedCandidates.isNotEmpty) {
+        filteredTasksDirty = true;
         notifyListeners();
       }
     }
@@ -699,7 +703,7 @@ class DownloadProvider extends ChangeNotifier
     // auto-resumed ones) start without requiring user interaction.
     pumpQueue();
 
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
 
     // Phase 2 — deferred per-task file reconciliation (I/O heavy).
     // Runs after the first frame so the UI renders immediately with stale
@@ -1183,7 +1187,7 @@ class DownloadProvider extends ChangeNotifier
     await _databaseService.saveTask(task);
 
     notifyListeners();
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
 
     if (!isScheduled && shouldPumpQueue) {
       pumpQueue();
@@ -1376,7 +1380,7 @@ class DownloadProvider extends ChangeNotifier
     );
 
     pumpQueue();
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
   }
 
   Future<void> pauseAllTasks() => mixinPauseAllTasks(notifyListeners);
@@ -1419,9 +1423,9 @@ class DownloadProvider extends ChangeNotifier
       _torrentIds.remove(id);
     }
 
-    // Remove temporary state files so a fresh download won't try to resume
-    // from stale progress data.
-    await cleanupPartFiles(task);
+    // Remove temporary state files safely while preserving downloaded parts
+    // so user can retry/resume later.
+    await cleanupPartFiles(task, preserveParts: true);
 
     await _setTask(
       task.copyWith(
@@ -1438,7 +1442,7 @@ class DownloadProvider extends ChangeNotifier
       _stopWidgetTimer();
     }
 
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
   }
 
   Future<void> retryTask(String id) async {
@@ -1485,7 +1489,7 @@ class DownloadProvider extends ChangeNotifier
     );
 
     pumpQueue();
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
     notifyListeners();
   }
 
@@ -1493,18 +1497,26 @@ class DownloadProvider extends ChangeNotifier
   /// Returns 0 when the file is missing, corrupt, or empty.
   static Future<int> _readDmxStateBytes(String tempFilePath) async {
     final stateFile = File('$tempFilePath.dmxstate');
-    if (!await stateFile.exists()) return 0;
-    try {
-      final content = await stateFile.readAsString();
-      final decoded = jsonDecode(content);
-      if (decoded is Map && decoded['progress'] is List) {
-        return (decoded['progress'] as List)
-            .fold<int>(0, (sum, chunk) => sum + ((chunk as num).toInt()));
+    if (await stateFile.exists()) {
+      try {
+        final content = await stateFile.readAsString();
+        final decoded = jsonDecode(content);
+        if (decoded is Map && decoded['progress'] is List) {
+          return (decoded['progress'] as List)
+              .fold<int>(0, (sum, chunk) => sum + ((chunk as num).toInt()));
+        }
+      } catch (e, st) {
+        _log.warning('[download_provider] operation failed', e, st);
+        // Corrupt state → treat as fresh start
       }
-    } catch (e, st) {
-      _log.warning('[download_provider] operation failed', e, st);
-      // Corrupt state → treat as fresh start
     }
+    // Fallback if no .dmxstate exists (e.g. single-threaded download or finished stream file)
+    try {
+      final tempFile = File(tempFilePath);
+      if (await tempFile.exists()) {
+        return await tempFile.length();
+      }
+    } catch (_) {}
     return 0;
   }
 
@@ -1623,7 +1635,7 @@ class DownloadProvider extends ChangeNotifier
       _stopWidgetTimer();
     }
 
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
   }
 
   Future<void> clearHistoryTasks(List<String> ids) async {
@@ -2010,9 +2022,10 @@ class DownloadProvider extends ChangeNotifier
   // Widget / telemetry timer
   // ---------------------------------------------------------------------------
 
-  void _updateTelemetryWidget() {
+  void _updateTelemetryWidget({bool force = false}) {
     if (kIsWeb) return;
-    unawaited(_pushWidgetData());
+    _startWidgetTimer();
+    unawaited(_pushWidgetData(force: force));
   }
 
   /// Builds the widget dashboard from the current task list and pushes it to
@@ -2022,7 +2035,7 @@ class DownloadProvider extends ChangeNotifier
   /// invoked from the 5-second telemetry timer while downloads are active and
   /// immediately after every state transition (add, pause, resume, complete,
   /// fail, delete).
-  Future<void> _pushWidgetData() async {
+  Future<void> _pushWidgetData({bool force = false}) async {
     try {
       final bridge = WidgetDataBridge.instance;
       final freeSpace = await bridge.fetchFreeDiskSpace();
@@ -2036,8 +2049,7 @@ class DownloadProvider extends ChangeNotifier
         if (status == 'completed' && task.isTorrent && task.seedingEnabled) {
           status = 'seeding';
         }
-        final history =
-            _speedHistories[task.id]?.toList() ?? const <double>[];
+        final history = _speedHistories[task.id]?.toList() ?? const <double>[];
         final recentSamples =
             history.where((s) => s > 0).map((s) => s.round()).toList();
         final recent5 = recentSamples.length > 5
@@ -2084,7 +2096,7 @@ class DownloadProvider extends ChangeNotifier
         }).length,
       );
 
-      await bridge.pushDashboard(dashboard);
+      await bridge.pushDashboard(dashboard, force: force);
     } catch (e) {
       _log.fine('[download_provider] widget dashboard push failed: $e');
     }
@@ -2185,16 +2197,13 @@ class DownloadProvider extends ChangeNotifier
 
     if (task.downloadedBytes > 0) {
       try {
-        // Clean up temp file, state file, journal, and legacy part files.
-        await cleanupPartFiles(task);
+        await cleanupPartFiles(task, preserveParts: true);
       } catch (e) {
-        debugPrint('Error deleting segment files: $e');
+        debugPrint('Error preserving segment files on thread count change: $e');
       }
 
       task = task.copyWith(
         threadCount: targetThreadCount,
-        downloadedBytes: 0,
-        chunks: List<double>.filled(targetThreadCount, 0.0),
         status: DownloadStatus.paused,
         clearError: true,
       );
@@ -2210,7 +2219,7 @@ class DownloadProvider extends ChangeNotifier
     await _databaseService.saveTask(task);
 
     notifyListeners();
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
   }
 
   Future<void> updateTaskUrl(
@@ -2499,15 +2508,23 @@ class DownloadProvider extends ChangeNotifier
       debugPrint('Failed to delete completed file during start over: $e');
     }
 
+    final videoBytes = await _readDmxStateBytes(task.tempFilePath);
+    var audioBytes = 0;
+    final targetAudioUrl = newAudioUrl ?? task.mergedAudioUrl;
+    if (targetAudioUrl != null && targetAudioUrl.isNotEmpty) {
+      audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+    }
+    final realBytesOnDisk = videoBytes + audioBytes;
+
     await _setTask(
       task.copyWith(
         url: newUrl.trim(),
-        mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
+        mergedAudioUrl: targetAudioUrl,
         clearMergedAudioUrl: clearAudioUrl,
         fileSize: newFileSize ?? task.fileSize,
         audioSize: newAudioSize ?? task.audioSize,
         status: DownloadStatus.queued,
-        downloadedBytes: 0,
+        downloadedBytes: realBytesOnDisk,
         speed: 0,
         clearEta: true,
         clearError: true,
@@ -2518,7 +2535,7 @@ class DownloadProvider extends ChangeNotifier
 
     pumpQueue();
     _startWidgetTimer();
-    _updateTelemetryWidget();
+    _updateTelemetryWidget(force: true);
   }
 
   // ---------------------------------------------------------------------------

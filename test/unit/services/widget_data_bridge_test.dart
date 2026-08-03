@@ -50,7 +50,15 @@ void main() {
 
       expect(
         result.tasks.map((t) => t.id).toList(),
-        ['failed', 'app-update', 'high', 'low', 'queued', 'paused', 'completed'],
+        [
+          'failed',
+          'app-update',
+          'high',
+          'low',
+          'queued',
+          'paused',
+          'completed'
+        ],
       );
     });
 

@@ -42,5 +42,6 @@ Future<void> configureDependencies() async {
   getIt.registerLazySingleton<SingleInstanceService>(
       () => SingleInstanceService());
   getIt.registerLazySingleton<TrackerManager>(() => TrackerManager());
-  getIt.registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
+  getIt
+      .registerLazySingleton<WidgetDataBridge>(() => WidgetDataBridge.instance);
 }

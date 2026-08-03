@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 4x2 list widget: header + 3 download rows + footer -->
+<!-- 4x2 list widget: header + 3 download rows (category tag + filename + progress bar + %) + footer -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -13,15 +13,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:paddingBottom="4dp">
 
         <TextView
             android:id="@+id/widget_list_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="DMX DOWNLOADS"
-            android:textColor="#00D4FF"
+            android:text="XDM SIGNAL DECK"
+            android:textColor="#3B82F6"
             android:textSize="11sp"
             android:textStyle="bold"
             android:letterSpacing="0.08" />
@@ -31,7 +32,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="0 B/s"
-            android:textColor="#00FF88"
+            android:textColor="#10B981"
             android:textSize="11sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -41,8 +42,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:paddingTop="4dp">
+        android:orientation="vertical">
 
         <LinearLayout
             android:id="@+id/widget_row1"
@@ -51,25 +51,47 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_vertical"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp">
-
-            <TextView
-                android:id="@+id/widget_row1_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="File name"
-                android:textColor="#E0E0E0"
-                android:textSize="11sp"
-                android:maxLines="1"
-                android:ellipsize="middle"
-                android:textDirection="locale" />
+            android:paddingVertical="2dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/widget_row1_tag"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="VIDEO"
+                    android:textColor="#8B5CF6"
+                    android:textSize="8sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/widget_category_chip"
+                    android:paddingHorizontal="4dp"
+                    android:paddingVertical="1dp"
+                    android:layout_marginEnd="5dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_row1_name"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="File name"
+                    android:textColor="#F2F4F8"
+                    android:textSize="11sp"
+                    android:maxLines="1"
+                    android:ellipsize="middle"
+                    android:textDirection="locale" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
 
                 <ProgressBar
                     android:id="@+id/widget_row1_progress"
@@ -86,8 +108,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0%"
-                    android:textColor="#00FF88"
+                    android:textColor="#10B981"
                     android:textSize="9sp"
+                    android:textStyle="bold"
                     android:layout_marginStart="6dp" />
             </LinearLayout>
         </LinearLayout>
@@ -99,25 +122,47 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_vertical"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp">
-
-            <TextView
-                android:id="@+id/widget_row2_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="File name"
-                android:textColor="#E0E0E0"
-                android:textSize="11sp"
-                android:maxLines="1"
-                android:ellipsize="middle"
-                android:textDirection="locale" />
+            android:paddingVertical="2dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/widget_row2_tag"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AUDIO"
+                    android:textColor="#8B5CF6"
+                    android:textSize="8sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/widget_category_chip"
+                    android:paddingHorizontal="4dp"
+                    android:paddingVertical="1dp"
+                    android:layout_marginEnd="5dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_row2_name"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="File name"
+                    android:textColor="#F2F4F8"
+                    android:textSize="11sp"
+                    android:maxLines="1"
+                    android:ellipsize="middle"
+                    android:textDirection="locale" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
 
                 <ProgressBar
                     android:id="@+id/widget_row2_progress"
@@ -134,8 +179,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0%"
-                    android:textColor="#00FF88"
+                    android:textColor="#10B981"
                     android:textSize="9sp"
+                    android:textStyle="bold"
                     android:layout_marginStart="6dp" />
             </LinearLayout>
         </LinearLayout>
@@ -147,25 +193,47 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_vertical"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp">
-
-            <TextView
-                android:id="@+id/widget_row3_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="File name"
-                android:textColor="#E0E0E0"
-                android:textSize="11sp"
-                android:maxLines="1"
-                android:ellipsize="middle"
-                android:textDirection="locale" />
+            android:paddingVertical="2dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/widget_row3_tag"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ZIP"
+                    android:textColor="#8B5CF6"
+                    android:textSize="8sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/widget_category_chip"
+                    android:paddingHorizontal="4dp"
+                    android:paddingVertical="1dp"
+                    android:layout_marginEnd="5dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_row3_name"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="File name"
+                    android:textColor="#F2F4F8"
+                    android:textSize="11sp"
+                    android:maxLines="1"
+                    android:ellipsize="middle"
+                    android:textDirection="locale" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
 
                 <ProgressBar
                     android:id="@+id/widget_row3_progress"
@@ -182,8 +250,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0%"
-                    android:textColor="#00FF88"
+                    android:textColor="#10B981"
                     android:textSize="9sp"
+                    android:textStyle="bold"
                     android:layout_marginStart="6dp" />
             </LinearLayout>
         </LinearLayout>
@@ -194,9 +263,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="No active downloads"
-        android:textColor="#878787"
+        android:textColor="#9AA3B5"
         android:textSize="9sp"
-        android:paddingTop="2dp"
+        android:paddingTop="3dp"
         android:textDirection="locale" />
 
     <TextView
@@ -204,7 +273,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:text="ALL CLEAR"
-        android:textColor="#00FF88"
+        android:textColor="#10B981"
         android:textSize="14sp"
         android:textStyle="bold"
         android:gravity="center"

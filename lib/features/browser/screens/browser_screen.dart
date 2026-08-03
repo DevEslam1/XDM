@@ -427,7 +427,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     _inactivityTimer?.cancel();
     if (_isHibernating) {
       _isHibernating = false;
-      debugPrint('[BrowserWatchdog] Browser active — resuming inactivity watchdog.');
+      debugPrint(
+          '[BrowserWatchdog] Browser active — resuming inactivity watchdog.');
     }
     if (!mounted) return;
     _inactivityTimer = Timer(_kInactivityDuration, _onInactivityTimeout);
@@ -695,7 +696,7 @@ class _BrowserScreenState extends State<BrowserScreen>
               if (mounted) {
                 setState(() {
                   tab.url = cleanUrl;
-                  if (cleanUrl != 'about:blank') {
+                  if (cleanUrl.isNotEmpty) {
                     tab.isHome = false;
                   }
                   if (_currentTabIndex >= 0 &&
@@ -982,7 +983,8 @@ class _BrowserScreenState extends State<BrowserScreen>
             Text(
               'Hide this element on every page?',
               style: TextStyle(
-                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                color:
+                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
               ),
             ),
             const SizedBox(height: 8),
@@ -1028,7 +1030,6 @@ class _BrowserScreenState extends State<BrowserScreen>
       ),
     );
   }
-
 
   void _openInNewTab(String url,
       {bool isIncognito = false, bool switchToTab = false}) {
@@ -1298,6 +1299,9 @@ class _BrowserScreenState extends State<BrowserScreen>
           activeTab.canGoForward = true;
           _urlController.clear();
         });
+        // Clear the WebView so stale page content doesn't flash when the
+        // user navigates to a new page from the Home dashboard.
+        activeTab.controller.loadRequest(Uri.parse('about:blank'));
       }
     }
   }
@@ -1623,7 +1627,8 @@ class _BrowserScreenState extends State<BrowserScreen>
     final settings = context.read<SettingsProvider>();
     if (activeTab.isHome) return;
     try {
-      await activeTab.controller.runJavaScript(ElementPickerService.pickerScript);
+      await activeTab.controller
+          .runJavaScript(ElementPickerService.pickerScript);
     } catch (e) {
       debugPrint('[DMX Browser] Failed to start element picker: $e');
       return;
@@ -1632,9 +1637,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       ThemedSnackbar.show(
         context,
         message: 'Tap an element on the page to block it',
-        color: settings.isDarkMode
-            ? AppTheme.neonBlue
-            : AppTheme.lightNeonBlue,
+        color: settings.isDarkMode ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
         icon: Icons.touch_app,
         isDarkMode: settings.isDarkMode,
       );
@@ -3459,215 +3462,171 @@ ${script.code}
       }
     }
     return Listener(
-
       onPointerDown: (_) => _resetInactivityTimer(),
-
       onPointerMove: (_) => _resetInactivityTimer(),
-
       child: PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) {
-          return;
-        }
-        if (downloadProvider.activeTabIndex != 1) {
-          return;
-        }
-        if (_tabs.isEmpty ||
-            _currentTabIndex < 0 ||
-            _currentTabIndex >= _tabs.length) {
-          return;
-        }
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-          return;
-        }
-        final activeTab = _tabs[_currentTabIndex];
-        final canGoBack = await activeTab.controller.canGoBack();
-        if (canGoBack) {
-          await _goBack();
-        } else {
-          downloadProvider.setActiveTabIndex(0);
-        }
-      },
-      child: GeometricGridBackground(
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          resizeToAvoidBottomInset: false,
-          floatingActionButton:
-              showFab ? _buildDownloadFab(context, settings) : null,
-          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-          body: Column(
-            children: [
-              // ── Cockpit URL Bar ──
-              RepaintBoundary(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeInOut,
-                  height: _showBars ? (kToolbarHeight + statusBarHeight) : 0,
-                  clipBehavior: Clip.hardEdge,
-                  decoration: const BoxDecoration(),
-                  child: DmxBackdropFilter(
-                    sigmaX: 12,
-                    sigmaY: 12,
-                    child: Container(
-                      padding: EdgeInsets.only(top: statusBarHeight),
-                      height: kToolbarHeight + statusBarHeight,
-                      decoration: BoxDecoration(
-                        color: settings.classicUi
-                            ? (isDark
-                                ? AppTheme.surface
-                                : AppTheme.lightSurface)
-                            : (isDark
-                                    ? AppTheme.surface
-                                    : AppTheme.lightSurface)
-                                .withValues(alpha: 0.88),
-                        border: Border(
-                          bottom: BorderSide(
-                            color: settings.classicUi
-                                ? (isDark
-                                    ? AppTheme.border
-                                    : AppTheme.lightBorder)
-                                : (isDark
-                                    ? AppTheme.glassBorder
-                                    : AppTheme.lightGlassBorder),
-                            width: settings.classicUi ? 1.0 : 0.8,
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) {
+            return;
+          }
+          if (downloadProvider.activeTabIndex != 1) {
+            return;
+          }
+          if (_tabs.isEmpty ||
+              _currentTabIndex < 0 ||
+              _currentTabIndex >= _tabs.length) {
+            return;
+          }
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+            return;
+          }
+          final activeTab = _tabs[_currentTabIndex];
+          final canGoBack = await activeTab.controller.canGoBack();
+          if (canGoBack) {
+            await _goBack();
+          } else {
+            downloadProvider.setActiveTabIndex(0);
+          }
+        },
+        child: GeometricGridBackground(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            resizeToAvoidBottomInset: false,
+            floatingActionButton:
+                showFab ? _buildDownloadFab(context, settings) : null,
+            floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+            body: Column(
+              children: [
+                // ── Cockpit URL Bar ──
+                RepaintBoundary(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeInOut,
+                    height: _showBars ? (kToolbarHeight + statusBarHeight) : 0,
+                    clipBehavior: Clip.hardEdge,
+                    decoration: const BoxDecoration(),
+                    child: DmxBackdropFilter(
+                      sigmaX: 12,
+                      sigmaY: 12,
+                      child: Container(
+                        padding: EdgeInsets.only(top: statusBarHeight),
+                        height: kToolbarHeight + statusBarHeight,
+                        decoration: BoxDecoration(
+                          color: settings.classicUi
+                              ? (isDark
+                                  ? AppTheme.surface
+                                  : AppTheme.lightSurface)
+                              : (isDark
+                                      ? AppTheme.surface
+                                      : AppTheme.lightSurface)
+                                  .withValues(alpha: 0.88),
+                          border: Border(
+                            bottom: BorderSide(
+                              color: settings.classicUi
+                                  ? (isDark
+                                      ? AppTheme.border
+                                      : AppTheme.lightBorder)
+                                  : (isDark
+                                      ? AppTheme.glassBorder
+                                      : AppTheme.lightGlassBorder),
+                              width: settings.classicUi ? 1.0 : 0.8,
+                            ),
                           ),
                         ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.close, size: 20, color: textClr),
-                              tooltip:
-                                  isRtl ? 'إغلاق المتصفح' : 'Close browser',
-                              onPressed: () {
-                                triggerHaptic(settings);
-                                if (Navigator.canPop(context)) {
-                                  Navigator.pop(context);
-                                } else {
-                                  downloadProvider.setActiveTabIndex(0);
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 4),
-                            // Address bar with security readout
-                            Expanded(
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? (_isFocused
-                                          ? const Color(0xFF141424)
-                                          : const Color(0xFF0F0F16))
-                                      : (_isFocused
-                                          ? AppTheme.lightNeonBlue.withValues(
-                                              alpha: 0.08,
-                                            )
-                                          : const Color(0xFFF1F5F9)),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: _isFocused
-                                        ? (isDark
-                                                ? AppTheme.neonBlue
-                                                : AppTheme.lightNeonBlue)
-                                            .withValues(alpha: 0.5)
-                                        : (isDark
-                                            ? const Color(0x15FFFFFF)
-                                            : const Color(0x0D000000)),
-                                    width: _isFocused ? 1.2 : 0.8,
-                                  ),
-                                  boxShadow: (_isFocused &&
-                                          isDark &&
-                                          settings.enableGlow)
-                                      ? [
-                                          BoxShadow(
-                                            color: (isDark
-                                                    ? AppTheme.neonBlue
-                                                    : AppTheme.lightNeonBlue)
-                                                .withValues(alpha: 0.25),
-                                            blurRadius: 8,
-                                            spreadRadius: 0.5,
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: Row(
-                                  children: [
-                                    // Security / mode indicator
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                      ),
-                                      child: Icon(
-                                        activeTab.isIncognito
-                                            ? Icons.visibility_off_rounded
-                                            : activeTab.isHome
-                                                ? Icons.search_rounded
-                                                : activeTab.url
-                                                        .startsWith('https')
-                                                    ? Icons.lock_rounded
-                                                    : Icons
-                                                        .info_outline_rounded,
-                                        size: 14,
-                                        color: activeTab.isIncognito
-                                            ? (isDark
-                                                ? AppTheme.neonViolet
-                                                : AppTheme.lightNeonViolet)
-                                            : activeTab.url.startsWith('https')
-                                                ? (isDark
-                                                    ? AppTheme.neonGreen
-                                                    : AppTheme.lightNeonGreen)
-                                                : _isFocused
-                                                    ? (isDark
-                                                        ? AppTheme.neonBlue
-                                                        : AppTheme
-                                                            .lightNeonBlue)
-                                                    : (isDark
-                                                        ? AppTheme.textSecondary
-                                                        : AppTheme
-                                                            .lightTextSecondary),
-                                      ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon:
+                                    Icon(Icons.close, size: 20, color: textClr),
+                                tooltip:
+                                    isRtl ? 'إغلاق المتصفح' : 'Close browser',
+                                onPressed: () {
+                                  triggerHaptic(settings);
+                                  if (Navigator.canPop(context)) {
+                                    Navigator.pop(context);
+                                  } else {
+                                    downloadProvider.setActiveTabIndex(0);
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                              // Address bar with security readout
+                              Expanded(
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? (_isFocused
+                                            ? const Color(0xFF141424)
+                                            : const Color(0xFF0F0F16))
+                                        : (_isFocused
+                                            ? AppTheme.lightNeonBlue.withValues(
+                                                alpha: 0.08,
+                                              )
+                                            : const Color(0xFFF1F5F9)),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: _isFocused
+                                          ? (isDark
+                                                  ? AppTheme.neonBlue
+                                                  : AppTheme.lightNeonBlue)
+                                              .withValues(alpha: 0.5)
+                                          : (isDark
+                                              ? const Color(0x15FFFFFF)
+                                              : const Color(0x0D000000)),
+                                      width: _isFocused ? 1.2 : 0.8,
                                     ),
-                                    Expanded(
-                                      child: ValueListenableBuilder<
-                                          TextEditingValue>(
-                                        valueListenable: _urlController,
-                                        builder: (context, value, child) {
-                                          return TextField(
-                                            controller: _urlController,
-                                            focusNode: _focusNode,
-                                            textAlignVertical:
-                                                TextAlignVertical.center,
-                                            style: TextStyle(
-                                              color: textClr,
-                                              fontSize: 13,
+                                    boxShadow: (_isFocused &&
+                                            isDark &&
+                                            settings.enableGlow)
+                                        ? [
+                                            BoxShadow(
+                                              color: (isDark
+                                                      ? AppTheme.neonBlue
+                                                      : AppTheme.lightNeonBlue)
+                                                  .withValues(alpha: 0.25),
+                                              blurRadius: 8,
+                                              spreadRadius: 0.5,
                                             ),
-                                            decoration: InputDecoration(
-                                              isDense: true,
-                                              suffixIcon: IconButton(
-                                                padding: EdgeInsets.zero,
-                                                constraints:
-                                                    const BoxConstraints(
-                                                  minWidth: 32,
-                                                  minHeight: 32,
-                                                ),
-                                                icon: Icon(
-                                                  activeTab.isLoading
-                                                      ? Icons.close
-                                                      : (_isFocused &&
-                                                              value.text
-                                                                  .isNotEmpty)
-                                                          ? Icons.clear
-                                                          : Icons.refresh,
-                                                  size: 16,
-                                                  color: _isFocused
+                                          ]
+                                        : null,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      // Security / mode indicator
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        child: Icon(
+                                          activeTab.isIncognito
+                                              ? Icons.visibility_off_rounded
+                                              : activeTab.isHome
+                                                  ? Icons.search_rounded
+                                                  : activeTab.url
+                                                          .startsWith('https')
+                                                      ? Icons.lock_rounded
+                                                      : Icons
+                                                          .info_outline_rounded,
+                                          size: 14,
+                                          color: activeTab.isIncognito
+                                              ? (isDark
+                                                  ? AppTheme.neonViolet
+                                                  : AppTheme.lightNeonViolet)
+                                              : activeTab.url
+                                                      .startsWith('https')
+                                                  ? (isDark
+                                                      ? AppTheme.neonGreen
+                                                      : AppTheme.lightNeonGreen)
+                                                  : _isFocused
                                                       ? (isDark
                                                           ? AppTheme.neonBlue
                                                           : AppTheme
@@ -3677,699 +3636,755 @@ ${script.code}
                                                               .textSecondary
                                                           : AppTheme
                                                               .lightTextSecondary),
-                                                ),
-                                                tooltip: activeTab.isLoading
-                                                    ? (isRtl
-                                                        ? 'إلغاء التحميل'
-                                                        : 'Stop loading')
-                                                    : (_isFocused &&
-                                                            value.text
-                                                                .isNotEmpty)
-                                                        ? (isRtl
-                                                            ? 'مسح'
-                                                            : 'Clear')
-                                                        : (isRtl
-                                                            ? 'إعادة تحميل الصفحة'
-                                                            : 'Refresh page'),
-                                                onPressed: () {
-                                                  triggerHaptic(settings);
-                                                  if (activeTab.isLoading) {
-                                                    activeTab.controller
-                                                        .runJavaScript(
-                                                      'window.stop();',
-                                                    );
-                                                    setState(() {
-                                                      activeTab.isLoading =
-                                                          false;
-                                                    });
-                                                  } else if (_isFocused &&
-                                                      value.text.isNotEmpty) {
-                                                    _urlController.clear();
-                                                  } else {
-                                                    if (!activeTab.isHome) {
-                                                      activeTab.controller
-                                                          .reload();
-                                                    }
-                                                  }
-                                                },
-                                              ),
-                                              suffixIconConstraints:
-                                                  const BoxConstraints(
-                                                minWidth: 32,
-                                                minHeight: 32,
-                                              ),
-                                              hintText: isRtl
-                                                  ? 'ابحث أو ادخل الرابط...'
-                                                  : 'Search or enter URL...',
-                                              hintStyle: TextStyle(
-                                                color: isDark
-                                                    ? AppTheme.textMuted
-                                                    : AppTheme.lightTextMuted,
-                                                fontSize: 11,
-                                              ),
-                                              filled: false,
-                                              border: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              focusedBorder: InputBorder.none,
-                                              contentPadding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 4,
-                                                vertical: 6,
-                                              ),
-                                            ),
-                                            onSubmitted: (val) {
-                                              _navigateToUrl(val);
-                                            },
-                                          );
-                                        },
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                      Expanded(
+                                        child: ValueListenableBuilder<
+                                            TextEditingValue>(
+                                          valueListenable: _urlController,
+                                          builder: (context, value, child) {
+                                            return TextField(
+                                              controller: _urlController,
+                                              focusNode: _focusNode,
+                                              textAlignVertical:
+                                                  TextAlignVertical.center,
+                                              style: TextStyle(
+                                                color: textClr,
+                                                fontSize: 13,
+                                              ),
+                                              decoration: InputDecoration(
+                                                isDense: true,
+                                                suffixIcon: IconButton(
+                                                  padding: EdgeInsets.zero,
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                    minWidth: 32,
+                                                    minHeight: 32,
+                                                  ),
+                                                  icon: Icon(
+                                                    activeTab.isLoading
+                                                        ? Icons.close
+                                                        : (_isFocused &&
+                                                                value.text
+                                                                    .isNotEmpty)
+                                                            ? Icons.clear
+                                                            : Icons.refresh,
+                                                    size: 16,
+                                                    color: _isFocused
+                                                        ? (isDark
+                                                            ? AppTheme.neonBlue
+                                                            : AppTheme
+                                                                .lightNeonBlue)
+                                                        : (isDark
+                                                            ? AppTheme
+                                                                .textSecondary
+                                                            : AppTheme
+                                                                .lightTextSecondary),
+                                                  ),
+                                                  tooltip: activeTab.isLoading
+                                                      ? (isRtl
+                                                          ? 'إلغاء التحميل'
+                                                          : 'Stop loading')
+                                                      : (_isFocused &&
+                                                              value.text
+                                                                  .isNotEmpty)
+                                                          ? (isRtl
+                                                              ? 'مسح'
+                                                              : 'Clear')
+                                                          : (isRtl
+                                                              ? 'إعادة تحميل الصفحة'
+                                                              : 'Refresh page'),
+                                                  onPressed: () {
+                                                    triggerHaptic(settings);
+                                                    if (activeTab.isLoading) {
+                                                      activeTab.controller
+                                                          .runJavaScript(
+                                                        'window.stop();',
+                                                      );
+                                                      setState(() {
+                                                        activeTab.isLoading =
+                                                            false;
+                                                      });
+                                                    } else if (_isFocused &&
+                                                        value.text.isNotEmpty) {
+                                                      _urlController.clear();
+                                                    } else {
+                                                      if (!activeTab.isHome) {
+                                                        activeTab.controller
+                                                            .reload();
+                                                      }
+                                                    }
+                                                  },
+                                                ),
+                                                suffixIconConstraints:
+                                                    const BoxConstraints(
+                                                  minWidth: 32,
+                                                  minHeight: 32,
+                                                ),
+                                                hintText: isRtl
+                                                    ? 'ابحث أو ادخل الرابط...'
+                                                    : 'Search or enter URL...',
+                                                hintStyle: TextStyle(
+                                                  color: isDark
+                                                      ? AppTheme.textMuted
+                                                      : AppTheme.lightTextMuted,
+                                                  fontSize: 11,
+                                                ),
+                                                filled: false,
+                                                border: InputBorder.none,
+                                                enabledBorder: InputBorder.none,
+                                                focusedBorder: InputBorder.none,
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 4,
+                                                  vertical: 6,
+                                                ),
+                                              ),
+                                              onSubmitted: (val) {
+                                                _navigateToUrl(val);
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // YouTube grab button
-                            if (!activeTab.isHome &&
-                                (YoutubeService.isYoutubeVideoUrl(
-                                      activeTab.url,
-                                    ) ||
-                                    YoutubeService.isPlaylistUrl(
-                                      activeTab.url,
-                                    ))) ...[
-                              _YouTubeGrabButton(
-                                isPlaylist: YoutubeService.isPlaylistUrl(
-                                  activeTab.url,
-                                ),
-                                isRtl: isRtl,
-                                isDark: isDark,
-                                enableGlow: settings.enableGlow,
-                                onPressed: () =>
-                                    _handleYouTubeGrab(activeTab, settings),
                               ),
                               const SizedBox(width: 4),
-                            ],
-                            IconButton(
-                              icon: Icon(
-                                Icons.arrow_back_ios_new,
-                                size: 15,
-                                color:
-                                    (activeTab.canGoBack || !activeTab.isHome)
-                                        ? textClr
-                                        : (isDark
-                                            ? AppTheme.textMuted
-                                            : AppTheme.lightTextMuted),
-                              ),
-                              onPressed:
-                                  (activeTab.canGoBack || !activeTab.isHome)
-                                      ? () async {
-                                          triggerHaptic(settings);
-                                          await _goBack();
-                                        }
-                                      : null,
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.arrow_forward_ios,
-                                size: 15,
-                                color: activeTab.canGoForward
-                                    ? textClr
-                                    : (isDark
-                                        ? AppTheme.textMuted
-                                        : AppTheme.lightTextMuted),
-                              ),
-                              onPressed: activeTab.canGoForward
-                                  ? () async {
-                                      triggerHaptic(settings);
-                                      await _goForward();
-                                    }
-                                  : null,
-                            ),
-                            // Tab counter
-                            GestureDetector(
-                              onTap: () {
-                                triggerHaptic(settings);
-                                _showTabSwitcher(context);
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                                width: 26,
-                                height: 26,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: textClr,
-                                    width: 1.8,
+                              // YouTube grab button
+                              if (!activeTab.isHome &&
+                                  (YoutubeService.isYoutubeVideoUrl(
+                                        activeTab.url,
+                                      ) ||
+                                      YoutubeService.isPlaylistUrl(
+                                        activeTab.url,
+                                      ))) ...[
+                                _YouTubeGrabButton(
+                                  isPlaylist: YoutubeService.isPlaylistUrl(
+                                    activeTab.url,
                                   ),
-                                  borderRadius: BorderRadius.circular(7),
-                                  color: _tabs.length > 1
-                                      ? (isDark
-                                              ? AppTheme.neonBlue
-                                              : AppTheme.lightNeonBlue)
-                                          .withValues(alpha: 0.1)
-                                      : Colors.transparent,
+                                  isRtl: isRtl,
+                                  isDark: isDark,
+                                  enableGlow: settings.enableGlow,
+                                  onPressed: () =>
+                                      _handleYouTubeGrab(activeTab, settings),
                                 ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  '${_tabs.length}',
-                                  style: TextStyle(
-                                    color: textClr,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    fontFamily: 'Space Grotesk',
-                                  ),
-                                ),
-                              ),
-                            ),
-                            PopupMenuButton<String>(
-                              icon: Icon(
-                                Icons.more_vert,
-                                size: 18,
-                                color: textClr,
-                              ),
-                              color: (isDark
-                                  ? AppTheme.surface
-                                  : AppTheme.lightSurface),
-                              onSelected: (value) async {
-                                triggerHaptic(settings);
-                                await _handleMenuAction(value);
-                              },
-                              itemBuilder: (_) => [
-                                _menuItem(
-                                  Icons.refresh,
-                                  'Reload',
-                                  'reload',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.bookmark_add_outlined,
-                                  'Bookmark this page',
-                                  'bookmark',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.bookmarks_outlined,
-                                  'Bookmarks Manager',
-                                  'show_bookmarks',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.history,
-                                  'Browser History',
-                                  'show_history',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.copy,
-                                  'Copy URL',
-                                  'copy',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.share,
-                                  'Share URL',
-                                  'share',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.save_alt,
-                                  'Save Page Offline',
-                                  'offline',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.menu_book_outlined,
-                                  'Reader Mode',
-                                  'reader',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.code,
-                                  'Inject JS / CSS',
-                                  'injector',
-                                  textClr,
-                                ),
-                                const PopupMenuDivider(),
-                                _menuItem(
-                                  settings.desktopMode
-                                      ? Icons.smartphone
-                                      : Icons.desktop_mac,
-                                  settings.desktopMode
-                                      ? 'Mobile mode'
-                                      : 'Desktop mode',
-                                  'desktop',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  _isSnifferEnabled
-                                      ? Icons.radar
-                                      : Icons.radar_outlined,
-                                  _isSnifferEnabled
-                                      ? (L10n.isRtl(context)
-                                          ? 'كاشف الوسائط: مفعل'
-                                          : 'Media detector: ON')
-                                      : (L10n.isRtl(context)
-                                          ? 'كاشف الوسائط: معطل'
-                                          : 'Media detector: OFF'),
-                                  'sniffer',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  _adBlocker.isEnabled
-                                      ? Icons.shield
-                                      : Icons.shield_outlined,
-                                  _adBlocker.isEnabled
-                                      ? 'Ad blocker: ON'
-                                      : 'Ad blocker: OFF',
-                                  'adblocker',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.touch_app_outlined,
-                                  'Block Element',
-                                  'picker',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  settings.incognitoEnabled
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
-                                  settings.incognitoEnabled
-                                      ? 'Exit incognito'
-                                      : 'New incognito tab',
-                                  'incognito',
-                                  textClr,
-                                ),
-                                _menuItem(
-                                  Icons.exit_to_app_rounded,
-                                  L10n.isRtl(context)
-                                      ? 'إنهاء المتصفح'
-                                      : 'Quit browser',
-                                  'quit',
-                                  textClr,
-                                ),
+                                const SizedBox(width: 4),
                               ],
-                            ),
-                          ],
+                              IconButton(
+                                icon: Icon(
+                                  Icons.arrow_back_ios_new,
+                                  size: 15,
+                                  color:
+                                      (activeTab.canGoBack || !activeTab.isHome)
+                                          ? textClr
+                                          : (isDark
+                                              ? AppTheme.textMuted
+                                              : AppTheme.lightTextMuted),
+                                ),
+                                onPressed:
+                                    (activeTab.canGoBack || !activeTab.isHome)
+                                        ? () async {
+                                            triggerHaptic(settings);
+                                            await _goBack();
+                                          }
+                                        : null,
+                              ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 15,
+                                  color: activeTab.canGoForward
+                                      ? textClr
+                                      : (isDark
+                                          ? AppTheme.textMuted
+                                          : AppTheme.lightTextMuted),
+                                ),
+                                onPressed: activeTab.canGoForward
+                                    ? () async {
+                                        triggerHaptic(settings);
+                                        await _goForward();
+                                      }
+                                    : null,
+                              ),
+                              // Tab counter
+                              GestureDetector(
+                                onTap: () {
+                                  triggerHaptic(settings);
+                                  _showTabSwitcher(context);
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  width: 26,
+                                  height: 26,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: textClr,
+                                      width: 1.8,
+                                    ),
+                                    borderRadius: BorderRadius.circular(7),
+                                    color: _tabs.length > 1
+                                        ? (isDark
+                                                ? AppTheme.neonBlue
+                                                : AppTheme.lightNeonBlue)
+                                            .withValues(alpha: 0.1)
+                                        : Colors.transparent,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '${_tabs.length}',
+                                    style: TextStyle(
+                                      color: textClr,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      fontFamily: 'Space Grotesk',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                icon: Icon(
+                                  Icons.more_vert,
+                                  size: 18,
+                                  color: textClr,
+                                ),
+                                color: (isDark
+                                    ? AppTheme.surface
+                                    : AppTheme.lightSurface),
+                                onSelected: (value) async {
+                                  triggerHaptic(settings);
+                                  await _handleMenuAction(value);
+                                },
+                                itemBuilder: (_) => [
+                                  _menuItem(
+                                    Icons.refresh,
+                                    'Reload',
+                                    'reload',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.bookmark_add_outlined,
+                                    'Bookmark this page',
+                                    'bookmark',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.bookmarks_outlined,
+                                    'Bookmarks Manager',
+                                    'show_bookmarks',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.history,
+                                    'Browser History',
+                                    'show_history',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.copy,
+                                    'Copy URL',
+                                    'copy',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.share,
+                                    'Share URL',
+                                    'share',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.save_alt,
+                                    'Save Page Offline',
+                                    'offline',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.menu_book_outlined,
+                                    'Reader Mode',
+                                    'reader',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.code,
+                                    'Inject JS / CSS',
+                                    'injector',
+                                    textClr,
+                                  ),
+                                  const PopupMenuDivider(),
+                                  _menuItem(
+                                    settings.desktopMode
+                                        ? Icons.smartphone
+                                        : Icons.desktop_mac,
+                                    settings.desktopMode
+                                        ? 'Mobile mode'
+                                        : 'Desktop mode',
+                                    'desktop',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    _isSnifferEnabled
+                                        ? Icons.radar
+                                        : Icons.radar_outlined,
+                                    _isSnifferEnabled
+                                        ? (L10n.isRtl(context)
+                                            ? 'كاشف الوسائط: مفعل'
+                                            : 'Media detector: ON')
+                                        : (L10n.isRtl(context)
+                                            ? 'كاشف الوسائط: معطل'
+                                            : 'Media detector: OFF'),
+                                    'sniffer',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    _adBlocker.isEnabled
+                                        ? Icons.shield
+                                        : Icons.shield_outlined,
+                                    _adBlocker.isEnabled
+                                        ? 'Ad blocker: ON'
+                                        : 'Ad blocker: OFF',
+                                    'adblocker',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.touch_app_outlined,
+                                    'Block Element',
+                                    'picker',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    settings.incognitoEnabled
+                                        ? Icons.visibility_off
+                                        : Icons.visibility,
+                                    settings.incognitoEnabled
+                                        ? 'Exit incognito'
+                                        : 'New incognito tab',
+                                    'incognito',
+                                    textClr,
+                                  ),
+                                  _menuItem(
+                                    Icons.exit_to_app_rounded,
+                                    L10n.isRtl(context)
+                                        ? 'إنهاء المتصفح'
+                                        : 'Quit browser',
+                                    'quit',
+                                    textClr,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              // ── Scanline loading progress ──
-              if (activeTab.isLoading && !activeTab.isHome)
-                ValueListenableBuilder<double>(
-                  valueListenable: activeTab.progressNotifier,
-                  builder: (context, progressValue, child) {
-                    return _ScanlineProgress(
-                      progress: progressValue,
-                      isDark: isDark,
-                    );
-                  },
-                ),
-              // Main browser view
-              Expanded(
-                child: Stack(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _focusNode.unfocus(),
-                      behavior: HitTestBehavior.translucent,
-                      child: _tabs.isEmpty
-                          ? const SizedBox.shrink()
-                          : Builder(
-                              builder: (context) {
-                                _updateLruOrder();
-                                return IndexedStack(
-                                  index: _currentTabIndex >= 0 &&
-                                          _currentTabIndex < _tabs.length
-                                      ? _currentTabIndex
-                                      : 0,
-                                  children: _tabs.asMap().entries.map((entry) {
-                                    final tabIndex = entry.key;
-                                    final tab = entry.value;
-                                    final isActiveTab =
-                                        tabIndex == _currentTabIndex;
-                                    if (tab.isHome) {
-                                      return SizedBox(
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        child: _buildHomeDashboard(
-                                          context,
-                                          settings,
-                                          scrollController: isActiveTab
-                                              ? _dashboardScrollController
-                                              : null,
-                                        ),
-                                      );
-                                    } else {
-                                      final isLive =
-                                          _lruTabIds.contains(tab.id);
-                                      if (!isLive) {
+                // ── Scanline loading progress ──
+                if (activeTab.isLoading && !activeTab.isHome)
+                  ValueListenableBuilder<double>(
+                    valueListenable: activeTab.progressNotifier,
+                    builder: (context, progressValue, child) {
+                      return _ScanlineProgress(
+                        progress: progressValue,
+                        isDark: isDark,
+                      );
+                    },
+                  ),
+                // Main browser view
+                Expanded(
+                  child: Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: () => _focusNode.unfocus(),
+                        behavior: HitTestBehavior.translucent,
+                        child: _tabs.isEmpty
+                            ? const SizedBox.shrink()
+                            : Builder(
+                                builder: (context) {
+                                  _updateLruOrder();
+                                  return IndexedStack(
+                                    index: _currentTabIndex >= 0 &&
+                                            _currentTabIndex < _tabs.length
+                                        ? _currentTabIndex
+                                        : 0,
+                                    children:
+                                        _tabs.asMap().entries.map((entry) {
+                                      final tabIndex = entry.key;
+                                      final tab = entry.value;
+                                      final isActiveTab =
+                                          tabIndex == _currentTabIndex;
+                                      if (tab.isHome) {
                                         return SizedBox(
                                           width: double.infinity,
                                           height: double.infinity,
-                                          child: Container(
-                                            color: isDark
-                                                ? AppTheme.surface
-                                                : AppTheme.lightSurface,
-                                            child: Center(
-                                              child: Column(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Icon(
-                                                    Icons.web,
-                                                    size: 48,
-                                                    color: (isDark
-                                                            ? AppTheme.neonBlue
-                                                            : AppTheme
-                                                                .lightNeonBlue)
-                                                        .withValues(alpha: 0.6),
-                                                  ),
-                                                  const SizedBox(height: 12),
-                                                  Text(
-                                                    tab.title.isNotEmpty
-                                                        ? tab.title
-                                                        : 'Web Page',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: isDark
-                                                          ? Colors.white
-                                                          : Colors.black87,
+                                          child: _buildHomeDashboard(
+                                            context,
+                                            settings,
+                                            scrollController: isActiveTab
+                                                ? _dashboardScrollController
+                                                : null,
+                                          ),
+                                        );
+                                      } else {
+                                        final isLive =
+                                            _lruTabIds.contains(tab.id);
+                                        if (!isLive) {
+                                          return SizedBox(
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            child: Container(
+                                              color: isDark
+                                                  ? AppTheme.surface
+                                                  : AppTheme.lightSurface,
+                                              child: Center(
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.web,
+                                                      size: 48,
+                                                      color: (isDark
+                                                              ? AppTheme
+                                                                  .neonBlue
+                                                              : AppTheme
+                                                                  .lightNeonBlue)
+                                                          .withValues(
+                                                              alpha: 0.6),
                                                     ),
-                                                    textAlign: TextAlign.center,
-                                                  ),
-                                                  if (tab.url.isNotEmpty) ...[
-                                                    const SizedBox(height: 4),
-                                                    Padding(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 24,
+                                                    const SizedBox(height: 12),
+                                                    Text(
+                                                      tab.title.isNotEmpty
+                                                          ? tab.title
+                                                          : 'Web Page',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: isDark
+                                                            ? Colors.white
+                                                            : Colors.black87,
                                                       ),
-                                                      child: Text(
-                                                        tab.domain.isNotEmpty
-                                                            ? tab.domain
-                                                            : tab.url,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color: isDark
-                                                              ? Colors.white54
-                                                              : Colors.black54,
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                    ),
+                                                    if (tab.url.isNotEmpty) ...[
+                                                      const SizedBox(height: 4),
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 24,
                                                         ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
+                                                        child: Text(
+                                                          tab.domain.isNotEmpty
+                                                              ? tab.domain
+                                                              : tab.url,
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: isDark
+                                                                ? Colors.white54
+                                                                : Colors
+                                                                    .black54,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
                                                       ),
-                                                    ),
+                                                    ],
                                                   ],
-                                                ],
+                                                ),
                                               ),
+                                            ),
+                                          );
+                                        }
+                                        return SizedBox(
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          child: RepaintBoundary(
+                                            child: RefreshIndicator(
+                                              color: isDark
+                                                  ? AppTheme.neonBlue
+                                                  : AppTheme.lightNeonBlue,
+                                              onRefresh: () async {
+                                                tab.hasCrashed = false;
+                                                await tab.controller.reload();
+                                              },
+                                              child: tab.hasCrashed
+                                                  ? Container(
+                                                      color: isDark
+                                                          ? AppTheme.surface
+                                                          : AppTheme
+                                                              .lightSurface,
+                                                      child: Center(
+                                                        child: Column(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            const Icon(
+                                                              Icons
+                                                                  .error_outline_rounded,
+                                                              size: 54,
+                                                              color: Colors
+                                                                  .orangeAccent,
+                                                            ),
+                                                            const SizedBox(
+                                                                height: 12),
+                                                            Text(
+                                                              'This tab crashed unexpectedly',
+                                                              style: TextStyle(
+                                                                fontSize: 16,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                color: isDark
+                                                                    ? Colors
+                                                                        .white
+                                                                    : Colors
+                                                                        .black87,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(
+                                                                height: 8),
+                                                            Text(
+                                                              tab.url,
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                color: isDark
+                                                                    ? Colors
+                                                                        .white54
+                                                                    : Colors
+                                                                        .black54,
+                                                              ),
+                                                              maxLines: 1,
+                                                              overflow:
+                                                                  TextOverflow
+                                                                      .ellipsis,
+                                                            ),
+                                                            const SizedBox(
+                                                                height: 16),
+                                                            ElevatedButton.icon(
+                                                              style:
+                                                                  ElevatedButton
+                                                                      .styleFrom(
+                                                                backgroundColor: isDark
+                                                                    ? AppTheme
+                                                                        .neonBlue
+                                                                    : AppTheme
+                                                                        .lightNeonBlue,
+                                                                foregroundColor:
+                                                                    Colors
+                                                                        .white,
+                                                              ),
+                                                              onPressed: () {
+                                                                setState(() {
+                                                                  tab.hasCrashed =
+                                                                      false;
+                                                                });
+                                                                tab.controller
+                                                                    .reload();
+                                                              },
+                                                              icon: const Icon(
+                                                                Icons
+                                                                    .refresh_rounded,
+                                                                size: 18,
+                                                              ),
+                                                              label: const Text(
+                                                                  'Reload Tab'),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : Stack(
+                                                      children: [
+                                                        WebViewWidget(
+                                                          controller:
+                                                              tab.controller,
+                                                        ),
+                                                        if (tab.isTimedOut &&
+                                                            tab.isLoading)
+                                                          Positioned(
+                                                            top: 0,
+                                                            left: 0,
+                                                            right: 0,
+                                                            child: Container(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 12,
+                                                                vertical: 6,
+                                                              ),
+                                                              color: Colors
+                                                                  .orange
+                                                                  .withValues(
+                                                                alpha: 0.9,
+                                                              ),
+                                                              child: Row(
+                                                                children: [
+                                                                  const Icon(
+                                                                    Icons
+                                                                        .warning_amber_rounded,
+                                                                    size: 16,
+                                                                    color: Colors
+                                                                        .white,
+                                                                  ),
+                                                                  const SizedBox(
+                                                                    width: 8,
+                                                                  ),
+                                                                  const Expanded(
+                                                                    child: Text(
+                                                                      'Page load taking long...',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            12,
+                                                                        color: Colors
+                                                                            .white,
+                                                                        fontWeight:
+                                                                            FontWeight.bold,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  GestureDetector(
+                                                                    onTap: () {
+                                                                      tab.controller
+                                                                          .runJavaScript(
+                                                                        'window.stop();',
+                                                                      );
+                                                                      setState(
+                                                                          () {
+                                                                        tab.isLoading =
+                                                                            false;
+                                                                        tab.isTimedOut =
+                                                                            false;
+                                                                      });
+                                                                    },
+                                                                    child:
+                                                                        const Padding(
+                                                                      padding:
+                                                                          EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            6,
+                                                                      ),
+                                                                      child:
+                                                                          Text(
+                                                                        'Stop',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          color:
+                                                                              Colors.white,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          fontSize:
+                                                                              12,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  GestureDetector(
+                                                                    onTap: () {
+                                                                      setState(
+                                                                          () {
+                                                                        tab.isTimedOut =
+                                                                            false;
+                                                                      });
+                                                                      tab.controller
+                                                                          .reload();
+                                                                    },
+                                                                    child:
+                                                                        const Padding(
+                                                                      padding:
+                                                                          EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            6,
+                                                                      ),
+                                                                      child:
+                                                                          Text(
+                                                                        'Reload',
+                                                                        style:
+                                                                            TextStyle(
+                                                                          color:
+                                                                              Colors.white,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          fontSize:
+                                                                              12,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      ],
+                                                    ),
                                             ),
                                           ),
                                         );
                                       }
-                                      return SizedBox(
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        child: RepaintBoundary(
-                                          child: RefreshIndicator(
-                                            color: isDark
-                                                ? AppTheme.neonBlue
-                                                : AppTheme.lightNeonBlue,
-                                            onRefresh: () async {
-                                              tab.hasCrashed = false;
-                                              await tab.controller.reload();
-                                            },
-                                            child: tab.hasCrashed
-                                                ? Container(
-                                                    color: isDark
-                                                        ? AppTheme.surface
-                                                        : AppTheme.lightSurface,
-                                                    child: Center(
-                                                      child: Column(
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .center,
-                                                        children: [
-                                                          const Icon(
-                                                            Icons
-                                                                .error_outline_rounded,
-                                                            size: 54,
-                                                            color: Colors
-                                                                .orangeAccent,
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 12),
-                                                          Text(
-                                                            'This tab crashed unexpectedly',
-                                                            style: TextStyle(
-                                                              fontSize: 16,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              color: isDark
-                                                                  ? Colors.white
-                                                                  : Colors
-                                                                      .black87,
-                                                            ),
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 8),
-                                                          Text(
-                                                            tab.url,
-                                                            style: TextStyle(
-                                                              fontSize: 12,
-                                                              color: isDark
-                                                                  ? Colors
-                                                                      .white54
-                                                                  : Colors
-                                                                      .black54,
-                                                            ),
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                          const SizedBox(
-                                                              height: 16),
-                                                          ElevatedButton.icon(
-                                                            style:
-                                                                ElevatedButton
-                                                                    .styleFrom(
-                                                              backgroundColor: isDark
-                                                                  ? AppTheme
-                                                                      .neonBlue
-                                                                  : AppTheme
-                                                                      .lightNeonBlue,
-                                                              foregroundColor:
-                                                                  Colors.white,
-                                                            ),
-                                                            onPressed: () {
-                                                              setState(() {
-                                                                tab.hasCrashed =
-                                                                    false;
-                                                              });
-                                                              tab.controller
-                                                                  .reload();
-                                                            },
-                                                            icon: const Icon(
-                                                              Icons
-                                                                  .refresh_rounded,
-                                                              size: 18,
-                                                            ),
-                                                            label: const Text(
-                                                                'Reload Tab'),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  )
-                                                : Stack(
-                                                    children: [
-                                                      WebViewWidget(
-                                                        controller:
-                                                            tab.controller,
-                                                      ),
-                                                      if (tab.isTimedOut &&
-                                                          tab.isLoading)
-                                                        Positioned(
-                                                          top: 0,
-                                                          left: 0,
-                                                          right: 0,
-                                                          child: Container(
-                                                            padding:
-                                                                const EdgeInsets
-                                                                    .symmetric(
-                                                              horizontal: 12,
-                                                              vertical: 6,
-                                                            ),
-                                                            color: Colors.orange
-                                                                .withValues(
-                                                              alpha: 0.9,
-                                                            ),
-                                                            child: Row(
-                                                              children: [
-                                                                const Icon(
-                                                                  Icons
-                                                                      .warning_amber_rounded,
-                                                                  size: 16,
-                                                                  color: Colors
-                                                                      .white,
-                                                                ),
-                                                                const SizedBox(
-                                                                  width: 8,
-                                                                ),
-                                                                const Expanded(
-                                                                  child: Text(
-                                                                    'Page load taking long...',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          12,
-                                                                      color: Colors
-                                                                          .white,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .bold,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                GestureDetector(
-                                                                  onTap: () {
-                                                                    tab.controller
-                                                                        .runJavaScript(
-                                                                      'window.stop();',
-                                                                    );
-                                                                    setState(
-                                                                        () {
-                                                                      tab.isLoading =
-                                                                          false;
-                                                                      tab.isTimedOut =
-                                                                          false;
-                                                                    });
-                                                                  },
-                                                                  child:
-                                                                      const Padding(
-                                                                    padding:
-                                                                        EdgeInsets
-                                                                            .symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                    ),
-                                                                    child: Text(
-                                                                      'Stop',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        color: Colors
-                                                                            .white,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        fontSize:
-                                                                            12,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                GestureDetector(
-                                                                  onTap: () {
-                                                                    setState(
-                                                                        () {
-                                                                      tab.isTimedOut =
-                                                                          false;
-                                                                    });
-                                                                    tab.controller
-                                                                        .reload();
-                                                                  },
-                                                                  child:
-                                                                      const Padding(
-                                                                    padding:
-                                                                        EdgeInsets
-                                                                            .symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                    ),
-                                                                    child: Text(
-                                                                      'Reload',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        color: Colors
-                                                                            .white,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        fontSize:
-                                                                            12,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  }).toList(),
-                                );
-                              },
-                            ),
-                    ),
-                    if (!activeTab.isHome)
-                      Positioned(
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 28,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onHorizontalDragEnd: (details) {
-                            if (details.primaryVelocity != null &&
-                                details.primaryVelocity! > 300) {
-                              if (mounted) {
-                                triggerHaptic(settings);
-                                _goBack();
-                              }
-                            }
-                          },
-                        ),
+                                    }).toList(),
+                                  );
+                                },
+                              ),
                       ),
-                    if (!activeTab.isHome)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: 28,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onHorizontalDragEnd: (details) {
-                            if (details.primaryVelocity != null &&
-                                details.primaryVelocity! < -300) {
-                              if (mounted) {
-                                triggerHaptic(settings);
-                                _goForward();
+                      if (!activeTab.isHome)
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 28,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onHorizontalDragEnd: (details) {
+                              if (details.primaryVelocity != null &&
+                                  details.primaryVelocity! > 300) {
+                                if (mounted) {
+                                  triggerHaptic(settings);
+                                  _goBack();
+                                }
                               }
-                            }
-                          },
+                            },
+                          ),
                         ),
-                      ),
-                  ],
+                      if (!activeTab.isHome)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 28,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onHorizontalDragEnd: (details) {
+                              if (details.primaryVelocity != null &&
+                                  details.primaryVelocity! < -300) {
+                                if (mounted) {
+                                  triggerHaptic(settings);
+                                  _goForward();
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-      ),
     );
   }
+
   Future<void> _handleYouTubeGrab(
     BrowserTab activeTab,
     SettingsProvider settings,

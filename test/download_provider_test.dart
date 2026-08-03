@@ -865,6 +865,44 @@ void main() {
     await tempFile.delete();
     await stateFile.delete();
   });
+
+  test(
+      'load() invalidates filteredTasks cache so tasks loaded from DB appear in filteredTasks immediately',
+      () async {
+    final (database, settings) = await _setupServices();
+    final provider = DownloadProvider(
+      databaseService: database,
+      settingsProvider: settings,
+    );
+
+    final pausedTask = DownloadTask(
+      id: 'load-cache-test-1',
+      fileName: 'test.zip',
+      url: 'https://example.com/test.zip',
+      fileSize: 1000,
+      downloadedBytes: 0,
+      threadCount: 1,
+      chunks: const [0.0],
+      category: 'Archive',
+      status: DownloadStatus.paused,
+      savePath: 'build',
+      localFilePath: 'build/test.zip',
+      tempFilePath: 'build/test.dmxpart',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    await database.saveTask(pausedTask);
+
+    // Access filteredTasks BEFORE load() to simulate initial Flutter frame building with empty tasks
+    expect(provider.filteredTasks, isEmpty);
+
+    // Now call load()
+    await provider.load();
+
+    // filteredTasks MUST now reflect the task loaded from DB
+    expect(provider.filteredTasks.length, 1);
+    expect(provider.filteredTasks.first.id, 'load-cache-test-1');
+  });
 }
 
 class FakeDownloadEngine403 extends DownloadEngine {

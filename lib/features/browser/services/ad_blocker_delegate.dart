@@ -32,7 +32,8 @@ class AdBlockerDelegate {
 
   Future<void> addCustomRule(String rule) => _adBlocker.addCustomRule(rule);
 
-  Future<void> removeCustomRule(String rule) => _adBlocker.removeCustomRule(rule);
+  Future<void> removeCustomRule(String rule) =>
+      _adBlocker.removeCustomRule(rule);
 
   Future<void> toggle() => _adBlocker.setEnabled(!_adBlocker.isEnabled);
 
