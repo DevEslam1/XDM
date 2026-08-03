@@ -21,6 +21,29 @@ import UserNotifications
       IosBackgroundDownloadHandler.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "IosBackgroundDownloadHandler")!)
       XDMTorrentBackgroundManager.shared.registerBackgroundTask()
 
+      if let messenger = engineBridge.pluginRegistry.registrar(forPlugin: "XDMWidgetBridge")?.messenger() {
+        let widgetBridgeChannel = FlutterMethodChannel(
+          name: "com.dmx.app/widget_bridge",
+          binaryMessenger: messenger
+        )
+        widgetBridgeChannel.setMethodCallHandler { call, result in
+          switch call.method {
+          case "pushDashboard":
+            guard let json = call.arguments as? String else {
+              result(false)
+              return
+            }
+            XDMWidgetDataStore.shared.saveDashboardJson(json)
+            result(true)
+          case "getFreeDiskSpace":
+            let space = XDMWidgetDataStore.shared.getFreeDiskSpace()
+            result(space)
+          default:
+            result(FlutterMethodNotImplemented)
+          }
+        }
+      }
+
       if let messenger = engineBridge.pluginRegistry.registrar(forPlugin: "XDMTorrentBackground")?.messenger() {
         let torrentBgChannel = FlutterMethodChannel(
           name: "com.dmx.app/torrent_background",

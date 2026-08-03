@@ -3,9 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:logging/logging.dart';
 import '../app_theme.dart';
 import '../../features/details/screens/details_screen.dart';
+import '../../features/downloads/models/download_task.dart';
 import '../../features/downloads/provider/download_provider.dart';
+import '../../features/settings/provider/settings_provider.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../shared/widgets/themed_snackbar.dart';
+import '../utils/file_opener.dart';
 import 'share_url_handler.dart';
 import 'widget_data_bridge.dart';
 
@@ -18,6 +21,10 @@ import 'widget_data_bridge.dart';
 /// Supported routes:
 ///   `dmx://downloads`                     → open the app
 ///   `dmx://download/<task-id>`            → open task details
+///   `dmx://toggle/<task-id>`              → toggle task pause/resume
+///   `dmx://pause/<task-id>`               → pause task
+///   `dmx://resume/<task-id>`              → resume task
+///   `dmx://open/<task-id>`                → open completed downloaded file
 ///   `dmx://settings`                      → open settings
 ///   `dmx://add?url=<encoded-http(s)-url>` → show the add-download flow
 ///   `dmx://pause_all` / `dmx://resume_all` → toggle every download
@@ -43,13 +50,26 @@ class WidgetDeepLinkHandler {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.scheme.toLowerCase() != 'dmx') return;
 
+    final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
+
     switch (uri.host.toLowerCase()) {
       case 'downloads':
         _showMessage('DMX Downloads');
         break;
       case 'download':
-        final id = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
         if (id != null && id.isNotEmpty) _openTaskDetails(id);
+        break;
+      case 'toggle':
+        if (id != null && id.isNotEmpty) _toggleTask(id);
+        break;
+      case 'pause':
+        if (id != null && id.isNotEmpty) _pauseTask(id);
+        break;
+      case 'resume':
+        if (id != null && id.isNotEmpty) _resumeTask(id);
+        break;
+      case 'open':
+        if (id != null && id.isNotEmpty) _openTaskFile(id);
         break;
       case 'settings':
         navigatorKey?.currentState?.push(
@@ -79,6 +99,53 @@ class WidgetDeepLinkHandler {
     navigator.push(
       MaterialPageRoute<void>(builder: (_) => DetailsScreen(taskId: taskId)),
     );
+  }
+
+  static void _toggleTask(String taskId) {
+    final ctx = navigatorKey?.currentContext;
+    if (ctx == null) return;
+    final provider = Provider.of<DownloadProvider>(ctx, listen: false);
+    final task = provider.findTaskById(taskId);
+    if (task == null) return;
+
+    if (task.status == DownloadStatus.downloading ||
+        task.status == DownloadStatus.queued) {
+      provider.pauseTask(taskId);
+    } else if (task.status == DownloadStatus.paused ||
+        task.status == DownloadStatus.failed) {
+      provider.resumeTask(taskId);
+    } else if (task.status == DownloadStatus.completed) {
+      _openTaskFile(taskId);
+    }
+  }
+
+  static void _pauseTask(String taskId) {
+    final ctx = navigatorKey?.currentContext;
+    if (ctx == null) return;
+    final provider = Provider.of<DownloadProvider>(ctx, listen: false);
+    provider.pauseTask(taskId);
+  }
+
+  static void _resumeTask(String taskId) {
+    final ctx = navigatorKey?.currentContext;
+    if (ctx == null) return;
+    final provider = Provider.of<DownloadProvider>(ctx, listen: false);
+    provider.resumeTask(taskId);
+  }
+
+  static Future<void> _openTaskFile(String taskId) async {
+    final ctx = navigatorKey?.currentContext;
+    if (ctx == null) return;
+    final provider = Provider.of<DownloadProvider>(ctx, listen: false);
+    final settings = Provider.of<SettingsProvider>(ctx, listen: false);
+    final task = provider.findTaskById(taskId);
+    if (task == null) return;
+
+    if (task.status == DownloadStatus.completed) {
+      await openFile(ctx, task.localFilePath, settings);
+    } else {
+      _openTaskDetails(taskId);
+    }
   }
 
   static void _handleAddUrl(String url) {

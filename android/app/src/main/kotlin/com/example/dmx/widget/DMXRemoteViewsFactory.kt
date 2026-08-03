@@ -1,6 +1,7 @@
 package com.example.dmx.widget
 
 import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -12,11 +13,9 @@ import com.example.dmx.R
 /**
  * Builds neon-themed [RemoteViews] for every widget size with adaptive
  * content matching the XDM Signal Deck app theme:
- *   - no tasks        → "All clear"
- *   - failures        → red alert banner
- *   - 1-2 active      → compact detail rows with category chips
- *   - 4+ active       → top rows + "+N more"
- *   - storage low     → amber warning bar
+ *   - 2-Tab Header: DOWNLOADING vs COMPLETED
+ *   - Downloading Tab: Active/queued/paused downloads with individual Pause/Resume action buttons
+ *   - Completed Tab: Completed downloads with one-tap OPEN file buttons
  */
 object DMXRemoteViewsFactory {
     const val SIZE_MINI = "mini"
@@ -62,16 +61,24 @@ object DMXRemoteViewsFactory {
         dashboard: WidgetDashboard?,
     ): RemoteViews {
         val views = RemoteViews(context.packageName, layout)
+        val selectedTab = WidgetDataRepository.selectedTab(context, widgetId)
         val openDownloads = activityIntent(context, "dmx://downloads")
 
-        if (dashboard == null || dashboard.tasks.isEmpty()) {
+        val allTasks = dashboard?.tasks ?: emptyList()
+        val filteredTasks = if (selectedTab == WidgetDataRepository.TAB_COMPLETED) {
+            allTasks.filter { it.status == "completed" }
+        } else {
+            allTasks.filter { it.status != "completed" }
+        }
+
+        if (dashboard == null || allTasks.isEmpty()) {
             applyAllClear(views, size, dashboard)
         } else {
             when (size) {
-                SIZE_MINI -> applyMini(context, views, dashboard)
-                SIZE_WIDE -> applyWide(context, views, dashboard)
-                SIZE_DASHBOARD -> applyDashboard(context, views, dashboard)
-                else -> applyList(context, views, dashboard)
+                SIZE_MINI -> applyMini(context, views, dashboard, filteredTasks, selectedTab)
+                SIZE_WIDE -> applyWide(context, views, dashboard, filteredTasks, selectedTab)
+                SIZE_DASHBOARD -> applyDashboard(context, widgetId, views, dashboard, filteredTasks, selectedTab)
+                else -> applyList(context, widgetId, views, dashboard, filteredTasks, selectedTab)
             }
         }
 
@@ -83,12 +90,19 @@ object DMXRemoteViewsFactory {
     // Size-specific builders
     // ─────────────────────────────────────────────────────────────────────
 
-    private fun applyMini(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
-        val top = dashboard.tasks.first()
+    private fun applyMini(
+        context: Context,
+        views: RemoteViews,
+        dashboard: WidgetDashboard,
+        tasks: List<WidgetTaskSummary>,
+        selectedTab: String,
+    ) {
+        val top = tasks.firstOrNull() ?: dashboard.tasks.first()
         views.setViewVisibility(R.id.widget_mini_name, View.VISIBLE)
         views.setViewVisibility(R.id.widget_mini_stats, View.VISIBLE)
         applyCategoryTag(views, R.id.widget_mini_tag, top)
         views.setTextViewText(R.id.widget_mini_name, top.fileName)
+
         if (top.status == "downloading") {
             views.setTextViewText(
                 R.id.widget_mini_stats,
@@ -96,6 +110,14 @@ object DMXRemoteViewsFactory {
             )
             views.setViewVisibility(R.id.widget_mini_ring, View.VISIBLE)
             views.setViewVisibility(R.id.widget_mini_clear, View.GONE)
+        } else if (top.status == "completed") {
+            views.setViewVisibility(R.id.widget_mini_ring, View.GONE)
+            views.setViewVisibility(R.id.widget_mini_clear, View.VISIBLE)
+            views.setTextViewText(R.id.widget_mini_clear, "OPEN FILE")
+            views.setTextViewText(
+                R.id.widget_mini_stats,
+                formatBytes(top.fileSizeBytes),
+            )
         } else {
             views.setViewVisibility(R.id.widget_mini_ring, View.GONE)
             views.setViewVisibility(R.id.widget_mini_clear, View.VISIBLE)
@@ -104,17 +126,23 @@ object DMXRemoteViewsFactory {
                 statusLabel(top.status),
             )
         }
-        views.setOnClickPendingIntent(
-            R.id.widget_mini_root,
-            activityIntent(
-                context,
-                "dmx://download/${top.id}",
-            ),
-        )
+
+        val intent = if (top.status == "completed") {
+            broadcastActionIntent(context, WidgetActionReceiver.ACTION_OPEN_TASK, top.id)
+        } else {
+            activityIntent(context, "dmx://download/${top.id}")
+        }
+        views.setOnClickPendingIntent(R.id.widget_mini_root, intent)
     }
 
-    private fun applyWide(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
-        val top = dashboard.tasks.first()
+    private fun applyWide(
+        context: Context,
+        views: RemoteViews,
+        dashboard: WidgetDashboard,
+        tasks: List<WidgetTaskSummary>,
+        selectedTab: String,
+    ) {
+        val top = tasks.firstOrNull() ?: dashboard.tasks.first()
         views.setViewVisibility(R.id.widget_wide_clear, View.GONE)
         views.setViewVisibility(R.id.widget_wide_name, View.VISIBLE)
         views.setViewVisibility(R.id.widget_wide_progress, View.VISIBLE)
@@ -123,27 +151,30 @@ object DMXRemoteViewsFactory {
         views.setTextViewText(R.id.widget_wide_name, top.fileName)
         setProgress(views, R.id.widget_wide_progress, top.progress)
         views.setTextViewText(R.id.widget_wide_stats, buildStatsLine(top))
-        views.setOnClickPendingIntent(
-            R.id.widget_wide_root,
-            activityIntent(context, "dmx://download/${top.id}"),
-        )
+
+        val intent = if (top.status == "completed") {
+            broadcastActionIntent(context, WidgetActionReceiver.ACTION_OPEN_TASK, top.id)
+        } else {
+            activityIntent(context, "dmx://download/${top.id}")
+        }
+        views.setOnClickPendingIntent(R.id.widget_wide_root, intent)
     }
 
-    private fun applyList(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
+    private fun applyList(
+        context: Context,
+        widgetId: Int,
+        views: RemoteViews,
+        dashboard: WidgetDashboard,
+        tasks: List<WidgetTaskSummary>,
+        selectedTab: String,
+    ) {
         views.setViewVisibility(R.id.widget_list_clear, View.GONE)
         views.setViewVisibility(R.id.widget_list_rows, View.VISIBLE)
         views.setViewVisibility(R.id.widget_list_footer, View.VISIBLE)
 
-        views.setTextViewText(
-            R.id.widget_list_title,
-            "XDM SIGNAL DECK",
-        )
-        views.setTextViewText(
-            R.id.widget_list_speed,
-            formatSpeed(dashboard.totalSpeedBytesPerSec),
-        )
+        bindTabsHeader(context, widgetId, views, dashboard, selectedTab)
 
-        val visible = dashboard.tasks.take(3)
+        val visible = tasks.take(3)
         for (index in 0 until 3) {
             val task = visible.getOrNull(index)
             val visibleId = rowVisibleId(index)
@@ -151,37 +182,44 @@ object DMXRemoteViewsFactory {
             if (task != null) {
                 applyCategoryTag(views, rowTagId(index), task)
                 views.setTextViewText(rowNameId(index), task.fileName)
-                setProgress(views, rowProgressId(index), task.progress)
+                setProgress(views, rowProgressId(index), if (task.status == "completed") 1.0 else task.progress)
                 views.setTextViewText(
                     rowPercentId(index),
-                    "${(task.progress * 100).toInt()}%",
+                    if (task.status == "completed") formatBytes(task.fileSizeBytes) else "${(task.progress * 100).toInt()}%",
                 )
-                views.setOnClickPendingIntent(
-                    visibleId,
-                    activityIntent(context, "dmx://download/${task.id}"),
-                )
+
+                // Row action button (Pause/Resume or Open)
+                val actionId = rowActionId(index)
+                bindRowActionButton(context, views, actionId, task)
+
+                val itemIntent = if (task.status == "completed") {
+                    broadcastActionIntent(context, WidgetActionReceiver.ACTION_OPEN_TASK, task.id)
+                } else {
+                    activityIntent(context, "dmx://download/${task.id}")
+                }
+                views.setOnClickPendingIntent(visibleId, itemIntent)
             }
         }
 
-        val footer = buildFooter(dashboard)
+        val footer = buildFooter(dashboard, selectedTab, tasks.size)
         views.setTextViewText(R.id.widget_list_footer, footer)
     }
 
-    private fun applyDashboard(context: Context, views: RemoteViews, dashboard: WidgetDashboard) {
+    private fun applyDashboard(
+        context: Context,
+        widgetId: Int,
+        views: RemoteViews,
+        dashboard: WidgetDashboard,
+        tasks: List<WidgetTaskSummary>,
+        selectedTab: String,
+    ) {
         views.setViewVisibility(R.id.widget_dash_clear, View.GONE)
         views.setViewVisibility(R.id.widget_dash_rows, View.VISIBLE)
         views.setViewVisibility(R.id.widget_dash_actions, View.VISIBLE)
 
-        views.setTextViewText(
-            R.id.widget_dash_title,
-            "XDM SIGNAL DECK",
-        )
-        views.setTextViewText(
-            R.id.widget_dash_speed,
-            formatSpeed(dashboard.totalSpeedBytesPerSec),
-        )
+        bindTabsHeader(context, widgetId, views, dashboard, selectedTab)
 
-        val visible = dashboard.tasks.take(5)
+        val visible = tasks.take(5)
         for (index in 0 until 5) {
             val task = visible.getOrNull(index)
             val visibleId = dashRowVisibleId(index)
@@ -189,20 +227,27 @@ object DMXRemoteViewsFactory {
             if (task != null) {
                 applyCategoryTag(views, dashRowTagId(index), task)
                 views.setTextViewText(dashRowNameId(index), task.fileName)
-                setProgress(views, dashRowProgressId(index), task.progress)
+                setProgress(views, dashRowProgressId(index), if (task.status == "completed") 1.0 else task.progress)
                 views.setTextViewText(
                     dashRowPercentId(index),
-                    "${(task.progress * 100).toInt()}%",
+                    if (task.status == "completed") formatBytes(task.fileSizeBytes) else "${(task.progress * 100).toInt()}%",
                 )
-                views.setOnClickPendingIntent(
-                    visibleId,
-                    activityIntent(context, "dmx://download/${task.id}"),
-                )
+
+                // Row action button (Pause/Resume or Open)
+                val actionId = dashRowActionId(index)
+                bindRowActionButton(context, views, actionId, task)
+
+                val itemIntent = if (task.status == "completed") {
+                    broadcastActionIntent(context, WidgetActionReceiver.ACTION_OPEN_TASK, task.id)
+                } else {
+                    activityIntent(context, "dmx://download/${task.id}")
+                }
+                views.setOnClickPendingIntent(visibleId, itemIntent)
             }
         }
 
         // "+N more" hint when the list overflows the layout.
-        val remaining = dashboard.tasks.size - 5
+        val remaining = tasks.size - 5
         views.setViewVisibility(
             R.id.widget_dash_more,
             if (remaining > 0) View.VISIBLE else View.GONE,
@@ -234,7 +279,7 @@ object DMXRemoteViewsFactory {
         }
 
         // Failure banner.
-        if (dashboard.hasFailures) {
+        if (dashboard.hasFailures && selectedTab == WidgetDataRepository.TAB_DOWNLOADING) {
             views.setViewVisibility(R.id.widget_dash_failures, View.VISIBLE)
             views.setTextViewText(
                 R.id.widget_dash_failures,
@@ -259,6 +304,84 @@ object DMXRemoteViewsFactory {
     // ─────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────
+
+    private fun bindTabsHeader(
+        context: Context,
+        widgetId: Int,
+        views: RemoteViews,
+        dashboard: WidgetDashboard,
+        selectedTab: String,
+    ) {
+        val activeCount = dashboard.tasks.count { it.status != "completed" }
+        val completedCount = dashboard.tasks.count { it.status == "completed" }
+
+        views.setTextViewText(R.id.widget_tab_downloading, "DOWNLOADING ($activeCount)")
+        views.setTextViewText(R.id.widget_tab_completed, "COMPLETED ($completedCount)")
+
+        val isCompleted = selectedTab == WidgetDataRepository.TAB_COMPLETED
+        if (isCompleted) {
+            views.setInt(R.id.widget_tab_downloading, "setBackgroundResource", R.drawable.widget_tab_inactive)
+            views.setTextColor(R.id.widget_tab_downloading, COLOR_TEXT_SECONDARY)
+            views.setInt(R.id.widget_tab_completed, "setBackgroundResource", R.drawable.widget_tab_active_green)
+            views.setTextColor(R.id.widget_tab_completed, COLOR_NEON_GREEN)
+        } else {
+            views.setInt(R.id.widget_tab_downloading, "setBackgroundResource", R.drawable.widget_tab_active_cyan)
+            views.setTextColor(R.id.widget_tab_downloading, COLOR_NEON_BLUE)
+            views.setInt(R.id.widget_tab_completed, "setBackgroundResource", R.drawable.widget_tab_inactive)
+            views.setTextColor(R.id.widget_tab_completed, COLOR_TEXT_SECONDARY)
+        }
+
+        views.setOnClickPendingIntent(
+            R.id.widget_tab_downloading,
+            broadcastTabIntent(context, widgetId, WidgetDataRepository.TAB_DOWNLOADING),
+        )
+        views.setOnClickPendingIntent(
+            R.id.widget_tab_completed,
+            broadcastTabIntent(context, widgetId, WidgetDataRepository.TAB_COMPLETED),
+        )
+
+        views.setTextViewText(
+            R.id.widget_list_speed,
+            formatSpeed(dashboard.totalSpeedBytesPerSec),
+        )
+        views.setTextViewText(
+            R.id.widget_dash_speed,
+            formatSpeed(dashboard.totalSpeedBytesPerSec),
+        )
+    }
+
+    private fun bindRowActionButton(
+        context: Context,
+        views: RemoteViews,
+        actionViewId: Int,
+        task: WidgetTaskSummary,
+    ) {
+        if (task.status == "completed") {
+            views.setTextViewText(actionViewId, "OPEN")
+            views.setTextColor(actionViewId, COLOR_NEON_GREEN)
+            views.setInt(actionViewId, "setBackgroundResource", R.drawable.widget_button_resume)
+            views.setOnClickPendingIntent(
+                actionViewId,
+                broadcastActionIntent(context, WidgetActionReceiver.ACTION_OPEN_TASK, task.id),
+            )
+        } else if (task.status == "downloading" || task.status == "queued") {
+            views.setTextViewText(actionViewId, "❚❚")
+            views.setTextColor(actionViewId, COLOR_NEON_BLUE)
+            views.setInt(actionViewId, "setBackgroundResource", R.drawable.widget_button_pause)
+            views.setOnClickPendingIntent(
+                actionViewId,
+                broadcastActionIntent(context, WidgetActionReceiver.ACTION_TOGGLE_TASK, task.id),
+            )
+        } else {
+            views.setTextViewText(actionViewId, "▶")
+            views.setTextColor(actionViewId, COLOR_NEON_GREEN)
+            views.setInt(actionViewId, "setBackgroundResource", R.drawable.widget_button_resume)
+            views.setOnClickPendingIntent(
+                actionViewId,
+                broadcastActionIntent(context, WidgetActionReceiver.ACTION_TOGGLE_TASK, task.id),
+            )
+        }
+    }
 
     private fun formatCategoryTag(task: WidgetTaskSummary): String {
         if (task.isTorrent) return "TORRENT"
@@ -336,17 +459,22 @@ object DMXRemoteViewsFactory {
             "paused" -> "Paused · ${(task.progress * 100).toInt()}%"
             "queued" -> "Queued"
             "failed" -> "Failed"
+            "completed" -> "Completed · ${formatBytes(task.fileSizeBytes)}"
             else -> "${(task.progress * 100).toInt()}%"
         }
     }
 
-    private fun buildFooter(dashboard: WidgetDashboard): String {
+    private fun buildFooter(dashboard: WidgetDashboard, selectedTab: String, count: Int): String {
         val parts = mutableListOf<String>()
-        if (dashboard.totalActiveCount > 0) {
-            parts.add("${dashboard.totalActiveCount} active")
-        }
-        if (dashboard.queuedCount > 0) {
-            parts.add("${dashboard.queuedCount} queued")
+        if (selectedTab == WidgetDataRepository.TAB_COMPLETED) {
+            parts.add("$count completed")
+        } else {
+            if (dashboard.totalActiveCount > 0) {
+                parts.add("${dashboard.totalActiveCount} active")
+            }
+            if (dashboard.queuedCount > 0) {
+                parts.add("${dashboard.queuedCount} queued")
+            }
         }
         if (dashboard.availableStorageBytes >= 0) {
             parts.add("${formatBytes(dashboard.availableStorageBytes)} free")
@@ -427,6 +555,33 @@ object DMXRemoteViewsFactory {
         )
     }
 
+    private fun broadcastTabIntent(context: Context, widgetId: Int, tab: String): PendingIntent {
+        val intent = Intent(context, WidgetActionReceiver::class.java).apply {
+            action = WidgetActionReceiver.ACTION_SELECT_TAB
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            putExtra(WidgetActionReceiver.EXTRA_TAB, tab)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            (widgetId.toString() + "_" + tab).hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun broadcastActionIntent(context: Context, action: String, taskId: String): PendingIntent {
+        val intent = Intent(context, WidgetActionReceiver::class.java).apply {
+            this.action = action
+            putExtra(WidgetActionReceiver.EXTRA_TASK_ID, taskId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            (action + "_" + taskId).hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
     // ── Row id helpers (widget_list) ──
     private fun rowVisibleId(index: Int) = when (index) {
         0 -> R.id.widget_row1
@@ -456,6 +611,12 @@ object DMXRemoteViewsFactory {
         0 -> R.id.widget_row1_percent
         1 -> R.id.widget_row2_percent
         else -> R.id.widget_row3_percent
+    }
+
+    private fun rowActionId(index: Int) = when (index) {
+        0 -> R.id.widget_row1_action
+        1 -> R.id.widget_row2_action
+        else -> R.id.widget_row3_action
     }
 
     // ── Row id helpers (widget_dashboard) ──
@@ -497,5 +658,13 @@ object DMXRemoteViewsFactory {
         2 -> R.id.widget_dash_row3_percent
         3 -> R.id.widget_dash_row4_percent
         else -> R.id.widget_dash_row5_percent
+    }
+
+    private fun dashRowActionId(index: Int) = when (index) {
+        0 -> R.id.widget_dash_row1_action
+        1 -> R.id.widget_dash_row2_action
+        2 -> R.id.widget_dash_row3_action
+        3 -> R.id.widget_dash_row4_action
+        else -> R.id.widget_dash_row5_action
     }
 }

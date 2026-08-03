@@ -104,7 +104,7 @@ class DownloadProvider extends ChangeNotifier
     DownloadEngine? downloadEngine,
     PermissionService? permissionService,
     NotificationService? notificationService,
-    bool enableBackgroundTimers = true,
+    this.enableBackgroundTimers = true,
   })  : _databaseService = databaseService,
         _settingsProvider = settingsProvider,
         _downloadEngine = downloadEngine ?? DownloadEngine(),
@@ -228,6 +228,9 @@ class DownloadProvider extends ChangeNotifier
 
   int _generation = 0;
   bool _disposed = false;
+
+  @override
+  final bool enableBackgroundTimers;
 
   final Map<String, int> _retryCounts = {};
   final Map<String, int> _dbRetryCounts = {};

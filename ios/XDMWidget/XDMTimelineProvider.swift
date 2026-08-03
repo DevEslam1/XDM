@@ -4,13 +4,41 @@ struct XDMTimelineProvider: TimelineProvider {
     func placeholder(in context: Context) -> XDMWidgetEntry {
         XDMWidgetEntry(
             date: Date(),
-            activeCount: 2,
-            speedBytesPerSec: 5_242_880,
-            completedCount: 15,
-            totalDownloads: 42,
-            topFileName: "ubuntu-24.04-desktop-amd64.iso",
-            topFileProgress: 0.65,
-            isDownloading: true
+            tasks: [
+                WidgetTaskSummaryItem(
+                    id: "sample_1",
+                    fileName: "ubuntu-24.04-desktop-amd64.iso",
+                    status: "downloading",
+                    progress: 0.65,
+                    speedBytesPerSec: 5_242_880,
+                    etaSeconds: 180,
+                    fileSizeBytes: 2_500_000_000,
+                    downloadedBytes: 1_625_000_000,
+                    category: "ISO",
+                    isTorrent: false,
+                    isAppUpdate: false
+                ),
+                WidgetTaskSummaryItem(
+                    id: "sample_2",
+                    fileName: "album_master_2026.zip",
+                    status: "downloading",
+                    progress: 0.30,
+                    speedBytesPerSec: 2_097_152,
+                    etaSeconds: 420,
+                    fileSizeBytes: 800_000_000,
+                    downloadedBytes: 240_000_000,
+                    category: "ZIP",
+                    isTorrent: true,
+                    isAppUpdate: false
+                )
+            ],
+            totalActiveCount: 2,
+            totalSpeedBytesPerSec: 7_340_032,
+            completedTodayCount: 8,
+            failedCount: 0,
+            availableStorageBytes: 12_800_000_000,
+            isOnWifi: true,
+            selectedTab: "downloading"
         )
     }
 
@@ -29,9 +57,9 @@ struct XDMTimelineProvider: TimelineProvider {
         let entry = XDMWidgetDataLoader.loadStats() ?? placeholder(in: context)
 
         // Refresh policy:
-        // - If downloading: every 1 minute (active progress)
-        // - If idle: every 15 minutes (just stats)
-        let refreshInterval: TimeInterval = entry.isDownloading ? 60 : 900
+        // - If active downloads: every 1 minute
+        // - If idle: every 15 minutes
+        let refreshInterval: TimeInterval = entry.totalActiveCount > 0 ? 60 : 900
         let nextUpdate = Date().addingTimeInterval(refreshInterval)
 
         let timeline = Timeline(

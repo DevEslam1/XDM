@@ -16,8 +16,8 @@ struct XDMDownloadWidget: Widget {
             XDMWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("XDM Downloads")
-        .description("Monitor your active downloads and speed.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .description("Monitor your active/completed downloads, speed, and status.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -31,6 +31,8 @@ struct XDMWidgetEntryView: View {
             XDMSmallWidgetView(entry: entry)
         case .systemMedium:
             XDMMediumWidgetView(entry: entry)
+        case .systemLarge:
+            XDMWidgetLargeView(entry: entry)
         default:
             XDMSmallWidgetView(entry: entry)
         }
@@ -42,11 +44,28 @@ struct XDMWidget_Previews: PreviewProvider {
     static var previews: some View {
         let entry = XDMWidgetEntry(
             date: Date(),
-            activeCount: 3,
-            speedBytesPerSec: 10_485_760,
-            completedCount: 25,
-            progress: 0.72,
-            topFileName: "ubuntu-24.04-desktop-amd64.iso"
+            tasks: [
+                WidgetTaskSummaryItem(
+                    id: "preview_1",
+                    fileName: "ubuntu-24.04-desktop-amd64.iso",
+                    status: "downloading",
+                    progress: 0.72,
+                    speedBytesPerSec: 10_485_760,
+                    etaSeconds: 120,
+                    fileSizeBytes: 2_500_000_000,
+                    downloadedBytes: 1_800_000_000,
+                    category: "ISO",
+                    isTorrent: false,
+                    isAppUpdate: false
+                )
+            ],
+            totalActiveCount: 3,
+            totalSpeedBytesPerSec: 10_485_760,
+            completedTodayCount: 25,
+            failedCount: 0,
+            availableStorageBytes: 64_000_000_000,
+            isOnWifi: true,
+            selectedTab: "downloading"
         )
 
         XDMSmallWidgetView(entry: entry)
@@ -54,5 +73,8 @@ struct XDMWidget_Previews: PreviewProvider {
 
         XDMMediumWidgetView(entry: entry)
             .previewContext(WidgetPreviewContext(family: .systemMedium))
+
+        XDMWidgetLargeView(entry: entry)
+            .previewContext(WidgetPreviewContext(family: .systemLarge))
     }
 }

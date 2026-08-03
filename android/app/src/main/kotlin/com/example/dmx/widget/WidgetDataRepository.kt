@@ -14,6 +14,11 @@ object WidgetDataRepository {
     /** Size class per widget id, chosen in onAppWidgetOptionsChanged. */
     private const val KEY_SIZE = "widget_size_"
 
+    /** Selected tab per widget id ("downloading" or "completed"). */
+    private const val KEY_TAB = "widget_tab_"
+    const val TAB_DOWNLOADING = "downloading"
+    const val TAB_COMPLETED = "completed"
+
     fun save(context: Context, json: String) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -43,5 +48,17 @@ object WidgetDataRepository {
     fun sizeClass(context: Context, widgetId: Int): String {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_SIZE + widgetId, DMXRemoteViewsFactory.SIZE_LIST) ?: DMXRemoteViewsFactory.SIZE_LIST
+    }
+
+    fun storeSelectedTab(context: Context, widgetId: Int, tab: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_TAB + widgetId, tab)
+            .apply()
+    }
+
+    fun selectedTab(context: Context, widgetId: Int): String {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_TAB + widgetId, TAB_DOWNLOADING) ?: TAB_DOWNLOADING
     }
 }

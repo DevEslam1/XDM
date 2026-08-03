@@ -59,6 +59,7 @@ abstract class DownloadOrchestratorHost {
   Map<int, TorrentUpdateInfo> get providerLatestTorrentStats;
   bool get providerDisposed;
   Map<String, DownloadMetrics> get downloadMetrics;
+  bool get enableBackgroundTimers;
 
   // Collaborators.
   SettingsProvider get providerSettingsProvider;
@@ -119,6 +120,7 @@ class DownloadOrchestrator {
 
   void _startPeriodicResumeSave() {
     _periodicResumeSaveTimer?.cancel();
+    if (!_host.enableBackgroundTimers) return;
     _periodicResumeSaveTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) {
