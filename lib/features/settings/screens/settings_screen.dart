@@ -433,9 +433,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? AppTheme.neonGreen
                               : AppTheme.lightNeonGreen,
                           title: L10n.of(context, 'settings_speed_limit'),
-                          subtitle: settings.speedLimitMb == 0.0
+                          valueLabel: settings.speedLimitMb == 0.0
                               ? L10n.of(context, 'settings_unlimited')
-                              : '${settings.speedLimitMb.toInt()} ${L10n.of(context, 'settings_limit_to')}',
+                              : '${settings.speedLimitMb.toInt()} MB/s',
+                          subtitle: L10n.of(context, 'settings_limit_to'),
                           value: settings.speedLimitMb,
                           min: 0.0,
                           max: 100.0,
@@ -644,8 +645,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? AppTheme.neonViolet
                               : AppTheme.lightNeonViolet,
                           title: L10n.of(context, 'settings_grid'),
-                          subtitle:
-                              '${settings.gridOpacity.toInt()}% ${L10n.of(context, 'settings_grid_sub')}',
+                          valueLabel: '${settings.gridOpacity.toInt()}%',
+                          subtitle: L10n.of(context, 'settings_grid_sub'),
                           value: settings.gridOpacity,
                           min: 0.0,
                           max: 40.0,
@@ -1294,8 +1295,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ? AppTheme.neonBlue
                               : AppTheme.lightNeonBlue,
                           title: L10n.of(context, 'settings_text_scaling'),
-                          subtitle:
-                              '${(settings.textScaleFactor * 100).toInt()}% ${L10n.of(context, 'settings_text_scaling_sub')}',
+                          valueLabel:
+                              '${(settings.textScaleFactor * 100).toInt()}%',
+                          subtitle: L10n.of(context, 'settings_text_scaling_sub'),
                           value: settings.textScaleFactor,
                           min: 0.8,
                           max: 2.0,
@@ -1850,18 +1852,20 @@ class _SwitchTile extends StatelessWidget {
 
 class _SliderTile extends StatelessWidget {
   final String title;
-  final String subtitle;
+  final String? subtitle;
+  final String? valueLabel;
   final double value;
   final double min;
   final double max;
   final int divisions;
   final ValueChanged<double> onChanged;
   final ValueChanged<double>? onChangeEnd;
-  final Color accentColor; // NEW
+  final Color accentColor;
 
   const _SliderTile({
     required this.title,
-    required this.subtitle,
+    this.subtitle,
+    this.valueLabel,
     required this.value,
     required this.min,
     required this.max,
@@ -1874,6 +1878,22 @@ class _SliderTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    String badgeText = valueLabel ?? '';
+    String? descriptionText = subtitle;
+
+    if (badgeText.isEmpty && subtitle != null) {
+      final spaceIndex = subtitle!.indexOf(' ');
+      if (spaceIndex > 0 &&
+          (subtitle!.startsWith(RegExp(r'\d')) || subtitle!.endsWith('%'))) {
+        badgeText = subtitle!.substring(0, spaceIndex);
+        descriptionText = subtitle!.substring(spaceIndex + 1);
+      } else {
+        badgeText = subtitle!;
+        descriptionText = null;
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       child: Container(
@@ -1897,42 +1917,68 @@ class _SliderTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: isDark
-                        ? AppTheme.textPrimary
-                        : AppTheme.lightTextPrimary,
-                    fontFamily: 'Space Grotesk',
-                    fontSize: 14.0,
-                    fontWeight: FontWeight.w700,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                          fontFamily: 'Space Grotesk',
+                          fontSize: 14.0,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (descriptionText != null &&
+                          descriptionText.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          descriptionText.trim(),
+                          style: TextStyle(
+                            color: isDark
+                                ? AppTheme.textMuted
+                                : AppTheme.lightTextMuted,
+                            fontFamily: 'Inter',
+                            fontSize: 12.0,
+                            height: 1.35,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: accentColor.withValues(alpha: 0.3),
-                      width: 1,
+                if (badgeText.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: accentColor.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      badgeText,
+                      style: TextStyle(
+                        color: accentColor,
+                        fontFamily: 'Space Grotesk',
+                        fontSize: 12.0,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                  child: Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: accentColor,
-                      fontFamily: 'Space Grotesk',
-                      fontSize: 12.0,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 4),

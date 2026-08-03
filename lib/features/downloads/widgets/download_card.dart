@@ -950,52 +950,6 @@ class _MediaCard extends StatelessWidget with HapticHelper {
             _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
             const SizedBox(height: 12),
             _ProgressRow(task: task, isDark: isDark, color: statusColor),
-            // Separate audio-track progress while merging download runs
-            if (_hasAudioTrack &&
-                !_isAudioOnly &&
-                task.status == DownloadStatus.downloading &&
-                task.audioProgress > 0) ...[
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.audio_file_rounded, size: 11, color: mutedClr),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: Stack(
-                        children: [
-                          Container(
-                            height: 4,
-                            decoration: AppTheme.progressTrack(
-                              isDark: isDark,
-                              radius: 2,
-                            ),
-                          ),
-                          FractionallySizedBox(
-                            widthFactor: task.audioProgress.clamp(0.0, 1.0),
-                            child: Container(
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppTheme.neonGreen
-                                    : AppTheme.lightNeonGreen,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    task.audioProgressPercentString,
-                    style: AppTheme.microLabel(isDark: isDark, size: 8.5),
-                  ),
-                ],
-              ),
-            ],
             if (task.statusMessage != null && task.statusMessage!.isNotEmpty)
               _NoticeRow(
                 text: task.statusMessage!,

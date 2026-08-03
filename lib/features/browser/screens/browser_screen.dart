@@ -1137,6 +1137,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   @override
   void dispose() {
+    _inactivityTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     for (final timer in _loadingTimeoutTimers.values) {
       timer.cancel();

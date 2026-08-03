@@ -786,15 +786,13 @@ class DownloadOrchestrator {
             ? task.audioSize
             : max((task.audioProgress * task.audioSize).round(), audioLen))
         : audioLen;
-    int videoBytesSoFar = (task.downloadedBytes - audioBytesSoFar).clamp(
-      0,
-      task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
+    int videoBytesSoFar = max(
+      tempLen,
+      (task.downloadedBytes - audioBytesSoFar).clamp(
+        0,
+        task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
+      ),
     );
-    if (videoBytesSoFar == 0 &&
-        tempLen > 0 &&
-        (task.fileSize <= 0 || tempLen < task.fileSize)) {
-      videoBytesSoFar = tempLen;
-    }
     double audioSpeedNow = 0.0;
     double videoSpeedNow = 0.0;
     int videoSizeSoFar = videoTransferSize;
@@ -819,7 +817,8 @@ class DownloadOrchestrator {
       final effectiveVideoSize =
           videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
       final totalSize = effectiveVideoSize + audioContribution;
-      final totalDownloaded = audioBytesSoFar + videoBytesSoFar;
+      final totalDownloaded =
+          max(base.downloadedBytes, audioBytesSoFar + videoBytesSoFar);
       final instantSpeed = audioSpeedNow + videoSpeedNow;
       final speedQueue = _host.speedHistories[task.id];
       if (speedQueue != null) {

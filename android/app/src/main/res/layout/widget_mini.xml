@@ -7,7 +7,7 @@
     android:orientation="vertical"
     android:gravity="center"
     android:background="@drawable/widget_background"
-    android:padding="10dp"
+    android:padding="8dp"
     android:layoutDirection="locale">
 
     <LinearLayout
@@ -17,7 +17,8 @@
         android:orientation="vertical"
         android:gravity="center"
         android:background="@drawable/widget_surface"
-        android:padding="10dp">
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="10dp">
 
         <ProgressBar
             android:id="@+id/widget_mini_ring"

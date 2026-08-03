@@ -104,12 +104,13 @@ class DownloadProvider extends ChangeNotifier
     DownloadEngine? downloadEngine,
     PermissionService? permissionService,
     NotificationService? notificationService,
-    this.enableBackgroundTimers = true,
+    bool enableBackgroundTimers = true,
   })  : _databaseService = databaseService,
         _settingsProvider = settingsProvider,
         _downloadEngine = downloadEngine ?? DownloadEngine(),
         _permissionService = permissionService ?? PermissionService(),
-        _notificationService = notificationService ?? NotificationService() {
+        _notificationService = notificationService ?? NotificationService(),
+        enableBackgroundTimers = enableBackgroundTimers && !Platform.environment.containsKey('FLUTTER_TEST') {
     _settingsProvider.addListener(_onSettingsChanged);
 
     _networkMonitor = NetworkMonitor(
@@ -1300,8 +1301,12 @@ class DownloadProvider extends ChangeNotifier
     // Cancel any lingering progress notification (M2).
     _notifications.cancelForTask(id);
 
+    // Re-query the live in-memory task after flushing progress and token cancellation
+    // to avoid snapshotting a stale `task` reference captured at method entry.
+    final latestLiveTask = _findTask(id) ?? task;
+
     await _setTask(
-      task.copyWith(
+      latestLiveTask.copyWith(
         status: DownloadStatus.paused,
         speed: 0,
         clearEta: true,
@@ -1765,18 +1770,31 @@ class DownloadProvider extends ChangeNotifier
   /// structural update (status change, URL edit, metadata save) carries
   /// stale progress values captured before the update was enqueued.
   DownloadTask _mergeTaskUpdate(DownloadTask live, DownloadTask incoming) {
+    final isReset =
+        incoming.status == DownloadStatus.queued && incoming.downloadedBytes == 0;
+
+    final effectiveDownloadedBytes = isReset
+        ? incoming.downloadedBytes
+        : (incoming.downloadedBytes > live.downloadedBytes
+            ? incoming.downloadedBytes
+            : live.downloadedBytes);
+
+    final effectiveAudioProgress = isReset
+        ? incoming.audioProgress
+        : (incoming.audioProgress > live.audioProgress
+            ? incoming.audioProgress
+            : live.audioProgress);
+
     final useIncomingProgress =
         incoming.downloadedBytes >= live.downloadedBytes ||
-            incoming.status != live.status;
+            incoming.status == DownloadStatus.completed;
 
     return incoming.copyWith(
-      downloadedBytes:
-          useIncomingProgress ? incoming.downloadedBytes : live.downloadedBytes,
+      downloadedBytes: effectiveDownloadedBytes,
       speed: useIncomingProgress ? incoming.speed : live.speed,
       eta: useIncomingProgress ? incoming.eta : live.eta,
       chunks: useIncomingProgress ? incoming.chunks : live.chunks,
-      audioProgress:
-          useIncomingProgress ? incoming.audioProgress : live.audioProgress,
+      audioProgress: effectiveAudioProgress,
     );
   }
 

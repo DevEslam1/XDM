@@ -7,7 +7,7 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/widget_background"
-    android:padding="10dp"
+    android:padding="8dp"
     android:layoutDirection="locale">
 
     <LinearLayout
@@ -17,7 +17,8 @@
         android:orientation="vertical"
         android:gravity="center_vertical"
         android:background="@drawable/widget_surface"
-        android:paddingHorizontal="12dp">
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp">
 
         <LinearLayout
             android:layout_width="match_parent"

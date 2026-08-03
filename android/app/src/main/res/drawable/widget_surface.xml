@@ -2,9 +2,10 @@
 <!-- Raised surface card matching XDM App theme -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#161A22" />
+    <solid android:color="#141822" />
     <stroke
         android:width="1dp"
-        android:color="#1E2330" />
+        android:color="#252D3D" />
     <corners android:radius="12dp" />
 </shape>
+

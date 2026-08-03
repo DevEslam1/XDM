@@ -98,8 +98,12 @@ struct XDMSmallWidgetView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .padding(12)
+        .padding(11)
         .background(Color(red: 15/255, green: 17/255, blue: 23/255))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(red: 59/255, green: 130/255, blue: 246/255).opacity(0.24), lineWidth: 1.2)
+        )
     }
 
     private func formatCategory(_ task: WidgetTaskSummaryItem) -> String {
