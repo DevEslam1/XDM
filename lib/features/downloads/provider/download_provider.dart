@@ -694,10 +694,12 @@ class DownloadProvider extends ChangeNotifier
               await _readDmxStateBytes('${candidate.tempFilePath}.audio');
         }
 
-        final realBytesOnDisk = videoBytes + audioBytes;
+        final hasDiskBytes = videoBytes > 0 || audioBytes > 0;
+        final realBytesOnDisk =
+            hasDiskBytes ? videoBytes + audioBytes : candidate.downloadedBytes;
         final hasState =
             await File('${candidate.tempFilePath}.dmxstate').exists();
-        final chunks = hasState
+        final chunks = hasState || !hasDiskBytes
             ? candidate.chunks
             : List<double>.filled(candidate.threadCount, 0.0);
 
@@ -2267,13 +2269,15 @@ class DownloadProvider extends ChangeNotifier
 
     if (task.downloadedBytes > 0) {
       try {
-        await cleanupPartFiles(task, preserveParts: true);
+        await cleanupPartFiles(task);
       } catch (e) {
-        debugPrint('Error preserving segment files on thread count change: $e');
+        debugPrint('Error deleting segment files on thread count change: $e');
       }
 
       task = task.copyWith(
         threadCount: targetThreadCount,
+        downloadedBytes: 0,
+        chunks: List<double>.filled(targetThreadCount, 0.0),
         status: DownloadStatus.paused,
         clearError: true,
       );
