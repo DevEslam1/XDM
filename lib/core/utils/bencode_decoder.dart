@@ -204,10 +204,20 @@ class BencodeDecoder {
                       ? utf8.decode(s, allowMalformed: true)
                       : s.toString())
                   .where((seg) =>
+                      seg.isNotEmpty &&
+                      // Reject traversal segments
                       seg != '.' &&
                       seg != '..' &&
+                      // Reject embedded slashes (any direction)
                       !seg.contains('/') &&
-                      !seg.contains('\\'))
+                      !seg.contains('\\') &&
+                      // Reject null bytes
+                      !seg.contains('\x00') &&
+                      // Reject absolute Unix paths ('/' or '\' prefix)
+                      !seg.startsWith('/') &&
+                      !seg.startsWith('\\') &&
+                      // Reject Windows drive-letter roots (e.g. 'C:', 'D:')
+                      !RegExp(r'^[A-Za-z]:').hasMatch(seg))
                   .toList();
               final safeName = pathList.isNotEmpty
                   ? pathList.join('/')

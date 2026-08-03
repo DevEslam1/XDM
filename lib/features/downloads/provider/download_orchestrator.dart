@@ -711,8 +711,13 @@ class DownloadOrchestrator {
         if (torrentFiles != null && torrentFiles.isNotEmpty) {
           final targetRelName = torrentFiles.first['name'] as String?;
           if (targetRelName != null && targetRelName.isNotEmpty) {
-            final candidate = p.join(current.savePath, targetRelName);
-            if (File(candidate).existsSync()) {
+            final canonicalSave = p.canonicalize(current.savePath);
+            final candidate = p.canonicalize(
+              p.join(current.savePath, targetRelName),
+            );
+            // SECURITY: only follow the name if it stays inside savePath.
+            if (p.isWithin(canonicalSave, candidate) &&
+                File(candidate).existsSync()) {
               actualFilePath = candidate;
               actualFileName = p.basename(candidate);
             }

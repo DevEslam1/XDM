@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
@@ -75,6 +76,16 @@ class AdBlockFilterUpdater {
   final Map<String, Set<String>> _siteCosmeticRules = {};
   final Set<String> _scriptletRules = {};
 
+  // PERF (TASK 4): LRU cache for cosmeticRulesForHost.
+  // Keyed by lowercase host; evicts the oldest entry when capacity is reached.
+  // Invalidated whenever _cosmeticRules or _siteCosmeticRules is mutated
+  // (i.e., after a filter download/update).
+  static const _kCosmeticCacheMax = 50;
+  final LinkedHashMap<String, Set<String>> _cosmeticCache =
+      LinkedHashMap<String, Set<String>>();
+
+  void _invalidateCosmeticCache() => _cosmeticCache.clear();
+
   Set<String> get allBlockedDomains => _downloadedDomains;
   Set<String> get allTrackingDomains => _downloadedTrackingDomains;
   int get downloadedDomainCount => _downloadedDomains.length;
@@ -143,6 +154,7 @@ class AdBlockFilterUpdater {
   }
 
   Future<void> _downloadAndParse() async {
+    _invalidateCosmeticCache();
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 15),
@@ -378,21 +390,37 @@ class AdBlockFilterUpdater {
   }
 
   Set<String> cosmeticRulesForHost(String host) {
-    final rules = <String>{}..addAll(_cosmeticRules);
-    if (host.isEmpty) return rules;
+    final cacheKey = host.toLowerCase();
 
-    final lowerHost = host.toLowerCase();
-    if (_siteCosmeticRules.containsKey(lowerHost)) {
-      rules.addAll(_siteCosmeticRules[lowerHost]!);
+    // Fast path: return cached result if present.
+    final cached = _cosmeticCache[cacheKey];
+    if (cached != null) {
+      // Refresh LRU position by removing and re-inserting.
+      _cosmeticCache.remove(cacheKey);
+      _cosmeticCache[cacheKey] = cached;
+      return cached;
     }
 
-    final parts = lowerHost.split('.');
-    for (var i = 1; i < parts.length - 1; i++) {
-      final parent = parts.sublist(i).join('.');
-      if (_siteCosmeticRules.containsKey(parent)) {
-        rules.addAll(_siteCosmeticRules[parent]!);
+    // Slow path: compute and store.
+    final rules = <String>{}..addAll(_cosmeticRules);
+    if (cacheKey.isNotEmpty) {
+      if (_siteCosmeticRules.containsKey(cacheKey)) {
+        rules.addAll(_siteCosmeticRules[cacheKey]!);
+      }
+      final parts = cacheKey.split('.');
+      for (var i = 1; i < parts.length - 1; i++) {
+        final parent = parts.sublist(i).join('.');
+        if (_siteCosmeticRules.containsKey(parent)) {
+          rules.addAll(_siteCosmeticRules[parent]!);
+        }
       }
     }
+
+    // Evict oldest entry if at capacity.
+    if (_cosmeticCache.length >= _kCosmeticCacheMax) {
+      _cosmeticCache.remove(_cosmeticCache.keys.first);
+    }
+    _cosmeticCache[cacheKey] = rules;
     return rules;
   }
 
@@ -416,6 +444,7 @@ class AdBlockFilterUpdater {
   }
 
   Future<void> clearDownloadedDomains() async {
+    _invalidateCosmeticCache();
     _downloadedDomains.clear();
     _downloadedTrackingDomains.clear();
     _siteCosmeticRules.clear();

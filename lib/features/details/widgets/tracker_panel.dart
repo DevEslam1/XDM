@@ -125,53 +125,53 @@ class _TrackerPanelState extends State<TrackerPanel> {
                   ),
                 )
               else
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: trackers.length,
-                    itemBuilder: (context, index) {
-                      final tracker = trackers[index];
-                      return Dismissible(
-                        key: Key(tracker.url),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          color: Colors.red,
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 16.0),
-                          child: const Icon(Icons.delete, color: Colors.white),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: trackers.length,
+                  itemBuilder: (context, index) {
+                    final tracker = trackers[index];
+                    return Dismissible(
+                      key: Key(tracker.url),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        color: Colors.red,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 16.0),
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      onDismissed: (_) {
+                        widget.trackerManager.removeTracker(
+                          widget.torrentId,
+                          tracker.url,
+                        );
+                      },
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 6,
+                          backgroundColor: _statusColor(tracker.status),
                         ),
-                        onDismissed: (_) {
-                          widget.trackerManager.removeTracker(
-                            widget.torrentId,
-                            tracker.url,
-                          );
-                        },
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            radius: 6,
-                            backgroundColor: _statusColor(tracker.status),
-                          ),
-                          title: Text(
-                            tracker.url,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            'Seeds: ${tracker.seeds} | Peers: ${tracker.peers} ${tracker.message.isNotEmpty ? '• ${tracker.message}' : ''}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.close, size: 16),
-                            onPressed: () {
-                              widget.trackerManager.removeTracker(
-                                widget.torrentId,
-                                tracker.url,
-                              );
-                            },
-                          ),
+                        title: Text(
+                          tracker.url,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      );
-                    },
-                  ),
+                        subtitle: Text(
+                          'Seeds: ${tracker.seeds} | Peers: ${tracker.peers} ${tracker.message.isNotEmpty ? '• ${tracker.message}' : ''}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          onPressed: () {
+                            widget.trackerManager.removeTracker(
+                              widget.torrentId,
+                              tracker.url,
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
                 ),
             ],
           ),

@@ -360,4 +360,120 @@ void main() {
       expect(utf8.decode(result['bar'] as Uint8List), 'test');
     });
   });
+
+  // ── Path-traversal regression tests (TASK 1 / TASK 2) ──────────────────
+  group('BencodeDecoder — parseTorrentBytes path traversal protection', () {
+    /// Builds a minimal multi-file torrent where the first file's path list
+    /// contains [segment1] and [segment2].
+    Uint8List buildMultiFileTorrent(String seg1, String seg2) {
+      // Bencode: d4:infod5:filesl d6:lengthi100e 4:pathl<seg1><seg2>e e e 4:name4:root 12:piece lengthi32768e 6:pieces20:aaaaaaaaaaaaaaaaaaaa e e
+      final s1Enc = '${seg1.length}:$seg1';
+      final s2Enc = '${seg2.length}:$seg2';
+      return utf8.encode(
+        'd8:announce19:http://tracker.test'
+        '4:info'
+        'd'
+        '5:files'
+        'l'
+        'd6:lengthi100e4:pathl$s1Enc${s2Enc}ee'
+        'e'
+        '4:name4:root'
+        '12:piece lengthi32768e'
+        '6:pieces20:aaaaaaaaaaaaaaaaaaaa'
+        'e'
+        'e',
+      );
+    }
+
+    test('traversal segment ".." is stripped from multi-file path', () {
+      // A crafted torrent with path ["../../", "outside.txt"] must not
+      // produce a name containing ".." after parsing.
+      final raw = buildMultiFileTorrent('..', 'outside.txt');
+      final result = BencodeDecoder.parseTorrentBytes(raw);
+      expect(result, isNotNull);
+      final files = result!['files'] as List;
+      // The ".." segment must have been dropped; only "outside.txt" survives.
+      for (final f in files) {
+        final name = (f as Map)['name'] as String;
+        expect(
+          name.contains('..'),
+          isFalse,
+          reason: 'File name "$name" still contains ".."',
+        );
+        // The resolved name must not start with a path separator.
+        expect(
+          name.startsWith('/') || name.startsWith('\\'),
+          isFalse,
+          reason: 'File name "$name" starts with a path separator',
+        );
+      }
+    });
+
+    test('traversal segment with embedded slash is stripped', () {
+      // Segment "../../etc" with embedded slash must be fully rejected.
+      final raw = buildMultiFileTorrent('../../etc', 'passwd');
+      final result = BencodeDecoder.parseTorrentBytes(raw);
+      expect(result, isNotNull);
+      final files = result!['files'] as List;
+      for (final f in files) {
+        final name = (f as Map)['name'] as String;
+        expect(
+          name.contains('..'),
+          isFalse,
+          reason: 'File name "$name" still contains ".."',
+        );
+      }
+    });
+
+    test('absolute Unix path segment is stripped', () {
+      // Segment "/etc" is an absolute path and must be rejected.
+      final raw = buildMultiFileTorrent('/etc', 'passwd');
+      final result = BencodeDecoder.parseTorrentBytes(raw);
+      expect(result, isNotNull);
+      final files = result!['files'] as List;
+      for (final f in files) {
+        final name = (f as Map)['name'] as String;
+        expect(
+          name.startsWith('/'),
+          isFalse,
+          reason: 'File name "$name" starts with absolute path separator',
+        );
+      }
+    });
+
+    test('Windows drive-letter segment is stripped', () {
+      // Segment "C:" (Windows drive root) must be rejected.
+      final raw = buildMultiFileTorrent('C:', 'evil.exe');
+      final result = BencodeDecoder.parseTorrentBytes(raw);
+      expect(result, isNotNull);
+      final files = result!['files'] as List;
+      for (final f in files) {
+        final name = (f as Map)['name'] as String;
+        // "C:" must have been stripped; only "evil.exe" may survive.
+        expect(
+          name.startsWith('C:') || name.startsWith('c:'),
+          isFalse,
+          reason: 'File name "$name" contains Windows drive letter',
+        );
+      }
+    });
+
+    test('all-traversal path produces fallback name, not a traversal path', () {
+      // If every segment is filtered out, the parser produces a fallback name
+      // (e.g. "file_<length>") rather than an empty or traversal string.
+      final raw = buildMultiFileTorrent('..', '..');
+      final result = BencodeDecoder.parseTorrentBytes(raw);
+      expect(result, isNotNull);
+      final files = result!['files'] as List;
+      for (final f in files) {
+        final name = (f as Map)['name'] as String;
+        expect(name.isNotEmpty, isTrue, reason: 'File name must not be empty');
+        expect(
+          name.contains('..'),
+          isFalse,
+          reason: 'Fallback name "$name" still contains ".."',
+        );
+      }
+    });
+  });
 }

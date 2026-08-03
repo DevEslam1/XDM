@@ -57,20 +57,28 @@ class PeerPanel extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Peers (${peers.length})',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color:
-                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+            Flexible(
+              child: Text(
+                'Peers (${peers.length})',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            Text(
-              'Seeds: $seeds | Leeches: $leeches',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Seeds: $seeds | Leeches: $leeches',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                ),
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
               ),
             ),
           ],

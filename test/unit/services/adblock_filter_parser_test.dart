@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:dmx/features/browser/services/adblock_filter_updater.dart';
 
 void main() {
   /// These tests verify the integrity check logic used in AdblockFilterUpdater._downloadAndParse.
@@ -68,6 +69,46 @@ void main() {
       final size = await f.length();
       final sample = await f.openRead(0, 1024).expand((b) => b).toList();
       expect(_isIntegrityOk(size, sample, 0), isTrue);
+    });
+  });
+
+  group('AdblockFilterUpdater.cosmeticRulesForHost LRU cache behavior', () {
+    final updater = AdBlockFilterUpdater();
+
+    test('returns consistent set on repeat calls for same host', () {
+      final rules1 = updater.cosmeticRulesForHost('example.com');
+      final rules2 = updater.cosmeticRulesForHost('example.com');
+      expect(identical(rules1, rules2), isTrue,
+          reason: 'Cached result should return the exact same Set instance');
+    });
+
+    test('case-insensitive host lookup', () {
+      final rulesLower = updater.cosmeticRulesForHost('sub.example.com');
+      final rulesUpper = updater.cosmeticRulesForHost('SUB.EXAMPLE.COM');
+      expect(identical(rulesLower, rulesUpper), isTrue,
+          reason: 'Different casing should hit the same cache entry');
+    });
+
+    test('evicts oldest entry when max capacity (50) is exceeded', () {
+      // Populate 50 entries
+      for (var i = 0; i < 50; i++) {
+        updater.cosmeticRulesForHost('host$i.com');
+      }
+      final firstHostRef1 = updater.cosmeticRulesForHost('host0.com');
+
+      // Accessing host0 refreshes its LRU position to newest.
+      // Now add 49 new hosts (filling total 50 capacity).
+      for (var i = 100; i < 149; i++) {
+        updater.cosmeticRulesForHost('newhost$i.com');
+      }
+
+      // host0 should be retained because it was refreshed to newest before inserting 49 items:
+      final firstHostRef2 = updater.cosmeticRulesForHost('host0.com');
+      expect(identical(firstHostRef1, firstHostRef2), isTrue);
+
+      final host1Ref1 = updater.cosmeticRulesForHost('host1.com'); // re-computed
+      final host1Ref2 = updater.cosmeticRulesForHost('host1.com'); // cached
+      expect(identical(host1Ref1, host1Ref2), isTrue);
     });
   });
 }

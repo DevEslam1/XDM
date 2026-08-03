@@ -177,53 +177,71 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<SettingsProvider>();
-    final downloadProvider = context.watch<DownloadProvider>();
-    final isDark = settings.isDarkMode;
-    final isRtl = L10n.isRtl(context);
-    final currentIndex = downloadProvider.activeTabIndex;
-    final screenType = getScreenType(context);
+    // PERF: Use Selector so this shell only rebuilds when the navigation
+    // state actually changes — not on every download-progress tick.
+    return Selector<SettingsProvider,
+        ({bool isDark, bool classicUi, bool vibration})>(
+      selector: (_, s) =>
+          (isDark: s.isDarkMode, classicUi: s.classicUi, vibration: s.vibration),
+      builder: (context, settingsTuple, _) {
+        final isDark = settingsTuple.isDark;
+        final isRtl = L10n.isRtl(context);
+        final screenType = getScreenType(context);
 
-    final bodyContent = Directionality(
-      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-      child: _FadeIndexedStack(index: currentIndex, children: _screens),
-    );
+        return Selector<DownloadProvider,
+            ({int activeTabIndex, bool isNavbarVisible})>(
+          selector: (_, p) => (
+            activeTabIndex: p.activeTabIndex,
+            isNavbarVisible: p.isNavbarVisible,
+          ),
+          builder: (context, navState, _) {
+            final currentIndex = navState.activeTabIndex;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppTheme.background : AppTheme.lightBackground,
-      extendBody: true,
-      body: screenType == ScreenType.desktop
-          ? Row(
-              children: [
-                _NavigationRailWidget(
-                  settings: settings,
-                  downloadProvider: downloadProvider,
-                  isDark: isDark,
-                  isRtl: isRtl,
-                  currentIndex: currentIndex,
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: bodyContent),
-              ],
-            )
-          : bodyContent,
-      bottomNavigationBar: screenType == ScreenType.phone
-          ? _PhoneBottomNavBar(
-              settings: settings,
-              downloadProvider: downloadProvider,
-              isDark: isDark,
-              isRtl: isRtl,
-              currentIndex: currentIndex,
-            )
-          : screenType == ScreenType.tablet
-              ? _TabletFloatingNavBar(
-                  settings: settings,
-                  downloadProvider: downloadProvider,
-                  isDark: isDark,
-                  isRtl: isRtl,
-                  currentIndex: currentIndex,
-                )
-              : null,
+            final bodyContent = Directionality(
+              textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+              child: _FadeIndexedStack(
+                index: currentIndex,
+                children: _screens,
+              ),
+            );
+
+            return Scaffold(
+              backgroundColor:
+                  isDark ? AppTheme.background : AppTheme.lightBackground,
+              extendBody: true,
+              body: screenType == ScreenType.desktop
+                  ? Row(
+                      children: [
+                        _NavigationRailWidget(
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          isRtl: isRtl,
+                          currentIndex: currentIndex,
+                        ),
+                        const VerticalDivider(width: 1),
+                        Expanded(child: bodyContent),
+                      ],
+                    )
+                  : bodyContent,
+              bottomNavigationBar: screenType == ScreenType.phone
+                  ? _PhoneBottomNavBar(
+                      settingsTuple: settingsTuple,
+                      isDark: isDark,
+                      isRtl: isRtl,
+                      navState: navState,
+                    )
+                  : screenType == ScreenType.tablet
+                      ? _TabletFloatingNavBar(
+                          settingsTuple: settingsTuple,
+                          isDark: isDark,
+                          isRtl: isRtl,
+                          navState: navState,
+                        )
+                      : null,
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -272,24 +290,23 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
 }
 
 class _PhoneBottomNavBar extends StatelessWidget {
-  final SettingsProvider settings;
-  final DownloadProvider downloadProvider;
+  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
+  final ({int activeTabIndex, bool isNavbarVisible}) navState;
   final bool isDark;
   final bool isRtl;
-  final int currentIndex;
 
   const _PhoneBottomNavBar({
-    required this.settings,
-    required this.downloadProvider,
+    required this.settingsTuple,
+    required this.navState,
     required this.isDark,
     required this.isRtl,
-    required this.currentIndex,
   });
 
   @override
   Widget build(BuildContext context) {
+    final currentIndex = navState.activeTabIndex;
     return AnimatedSlide(
-      offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
+      offset: (navState.isNavbarVisible && currentIndex != 1)
           ? Offset.zero
           : const Offset(0, 1.0),
       duration: AppTheme.motionBase,
@@ -301,7 +318,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
           sigmaY: 15,
           child: Container(
             decoration: BoxDecoration(
-              color: settings.classicUi
+              color: settingsTuple.classicUi
                   ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
                   : (isDark ? AppTheme.surface : AppTheme.lightSurface)
                       .withValues(alpha: 0.7),
@@ -309,12 +326,12 @@ class _PhoneBottomNavBar extends StatelessWidget {
                   const BorderRadius.vertical(top: Radius.circular(24)),
               border: Border(
                 top: BorderSide(
-                  color: settings.classicUi
+                  color: settingsTuple.classicUi
                       ? (isDark ? AppTheme.border : AppTheme.lightBorder)
                       : (isDark
                           ? AppTheme.glassBorder
                           : AppTheme.lightGlassBorder),
-                  width: settings.classicUi ? 1.0 : 0.6,
+                  width: settingsTuple.classicUi ? 1.0 : 0.6,
                 ),
               ),
             ),
@@ -332,8 +349,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
                         icon: Icons.file_download_outlined,
                         activeIcon: Icons.file_download,
                         label: L10n.of(context, 'title_transmissions'),
-                        settings: settings,
-                        downloadProvider: downloadProvider,
+                        settingsTuple: settingsTuple,
                         isDark: isDark,
                         currentIndex: currentIndex,
                       ),
@@ -342,8 +358,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
                         icon: Icons.language_outlined,
                         activeIcon: Icons.language,
                         label: L10n.of(context, 'title_browser'),
-                        settings: settings,
-                        downloadProvider: downloadProvider,
+                        settingsTuple: settingsTuple,
                         isDark: isDark,
                         currentIndex: currentIndex,
                       ),
@@ -352,8 +367,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
                         icon: Icons.settings_outlined,
                         activeIcon: Icons.settings_rounded,
                         label: L10n.of(context, 'title_config'),
-                        settings: settings,
-                        downloadProvider: downloadProvider,
+                        settingsTuple: settingsTuple,
                         isDark: isDark,
                         currentIndex: currentIndex,
                       ),
@@ -370,24 +384,23 @@ class _PhoneBottomNavBar extends StatelessWidget {
 }
 
 class _TabletFloatingNavBar extends StatelessWidget {
-  final SettingsProvider settings;
-  final DownloadProvider downloadProvider;
+  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
+  final ({int activeTabIndex, bool isNavbarVisible}) navState;
   final bool isDark;
   final bool isRtl;
-  final int currentIndex;
 
   const _TabletFloatingNavBar({
-    required this.settings,
-    required this.downloadProvider,
+    required this.settingsTuple,
+    required this.navState,
     required this.isDark,
     required this.isRtl,
-    required this.currentIndex,
   });
 
   @override
   Widget build(BuildContext context) {
+    final currentIndex = navState.activeTabIndex;
     return AnimatedSlide(
-      offset: (downloadProvider.isNavbarVisible && currentIndex != 1)
+      offset: (navState.isNavbarVisible && currentIndex != 1)
           ? Offset.zero
           : const Offset(0, 1.8),
       duration: AppTheme.motionSlow,
@@ -400,7 +413,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
           height: 70,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 460),
-            decoration: settings.classicUi
+            decoration: settingsTuple.classicUi
                 ? BoxDecoration(
                     color: isDark ? AppTheme.surface : AppTheme.lightSurface,
                     borderRadius: BorderRadius.circular(30),
@@ -445,8 +458,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
                         icon: Icons.file_download_outlined,
                         activeIcon: Icons.file_download,
                         label: L10n.of(context, 'title_transmissions'),
-                        settings: settings,
-                        downloadProvider: downloadProvider,
+                        settingsTuple: settingsTuple,
                         isDark: isDark,
                         currentIndex: currentIndex,
                       ),
@@ -455,8 +467,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
                         icon: Icons.language_outlined,
                         activeIcon: Icons.language,
                         label: L10n.of(context, 'title_browser'),
-                        settings: settings,
-                        downloadProvider: downloadProvider,
+                        settingsTuple: settingsTuple,
                         isDark: isDark,
                         currentIndex: currentIndex,
                       ),
@@ -465,8 +476,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
                         icon: Icons.settings_outlined,
                         activeIcon: Icons.settings_rounded,
                         label: L10n.of(context, 'title_config'),
-                        settings: settings,
-                        downloadProvider: downloadProvider,
+                        settingsTuple: settingsTuple,
                         isDark: isDark,
                         currentIndex: currentIndex,
                       ),
@@ -483,15 +493,13 @@ class _TabletFloatingNavBar extends StatelessWidget {
 }
 
 class _NavigationRailWidget extends StatelessWidget {
-  final SettingsProvider settings;
-  final DownloadProvider downloadProvider;
+  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
   final bool isDark;
   final bool isRtl;
   final int currentIndex;
 
   const _NavigationRailWidget({
-    required this.settings,
-    required this.downloadProvider,
+    required this.settingsTuple,
     required this.isDark,
     required this.isRtl,
     required this.currentIndex,
@@ -499,6 +507,7 @@ class _NavigationRailWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final downloadProvider = context.read<DownloadProvider>();
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
@@ -508,7 +517,7 @@ class _NavigationRailWidget extends StatelessWidget {
       sigmaY: 15,
       child: Container(
         decoration: BoxDecoration(
-          color: settings.classicUi
+          color: settingsTuple.classicUi
               ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
               : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
                   alpha: 0.85,
@@ -545,7 +554,7 @@ class _NavigationRailWidget extends StatelessWidget {
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
                 onTap: () {
-                  if (settings.vibration) HapticFeedback.lightImpact();
+                  if (settingsTuple.vibration) HapticFeedback.lightImpact();
                   downloadProvider.setActiveTabIndex(0);
                 },
               ),
@@ -558,7 +567,7 @@ class _NavigationRailWidget extends StatelessWidget {
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
                 onTap: () {
-                  if (settings.vibration) HapticFeedback.lightImpact();
+                  if (settingsTuple.vibration) HapticFeedback.lightImpact();
                   downloadProvider.setActiveTabIndex(1);
                 },
               ),
@@ -571,7 +580,7 @@ class _NavigationRailWidget extends StatelessWidget {
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
                 onTap: () {
-                  if (settings.vibration) HapticFeedback.lightImpact();
+                  if (settingsTuple.vibration) HapticFeedback.lightImpact();
                   downloadProvider.setActiveTabIndex(2);
                 },
               ),
@@ -663,8 +672,7 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final IconData activeIcon;
   final String label;
-  final SettingsProvider settings;
-  final DownloadProvider downloadProvider;
+  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
   final bool isDark;
   final int currentIndex;
 
@@ -673,8 +681,7 @@ class _NavItem extends StatelessWidget {
     required this.icon,
     required this.activeIcon,
     required this.label,
-    required this.settings,
-    required this.downloadProvider,
+    required this.settingsTuple,
     required this.isDark,
     required this.currentIndex,
   });
@@ -685,8 +692,6 @@ class _NavItem extends StatelessWidget {
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    final activeDownloadsCount =
-        index == 0 ? downloadProvider.downloadingTasksCount : 0;
     final color = isSelected ? activeColor : inactiveColor;
     final displayIcon = isSelected ? activeIcon : icon;
 
@@ -695,8 +700,8 @@ class _NavItem extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            if (settings.vibration) HapticFeedback.mediumImpact();
-            downloadProvider.setActiveTabIndex(index);
+            if (settingsTuple.vibration) HapticFeedback.mediumImpact();
+            context.read<DownloadProvider>().setActiveTabIndex(index);
           },
           focusColor: isDark
               ? AppTheme.focusRing.withValues(alpha: 0.3)
@@ -729,38 +734,47 @@ class _NavItem extends StatelessWidget {
                     ),
                     child: Icon(displayIcon, color: color, size: 22),
                   ),
-                  if (index == 0 && activeDownloadsCount > 0)
+                  // PERF: Badge is scoped to its own Selector so only the
+                  // badge rebuilds on download-count changes, not the whole
+                  // nav bar.
+                  if (index == 0)
                     Positioned(
                       top: -4,
                       right: 4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isDark
-                                      ? AppTheme.neonGreen
-                                      : AppTheme.lightNeonGreen)
-                                  .withValues(alpha: 0.4),
-                              blurRadius: 4,
+                      child: Selector<DownloadProvider, int>(
+                        selector: (_, p) => p.downloadingTasksCount,
+                        builder: (_, count, __) {
+                          if (count <= 0) return const SizedBox.shrink();
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          '$activeDownloadsCount',
-                          style: TextStyle(
-                            color: isDark ? Colors.black : Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.lightNeonGreen,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen)
+                                      .withValues(alpha: 0.4),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '$count',
+                              style: TextStyle(
+                                color: isDark ? Colors.black : Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                 ],

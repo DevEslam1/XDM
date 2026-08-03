@@ -186,18 +186,25 @@ int scanFolderBytesSync(String path) {
     var downloaded = 0;
     if (relPath.isNotEmpty && length > 0) {
       try {
-        final file = File(p.join(saveRoot, relPath));
-        if (file.existsSync()) {
-          final diskLen = file.lengthSync();
-          // FIX(5): libtorrent pre-allocates files to full length, so a full-size file
-          // is NOT evidence of completion. Only a short file is a reliable
-          // lower bound; a full-size file is ambiguous and must not read 100%.
-          final storedDownloaded =
-              (copy['downloadedBytes'] as num?)?.toInt() ?? 0;
-          if (storedDownloaded > 0) {
-            downloaded = storedDownloaded;
-          } else if (diskLen > 0 && diskLen < length) {
-            downloaded = diskLen;
+        // SECURITY: Guard against path traversal in stored file entries.
+        final canonicalRoot = p.canonicalize(saveRoot);
+        final candidatePath = p.canonicalize(p.join(saveRoot, relPath));
+        if (!p.isWithin(canonicalRoot, candidatePath)) {
+          LoggingService.logger('FileUtils').warning(
+            '[FileUtils] scanTorrentFilesOnDisk: blocked traversal for '
+            'relPath="$relPath"',
+          );
+        } else {
+          final file = File(candidatePath);
+          if (file.existsSync()) {
+            final diskLen = file.lengthSync();
+            final storedDownloaded =
+                (copy['downloadedBytes'] as num?)?.toInt() ?? 0;
+            if (storedDownloaded > 0) {
+              downloaded = storedDownloaded;
+            } else if (diskLen > 0 && diskLen < length) {
+              downloaded = diskLen;
+            }
           }
         }
       } catch (e) {

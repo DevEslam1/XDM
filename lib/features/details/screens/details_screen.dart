@@ -1810,7 +1810,36 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
       final relPath =
           widget.task.torrentFiles![fileIndex]['name'] as String? ?? '';
       if (relPath.isNotEmpty) {
-        final fullPath = p.normalize(p.join(widget.task.savePath, relPath));
+        final normalizedSave =
+            p.normalize(p.absolute(widget.task.savePath));
+        final fullPath =
+            p.normalize(p.absolute(widget.task.savePath, relPath));
+
+        // SECURITY: Reject any path that escapes the torrent's save directory.
+        // A crafted torrent entry like '../../etc/passwd' would otherwise
+        // allow arbitrary file deletion outside savePath.
+        if (!p.isWithin(normalizedSave, fullPath) &&
+            !p.equals(fullPath, normalizedSave)) {
+          debugPrint(
+            '[Security] _deleteSingleTorrentFile: blocked path traversal '
+            'attempt. relPath="$relPath", resolved="$fullPath", '
+            'savePath="$normalizedSave"',
+          );
+          if (context.mounted) {
+            final isRtlLocal = L10n.isRtl(context);
+            ThemedSnackbar.show(
+              context,
+              message: isRtlLocal
+                  ? 'مسار الملف غير صالح — رُفض الحذف'
+                  : 'Invalid file path — deletion rejected',
+              color: AppTheme.neonRed,
+              icon: Icons.warning_amber_rounded,
+              isDarkMode: isDark,
+            );
+          }
+          return;
+        }
+
         final file = File(fullPath);
         if (await file.exists()) {
           await file.delete();
