@@ -39,7 +39,20 @@ mixin DownloadTorrentMixin {
   // Seeding lifecycle
   // ---------------------------------------------------------------------------
   void startSeedingTorrent(DownloadTask task) {
-    if (providerTorrentIds.containsKey(task.id)) return;
+    // B3: Check whether a live native handle already exists before adding.
+    //     If the Dart map has an entry AND the native session still has the
+    //     torrent alive, just resume it — no duplicate handle created.
+    if (providerTorrentIds.containsKey(task.id)) {
+      final existingId = providerTorrentIds[task.id]!;
+      if (TorrentService.isTorrentAlive(existingId)) {
+        // Live handle found — reuse it.
+        TorrentService.resumeTorrent(existingId);
+        return;
+      }
+      // Stale map entry: the native session no longer knows this ID.
+      // Remove it so the add below creates a fresh handle cleanly.
+      providerTorrentIds.remove(task.id);
+    }
     try {
       final saveDir = task.savePath;
       int torrentId;
@@ -276,14 +289,12 @@ mixin DownloadTorrentMixin {
           }
 
           if (shouldStopSeeding) {
-            if (torrentId != null) {
-              TorrentService.pauseTorrent(torrentId);
-              TorrentService.removeTorrent(torrentId, deleteFiles: false);
-              providerTorrentIds.remove(task.id);
-            }
-            providerTasks[i] = task.copyWith(seedingEnabled: false);
-            // FIX(H8): Persist seeding stop to DB so it survives app restart.
-            unawaited(providerDatabaseService.saveTask(providerTasks[i]));
+            // B5: Delegate to updateTaskSeeding so the native torrent handle is
+            //     removed, the Dart map is cleaned up, and the change is persisted
+            //     to the DB — all via the same code path used everywhere else.
+            //     Using unawaited is safe here: updateSeedingSpeeds is a sync
+            //     hot-path; the async teardown can finish independently.
+            unawaited(updateTaskSeeding(task.id, enabled: false));
             filteredTasksDirty = true;
             changed = true;
           }

@@ -200,18 +200,20 @@ class BackgroundService {
         }
       });
 
-      // Start periodic renewal every 15 minutes to prevent native timeout expiry
+      // Start periodic renewal every 15 minutes to prevent native timeout expiry.
+      // A4: Re-acquire unconditionally — the native side handles idempotency
+      //     (release-then-acquire), so a missed/delayed Doze tick self-heals
+      //     on the next cycle even if _wakeLockHeld is stale from another isolate.
       _wakeLockRenewalTimer?.cancel();
       _wakeLockRenewalTimer = Timer.periodic(const Duration(minutes: 15), (
         _,
       ) async {
-        if (_wakeLockHeld && isSupported) {
-          try {
-            await _wakeLockChannel.invokeMethod<void>('acquire');
-            _log.fine('Wake lock renewed');
-          } catch (e) {
-            _log.warning('Failed to renew wake lock', e);
-          }
+        if (!isSupported) return;
+        try {
+          await _wakeLockChannel.invokeMethod<void>('acquire');
+          _log.fine('Wake lock renewed');
+        } catch (e) {
+          _log.warning('Failed to renew wake lock', e);
         }
       });
     } catch (e) {

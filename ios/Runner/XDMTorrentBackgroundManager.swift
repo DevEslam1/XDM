@@ -20,6 +20,16 @@ public class XDMTorrentBackgroundManager: NSObject {
     private let resumeDataKeyPrefix = "xdm_torrent_resume_"
     private let activeTorrentsKey = "xdm_active_torrent_ids"
 
+    // A2: Static flag ensures registerBackgroundTask() is a no-op if the
+    //     identifier was already registered in AppDelegate, preventing an
+    //     assert-crash from double-registration.
+    private static var _registered = false
+
+    // A3: Debounce timestamp so simultaneous AppDelegate + SceneDelegate
+    //     background callbacks don't schedule two BGProcessingTasks.
+    private var _lastBackgroundAt: Date? = nil
+    private static let _backgroundDebounceSeconds: TimeInterval = 2.0
+
     // Callbacks to Flutter
     public var onTorrentsPaused: (() -> Void)?
     public var onTorrentsResumed: (() -> Void)?
@@ -29,12 +39,21 @@ public class XDMTorrentBackgroundManager: NSObject {
     }
 
     /// Register the BGProcessingTask for periodic torrent checks.
+    /// A2: Guarded by a static flag — safe to call more than once; only
+    ///     the first call performs the actual BGTaskScheduler registration.
     public func registerBackgroundTask() {
+        guard !Self._registered else { return }
+        Self._registered = true
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.processingTaskId,
             using: nil
         ) { [weak self] task in
-            self?.handleTorrentRefreshTask(task: task as! BGProcessingTask)
+            // A2: Safe cast — guard against iOS delivering an unexpected BGTask subclass.
+            guard let processingTask = task as? BGProcessingTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            self?.handleTorrentRefreshTask(task: processingTask)
         }
     }
 
@@ -44,7 +63,19 @@ public class XDMTorrentBackgroundManager: NSObject {
     }
 
     /// Called when app enters background. Saves all torrent state.
+    /// A3: Idempotent within a 2-second window to prevent double-invocation
+    ///     from both AppDelegate and SceneDelegate firing simultaneously.
     public func appDidEnterBackground(activeTorrentIds: [Int]) {
+        let now = Date()
+        if let last = _lastBackgroundAt,
+           now.timeIntervalSince(last) < Self._backgroundDebounceSeconds {
+            // A3: Duplicate call within debounce window — skip to avoid
+            //     double-scheduling the BGProcessingTask.
+            print("XDM Torrent BG: Debouncing duplicate background callback")
+            return
+        }
+        _lastBackgroundAt = now
+
         // Save active torrent IDs
         UserDefaults.standard.set(activeTorrentIds, forKey: activeTorrentsKey)
 
@@ -59,6 +90,10 @@ public class XDMTorrentBackgroundManager: NSObject {
 
     /// Called when app returns to foreground. Resumes all torrents.
     public func appWillEnterForeground() {
+        // Reset the debounce timestamp so the next background transition
+        // is processed normally.
+        _lastBackgroundAt = nil
+
         // Cancel pending background task
         BGTaskScheduler.shared.cancel(
             taskRequestWithIdentifier: Self.processingTaskId

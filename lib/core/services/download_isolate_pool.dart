@@ -34,6 +34,8 @@ class DownloadCommand {
   final int activeCount;
   final String taskId;
   final List<String>? mirrorUrls;
+  final bool adaptiveThreads;
+  final int speedLimitKbps;
 
   DownloadCommand({
     required this.url,
@@ -59,6 +61,8 @@ class DownloadCommand {
     required this.activeCount,
     required this.taskId,
     this.mirrorUrls,
+    this.adaptiveThreads = false,
+    this.speedLimitKbps = 0,
   });
 }
 
@@ -781,6 +785,9 @@ Future<void> _runWorkerJob(
         activeDownloadCount: () => state.activeCount,
         cancelToken: state.cancelToken,
         onProgress: onProgress,
+        taskId: command.taskId,
+        adaptiveThreads: command.adaptiveThreads,
+        speedLimitKbps: command.speedLimitKbps,
       );
     }
 

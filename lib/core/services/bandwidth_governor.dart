@@ -72,10 +72,47 @@ class BandwidthGovernor {
     }
   }
 
+  final Map<String, int> _taskLimits = {};
+
+  void setTaskLimit(String taskId, int limit) {
+    _taskLimits[taskId] = limit;
+  }
+
+  void removeTaskLimit(String taskId) {
+    _taskLimits.remove(taskId);
+  }
+
+  int? getTaskLimit(String taskId) {
+    return _taskLimits[taskId];
+  }
+
   /// Returns how many milliseconds the caller should sleep before writing
   /// [bytes] to stay within the configured limit.
-  Future<int> acquire(int bytes) async {
+  Future<int> acquire(int bytes, {String? taskId}) async {
     if (bytes <= 0) return 0;
+
+    if (taskId != null && _taskLimits.containsKey(taskId)) {
+      final taskLimit = _taskLimits[taskId]!;
+      if (taskLimit == 0) return 0; // Unlimited
+
+      return _lock.synchronized(() {
+        _refillWithLimit(taskLimit);
+
+        _availableTokens -= bytes;
+        final maxDeficit = -(taskLimit * 2.0);
+        if (_availableTokens < maxDeficit) {
+          _availableTokens = maxDeficit;
+        }
+        if (_availableTokens >= 0) {
+          return 0;
+        }
+
+        final deficit = -_availableTokens;
+        final waitMs = (deficit / taskLimit * 1000.0).ceil();
+        return waitMs.clamp(0, 5000);
+      });
+    }
+
     if (isUnlimited) return 0;
 
     return _lock.synchronized(() {
@@ -99,6 +136,17 @@ class BandwidthGovernor {
       final waitMs = (deficit / share * 1000.0).ceil();
       return waitMs.clamp(0, 5000);
     });
+  }
+
+  void _refillWithLimit(int limit) {
+    final now = DateTime.now();
+    final elapsedMs = now.difference(_lastRefill).inMilliseconds;
+
+    if (elapsedMs <= 0) return;
+
+    final newTokens = limit * elapsedMs / 1000.0;
+    _availableTokens = min(_availableTokens + newTokens, limit * _burstFactor);
+    _lastRefill = now;
   }
 
   void _refill() {

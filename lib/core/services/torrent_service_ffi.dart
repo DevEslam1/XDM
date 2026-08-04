@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:libtorrent_flutter/libtorrent_flutter.dart' hide formatBytes;
 import 'package:logging/logging.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -7,37 +8,40 @@ import 'torrent_models.dart';
 import 'torrent_resume_store.dart';
 
 /// Safe accessors for plugin methods that may not exist in all versions.
-/// These replace all `as dynamic` casts with a single guarded boundary.
+/// B1: Capability flags are detected ONCE in TorrentService._probeCapabilities()
+///     and cached as static fields. These extension methods read the flags
+///     and never re-probe via `as dynamic` on every invocation.
 extension _LibtorrentSafeAccess on LibtorrentFlutter {
   List<dynamic>? tryGetFileProgress(int id) {
+    // B1: Check cached capability flag — no hot-path dynamic probe.
+    if (!TorrentService.fileProgressSupported) return null;
     try {
       // ignore: avoid_dynamic_calls
       return (this as dynamic).getFileProgress(id) as List<dynamic>?;
-    } on NoSuchMethodError {
-      // FIX(1): Plugin build lacks per-file progress. Record it so callers fall back
-      // to priority-based estimation instead of silently reporting 0 B.
-      TorrentService.fileProgressSupported = false;
+    } catch (_) {
       return null;
     }
   }
 
   List<dynamic>? tryGetFilePriorities(int id) {
+    // B1: Check cached capability flag — no hot-path dynamic probe.
+    if (!TorrentService.filePrioritiesSupported) return null;
     try {
       // ignore: avoid_dynamic_calls
       return (this as dynamic).getFilePriorities(id) as List<dynamic>?;
-    } on NoSuchMethodError {
-      // FIX(1): Plugin build lacks per-file priorities. Record it.
-      TorrentService.filePrioritiesSupported = false;
+    } catch (_) {
       return null;
     }
   }
 
   void tryForceRecheck(int id) {
+    // B1: Check cached capability flag — no hot-path dynamic probe.
+    if (!TorrentService._forceRecheckSupported) return;
     try {
       // ignore: avoid_dynamic_calls
       (this as dynamic).forceReCheck(id);
-    } on NoSuchMethodError {
-      // Plugin does not support forceReCheck; skip silently.
+    } catch (_) {
+      // silently skip if method vanishes at runtime
     }
   }
 
@@ -50,11 +54,12 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
   /// can be persisted and passed back to loadResumeData on restart, avoiding
   /// the full piece recheck.
   Uint8List? trySaveResumeData(int id) {
+    // B1: Check cached capability flag — no hot-path dynamic probe.
+    if (!TorrentService._resumeDataSupported) return null;
     try {
       // ignore: avoid_dynamic_calls
       return (this as dynamic).saveResumeData(id) as Uint8List?;
-    } on NoSuchMethodError {
-      // Plugin does not support saveResumeData — marker-only fallback.
+    } catch (_) {
       return null;
     }
   }
@@ -67,11 +72,13 @@ extension _LibtorrentSafeAccess on LibtorrentFlutter {
   /// accept a torrent ID and a Uint8List of previously saved fast-resume data.
   // ignore: unused_element
   bool tryLoadResumeData(int id, Uint8List data) {
+    // B1: Check cached capability flag — no hot-path dynamic probe.
+    if (!TorrentService._resumeDataSupported) return false;
     try {
       // ignore: avoid_dynamic_calls
       (this as dynamic).loadResumeData(id, data);
       return true;
-    } on NoSuchMethodError {
+    } catch (_) {
       return false;
     }
   }
@@ -96,8 +103,16 @@ class TorrentService {
   static StreamController<Map<int, TorrentUpdateInfo>>? _updateController;
   static bool fileProgressSupported = true;
   static bool filePrioritiesSupported = true;
+  // B1: Cached capability flags set once by _probeCapabilities() during init.
+  //     Extension methods read these flags instead of re-probing on every call.
+  static bool _resumeDataSupported = true;
+  static bool _forceRecheckSupported = true;
   static final Map<int, double> _latestProgress = {};
   static final Map<int, String> _torrentSources = {};
+
+  // B2: Reactive availability notifier — set true on successful init,
+  //     false on permanent failure. UI and providers can watch this.
+  static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
 
   static bool get isSupported => true;
   static bool get isInitialized => _state == TorrentSessionState.ready;
@@ -128,19 +143,88 @@ class TorrentService {
     try {
       await TorrentResumeStore.init();
       await LibtorrentFlutter.init();
-      fileProgressSupported = true;
-      filePrioritiesSupported = true;
+      // B1: Detect optional capabilities once, after the native session is live.
+      //     All try* extension methods read these cached flags — never re-probe.
+      _probeCapabilities();
       _configureSessionFromSettings();
       _startTrackingUpdates();
       _state = TorrentSessionState.ready;
+      // B2: Mark engine as available so UI/providers can observe readiness.
+      isAvailable.value = true;
       _initCompleter?.complete();
     } catch (e) {
       _state = TorrentSessionState.uninitialized;
+      // B2: Ensure isAvailable stays false on failure so the caller can detect it.
+      isAvailable.value = false;
       _initCompleter?.completeError(e);
       rethrow;
     } finally {
       _initCompleter = null;
     }
+  }
+
+  /// B1: One-time capability probe — called once during init() after the
+  ///     native session is live. Sets all cached static flags so the hot-path
+  ///     extension methods never need to re-probe via `as dynamic`.
+  static void _probeCapabilities() {
+    // Reset to optimistic defaults before probing.
+    fileProgressSupported = true;
+    filePrioritiesSupported = true;
+    _resumeDataSupported = true;
+    _forceRecheckSupported = true;
+
+    final instance = LibtorrentFlutter.instance;
+
+    // Probe getFileProgress
+    try {
+      // ignore: avoid_dynamic_calls
+      (instance as dynamic).getFileProgress(-1);
+    } on NoSuchMethodError {
+      fileProgressSupported = false;
+      _log.fine('B1: getFileProgress not supported in this plugin build');
+    } catch (_) {
+      // Method exists but threw for an invalid ID — that's fine, it's supported.
+    }
+
+    // Probe getFilePriorities
+    try {
+      // ignore: avoid_dynamic_calls
+      (instance as dynamic).getFilePriorities(-1);
+    } on NoSuchMethodError {
+      filePrioritiesSupported = false;
+      _log.fine('B1: getFilePriorities not supported in this plugin build');
+    } catch (_) {
+      // Method exists — supported.
+    }
+
+    // Probe saveResumeData
+    try {
+      // ignore: avoid_dynamic_calls
+      (instance as dynamic).saveResumeData(-1);
+    } on NoSuchMethodError {
+      _resumeDataSupported = false;
+      _log.fine('B1: saveResumeData not supported in this plugin build');
+    } catch (_) {
+      // Method exists — supported.
+    }
+
+    // Probe forceReCheck
+    try {
+      // ignore: avoid_dynamic_calls
+      (instance as dynamic).forceReCheck(-1);
+    } on NoSuchMethodError {
+      _forceRecheckSupported = false;
+      _log.fine('B1: forceReCheck not supported in this plugin build');
+    } catch (_) {
+      // Method exists — supported.
+    }
+
+    _log.fine(
+      'B1 capability probe: fileProgress=$fileProgressSupported '
+      'filePriorities=$filePrioritiesSupported '
+      'resumeData=$_resumeDataSupported '
+      'forceRecheck=$_forceRecheckSupported',
+    );
   }
 
   static bool _sequentialDownload = false;

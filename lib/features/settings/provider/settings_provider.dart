@@ -106,6 +106,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _maxTotalConnectionsKey = 'maxTotalConnections';
   static const _dnsEnabledKey = 'dnsEnabled';
   static const _dnsProviderKey = 'dnsProvider';
+  static const _adaptiveThreadsKey = 'adaptiveThreads';
+  static const _autoVerifyChecksumKey = 'autoVerifyChecksum';
 
   static const _backendUrlKey = 'backend_url';
   static const _backendTokenKey = 'backend_token';
@@ -317,6 +319,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool batteryOptimizationPrompted = false;
   int _maxTotalConnections = 32;
   int get maxTotalConnections => _maxTotalConnections;
+  bool adaptiveThreads = false;
+  bool autoVerifyChecksum = false;
 
   @override
   void didChangePlatformBrightness() {
@@ -462,6 +466,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
     dnsEnabled = _prefs.getBool(_dnsEnabledKey) ?? true;
     dnsProvider = _prefs.getString(_dnsProviderKey) ?? 'dns.adguard.com';
+    adaptiveThreads = _prefs.getBool(_adaptiveThreadsKey) ?? false;
+    autoVerifyChecksum = _prefs.getBool(_autoVerifyChecksumKey) ?? false;
 
     _loaded = true;
     _instance = this;
@@ -472,6 +478,18 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> setAutoStart(bool value) async {
     autoStart = value;
     await _prefs.setBool(_autoStartKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setAdaptiveThreads(bool value) async {
+    adaptiveThreads = value;
+    await _prefs.setBool(_adaptiveThreadsKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setAutoVerifyChecksum(bool value) async {
+    autoVerifyChecksum = value;
+    await _prefs.setBool(_autoVerifyChecksumKey, value);
     notifyListeners();
   }
 

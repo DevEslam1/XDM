@@ -215,6 +215,8 @@ Future<void> main(List<String> args) async {
                   'Torrent init failed, continuing without torrent support: $e',
                 );
                 Logger('main').severe('Torrent init failed', e, s);
+                // B2: isAvailable is now false — will be checked after load()
+                //     to mark stuck torrent tasks with a visible error state.
               }
             }());
           }
@@ -222,6 +224,15 @@ Future<void> main(List<String> args) async {
 
           // Load tasks (triggers pumpQueue) — UI is already up; list populates now.
           await downloadProvider.load();
+
+          // B2: If the torrent engine failed to initialize permanently, surface
+          //     the failure to any isTorrent tasks that would otherwise hang
+          //     indefinitely waiting for metadata from a non-existent session.
+          if (TorrentService.isSupported && !TorrentService.isAvailable.value) {
+            downloadProvider.markTorrentTasksFailed(
+              'Torrent engine unavailable — tap to retry',
+            );
+          }
         } catch (e, s) {
           debugPrint('Deferred init failed: $e\n$s');
         }

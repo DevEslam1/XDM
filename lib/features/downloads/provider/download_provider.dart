@@ -594,6 +594,33 @@ class DownloadProvider extends ChangeNotifier
     );
   }
 
+  /// B2: Called by main.dart after a permanent TorrentService init failure.
+  /// Marks all isTorrent tasks that are stuck in a non-terminal state
+  /// (e.g. waiting for metadata) with a visible error message so the UI
+  /// reflects the unavailable engine rather than showing a hung progress bar.
+  void markTorrentTasksFailed(String reason) {
+    bool changed = false;
+    for (var i = 0; i < _tasks.length; i++) {
+      final task = _tasks[i];
+      if (!task.isTorrent) continue;
+      if (task.status == DownloadStatus.completed ||
+          task.status == DownloadStatus.failed) {
+        continue;
+      }
+      _tasks[i] = task.copyWith(
+        status: DownloadStatus.failed,
+        errorMessage: reason,
+        speed: 0,
+      );
+      unawaited(_databaseService.saveTask(_tasks[i]));
+      changed = true;
+    }
+    if (changed) {
+      filteredTasksDirty = true;
+      notifyListeners();
+    }
+  }
+
   /// [pauseOrphanDownloads] should be true only on initial app startup, when
   /// in-flight downloads (from a previous run) cannot be resumed safely.
   /// On user-triggered reload, we must preserve currently active downloads.
@@ -723,61 +750,10 @@ class DownloadProvider extends ChangeNotifier
 
     _scheduleManager.checkScheduledDownloads();
 
-    // Auto-resume if enabled — unpause orphaned downloads (excluding
-    // user-paused, scheduled, or Wi-Fi-waiting tasks) and pump the queue so queued
-    // downloads start immediately.
+    await _cleanupOrphanedFiles();
+
     if (_settingsProvider.autoStart) {
-      final pausedCandidates = _tasks
-          .where(
-            (t) =>
-                t.status == DownloadStatus.paused &&
-                !t.pausedByUser &&
-                t.errorMessage != DownloadStatusMessages.waitingWifi &&
-                (t.scheduledAt == null ||
-                    t.scheduledAt!.isBefore(DateTime.now())),
-          )
-          .toList();
-
-      for (final candidate in pausedCandidates) {
-        _cancelTokens.remove(candidate.id);
-
-        final videoBytes = await _readDmxStateBytes(candidate.tempFilePath);
-        var audioBytes = 0;
-        if (candidate.mergedAudioUrl != null &&
-            candidate.mergedAudioUrl!.isNotEmpty) {
-          audioBytes =
-              await _readDmxStateBytes('${candidate.tempFilePath}.audio');
-        }
-
-        final hasDiskBytes = videoBytes > 0 || audioBytes > 0;
-        final realBytesOnDisk =
-            hasDiskBytes ? videoBytes + audioBytes : candidate.downloadedBytes;
-        final hasState =
-            await File('${candidate.tempFilePath}.dmxstate').exists();
-        final chunks = hasState || !hasDiskBytes
-            ? candidate.chunks
-            : List<double>.filled(candidate.threadCount, 0.0);
-
-        final updatedTask = candidate.copyWith(
-          status: DownloadStatus.queued,
-          downloadedBytes: realBytesOnDisk,
-          chunks: chunks,
-          speed: 0,
-          clearEta: true,
-          clearError: true,
-        );
-
-        final idx = _tasks.indexWhere((t) => t.id == candidate.id);
-        if (idx != -1) {
-          _tasks[idx] = updatedTask;
-          await _databaseService.saveTask(updatedTask);
-        }
-      }
-
-      if (pausedCandidates.isNotEmpty) {
-        filteredTasksDirty = true;
-        notifyListeners();
-      }
+      await _autoResumeIncomplete();
     }
 
     // Always pump the queue so queued-downloads (including newly
@@ -2919,5 +2895,93 @@ class DownloadProvider extends ChangeNotifier
 
     _latestTorrentStats.clear();
     super.dispose();
+  }
+
+  Future<void> _cleanupOrphanedFiles() async {
+    final activePaths = <String>{};
+    for (final task in _tasks) {
+      if (task.tempFilePath.isNotEmpty) {
+        activePaths.add(p.canonicalize(task.tempFilePath));
+      }
+      if (task.localFilePath.isNotEmpty) {
+        activePaths.add(p.canonicalize(task.localFilePath));
+      }
+    }
+    
+    final defaultDir = await _permissionService.defaultDownloadDirectory();
+    final dir = Directory(defaultDir);
+    if (!await dir.exists()) return;
+    
+    try {
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        final name = p.canonicalize(entity.path);
+        final isOrphan = (name.endsWith('.dmxpart') ||
+                          name.endsWith('.dmxstate') ||
+                          name.endsWith('.journal') ||
+                          name.endsWith('.audio') ||
+                          name.endsWith('.audio.dmxstate')) &&
+                         !activePaths.any((pPath) => name.startsWith(pPath.replaceAll('.dmxpart', '').replaceAll('.dmxstate', '')));
+        if (isOrphan) {
+          try {
+            await entity.delete();
+          } catch (e) {
+            debugPrint('[DMX] Failed to cleanup orphan: ${entity.path}');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[DMX] Orphan cleanup scan failed: $e');
+    }
+  }
+
+  Future<void> _autoResumeIncomplete() async {
+    final candidates = _tasks.where((t) {
+      final isPausedOrInterrupted = t.status == DownloadStatus.paused ||
+          t.status == DownloadStatus.failed;
+      final isNotUserPausedOrScheduled = !t.pausedByUser &&
+          t.errorMessage != DownloadStatusMessages.waitingWifi &&
+          (t.scheduledAt == null || t.scheduledAt!.isBefore(DateTime.now()));
+      return isPausedOrInterrupted && isNotUserPausedOrScheduled;
+    }).toList();
+
+    var updatedAny = false;
+    for (final task in candidates) {
+      var realBytesOnDisk = task.downloadedBytes;
+      if (task.tempFilePath.isNotEmpty) {
+        final stateFile = File('${task.tempFilePath}.dmxstate');
+        if (await stateFile.exists()) {
+          final videoBytes = await _readDmxStateBytes(task.tempFilePath);
+          var audioBytes = 0;
+          if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+            audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+          }
+          final diskBytes = videoBytes + audioBytes;
+          if (diskBytes > 0) {
+            realBytesOnDisk = diskBytes;
+          }
+        }
+      }
+
+      final updated = task.copyWith(
+        status: DownloadStatus.queued,
+        downloadedBytes: realBytesOnDisk,
+        speed: 0,
+        clearEta: true,
+        clearError: true,
+      );
+
+      final idx = _tasks.indexWhere((t) => t.id == task.id);
+      if (idx != -1) {
+        _tasks[idx] = updated;
+        await _databaseService.saveTask(updated);
+        updatedAny = true;
+      }
+    }
+
+    if (updatedAny) {
+      filteredTasksDirty = true;
+      notifyListeners();
+    }
   }
 }

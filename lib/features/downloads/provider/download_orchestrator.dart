@@ -178,6 +178,43 @@ class DownloadOrchestrator {
   Map<String, ({String cookie, DateTime timestamp})> get cookieCache =>
       _cookieCache;
   static const int _cookieCacheMaxSize = 50;
+
+  @visibleForTesting
+  Future<DownloadTask> validateResumeState(DownloadTask task) async {
+    if (task.downloadedBytes > 0 && task.tempFilePath.isNotEmpty) {
+      final stateFile = File('${task.tempFilePath}.dmxstate');
+      if (await stateFile.exists()) {
+        try {
+          final content = await stateFile.readAsString();
+          final decoded = jsonDecode(content);
+          if (decoded is Map) {
+            final savedSize = (decoded['totalSize'] as num?)?.toInt() ?? -1;
+            if (savedSize > 0 && task.fileSize > 0 &&
+                (savedSize - task.fileSize).abs() > 2048) {
+              debugPrint('[DMX] Size mismatch in resume state, resetting progress');
+              final updated = task.copyWith(
+                downloadedBytes: 0,
+                chunks: List<double>.filled(task.threadCount, 0.0),
+              );
+              await _host.setTaskState(updated);
+              try { await stateFile.delete(); } catch (_) {}
+              return updated;
+            }
+          }
+        } catch (e) {
+          debugPrint('[DMX] Corrupt resume state, resetting: $e');
+          final updated = task.copyWith(
+            downloadedBytes: 0,
+            chunks: List<double>.filled(task.threadCount, 0.0),
+          );
+          await _host.setTaskState(updated);
+          try { await stateFile.delete(); } catch (_) {}
+          return updated;
+        }
+      }
+    }
+    return task;
+  }
   final Map<String, int> _ytRefreshAttempts = {};
 
   int get pendingStartCount => _startingTaskIds.length;
@@ -555,13 +592,15 @@ class DownloadOrchestrator {
     _host.lastProgressUpdateTimes.remove(taskId);
     _host.lastDbSaveTimes.remove(taskId);
 
-    final current = _host.findTaskById(taskId);
+    final taskObj = _host.findTaskById(taskId);
     _host.ytLowSpeedCounts.remove(taskId);
     _host.ytThrottlingRefreshing.remove(taskId);
     _ytRefreshAttempts.remove(taskId);
     _host.lastTorrentFileDiskSync.remove(taskId);
-    if (current == null) return;
-    if (current.status != DownloadStatus.downloading) return;
+    if (taskObj == null) return;
+    if (taskObj.status != DownloadStatus.downloading) return;
+
+    var current = taskObj;
 
     // Finalize DownloadMetrics
     final metrics = _host.downloadMetrics[taskId];
@@ -603,6 +642,7 @@ class DownloadOrchestrator {
       }
     }
 
+    var updatedTask = current;
     if (current.expectedSha256 != null && current.expectedSha256!.isNotEmpty) {
       try {
         final file = File(current.localFilePath);
@@ -632,6 +672,26 @@ class DownloadOrchestrator {
           ),
         );
         return;
+      }
+    } else if (_host.providerSettingsProvider.autoVerifyChecksum) {
+      try {
+        final file = File(current.localFilePath);
+        if (!Directory(current.localFilePath).existsSync() && await file.exists()) {
+          final digest = await Isolate.run(
+            () => ChecksumService.sha256File(current.localFilePath),
+          );
+          updatedTask = current.copyWith(expectedSha256: digest);
+          await _host.setTaskState(updatedTask);
+          current = updatedTask;
+          
+          if (metrics != null) {
+            metrics.checksumAlgorithm = 'SHA-256';
+            metrics.checksumVerified = true;
+            metrics.checksumPassed = true;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DMX] Auto-SHA-256 computation failed: $e');
       }
     }
 
@@ -1021,6 +1081,8 @@ class DownloadOrchestrator {
               cookies: cookieString,
               oauthToken: YoutubeService.oauthToken,
               threadCount: 2, // Audio gets exactly 2 threads
+              adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
+              speedLimitKbps: task.speedLimitKbps,
               onProgress: (progress) {
                 final t = _host.findTaskById(task.id);
                 if (t == null || t.status != DownloadStatus.downloading) return;
@@ -1118,6 +1180,8 @@ class DownloadOrchestrator {
                 torrentId: torrentId,
                 cookies: cookieString,
                 oauthToken: YoutubeService.oauthToken,
+                adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
+                speedLimitKbps: task.speedLimitKbps,
                 onProgress: (progress) {
                   // TTFB tracking: record ms until first byte
                   if (ttfbTimestamp == null && progress.downloadedBytes > 0) {
@@ -1229,11 +1293,14 @@ class DownloadOrchestrator {
                           : base.category;
 
                   List<Map<String, dynamic>>? diskVerifiedFiles;
-                  // Only use disk scan as initial seed data BEFORE the engine has
+                  // B4: Only use disk scan as initial seed data BEFORE the engine has
                   // reported actual per-file progress. Once the engine reports real
-                  // per-file bytes, disk scans would overwrite accurate piece-level
-                  // accounting with imprecise file sizes (libtorrent writes pieces
-                  // that span multiple files).
+                  // per-file bytes (progressEstimated == false OR downloadedBytes > 0),
+                  // disk scans are suppressed permanently — pre-allocated torrent files
+                  // report full size on disk and would overwrite accurate piece-level
+                  // accounting with imprecise file sizes.
+                  // The engineHasActualPerFileProgress flag is the single source of truth
+                  // for this gate; never run disk scan after it becomes true.
                   // FIX(4): Treat "has data" as "real bytes OR an explicit estimate" so disk scans don't clobber engine data
                   final engineHasActualPerFileProgress =
                       progress.torrentFiles != null &&
@@ -1336,6 +1403,8 @@ class DownloadOrchestrator {
                     cancelToken: videoCancelToken,
                     cookies: cookieString,
                     oauthToken: YoutubeService.oauthToken,
+                    adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
+                    speedLimitKbps: task.speedLimitKbps,
                     onProgress: (progress) {
                       final current = _host.findTaskById(task.id);
                       if (current == null ||
@@ -1781,6 +1850,9 @@ class DownloadOrchestrator {
       );
     }
 
+    // Validate resume state before starting
+    task = await validateResumeState(task);
+
     // YouTube streams use multi-threaded mode as configured.
 
     // Run video and audio in PARALLEL — each gets the full configured
@@ -1898,6 +1970,7 @@ class DownloadOrchestrator {
         return;
       }
 
+      final wasExhausted = isRetryable && currentRetry >= maxRetries && maxRetries > 0;
       _host.retryCounts.remove(task.id);
       _recordDownloadFailure(task.id, realError);
       try {
@@ -1914,14 +1987,29 @@ class DownloadOrchestrator {
           speed: 0,
           clearEta: true,
           clearStatusMessage: true,
-          errorMessage: errorMessage(realError),
+          errorMessage: wasExhausted
+              ? 'Download failed after $maxRetries retries. Please check your network and try again.'
+              : errorMessage(realError),
         ),
       );
-      _host.notifications.showFailed(
-        notificationId: notificationId,
-        title: task.fileName,
-        error: errorMessage(realError),
-      );
+      if (wasExhausted) {
+        _host.notifications.showFailed(
+          notificationId: notificationId,
+          title: task.fileName,
+          error: 'Download failed after $maxRetries retries. Please check your network and try again.',
+        );
+        DiagnosticService.instance.record(
+          'download_engine',
+          'Download failed after $maxRetries retries. Error: ${errorMessage(realError)}',
+          error: realError,
+        );
+      } else {
+        _host.notifications.showFailed(
+          notificationId: notificationId,
+          title: task.fileName,
+          error: errorMessage(realError),
+        );
+      }
     }).whenComplete(() {
       _host.cancelTokens.remove(task.id);
       _host.activeFutures.remove(task.id);

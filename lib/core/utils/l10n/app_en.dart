@@ -9,6 +9,12 @@ const Map<String, String> enTranslations = {
   'settings_engine_status': 'Engine Status',
   'settings_auto_resume': 'Auto-resume Downloads',
   'settings_auto_resume_sub': 'Resume unfinished downloads on app launch',
+  'settings_adaptive_threads': 'Adaptive Thread Count',
+  'settings_adaptive_threads_sub':
+      'Automatically adjust thread count based on download speed trends',
+  'settings_auto_verify_checksum': 'Auto-verify file integrity',
+  'settings_auto_verify_checksum_sub':
+      'Compute SHA-256 hash after each download completes',
   'settings_max_channels': 'Max Concurrent Downloads',
   'settings_max_channels_sub': 'Limit active parallel downloads',
   'settings_bandwidth': 'Network & Speed Limits',

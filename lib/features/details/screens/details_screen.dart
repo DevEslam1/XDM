@@ -257,7 +257,7 @@ class _DetailsScreenState extends State<DetailsScreen>
                           ),
                         ),
                       ),
-                      if (task.isTorrent) const SizedBox(height: 14),
+                      if (_graphExpanded) const SizedBox(height: 14),
                       _stagger(
                         0.5,
                         _TorrentFilesPanel(
@@ -2755,8 +2755,46 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
             label: L10n.of(context, 'details_established'),
             value: task.createdAt.toLocal().toString().split('.')[0],
             isDark: isDark,
-            isLast: true,
           ),
+          Builder(builder: (context) {
+            final provider = context.read<DownloadProvider>();
+            final metrics = provider.getMetrics(task.id);
+            if (metrics == null) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 12),
+                Text(
+                  'PERFORMANCE',
+                  style: AppTheme.microLabel(isDark: isDark, size: 8),
+                ),
+                const SizedBox(height: 8),
+                _MetaRow(
+                  label: 'Peak Speed',
+                  value: '${formatBytes(metrics.peakSpeedBps.toDouble())}/s',
+                  isDark: isDark,
+                ),
+                _MetaRow(
+                  label: 'TTFB',
+                  value: '${metrics.timeToFirstByteMs}ms',
+                  isDark: isDark,
+                ),
+                if (metrics.resumed)
+                  _MetaRow(
+                    label: 'Resumed',
+                    value: '${formatBytes(metrics.resumeBytesSaved.toDouble())} saved',
+                    isDark: isDark,
+                  ),
+                if (metrics.checksumVerified)
+                  _MetaRow(
+                    label: 'Checksum',
+                    value: metrics.checksumPassed ? 'PASS ✓' : 'FAIL ✗',
+                    isDark: isDark,
+                    isLast: true,
+                  ),
+              ],
+            );
+          }),
         ],
       ),
     );

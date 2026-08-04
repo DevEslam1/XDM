@@ -107,10 +107,10 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
     final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
 
-    return RepaintBoundary(
-      child: Stack(
-        children: [
-          Positioned.fill(
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: RepaintBoundary(
             child: CustomPaint(
               painter: _AmbientBlobPainter(
                 progress: _progress,
@@ -124,9 +124,13 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
               size: Size.infinite,
             ),
           ),
-          Positioned.fill(child: widget.child),
-        ],
-      ),
+        ),
+        Positioned.fill(
+          child: RepaintBoundary(
+            child: widget.child,
+          ),
+        ),
+      ],
     );
   }
 }

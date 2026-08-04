@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/services/youtube_service.dart';
 import '../models/browser_tab.dart';
@@ -305,6 +305,7 @@ class MediaSniffer {
         });
       }
     } catch (e) {
+      if (e is MissingPluginException) return;
       _log.warning('[DMX Browser] Failed to run media scan JavaScript: $e');
       if (isActive() && containsTab(tab)) {
         _update(() {

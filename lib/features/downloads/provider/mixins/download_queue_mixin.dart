@@ -131,10 +131,10 @@ mixin DownloadQueueMixin {
 
       queued.sort((a, b) {
         if (a.isAppUpdate != b.isAppUpdate) return b.isAppUpdate ? 1 : -1;
-        final orderCmp = a.queueOrder.compareTo(b.queueOrder);
-        if (orderCmp != 0) return orderCmp;
         final prioCmp = b.priority.compareTo(a.priority);
         if (prioCmp != 0) return prioCmp;
+        final orderCmp = a.queueOrder.compareTo(b.queueOrder);
+        if (orderCmp != 0) return orderCmp;
         return a.createdAt.compareTo(b.createdAt);
       });
 

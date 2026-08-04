@@ -82,5 +82,24 @@ void main() {
       }
       expect(gov.getAverageSpeedForDomain('example.com'), 10.0);
     });
+
+    test('task-level limits isolate and bypass global share', () async {
+      final gov = BandwidthGovernor(1000);
+      gov.registerConsumer();
+
+      final normalWait = await gov.acquire(2000);
+      expect(normalWait, greaterThan(0));
+
+      gov.setTaskLimit('task1', 0);
+      expect(await gov.acquire(2000, taskId: 'task1'), 0);
+
+      gov.setTaskLimit('task2', 5000);
+      final taskWait = await gov.acquire(2000, taskId: 'task2');
+      expect(taskWait, lessThan(normalWait));
+
+      gov.removeTaskLimit('task2');
+      final fallbackWait = await gov.acquire(2000, taskId: 'task2');
+      expect(fallbackWait, greaterThan(0));
+    });
   });
 }

@@ -172,6 +172,23 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
       _SettingSearchEntry(
         sectionTitle: L10n.of(context, 'settings_engine_status'),
+        settingTitle: L10n.of(context, 'settings_adaptive_threads'),
+        subtitle: L10n.of(context, 'settings_adaptive_threads_sub'),
+        keywords: const ['adaptive', 'thread', 'monitor', 'speed', 'trend'],
+        accentColor: accent,
+        builder: (ctx) => _SwitchTile(
+          accentColor: accent,
+          title: L10n.of(ctx, 'settings_adaptive_threads'),
+          subtitle: L10n.of(ctx, 'settings_adaptive_threads_sub'),
+          value: settings.adaptiveThreads,
+          onChanged: (val) {
+            settings.setAdaptiveThreads(val);
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_engine_status'),
         settingTitle: L10n.of(context, 'settings_max_channels'),
         subtitle: L10n.of(context, 'settings_max_channels_sub'),
         keywords: const [
@@ -221,6 +238,23 @@ class _SettingsScreenState extends State<SettingsScreen>
           divisions: 100,
           onChanged: (val) {
             settings.setSpeedLimit(val);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_bandwidth'),
+        settingTitle: L10n.of(context, 'settings_auto_verify_checksum'),
+        subtitle: L10n.of(context, 'settings_auto_verify_checksum_sub'),
+        keywords: const ['checksum', 'sha256', 'verify', 'integrity', 'hash'],
+        accentColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+        builder: (ctx) => _SwitchTile(
+          accentColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+          title: L10n.of(ctx, 'settings_auto_verify_checksum'),
+          subtitle: L10n.of(ctx, 'settings_auto_verify_checksum_sub'),
+          value: settings.autoVerifyChecksum,
+          onChanged: (val) {
+            settings.setAutoVerifyChecksum(val);
+            triggerHaptic(settings);
           },
         ),
       ),
@@ -635,6 +669,22 @@ class _SettingsScreenState extends State<SettingsScreen>
                               },
                             ),
                             _Divider(isDark: isDark),
+                            _SwitchTile(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title: L10n.of(context, 'settings_adaptive_threads'),
+                              subtitle: L10n.of(
+                                context,
+                                'settings_adaptive_threads_sub',
+                              ),
+                              value: settings.adaptiveThreads,
+                              onChanged: (val) {
+                                settings.setAdaptiveThreads(val);
+                                triggerHaptic(settings);
+                              },
+                            ),
+                            _Divider(isDark: isDark),
                             _DropdownTile<int>(
                               accentColor: isDark
                                   ? AppTheme.neonBlue
@@ -870,6 +920,22 @@ class _SettingsScreenState extends State<SettingsScreen>
                             value: settings.wifiOnly,
                             onChanged: (val) {
                               settings.setWifiOnly(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen,
+                            title: L10n.of(context, 'settings_auto_verify_checksum'),
+                            subtitle: L10n.of(
+                              context,
+                              'settings_auto_verify_checksum_sub',
+                            ),
+                            value: settings.autoVerifyChecksum,
+                            onChanged: (val) {
+                              settings.setAutoVerifyChecksum(val);
                               triggerHaptic(settings);
                             },
                           ),

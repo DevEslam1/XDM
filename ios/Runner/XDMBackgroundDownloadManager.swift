@@ -14,14 +14,24 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
         return UserDefaults(suiteName: Self.appGroupId)
     }
 
+    // A1: Dedicated serial queue so delegate callbacks never fire on the main thread.
+    private let delegateQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.maxConcurrentOperationCount = 1
+        q.name = "com.dmx.app.download.delegate"
+        return q
+    }()
+
     private var session: URLSession!
     private var activeTasks: [String: URLSessionDownloadTask] = [:]
     private var taskMetadata: [String: [String: String]] = [:]
-    
+    // A1: O(1) reverse map from URLSessionTask.taskIdentifier → taskId.
+    private var taskIdMap: [Int: String] = [:]
+
     public var onProgressUpdate: ((String, Int64, Int64) -> Void)?
     public var onTaskComplete: ((String, String) -> Void)?
     public var onTaskFailed: ((String, String) -> Void)?
-    
+
     public var backgroundCompletionHandler: (() -> Void)?
 
     private override init() {
@@ -29,7 +39,8 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
         let config = URLSessionConfiguration.background(withIdentifier: "com.dmx.app.background")
         config.isDiscretionary = false
         config.sessionSendsLaunchEvents = true
-        session = URLSession(configuration: config, delegate: self, delegateQueue: OperationQueue.main)
+        // A1: Pass the dedicated serial delegate queue instead of OperationQueue.main.
+        session = URLSession(configuration: config, delegate: self, delegateQueue: delegateQueue)
         // Restore any in-flight task metadata persisted from a previous run so
         // delegate callbacks fired by a relaunched background session can map
         // their download tasks back to task IDs.
@@ -39,21 +50,25 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
     /// Starts a background download for [urlStr] identified by [taskId].
     public func startDownload(taskId: String, urlStr: String, destinationPath: String) {
         guard let url = URL(string: urlStr) else {
-            onTaskFailed?(taskId, "Invalid URL string: \(urlStr)")
+            DispatchQueue.main.async { [weak self] in
+                self?.onTaskFailed?(taskId, "Invalid URL string: \(urlStr)")
+            }
             return
         }
 
         let task = session.downloadTask(with: url)
         activeTasks[taskId] = task
+        // A1: Keep reverse map in sync.
+        taskIdMap[task.taskIdentifier] = taskId
         taskMetadata[taskId] = [
             "url": urlStr,
             "destinationPath": destinationPath
         ]
-        
+
         // Save state to App Group shared defaults for recovery by the widget
         // extension and for relaunch recovery via BGProcessingTask.
         saveActiveTasksState()
-        
+
         task.resume()
     }
 
@@ -64,6 +79,8 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
             if let resumeData = resumeData {
                 self?.sharedDefaults?.set(resumeData, forKey: "xdm_resume_\(taskId)")
             }
+            // A1: Clean up reverse map on pause (task is being cancelled for resume data).
+            self?.taskIdMap.removeValue(forKey: task.taskIdentifier)
             self?.activeTasks.removeValue(forKey: taskId)
             self?.saveActiveTasksState()
         }
@@ -74,6 +91,8 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
         if let resumeData = sharedDefaults?.data(forKey: "xdm_resume_\(taskId)") {
             let task = session.downloadTask(withResumeData: resumeData)
             activeTasks[taskId] = task
+            // A1: Keep reverse map in sync.
+            taskIdMap[task.taskIdentifier] = taskId
             taskMetadata[taskId] = [
                 "url": urlStr,
                 "destinationPath": destinationPath
@@ -90,6 +109,8 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
     public func cancelDownload(taskId: String) {
         guard let task = activeTasks[taskId] else { return }
         task.cancel()
+        // A1: Clean up reverse map on cancel.
+        taskIdMap.removeValue(forKey: task.taskIdentifier)
         activeTasks.removeValue(forKey: taskId)
         taskMetadata.removeValue(forKey: taskId)
         sharedDefaults?.removeObject(forKey: "xdm_resume_\(taskId)")
@@ -150,53 +171,78 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
     }
 
     // MARK: - URLSessionDownloadDelegate
+    // A1: All callbacks fire on delegateQueue (not main). Heavy bookkeeping
+    //     (map lookups, state writes) runs here. Only Flutter channel calls
+    //     hop to DispatchQueue.main explicitly.
 
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        if let taskId = findTaskId(for: downloadTask) {
-            onProgressUpdate?(taskId, totalBytesWritten, totalBytesExpectedToWrite)
+        // A1: O(1) lookup via reverse map — runs on delegateQueue.
+        guard let taskId = taskIdMap[downloadTask.taskIdentifier] else { return }
+        let callback = onProgressUpdate
+        DispatchQueue.main.async {
+            callback?(taskId, totalBytesWritten, totalBytesExpectedToWrite)
         }
     }
 
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard let taskId = findTaskId(for: downloadTask),
+        // A1: Runs on delegateQueue. File move is heavy I/O — stays here.
+        guard let taskId = taskIdMap[downloadTask.taskIdentifier],
               let meta = taskMetadata[taskId],
               let destPath = meta["destinationPath"] else { return }
 
         let fileManager = FileManager.default
         let destURL = URL(fileURLWithPath: destPath)
-        
+        let metaCopy = meta
+
         do {
             if fileManager.fileExists(atPath: destPath) {
                 try fileManager.removeItem(at: destURL)
             }
             try fileManager.moveItem(at: location, to: destURL)
-            // Remove from active tracking after the file is in place.
+            // A1: Remove from all tracking maps after file is in place.
+            taskIdMap.removeValue(forKey: downloadTask.taskIdentifier)
             activeTasks.removeValue(forKey: taskId)
             taskMetadata.removeValue(forKey: taskId)
             saveActiveTasksState()
             if activeTasks.isEmpty {
                 cancelScheduledBackgroundTask()
             }
-            onTaskComplete?(taskId, destPath)
+
+            // A1: Hop Flutter channel callbacks to main.
+            let completeCallback = onTaskComplete
+            DispatchQueue.main.async {
+                completeCallback?(taskId, destPath)
+            }
 
             postCompletionNotification(
                 taskId: taskId,
                 destPath: destPath,
-                url: URL(string: meta["url"] ?? "")
+                url: URL(string: metaCopy["url"] ?? "")
             )
         } catch {
-            onTaskFailed?(taskId, "Failed to move file to destination: \(error.localizedDescription)")
+            let failCallback = onTaskFailed
+            let errDesc = error.localizedDescription
+            DispatchQueue.main.async {
+                failCallback?(taskId, "Failed to move file to destination: \(errDesc)")
+            }
         }
     }
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        // A1: Runs on delegateQueue. Only hop to main for Flutter callback.
         if let downloadTask = task as? URLSessionDownloadTask,
-           let taskId = findTaskId(for: downloadTask),
+           let taskId = taskIdMap[downloadTask.taskIdentifier],
            let error = error {
+            // A1: Remove from all tracking maps on error.
+            taskIdMap.removeValue(forKey: downloadTask.taskIdentifier)
             activeTasks.removeValue(forKey: taskId)
             taskMetadata.removeValue(forKey: taskId)
             saveActiveTasksState()
-            onTaskFailed?(taskId, error.localizedDescription)
+            let failCallback = onTaskFailed
+            let errDesc = error.localizedDescription
+            DispatchQueue.main.async {
+                failCallback?(taskId, errDesc)
+            }
         }
     }
 
@@ -236,10 +282,9 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
         }
     }
 
+    // A1: findTaskId(for:) retained for any external callers, but internally
+    //     replaced by the O(1) taskIdMap lookup in all delegate callbacks.
     private func findTaskId(for task: URLSessionDownloadTask) -> String? {
-        for (id, activeTask) in activeTasks where activeTask == task {
-            return id
-        }
-        return nil
+        return taskIdMap[task.taskIdentifier]
     }
 }

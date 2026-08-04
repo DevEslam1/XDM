@@ -83,5 +83,102 @@ void main() {
       expect(task.progressPercentString, equals('50.0%'));
       expect(task.speedFormatted, isNotEmpty);
     });
+
+    test('DownloadTask priority queue sorting orders correctly', () {
+      final now = DateTime.now();
+      final appUpdate = DownloadTask(
+        id: 't_app',
+        fileName: 'update.apk',
+        url: 'https://example.com/update.apk',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Update',
+        status: DownloadStatus.queued,
+        savePath: '/downloads',
+        localFilePath: '/downloads/update.apk',
+        tempFilePath: '/downloads/update.apk.dmxpart',
+        threadCount: 4,
+        chunks: const [],
+        createdAt: now.add(const Duration(seconds: 1)),
+        updatedAt: now,
+        isAppUpdate: true,
+        priority: 0,
+      );
+
+      final urgent = DownloadTask(
+        id: 't_urgent',
+        fileName: 'urgent.iso',
+        url: 'https://example.com/urgent.iso',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'OS',
+        status: DownloadStatus.queued,
+        savePath: '/downloads',
+        localFilePath: '/downloads/urgent.iso',
+        tempFilePath: '/downloads/urgent.iso.dmxpart',
+        threadCount: 4,
+        chunks: const [],
+        createdAt: now.add(const Duration(seconds: 2)),
+        updatedAt: now,
+        isAppUpdate: false,
+        priority: 2, // urgent
+      );
+
+      final normalOld = DownloadTask(
+        id: 't_normal_old',
+        fileName: 'old.zip',
+        url: 'https://example.com/old.zip',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Archive',
+        status: DownloadStatus.queued,
+        savePath: '/downloads',
+        localFilePath: '/downloads/old.zip',
+        tempFilePath: '/downloads/old.zip.dmxpart',
+        threadCount: 4,
+        chunks: const [],
+        createdAt: now.subtract(const Duration(seconds: 10)),
+        updatedAt: now,
+        isAppUpdate: false,
+        priority: 0, // normal
+        queueOrder: 5,
+      );
+
+      final normalNewLowOrder = DownloadTask(
+        id: 't_normal_new_low_order',
+        fileName: 'new.zip',
+        url: 'https://example.com/new.zip',
+        fileSize: 100,
+        downloadedBytes: 0,
+        category: 'Archive',
+        status: DownloadStatus.queued,
+        savePath: '/downloads',
+        localFilePath: '/downloads/new.zip',
+        tempFilePath: '/downloads/new.zip.dmxpart',
+        threadCount: 4,
+        chunks: const [],
+        createdAt: now,
+        updatedAt: now,
+        isAppUpdate: false,
+        priority: 0, // normal
+        queueOrder: 2, // lower order = higher priority
+      );
+
+      final list = [normalOld, urgent, normalNewLowOrder, appUpdate];
+
+      list.sort((a, b) {
+        if (a.isAppUpdate != b.isAppUpdate) return b.isAppUpdate ? 1 : -1;
+        final prioCmp = b.priority.compareTo(a.priority);
+        if (prioCmp != 0) return prioCmp;
+        final orderCmp = a.queueOrder.compareTo(b.queueOrder);
+        if (orderCmp != 0) return orderCmp;
+        return a.createdAt.compareTo(b.createdAt);
+      });
+
+      expect(list[0].id, equals('t_app'));
+      expect(list[1].id, equals('t_urgent'));
+      expect(list[2].id, equals('t_normal_new_low_order'));
+      expect(list[3].id, equals('t_normal_old'));
+    });
   });
 }

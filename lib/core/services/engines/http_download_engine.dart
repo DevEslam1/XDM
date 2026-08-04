@@ -35,6 +35,12 @@ class HttpDownloadEngine {
     );
   }
 
+  void startAdaptiveMonitorIfEnabled(DownloadTask task, bool enabled) {
+    if (enabled) {
+      startAdaptiveThreadMonitor(task);
+    }
+  }
+
   void stopAdaptiveThreadMonitor() {
     _adaptiveThreadTimer?.cancel();
     _adaptiveThreadTimer = null;

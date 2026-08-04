@@ -2,7 +2,7 @@ PODS:
   - Flutter (1.0.0)
   - flutter_background_service_ios (0.0.3):
     - Flutter
-  - libtorrent_flutter (1.7.0):
+  - libtorrent_flutter (1.9.2):
     - Flutter
   - open_filex (0.0.2):
     - Flutter
@@ -36,7 +36,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_background_service_ios: 00d31bdff7b4bfe06d32375df358abe0329cf87e
-  libtorrent_flutter: 74ac0b3c3bd647942214cf2ba7897cfd24dc3ab8
+  libtorrent_flutter: e9b07533512a397d8a959729af23c36b5121fd8a
   open_filex: 432f3cd11432da3e39f47fcc0df2b1603854eff1
   receive_sharing_intent: 222384f00ffe7e952bbfabaa9e3967cb87e5fe00
   webview_cookie_manager: d63a76cabdf42a7ea3d92768ac67d4853a1367f8

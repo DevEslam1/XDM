@@ -9,6 +9,7 @@ class BrowserTab {
   String title;
   bool isIncognito;
   PullToRefreshController? pullToRefreshController;
+  int lastRenderedProgress = 0;
   bool isLoading;
   bool hasCrashed;
   bool isTimedOut;
@@ -63,6 +64,11 @@ class BrowserTab {
   void dispose() {
     try {
       progressNotifier.dispose();
+      // NOTE: pullToRefreshController is owned and disposed synchronously
+      // by _InAppWebViewState. Do NOT call prc.dispose() here — the widget
+      // framework already handles it and a second call throws
+      // "AndroidPullToRefreshController was used after being disposed".
+      pullToRefreshController = null;
     } catch (e, st) {
       Logger('browser_tab').warning('[browser_tab] operation failed', e, st);
     }

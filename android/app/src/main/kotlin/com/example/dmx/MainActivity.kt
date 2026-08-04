@@ -360,7 +360,7 @@ class MainActivity : FlutterActivity() {
                         "dmx:download_wakelock"
                     ).apply {
                         setReferenceCounted(false)
-                        acquire(30 * 60 * 1000L) // 30-minute max timeout as safety net
+                        acquire(45 * 60 * 1000L) // A4: 45-minute timeout — 3× the 15-min Dart renewal interval to survive Doze delays
                     }
                     result.success(true)
                 }

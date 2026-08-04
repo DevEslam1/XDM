@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'torrent_models.dart';
 import '../../features/settings/provider/settings_provider.dart';
 
 class TorrentService {
   static bool get isSupported => false;
   static bool get isInitialized => false;
+  // B2: Mirrors the FFI implementation's isAvailable so callers can read it
+  //     on all platforms without a conditional import.
+  static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
   static Set<int> get activeTorrentIds => const <int>{};
   static double progressFor(int id) => 0.0;
   static bool fileProgressSupported = false;

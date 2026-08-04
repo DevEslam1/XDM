@@ -308,18 +308,18 @@ class _BrowserScreenState extends State<BrowserScreen>
     WidgetsBinding.instance.addObserver(this);
 
     _focusNode.addListener(() {
-      setState(() {
-        _isFocused = _focusNode.hasFocus;
-      });
-      if (_focusNode.hasFocus) {
-        _delayed(Duration.zero, () {
-          if (_focusNode.hasFocus && mounted) {
-            _urlController.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: _urlController.text.length,
-            );
-          }
-        });
+      if (_isFocused != _focusNode.hasFocus) {
+        if (mounted) {
+          setState(() {
+            _isFocused = _focusNode.hasFocus;
+          });
+        }
+      }
+      if (_focusNode.hasFocus && mounted) {
+        _urlController.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _urlController.text.length,
+        );
       }
     });
 
@@ -340,8 +340,12 @@ class _BrowserScreenState extends State<BrowserScreen>
             ),
           );
         } catch (e) {
-          _log.warning(
-              '[Browser] Failed to update settings for tab ${tab.id}: $e');
+          if (e is MissingPluginException) {
+            tab.controller = null;
+          } else {
+            _log.warning(
+                '[Browser] Failed to update settings for tab ${tab.id}: $e');
+          }
         }
       }
     }
@@ -421,6 +425,22 @@ class _BrowserScreenState extends State<BrowserScreen>
       isIncognito: isIncognito,
       isHome: cleanInitialUrl == 'about:blank',
     );
+
+    // Create PullToRefreshController HERE — before the InAppWebView widget is
+    // built — so flutter_inappwebview can register it at construction time.
+    // Creating it inside onWebViewCreated (after the widget is already built
+    // with pullToRefreshController: null) causes a lifecycle mismatch that
+    // leads to "AndroidPullToRefreshController used after being disposed".
+    //
+    // The onRefresh closure captures `tab`. At call time tab.controller is
+    // already set by _configureController, so the reload is delegated correctly
+    // without needing to re-create the controller or call any non-existent
+    // setOnRefreshCallback API.
+    tab.pullToRefreshController = PullToRefreshController(
+      settings: PullToRefreshSettings(color: AppTheme.neonBlue),
+      onRefresh: () => tab.controller?.reload(),
+    );
+
     return tab;
   }
 
@@ -459,13 +479,11 @@ class _BrowserScreenState extends State<BrowserScreen>
       supportZoom: settings.desktopMode || settings.pinchToZoom,
       incognito: tab.isIncognito,
     ));
-
-    // Initialize PullToRefresh
-    tab.pullToRefreshController = PullToRefreshController(
-      settings: PullToRefreshSettings(color: AppTheme.neonBlue),
-      onRefresh: () => controller.reload(),
-    );
+    // NOTE: PullToRefreshController was already created in _createNewTab().
+    // Its onRefresh closure captures `tab` and calls tab.controller?.reload(),
+    // which now resolves to this controller. No re-creation needed.
   }
+
 
   void _onPageStart(BrowserTab tab, String url) {
     tab.hasCrashed = false;
@@ -502,6 +520,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       setState(() {
         tab.isLoading = true;
         tab.progress = 0.0;
+        tab.lastRenderedProgress = 0;
         tab.url = _cleanUrl(url);
         if (url != 'about:blank') {
           tab.isHome = false;
@@ -629,6 +648,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   void _onUrlChange(BrowserTab tab, String url) {
     final cleanUrl = _cleanUrl(url);
+    if (tab.url == cleanUrl) return;
     if (mounted) {
       setState(() {
         tab.url = cleanUrl;
@@ -707,6 +727,8 @@ class _BrowserScreenState extends State<BrowserScreen>
         ''');
       } catch (_) {}
       tab.isSuspended = true;
+      tab.controller = null;
+      tab.pullToRefreshController = null;
     }
   }
 
@@ -1079,8 +1101,8 @@ class _BrowserScreenState extends State<BrowserScreen>
         } catch (_) { /* ignore: clearing cache/storage on close */ }
       }
       try {
-        tab.progressNotifier.dispose();
-      } catch (_) { /* ignore: disposing notifier may already be disposed */ }
+        tab.dispose();
+      } catch (_) { /* ignore: disposing tab may already be disposed */ }
     }
 
     _tabs.clear();
@@ -1219,10 +1241,10 @@ class _BrowserScreenState extends State<BrowserScreen>
           activeTab.url = '';
           activeTab.canGoBack = false;
           activeTab.canGoForward = true;
+          activeTab.controller = null;
+          activeTab.pullToRefreshController = null;
           _urlController.clear();
         });
-        activeTab.controller
-            ?.loadUrl(urlRequest: URLRequest(url: WebUri('about:blank')));
       }
     }
   }
@@ -3977,7 +3999,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                   child: Stack(
                     children: [
                       GestureDetector(
-                        onTap: () => _focusNode.unfocus(),
+                        onTap: () {
+                          if (_focusNode.hasFocus) {
+                            _focusNode.unfocus();
+                          }
+                        },
                         behavior: HitTestBehavior.translucent,
                         child: _tabs.isEmpty
                             ? const SizedBox.shrink()
@@ -4004,6 +4030,16 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         final tab = entry.value;
                                         final isActiveTab =
                                             tabIndex == _currentTabIndex;
+                                        if (!tab.isHome &&
+                                            _lruTabIds.contains(tab.id)) {
+                                          tab.pullToRefreshController ??=
+                                              PullToRefreshController(
+                                            settings: PullToRefreshSettings(
+                                                color: AppTheme.neonBlue),
+                                            onRefresh: () =>
+                                                tab.controller?.reload(),
+                                          );
+                                        }
                                         if (tab.isHome) {
                                           return SizedBox(
                                             width: double.infinity,
@@ -4225,82 +4261,82 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                         ),
                                                       )
                                                     : Stack(
-                                                        children: [
-                                                          InAppWebView(
-                                                            initialUrlRequest: tab
-                                                                    .url.isEmpty
-                                                                ? null
-                                                                : URLRequest(
-                                                                    url: WebUri(
-                                                                        tab.url)),
-                                                            onWebViewCreated:
-                                                                (controller) {
-                                                              _configureController(
-                                                                  tab,
-                                                                  controller);
-                                                              _hideWebViewFingerprints(
-                                                                  tab);
-                                                              if (tab.url
-                                                                      .isNotEmpty &&
-                                                                  tab.url !=
-                                                                      'about:blank') {
-                                                                controller.loadUrl(
-                                                                    urlRequest:
-                                                                        URLRequest(
-                                                                            url:
-                                                                                WebUri(tab.url)));
-                                                              }
-                                                            },
-                                                            initialUserScripts:
-                                                                UnmodifiableListView<
-                                                                    UserScript>([
-                                                              UserScript(
-                                                                source: '''
+                                                            children: [
+                                                              InAppWebView(
+                                                                initialUrlRequest: tab
+                                                                        .url.isEmpty
+                                                                    ? null
+                                                                    : URLRequest(
+                                                                        url: WebUri(
+                                                                            tab.url)),
+                                                                onWebViewCreated:
+                                                                    (controller) {
+                                                                  _configureController(
+                                                                      tab,
+                                                                      controller);
+                                                                  _hideWebViewFingerprints(
+                                                                      tab);
+                                                                  if (tab.url
+                                                                          .isNotEmpty &&
+                                                                      tab.url !=
+                                                                          'about:blank') {
+                                                                    controller.loadUrl(
+                                                                        urlRequest:
+                                                                            URLRequest(
+                                                                                url:
+                                                                                    WebUri(tab.url)));
+                                                                  }
+                                                                },
+                                                                initialUserScripts:
+                                                                    UnmodifiableListView<
+                                                                        UserScript>([
+                                                                  UserScript(
+                                                                    source: '''
                                                                   window.XDM_LongPress = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_LongPress', msg); } };
                                                                   window.XDM_Popups = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_Popups', msg); } };
                                                                   window.XdmPickerChannel = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XdmPickerChannel', msg); } };
                                                                 ''',
-                                                                injectionTime:
-                                                                    UserScriptInjectionTime
-                                                                        .AT_DOCUMENT_START,
-                                                              ),
-                                                            ]),
-                                                            initialSettings:
-                                                                InAppWebViewSettings(
-                                                              useHybridComposition:
-                                                                  true,
-                                                              useShouldInterceptRequest:
-                                                                  true,
-                                                              transparentBackground:
-                                                                  true,
-                                                              allowsInlineMediaPlayback:
-                                                                  true,
-                                                              mediaPlaybackRequiresUserGesture:
-                                                                  false,
-                                                              supportZoom: settings
-                                                                      .desktopMode ||
-                                                                  settings
-                                                                      .pinchToZoom,
-                                                              contentBlockers:
-                                                                  _adBlocker
-                                                                      .contentBlockers,
-                                                              incognito: tab
-                                                                  .isIncognito,
-                                                            ),
-                                                            gestureRecognizers: <Factory<
-                                                                OneSequenceGestureRecognizer>>{
-                                                              Factory<VerticalDragGestureRecognizer>(
-                                                                  () =>
-                                                                      VerticalDragGestureRecognizer()),
-                                                              Factory<HorizontalDragGestureRecognizer>(
-                                                                  () =>
-                                                                      HorizontalDragGestureRecognizer()),
-                                                            },
-                                                            pullToRefreshController:
-                                                                tab.pullToRefreshController,
-                                                            onScrollChanged:
-                                                                (controller, x,
-                                                                    y) {
+                                                                    injectionTime:
+                                                                        UserScriptInjectionTime
+                                                                            .AT_DOCUMENT_START,
+                                                                  ),
+                                                                ]),
+                                                                initialSettings:
+                                                                    InAppWebViewSettings(
+                                                                  useHybridComposition:
+                                                                      true,
+                                                                  useShouldInterceptRequest:
+                                                                      true,
+                                                                  transparentBackground:
+                                                                      true,
+                                                                  allowsInlineMediaPlayback:
+                                                                      true,
+                                                                  mediaPlaybackRequiresUserGesture:
+                                                                      false,
+                                                                  supportZoom: settings
+                                                                          .desktopMode ||
+                                                                      settings
+                                                                          .pinchToZoom,
+                                                                  contentBlockers:
+                                                                      _adBlocker
+                                                                          .contentBlockers,
+                                                                  incognito: tab
+                                                                      .isIncognito,
+                                                                ),
+                                                                gestureRecognizers: <Factory<
+                                                                    OneSequenceGestureRecognizer>>{
+                                                                  Factory<VerticalDragGestureRecognizer>(
+                                                                      () =>
+                                                                          VerticalDragGestureRecognizer()),
+                                                                  Factory<HorizontalDragGestureRecognizer>(
+                                                                      () =>
+                                                                          HorizontalDragGestureRecognizer()),
+                                                                },
+                                                                pullToRefreshController:
+                                                                    tab.pullToRefreshController,
+                                                                onScrollChanged:
+                                                                    (controller,
+                                                                        x, y) {
                                                               if (mounted &&
                                                                   _currentTabIndex >=
                                                                       0 &&
@@ -4330,12 +4366,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   url?.toString() ??
                                                                       '');
                                                             },
-                                                            onProgressChanged:
-                                                                (controller,
-                                                                    progress) {
-                                                              tab.progress =
-                                                                  progress /
-                                                                      100;
+                                                            onProgressChanged: (controller, progress) {
+                                                              if (progress == 0 ||
+                                                                  progress == 100 ||
+                                                                  (progress - tab.lastRenderedProgress).abs() >= 2) {
+                                                                tab.lastRenderedProgress = progress;
+                                                                tab.progress = progress / 100;
+                                                              }
                                                             },
                                                             onUpdateVisitedHistory:
                                                                 (controller,
@@ -5232,7 +5269,7 @@ class _BrowserScreenState extends State<BrowserScreen>
 
     for (final tab in _tabs) {
       try {
-        tab.progressNotifier.dispose();
+        tab.dispose();
       } catch (e, st) {
         Logger('browser_screen')
             .warning('[browser_screen] operation failed', e, st);

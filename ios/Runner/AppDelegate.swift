@@ -21,14 +21,24 @@ import BackgroundTasks
         forTaskWithIdentifier: "com.dmx.app.download",
         using: nil
       ) { task in
-        IosBackgroundDownloadHandler.shared.handleDownloadTask(task: task as! BGProcessingTask)
+        // A2: Safe cast — guard against iOS delivering an unexpected BGTask subclass.
+        guard let processingTask = task as? BGProcessingTask else {
+          task.setTaskCompleted(success: false)
+          return
+        }
+        IosBackgroundDownloadHandler.shared.handleDownloadTask(task: processingTask)
       }
 
       BGTaskScheduler.shared.register(
         forTaskWithIdentifier: "com.dmx.app.torrent.refresh",
         using: nil
       ) { task in
-        XDMTorrentBackgroundManager.shared.handleTorrentRefreshTask(task: task as! BGProcessingTask)
+        // A2: Safe cast — guard against iOS delivering an unexpected BGTask subclass.
+        guard let processingTask = task as? BGProcessingTask else {
+          task.setTaskCompleted(success: false)
+          return
+        }
+        XDMTorrentBackgroundManager.shared.handleTorrentRefreshTask(task: processingTask)
       }
     }
 
