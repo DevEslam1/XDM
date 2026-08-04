@@ -3913,12 +3913,230 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
               const SizedBox(height: 10),
               Material(
                 color: Colors.transparent,
+                child: SwitchListTile(
+                  value: settings.jankAutoBatterySaver,
+                  onChanged: (val) {
+                    settings.setJankAutoBatterySaver(val);
+                    triggerHaptic(settings);
+                  },
+                  activeThumbColor: accentColor,
+                  activeTrackColor: accentColor.withValues(alpha: 0.3),
+                  inactiveThumbColor: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  inactiveTrackColor: isDark
+                      ? AppTheme.borderSubtle
+                      : AppTheme.lightBorderSubtle,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    isRtl
+                        ? 'تفعيل التوفير تلقائياً عند التجميع/التقطيع'
+                        : 'Auto Battery Saver on Sustained Jank',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isRtl
+                        ? 'تفعيل توفير البطارية تلقائياً عند اكتشاف تقطيع في الإطارات (>٨٪)'
+                        : 'Activates Battery Saver if frame drops (>8%) are detected across 3 consecutive windows',
+                    style: TextStyle(
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Material(
+                color: Colors.transparent,
+                child: SwitchListTile(
+                  value: settings.thermalThreadLimiting,
+                  onChanged: (val) {
+                    settings.setThermalThreadLimiting(val);
+                    triggerHaptic(settings);
+                  },
+                  activeThumbColor: accentColor,
+                  activeTrackColor: accentColor.withValues(alpha: 0.3),
+                  inactiveThumbColor: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  inactiveTrackColor: isDark
+                      ? AppTheme.borderSubtle
+                      : AppTheme.lightBorderSubtle,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    isRtl ? 'حد الخيوط الحراري' : 'Thermal Thread Limiter',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isRtl
+                        ? 'تقييد خيوط التحميل إلى ٢ عند ارتفاع حرارة الجهاز بشكل حاد'
+                        : 'Limits threads to 2 when device thermal status is Severe or Critical',
+                    style: TextStyle(
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Material(
+                color: Colors.transparent,
+                child: SwitchListTile(
+                  value: settings.powerAwareIsolatePool,
+                  onChanged: (val) {
+                    settings.setPowerAwareIsolatePool(val);
+                    triggerHaptic(settings);
+                  },
+                  activeThumbColor: accentColor,
+                  activeTrackColor: accentColor.withValues(alpha: 0.3),
+                  inactiveThumbColor: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  inactiveTrackColor: isDark
+                      ? AppTheme.borderSubtle
+                      : AppTheme.lightBorderSubtle,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    isRtl ? 'تحجيم الموارد حسب الطاقة' : 'Power-Aware Isolate Pool',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isRtl
+                        ? 'تقليل عدد بيئات العمل المعزولة عند انخفاض نسبة البطارية عن ٢٠٪'
+                        : 'Dynamically scales worker isolates when battery level drops below 20%',
+                    style: TextStyle(
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Material(
+                color: Colors.transparent,
+                child: SwitchListTile(
+                  value: settings.diskWriteBatching,
+                  onChanged: (val) {
+                    settings.setDiskWriteBatching(val);
+                    triggerHaptic(settings);
+                  },
+                  activeThumbColor: accentColor,
+                  activeTrackColor: accentColor.withValues(alpha: 0.3),
+                  inactiveThumbColor: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  inactiveTrackColor: isDark
+                      ? AppTheme.borderSubtle
+                      : AppTheme.lightBorderSubtle,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    isRtl ? 'تجميع عمليات الكتابة' : 'Disk Write Batching',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isRtl
+                        ? 'تجميع التخزين كل ٥٠٠ مللي ثانية أو ٢٥٦ كيلوبايت لتقليل استهلاك الطاقة'
+                        : 'Buffers disk writes up to 500ms or 256KB to reduce I/O wake-ups and conserve battery',
+                    style: TextStyle(
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Material(
+                color: Colors.transparent,
+                child: SwitchListTile(
+                  value: settings.powerBandwidthThrottling,
+                  onChanged: (val) {
+                    settings.setPowerBandwidthThrottling(val);
+                    triggerHaptic(settings);
+                  },
+                  activeThumbColor: accentColor,
+                  activeTrackColor: accentColor.withValues(alpha: 0.3),
+                  inactiveThumbColor: isDark
+                      ? AppTheme.textSecondary
+                      : AppTheme.lightTextSecondary,
+                  inactiveTrackColor: isDark
+                      ? AppTheme.borderSubtle
+                      : AppTheme.lightBorderSubtle,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    isRtl ? 'خنق سرعة النطاق عند انخفاض الطاقة' : 'Power Bandwidth Throttling',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    isRtl
+                        ? 'تخفيض السرعة تلقائياً في حالة التدفئة الشديدة أو انخفاض شحن البطارية'
+                        : 'Throttles bandwidth based on battery level and thermal state',
+                    style: TextStyle(
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Material(
+                color: Colors.transparent,
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(
                     isRtl
                         ? 'إلغاء تحسين البطارية (استمرار الخلفية)'
                         : 'Ignore Battery Optimization',
+
                     style: TextStyle(
                       color: isDark
                           ? AppTheme.textPrimary

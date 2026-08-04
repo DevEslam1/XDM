@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:dmx/core/services/logging_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:synchronized/synchronized.dart';
+import '../../features/settings/provider/settings_provider.dart';
+
 
 /// Buffered positional writer for multi-thread downloads.
 ///
@@ -164,14 +166,20 @@ class PositionalFileWriter {
 
       buffer.add(data);
 
+      bool batchingEnabled = true;
+      try {
+        batchingEnabled = SettingsProvider.instance.diskWriteBatching;
+      } catch (_) {}
+
       final elapsedMs =
           DateTime.now().difference(_lastFlushTimes[threadIndex]).inMilliseconds;
 
-      if (buffer.length >= _bufferSize || elapsedMs >= 500) {
+      if (!batchingEnabled || buffer.length >= _bufferSize || elapsedMs >= 500) {
         await _flushLocked(threadIndex);
       }
     });
   }
+
 
 
   /// Flushes buffered bytes for one thread.

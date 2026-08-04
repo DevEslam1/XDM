@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -17,6 +18,7 @@ import 'package:dmx/core/services/bandwidth_governor.dart';
 import 'package:dmx/core/services/connection_manager.dart';
 import 'package:dmx/core/services/download_journal.dart';
 import '../http_overrides.dart';
+import 'package:dmx/core/services/diagnostic_service.dart';
 import 'package:dmx/core/services/mirror_failover.dart';
 import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:dmx/core/services/power_monitor.dart';
@@ -2170,6 +2172,112 @@ class DownloadEngine {
         }
       }
 
+      // Spot-check resume integrity before spawning threads
+      final bool checkEnabled = SettingsProvider.instance.resumeIntegrityCheck;
+      final bool hasResumeBytes = chunkProgress.any((b) => b > 0);
+      const int maxSpotCheckSize = 8 * 1024 * 1024 * 1024; // 8 GB
+
+      if (checkEnabled &&
+          resolvedSupportsResume &&
+          totalSize > 0 &&
+          hasResumeBytes) {
+        if (totalSize > maxSpotCheckSize) {
+          debugPrint(
+            '[DownloadEngine] Skipping spot-check resume integrity for large file '
+            '(${totalSize ~/ (1024 * 1024 * 1024)} GB > 8 GB).',
+          );
+        } else {
+          for (int i = 0; i < threadCount; i++) {
+            final downloadedInChunk = chunkProgress[i];
+            if (downloadedInChunk <= 0) continue;
+
+            final chunkStart = i * partSize;
+            const int sampleSize = 64 * 1024; // 64 KB
+
+            final sample1Len = min(sampleSize, downloadedInChunk);
+            final sample1Start = chunkStart;
+
+            final sample2Len = min(sampleSize, downloadedInChunk);
+            final sample2Start = chunkStart + downloadedInChunk - sample2Len;
+
+            final samplesToCheck = <_RangeSample>[
+              _RangeSample(sample1Start, sample1Len),
+              if (sample2Start != sample1Start)
+                _RangeSample(sample2Start, sample2Len),
+            ];
+
+            bool chunkValid = true;
+
+            for (final sample in samplesToCheck) {
+              if (cancelToken.isCancelled) break;
+              try {
+                final diskBytes = await writer.readRange(
+                  sample.start,
+                  sample.length,
+                );
+                if (diskBytes.length != sample.length) {
+                  chunkValid = false;
+                  break;
+                }
+
+                final ifRange = _firstNonEmpty(savedEtag, savedLastModified);
+                final response = await isolatedDio.get<ResponseBody>(
+                  punyUrl,
+                  cancelToken: cancelToken,
+                  options: Options(
+                    responseType: ResponseType.stream,
+                    headers: {
+                      'Range':
+                          'bytes=${sample.start}-${sample.start + sample.length - 1}',
+                      if (ifRange != null) 'If-Range': ifRange,
+                    },
+                    validateStatus: (_) => true,
+                  ),
+                );
+
+                if (response.statusCode != 206 || response.data == null) {
+                  chunkValid = false;
+                  break;
+                }
+
+                final builder = BytesBuilder(copy: false);
+                await for (final b in response.data!.stream) {
+                  builder.add(b);
+                }
+                final netBytes = builder.takeBytes();
+
+                if (netBytes.length != sample.length ||
+                    !listEquals(diskBytes, netBytes)) {
+                  chunkValid = false;
+                  break;
+                }
+              } catch (e) {
+                debugPrint(
+                  '[DownloadEngine] Spot-check I/O error for chunk $i sample at ${sample.start}: $e',
+                );
+                chunkValid = false;
+                break;
+              }
+            }
+
+            if (!chunkValid) {
+              debugPrint(
+                '[DownloadEngine] Spot-check resume integrity mismatch for chunk $i. '
+                'Resetting chunk progress to 0.',
+              );
+              chunkProgress[i] = 0;
+              try {
+                DiagnosticService.instance.record(
+                  'resume_integrity',
+                  'Spot-check mismatch for task $taskId chunk $i, chunk progress reset to 0.',
+                  error: 'byte_mismatch',
+                );
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
       final stopwatch = Stopwatch()..start();
       final speedSamples = Queue<_SpeedSample>();
 
@@ -3693,4 +3801,10 @@ class _MutableDownloadTask extends DownloadTask {
     required super.updatedAt,
     super.supportsResume,
   });
+}
+
+class _RangeSample {
+  final int start;
+  final int length;
+  const _RangeSample(this.start, this.length);
 }

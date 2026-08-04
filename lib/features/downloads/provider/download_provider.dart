@@ -1372,9 +1372,6 @@ class DownloadProvider extends ChangeNotifier
     final task = _findTask(id);
     if (task == null) return;
 
-    // Flush any pending throttled progress to disk so resume has the latest bytes.
-    await _flushPendingProgress(id);
-
     _retryCounts.remove(id);
     _speedHistories.remove(id);
     _lastProgressUpdateTimes.remove(id);
@@ -1392,26 +1389,41 @@ class DownloadProvider extends ChangeNotifier
       }
 
       // Cancel the token only.
-      // Cancellation gates new starts via the cancel token check in _startTaskBody;
-      // Removing the cancel token allows future resumes.
       try {
         _cancelTokens[id]?.cancel('paused');
       } catch (e) {
         // Ignore
       }
 
+      // Wait for the engine future to finish (bounded) so its final
+      // .dmxstate is on disk before we snapshot.
+      final fut = _activeFutures[id];
+      if (fut != null) {
+        try {
+          await fut.timeout(const Duration(seconds: 5));
+        } catch (_) {}
+      }
+
       _cancelTokens.remove(id);
     }
+
+    // Flush any pending throttled progress to disk.
+    await _flushPendingProgress(id);
 
     // Cancel any lingering progress notification (M2).
     _notifications.cancelForTask(id);
 
-    // Re-query the live in-memory task after flushing progress and token cancellation
-    // to avoid snapshotting a stale `task` reference captured at method entry.
-    final latestLiveTask = _findTask(id) ?? task;
+    // Sync DB bytes with the authoritative state file
+    final stateBytes = await _readDmxStateBytes(task.tempFilePath);
+    final latest = _findTask(id) ?? task;
+    final synced = stateBytes > 0 &&
+            (latest.status == DownloadStatus.downloading ||
+                latest.status == DownloadStatus.paused)
+        ? latest.copyWith(downloadedBytes: stateBytes)
+        : latest;
 
     await _setTask(
-      latestLiveTask.copyWith(
+      synced.copyWith(
         status: DownloadStatus.paused,
         speed: 0,
         clearEta: true,
@@ -1435,6 +1447,7 @@ class DownloadProvider extends ChangeNotifier
 
     _updateTelemetryWidget();
   }
+
 
   // ---------------------------------------------------------------------------
   // Batch Operations
@@ -1494,11 +1507,10 @@ class DownloadProvider extends ChangeNotifier
       debugPrint('[DMX] resumeTask .dmxstate read failed: $e');
     }
 
-    // If no .dmxstate exists, reset chunks for fresh start
-    final hasState = await File('${task.tempFilePath}.dmxstate').exists();
-    final chunks = hasState
-        ? task.chunks
-        : List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
+    final stateChunks = await _readDmxStateChunks(
+        task.tempFilePath, task.threadCount);
+    final chunks = stateChunks ??
+        List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
 
     final videoStateBytes = await _readDmxStateBytes(task.tempFilePath);
     final audioProgressVal = task.audioSize > 0 &&
@@ -1607,11 +1619,10 @@ class DownloadProvider extends ChangeNotifier
 
     final realBytesOnDisk = videoBytes + audioBytes;
 
-    // If no .dmxstate exists, engine will start fresh → reset chunks
-    final hasState = await File('${task.tempFilePath}.dmxstate').exists();
-    final chunks = hasState
-        ? task.chunks
-        : List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
+    final stateChunks = await _readDmxStateChunks(
+        task.tempFilePath, task.threadCount);
+    final chunks = stateChunks ??
+        List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
 
     await _setTask(
       task.copyWith(
@@ -1665,6 +1676,33 @@ class DownloadProvider extends ChangeNotifier
       }
     } catch (_) {}
     return 0;
+  }
+
+  /// Reads per-chunk progress percentages from a `.dmxstate` sidecar file.
+  /// Returns null when the file is missing, corrupt, or empty.
+  static Future<List<double>?> _readDmxStateChunks(
+      String tempFilePath, int threadCount) async {
+    final stateFile = File('$tempFilePath.dmxstate');
+    if (!await stateFile.exists()) return null;
+    try {
+      final decoded = jsonDecode(await stateFile.readAsString());
+      if (decoded is Map && decoded['progress'] is List) {
+        final progress = (decoded['progress'] as List)
+            .map((e) => (e as num).toInt())
+            .toList();
+        final total = decoded['totalSize'] is num
+            ? (decoded['totalSize'] as num).toInt()
+            : 0;
+        if (total <= 0 || progress.isEmpty) return null;
+        final partSize = (total / progress.length).floor();
+        return List.generate(progress.length, (i) {
+          final end =
+              i == progress.length - 1 ? total - i * partSize : partSize;
+          return end > 0 ? (progress[i] / end).clamp(0.0, 1.0) : 0.0;
+        });
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
@@ -2433,6 +2471,7 @@ class DownloadProvider extends ChangeNotifier
     int? newFileSize,
     int? newAudioSize,
     bool isRefresh = false,
+    bool clearAudioUrl = false,
   }) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
@@ -2477,7 +2516,58 @@ class DownloadProvider extends ChangeNotifier
         _torrentIds.remove(taskId);
       }
 
-      await cleanupPartFiles(task, preserveParts: true);
+      bool sameTorrent(String a, String b) {
+        final ha = parseMagnetUrl(a)['infoHash']?.toString().toLowerCase();
+        final hb = parseMagnetUrl(b)['infoHash']?.toString().toLowerCase();
+        return ha != null && hb != null && ha == hb;
+      }
+
+      final preserve = sameTorrent(task.url, cleanUrl);
+      await cleanupPartFiles(task, preserveParts: preserve);
+
+      if (!preserve) {
+        if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+          final root = p.normalize(task.savePath);
+          for (final f in task.torrentFiles!) {
+            final relPath = f['name'] as String?;
+            if (relPath != null && relPath.isNotEmpty) {
+              try {
+                final fullPath = p.normalize(p.join(root, relPath));
+
+                if (fullPath == root || !p.isWithin(root, fullPath)) {
+                  debugPrint(
+                    '[DMX] Blocked unsafe torrent file path: $relPath',
+                  );
+                  continue;
+                }
+
+                final file = File(fullPath);
+                if (await file.exists()) {
+                  await file.delete();
+                }
+              } catch (e) {
+                debugPrint(
+                  'Failed to delete old torrent payload file $relPath: $e',
+                );
+              }
+            }
+          }
+
+          try {
+            if (task.fileName.isNotEmpty) {
+              final folderPath = p.normalize(p.join(root, task.fileName));
+              if (p.isWithin(root, folderPath)) {
+                final dir = Directory(folderPath);
+                if (await dir.exists() && (await dir.list().isEmpty)) {
+                  await dir.delete();
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('[DMX] Failed to delete empty torrent folder: $e');
+          }
+        }
+      }
 
       DownloadMetadata? metadata;
 
@@ -2500,13 +2590,17 @@ class DownloadProvider extends ChangeNotifier
 
       final updatedTask = task.copyWith(
         url: cleanUrl,
-        fileSize: metadata.fileSize > 0 ? metadata.fileSize : task.fileSize,
+        fileSize: metadata.fileSize > 0
+            ? metadata.fileSize
+            : (preserve ? task.fileSize : 0),
         supportsResume: metadata.supportsResume,
         downloadedBytes: 0,
+        audioProgress: 0.0,
         chunks: List<double>.filled(task.threadCount, 0.0),
         torrentFiles: metadata.torrentFiles,
+        clearTorrentFiles: !preserve && metadata.torrentFiles == null,
         fileName:
-            (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
+            (task.fileName.isEmpty || task.fileName == 'torrent_download.zip' || !preserve)
                 ? metadata.fileName
                 : task.fileName,
         clearError: true,
@@ -2609,15 +2703,33 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
+    final audioChanged = clearAudioUrl ||
+        (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl);
+    if (audioChanged) {
+      for (final path in [
+        '${task.tempFilePath}.audio',
+        '${task.tempFilePath}.audio.dmxstate',
+      ]) {
+        try {
+          final f = File(path);
+          if (await f.exists()) await f.delete();
+        } catch (e) {
+          debugPrint('[DMX] audio temp cleanup failed: $e');
+        }
+      }
+    }
+
     final updatedTask = task.copyWith(
       url: cleanUrl,
-      mergedAudioUrl: newAudioUrl ?? task.mergedAudioUrl,
+      mergedAudioUrl: clearAudioUrl ? null : (newAudioUrl ?? task.mergedAudioUrl),
+      clearMergedAudioUrl: clearAudioUrl,
       fileSize: sizeChanged || task.fileSize <= 0
           ? (resolvedFileSize > 0 ? resolvedFileSize : task.fileSize)
           : task.fileSize,
       audioSize: sizeChanged || task.audioSize <= 0
           ? (newAudioSize ?? task.audioSize)
           : task.audioSize,
+      audioProgress: audioChanged ? 0.0 : task.audioProgress,
       supportsResume: resolvedSupportsResume,
       // Only reset progress when the file actually changed
       downloadedBytes: sizeChanged ? 0 : task.downloadedBytes,
@@ -2630,6 +2742,7 @@ class DownloadProvider extends ChangeNotifier
               : task.fileName,
       clearError: true,
     );
+
 
     _tasks[index] = updatedTask;
 

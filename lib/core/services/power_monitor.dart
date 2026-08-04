@@ -33,6 +33,9 @@ class PowerMonitor {
   static final ValueNotifier<double> throttleFactorNotifier =
       ValueNotifier<double>(1.0);
 
+  static bool thermalThreadLimitingEnabled = true;
+  static bool powerBandwidthThrottlingEnabled = true;
+
   static BatteryState get batteryState => _state;
   static int get batteryLevel => _level;
   static ThermalStatus get thermal => _thermal;
@@ -56,7 +59,8 @@ class PowerMonitor {
     if (batterySaverMode == BatterySaverMode.aggressive) {
       return 1;
     }
-    if (_thermal == ThermalStatus.severe || _thermal == ThermalStatus.critical) {
+    if (thermalThreadLimitingEnabled &&
+        (_thermal == ThermalStatus.severe || _thermal == ThermalStatus.critical)) {
       return kThermalLimitedMaxThreads;
     }
     return 16;
@@ -91,6 +95,7 @@ class PowerMonitor {
 
   /// Master "aggression" scalar: 1.0 = full power, 0.3 = conserve hard.
   static double get throttleFactor {
+    if (!powerBandwidthThrottlingEnabled) return 1.0;
     var f = 1.0;
     if (!isCharging) {
       if (_level < kBatterySaverAggressiveThreshold) {
@@ -120,6 +125,7 @@ class PowerMonitor {
     }
     return f.clamp(floor, 1.0);
   }
+
 
   static Future<void> init() async {
     try {

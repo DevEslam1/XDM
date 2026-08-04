@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:ffmpeg_kit_flutter_new_min/ffmpeg_kit.dart';
@@ -59,6 +60,7 @@ class FFmpegMuxService {
     bool deleteInputsIfTemp = true,
     ValueChanged<double>? onProgress,
     Duration? totalDuration,
+    Duration? expectedDuration,
   }) async {
     await _mergeSemaphore.acquire();
     try {
@@ -75,6 +77,7 @@ class FFmpegMuxService {
         deleteInputsIfTemp: deleteInputsIfTemp,
         onProgress: onProgress,
         totalDuration: totalDuration,
+        expectedDuration: expectedDuration,
       );
     } finally {
       try {
@@ -85,6 +88,7 @@ class FFmpegMuxService {
       _mergeSemaphore.release();
     }
   }
+
 
   static List<String> _buildArgs({
     required String videoPath,
@@ -174,49 +178,51 @@ class FFmpegMuxService {
     }
   }
 
-  static Future<bool> _validateOutput(String path) async {
+  static Future<bool> _validateOutput(
+    String path, {
+    Duration? expectedDuration,
+  }) async {
     final file = File(path);
     if (!await file.exists()) return false;
-    final size = await file.length();
-    if (size < 1024) return false;
 
     try {
-      // FIX-H4: Check duration AND presence of both video+audio streams.
-      // A stream-copy that silently drops a track passes duration checks
-      // but produces an unwatchable file; we catch that here.
-      final session = await FFprobeKit.execute(
-        '-v error '
-        '-show_entries format=duration '
-        '-show_entries stream=codec_type '
-        '-of default=noprint_wrappers=1 '
+      final probe = await FFprobeKit.execute(
+        '-v error -show_entries format=duration '
+        '-show_entries stream=codec_type -of default=noprint_wrappers=1 '
         '"$path"',
       );
-      final logs = await session.getLogsAsString();
-
-      // Validate duration
-      final match = RegExp(r'duration=([\d.]+)').firstMatch(logs);
-      final dur = double.tryParse(match?.group(1) ?? '');
-      if (dur == null || dur <= 0) {
-        _log.severe(
-            '[Merge] Output validation failed: duration=$dur for $path');
-        return false;
-      }
-
-      // FIX-H4: Validate stream presence
+      final logs = await probe.getLogsAsString();
       final hasVideo = logs.contains('codec_type=video');
       final hasAudio = logs.contains('codec_type=audio');
-      if (!hasVideo || !hasAudio) {
-        _log.severe(
-          '[Merge] Output validation failed: missing streams '
-          '(video=$hasVideo, audio=$hasAudio) for $path',
-        );
+      final durMatch = RegExp(r'duration=([\d.]+)').firstMatch(logs);
+      final duration = double.tryParse(durMatch?.group(1) ?? '') ?? 0;
+      final sizeOk =
+          path.isNotEmpty && await file.exists() && (await file.length()) > 1024;
+
+      final expectedSecs = expectedDuration != null
+          ? expectedDuration.inMilliseconds / 1000.0
+          : null;
+      final durationOk = expectedSecs == null ||
+          (duration > 0 &&
+              (duration - expectedSecs).abs() <=
+                  math.max(2.0, expectedSecs * 0.05));
+
+      if (!hasVideo || !hasAudio || !sizeOk || !durationOk) {
+        debugPrint('[FFmpeg] Merged output invalid '
+            '(video=$hasVideo audio=$hasAudio size=$sizeOk dur=$durationOk)');
+        try {
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
         return false;
       }
 
       return true;
     } catch (e) {
-      _log.warning('[Merge] FFprobe validation exception: $e');
-      return true; // Fallback: allow valid file size if ffprobe fails
+      debugPrint('[FFmpeg] FFprobe validation exception: $e');
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+      return false;
     }
   }
 
@@ -227,6 +233,7 @@ class FFmpegMuxService {
     bool deleteInputsIfTemp = true,
     ValueChanged<double>? onProgress,
     Duration? totalDuration,
+    Duration? expectedDuration,
   }) async {
     bool isTempFile(String path) {
       final name = p.basename(path).toLowerCase();
@@ -313,7 +320,8 @@ class FFmpegMuxService {
         pollTimer.cancel();
 
         if (ReturnCode.isSuccess(returnCode)) {
-          if (await _validateOutput(outputPath)) {
+          final targetExpectedDuration = expectedDuration ?? totalDuration;
+          if (await _validateOutput(outputPath, expectedDuration: targetExpectedDuration)) {
             _log.info('Merge strategy $strategy succeeded: $outputPath');
             await cleanUpInputs();
             return true;
@@ -324,6 +332,7 @@ class FFmpegMuxService {
         _log.warning('Merge strategy $strategy failed: $e');
       }
     }
+
 
     // Clean up partial output if all strategies fail
     try {

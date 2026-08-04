@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/services/quiet_hours.dart';
 import '../../../core/services/xdm_backend_client.dart';
+import '../../../core/services/power_monitor.dart';
 
 class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   // FIX(R5): Logger instance
@@ -108,6 +109,14 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _dnsProviderKey = 'dnsProvider';
   static const _adaptiveThreadsKey = 'adaptiveThreads';
   static const _autoVerifyChecksumKey = 'autoVerifyChecksum';
+
+  static const _powerAwareIsolatePoolKey = 'powerAwareIsolatePool';
+  static const _thermalThreadLimitingKey = 'thermalThreadLimiting';
+  static const _jankAutoBatterySaverKey = 'jankAutoBatterySaver';
+  static const _diskWriteBatchingKey = 'diskWriteBatching';
+  static const _powerBandwidthThrottlingKey = 'powerBandwidthThrottling';
+  static const _resumeIntegrityCheckKey = 'resumeIntegrityCheck';
+
 
   static const _backendUrlKey = 'backend_url';
   static const _backendTokenKey = 'backend_token';
@@ -322,6 +331,14 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool adaptiveThreads = false;
   bool autoVerifyChecksum = false;
 
+  bool powerAwareIsolatePool = true;
+  bool thermalThreadLimiting = true;
+  bool jankAutoBatterySaver = true;
+  bool diskWriteBatching = true;
+  bool powerBandwidthThrottling = true;
+  bool resumeIntegrityCheck = true;
+
+
   @override
   void didChangePlatformBrightness() {
     if (themeMode == 'system') {
@@ -469,11 +486,55 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     adaptiveThreads = _prefs.getBool(_adaptiveThreadsKey) ?? false;
     autoVerifyChecksum = _prefs.getBool(_autoVerifyChecksumKey) ?? false;
 
+    powerAwareIsolatePool = _prefs.getBool(_powerAwareIsolatePoolKey) ?? true;
+    thermalThreadLimiting = _prefs.getBool(_thermalThreadLimitingKey) ?? true;
+    jankAutoBatterySaver = _prefs.getBool(_jankAutoBatterySaverKey) ?? true;
+    diskWriteBatching = _prefs.getBool(_diskWriteBatchingKey) ?? true;
+    powerBandwidthThrottling =
+        _prefs.getBool(_powerBandwidthThrottlingKey) ?? true;
+    resumeIntegrityCheck = _prefs.getBool(_resumeIntegrityCheckKey) ?? true;
+
+    PowerMonitor.thermalThreadLimitingEnabled = thermalThreadLimiting;
+    PowerMonitor.powerBandwidthThrottlingEnabled = powerBandwidthThrottling;
+
     _loaded = true;
     _instance = this;
   }
 
+  Future<void> setPowerAwareIsolatePool(bool value) async {
+    powerAwareIsolatePool = value;
+    await _prefs.setBool(_powerAwareIsolatePoolKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setThermalThreadLimiting(bool value) async {
+    thermalThreadLimiting = value;
+    PowerMonitor.thermalThreadLimitingEnabled = value;
+    await _prefs.setBool(_thermalThreadLimitingKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setJankAutoBatterySaver(bool value) async {
+    jankAutoBatterySaver = value;
+    await _prefs.setBool(_jankAutoBatterySaverKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setDiskWriteBatching(bool value) async {
+    diskWriteBatching = value;
+    await _prefs.setBool(_diskWriteBatchingKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setPowerBandwidthThrottling(bool value) async {
+    powerBandwidthThrottling = value;
+    PowerMonitor.powerBandwidthThrottlingEnabled = value;
+    await _prefs.setBool(_powerBandwidthThrottlingKey, value);
+    notifyListeners();
+  }
+
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
+
 
   Future<void> setAutoStart(bool value) async {
     autoStart = value;
@@ -806,6 +867,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       default:
         return ThemeMode.system;
     }
+  }
+
+  Future<void> setResumeIntegrityCheck(bool value) async {
+    resumeIntegrityCheck = value;
+    await _prefs.setBool(_resumeIntegrityCheckKey, value);
+    notifyListeners();
   }
 
   Future<void> setAutoRetryEnabled(bool value) async {
@@ -1154,6 +1221,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     useLocalYtFallback = false;
     dnsEnabled = true;
     dnsProvider = 'dns.adguard.com';
+    resumeIntegrityCheck = true;
 
     await _prefs.setBool(_isDarkModeKey, _isDarkMode);
     await _prefs.setBool(_classicUiKey, _classicUi);

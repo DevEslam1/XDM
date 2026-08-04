@@ -719,12 +719,43 @@ class TorrentService {
     if (id >= 0) {
       try {
         final progress = _latestProgress[id] ?? 0.0;
-        await TorrentResumeStore.save(id, progress: progress);
+
+        // Snapshot torrent file priorities/selections BEFORE pausing so they
+        // survive a forced kill. getFiles() calls the native session which is
+        // still running at this point.
+        List<Map<String, dynamic>>? torrentFiles;
+        try {
+          final items = getFiles(id);
+          if (items.isNotEmpty) {
+            torrentFiles = items
+                .map((f) => {
+                      'name': f.name,
+                      'size': f.size,
+                      'priority': f.priority,
+                      'selected': f.selected,
+                      'downloadedBytes': f.downloadedBytes,
+                    })
+                .toList();
+          }
+        } catch (e) {
+          _log.warning('getFiles snapshot failed for id $id (non-fatal): $e');
+        }
+
+        // Persist JSON progress + file priorities atomically.
+        await TorrentResumeStore.save(
+          id,
+          progress: progress,
+          torrentFiles: torrentFiles,
+        );
+
+        // Persist native fast-resume bytes under BOTH the stable source key
+        // and the numeric-id path. Best-effort: never throw out of pauseTorrent.
         try {
           await saveResumeData(id);
         } catch (e) {
           _log.warning('saveResumeData failed for id $id: $e');
         }
+
         LibtorrentFlutter.instance.pauseTorrent(id);
       } catch (e) {
         _log.warning('pauseTorrent failed for id $id: $e');

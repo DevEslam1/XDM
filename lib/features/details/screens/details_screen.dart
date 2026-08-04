@@ -959,10 +959,9 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Provider.of<SettingsProvider>(
-      context,
-      listen: false,
-    ).isDarkMode;
+    final settings = Provider.of<SettingsProvider>(context);
+    final isDark = settings.isDarkMode;
+    final isBatterySaver = settings.batterySaverMode;
     final isRtl = L10n.isRtl(context);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
@@ -998,22 +997,54 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                isRtl ? 'تعديل خيوط الاتصال' : 'ADJUST THREADS',
-                style: AppTheme.microLabel(isDark: isDark, size: 9),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isRtl ? 'تعديل خيوط الاتصال' : 'ADJUST THREADS',
+                    style: AppTheme.microLabel(isDark: isDark, size: 9),
+                  ),
+                  if (isBatterySaver) ...[
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: L10n.of(context, 'battery_saver_override_tooltip'),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.battery_saver_rounded,
+                            size: 11,
+                            color: AppTheme.neonAmber,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            L10n.of(context, 'battery_saver_override'),
+                            style: const TextStyle(
+                              fontSize: 8,
+                              color: AppTheme.neonAmber,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
               Row(
                 children: [
                   _StepBtn(
                     icon: Icons.remove_rounded,
                     color: statusColor,
-                    onPressed: () {
-                      final list = kAvailableThreadOptions;
-                      final curIdx = list.indexOf(task.threadCount);
-                      if (curIdx > 0) {
-                        _changeThreadCount(context, list[curIdx - 1]);
-                      }
-                    },
+                    onPressed: isBatterySaver
+                        ? null
+                        : () {
+                            final list = kAvailableThreadOptions;
+                            final curIdx = list.indexOf(task.threadCount);
+                            if (curIdx > 0) {
+                              _changeThreadCount(context, list[curIdx - 1]);
+                            }
+                          },
                   ),
                   const SizedBox(width: 6),
                   Container(
@@ -1036,13 +1067,15 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
                   _StepBtn(
                     icon: Icons.add_rounded,
                     color: statusColor,
-                    onPressed: () {
-                      final list = kAvailableThreadOptions;
-                      final curIdx = list.indexOf(task.threadCount);
-                      if (curIdx != -1 && curIdx < list.length - 1) {
-                        _changeThreadCount(context, list[curIdx + 1]);
-                      }
-                    },
+                    onPressed: isBatterySaver
+                        ? null
+                        : () {
+                            final list = kAvailableThreadOptions;
+                            final curIdx = list.indexOf(task.threadCount);
+                            if (curIdx != -1 && curIdx < list.length - 1) {
+                              _changeThreadCount(context, list[curIdx + 1]);
+                            }
+                          },
                   ),
                 ],
               ),
@@ -1121,7 +1154,7 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
 class _StepBtn extends StatefulWidget {
   final IconData icon;
   final Color color;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   const _StepBtn({
     required this.icon,
     required this.color,
@@ -1135,10 +1168,12 @@ class _StepBtnState extends State<_StepBtn> {
   bool _pressed = false;
   @override
   Widget build(BuildContext context) {
+    final disabled = widget.onPressed == null;
+    final color = disabled ? widget.color.withValues(alpha: 0.3) : widget.color;
     return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
+      onTapDown: disabled ? null : (_) => setState(() => _pressed = true),
+      onTapUp: disabled ? null : (_) => setState(() => _pressed = false),
+      onTapCancel: disabled ? null : () => setState(() => _pressed = false),
       onTap: widget.onPressed,
       child: AnimatedScale(
         scale: _pressed ? 0.85 : 1.0,
@@ -1147,14 +1182,14 @@ class _StepBtnState extends State<_StepBtn> {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: widget.color.withValues(alpha: 0.10),
+            color: color.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(9),
             border: Border.all(
-              color: widget.color.withValues(alpha: 0.3),
+              color: color.withValues(alpha: 0.3),
               width: 0.8,
             ),
           ),
-          child: Icon(widget.icon, size: 16, color: widget.color),
+          child: Icon(widget.icon, size: 16, color: color),
         ),
       ),
     );

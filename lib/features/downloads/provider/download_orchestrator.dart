@@ -20,6 +20,7 @@ import '../../../core/services/download_engine.dart';
 import '../../../core/services/download_metrics.dart';
 import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/ffmpeg_mux_service.dart' hide Semaphore;
+import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
@@ -181,61 +182,72 @@ class DownloadOrchestrator {
 
   @visibleForTesting
   Future<DownloadTask> validateResumeState(DownloadTask task) async {
-    if (task.downloadedBytes > 0 && task.tempFilePath.isNotEmpty) {
-      final stateFile = File('${task.tempFilePath}.dmxstate');
-      if (await stateFile.exists()) {
-        try {
-          final content = await stateFile.readAsString();
-          final decoded = jsonDecode(content);
-          if (decoded is Map) {
-            final savedSize = (decoded['totalSize'] as num?)?.toInt() ?? -1;
-            if (savedSize > 0 &&
-                task.fileSize > 0 &&
-                (savedSize - task.fileSize).abs() > 2048) {
-              debugPrint(
-                  '[DMX] Size mismatch in resume state, resetting progress');
-              final updated = task.copyWith(
-                downloadedBytes: 0,
-                chunks: List<double>.filled(task.threadCount, 0.0),
-              );
-              await _host.setTaskState(updated);
-              try {
-                await stateFile.delete();
-              } catch (_) {}
-              return updated;
+    try {
+      if (task.downloadedBytes > 0 && task.tempFilePath.isNotEmpty) {
+        final stateFile = File('${task.tempFilePath}.dmxstate');
+        bool validState = false;
+
+        if (await stateFile.exists()) {
+          try {
+            final content = await stateFile.readAsString();
+            final decoded = jsonDecode(content);
+            if (decoded is Map) {
+              final savedSize = (decoded['totalSize'] as num?)?.toInt() ?? -1;
+              if (savedSize > 0 &&
+                  task.fileSize > 0 &&
+                  (savedSize - task.fileSize).abs() > 2048) {
+                debugPrint(
+                    '[DMX] Size mismatch in resume state, resetting progress');
+              } else {
+                validState = true;
+              }
             }
+          } catch (e) {
+            debugPrint('[DMX] Corrupt resume state: $e');
           }
-        } catch (e) {
-          debugPrint('[DMX] Corrupt resume state, resetting: $e');
+        } else {
+          debugPrint(
+              '[DMX] .dmxstate missing for task with downloadedBytes > 0, resetting progress');
+        }
+
+        if (!validState) {
           final updated = task.copyWith(
             downloadedBytes: 0,
-            chunks: List<double>.filled(task.threadCount, 0.0),
+            chunks: List<double>.filled(
+                task.threadCount > 0 ? task.threadCount : 1, 0.0),
           );
           await _host.setTaskState(updated);
           try {
-            await stateFile.delete();
+            if (await stateFile.exists()) {
+              await stateFile.delete();
+            }
           } catch (_) {}
-          return updated;
+          task = updated;
         }
       }
-    }
 
-    // FIX-H1: Validate audio .dmxstate sidecar for YouTube audio downloads.
-    // If the sidecar is missing, reset audioProgress so the audio stream is
-    // re-downloaded from the beginning rather than resuming from a stale value.
-    if (task.mergedAudioUrl != null && task.audioSize > 0) {
-      final audioTempPath = '${task.tempFilePath}.audio';
-      final audioStateFile = File('$audioTempPath.dmxstate');
-      if (!await audioStateFile.exists() && task.audioProgress > 0) {
-        debugPrint('[DMX] Audio .dmxstate missing, resetting audioProgress');
-        final updated = task.copyWith(audioProgress: 0.0);
-        await _host.setTaskState(updated);
-        return updated;
+      // FIX-H1: Validate audio .dmxstate sidecar for YouTube audio downloads.
+      // If the sidecar is missing, reset audioProgress so the audio stream is
+      // re-downloaded from the beginning rather than resuming from a stale value.
+      if (task.mergedAudioUrl != null &&
+          task.mergedAudioUrl!.isNotEmpty &&
+          task.audioSize > 0) {
+        final audioTempPath = '${task.tempFilePath}.audio';
+        final audioStateFile = File('$audioTempPath.dmxstate');
+        if (!await audioStateFile.exists() && task.audioProgress > 0) {
+          debugPrint('[DMX] Audio .dmxstate missing, resetting audioProgress');
+          final updated = task.copyWith(audioProgress: 0.0);
+          await _host.setTaskState(updated);
+          task = updated;
+        }
       }
+    } catch (e) {
+      debugPrint('[DMX] validateResumeState exception: $e');
     }
 
     return task;
   }
+
 
   final Map<String, int> _ytRefreshAttempts = {};
 
@@ -507,11 +519,27 @@ class DownloadOrchestrator {
       throw Exception('Audio file is empty: $actualAudioPath');
     }
 
+    Duration? expectedDuration;
+    try {
+      final probe = await FFprobeKit.execute(
+        '-v error -show_entries format=duration -of default=noprint_wrappers=1 "$actualVideoPath"',
+      );
+      final logs = await probe.getLogsAsString();
+      final match = RegExp(r'duration=([\d.]+)').firstMatch(logs);
+      final durSecs = double.tryParse(match?.group(1) ?? '');
+      if (durSecs != null && durSecs > 0) {
+        expectedDuration = Duration(milliseconds: (durSecs * 1000).round());
+      }
+    } catch (e) {
+      debugPrint('[DMX] FFprobe video duration probe exception: $e');
+    }
+
     final success = await FFmpegMuxService.mergeVideoAudio(
       actualVideoPath,
       actualAudioPath,
       mergedPath,
       deleteInputsIfTemp: false,
+      expectedDuration: expectedDuration,
     );
 
     final latest = _host.findTaskById(taskId);
@@ -1669,6 +1697,9 @@ class DownloadOrchestrator {
       _host.cancelTokens.remove(task.id);
       return;
     }
+
+    // Validate resume state before starting any torrent or engine calls
+    task = await validateResumeState(latestBeforeStart);
 
     int? torrentId;
     if (task.isTorrent) {

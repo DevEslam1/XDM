@@ -264,6 +264,7 @@ class DownloadTask {
     bool? seedingLimited,
     int? seedingLimitKbps,
     List<Map<String, dynamic>>? torrentFiles,
+    bool clearTorrentFiles = false,
     String? downloadPageUrl,
     bool clearDownloadPageUrl = false,
     String? mergedAudioUrl,
@@ -310,7 +311,8 @@ class DownloadTask {
       seedingEnabled: seedingEnabled ?? this.seedingEnabled,
       seedingLimited: seedingLimited ?? this.seedingLimited,
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
-      torrentFiles: torrentFiles ?? this.torrentFiles,
+      torrentFiles:
+          clearTorrentFiles ? null : (torrentFiles ?? this.torrentFiles),
       downloadPageUrl: clearDownloadPageUrl
           ? null
           : (downloadPageUrl ?? this.downloadPageUrl),
