@@ -404,6 +404,24 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
+  Future<void> _refreshTabForPull(BrowserTab tab) async {
+    final controller = tab.controller;
+    if (controller != null) {
+      unawaited(controller.reload().catchError((_) {}));
+    }
+
+    // Keep the native indicator visible for a bounded three seconds.
+    await Future<void>.delayed(const Duration(seconds: 3));
+    final pullToRefresh = tab.pullToRefreshController;
+    if (pullToRefresh != null) {
+      try {
+        await pullToRefresh.endRefreshing();
+      } catch (_) {
+        // The controller may be disposed during tab eviction.
+      }
+    }
+  }
+
   BrowserTab _createNewTab({
     String initialUrl = 'about:blank',
     bool isIncognito = false,
@@ -439,7 +457,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     try {
       tab.pullToRefreshController = PullToRefreshController(
         settings: PullToRefreshSettings(color: AppTheme.neonBlue),
-        onRefresh: () => tab.controller?.reload(),
+        onRefresh: () => _refreshTabForPull(tab),
       );
     } catch (e) {
       _log.fine('PullToRefreshController not supported or uninitialized in current environment: $e');
@@ -1046,25 +1064,16 @@ class _BrowserScreenState extends State<BrowserScreen>
       listen: false,
     );
     if (downloadProvider.activeTabIndex != 1) return;
-    if (y <= 0) {
-      if (!_showBarsNotifier.value) {
-        _showBarsNotifier.value = true;
-        downloadProvider.setNavbarVisible(true);
-      }
-      _lastScrollY = y;
+
+    // The URL bar is intentionally persistent; scrolling may still update
+    // the surrounding app navigation visibility, but never hides this bar.
+    _showBarsNotifier.value = true;
+    if (y <= 0 || y < _lastScrollY) {
+      downloadProvider.setNavbarVisible(true);
     } else if (y - _lastScrollY > 40) {
-      if (_showBarsNotifier.value) {
-        _showBarsNotifier.value = false;
-        downloadProvider.setNavbarVisible(false);
-      }
-      _lastScrollY = y;
-    } else if (_lastScrollY - y > 40) {
-      if (!_showBarsNotifier.value) {
-        _showBarsNotifier.value = true;
-        downloadProvider.setNavbarVisible(true);
-      }
-      _lastScrollY = y;
+      downloadProvider.setNavbarVisible(false);
     }
+    _lastScrollY = y;
   }
 
   void _delayed(Duration duration, VoidCallback callback) =>
@@ -4024,7 +4033,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                                         FadeTransition(
                                             opacity: animation, child: child),
                                     child: IndexedStack(
-                                      key: ValueKey(_currentTabIndex),
                                       index: _currentTabIndex >= 0 &&
                                               _currentTabIndex < _tabs.length
                                           ? _currentTabIndex
@@ -4042,7 +4050,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                             settings: PullToRefreshSettings(
                                                 color: AppTheme.neonBlue),
                                             onRefresh: () =>
-                                                tab.controller?.reload(),
+                                                _refreshTabForPull(tab),
                                           );
                                         }
                                         if (tab.isHome) {
@@ -4147,8 +4155,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                     : AppTheme.lightNeonBlue,
                                                 onRefresh: () async {
                                                   tab.hasCrashed = false;
-                                                  await tab.controller
-                                                      ?.reload();
+                                                  await _refreshTabForPull(tab);
                                                 },
                                                 child: tab.hasCrashed
                                                     // E11: Tab Crash Recovery Visual Feedback
@@ -4309,7 +4316,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 initialSettings:
                                                                     InAppWebViewSettings(
                                                                   useHybridComposition:
-                                                                      false,
+                                                                      true,
                                                                   useShouldInterceptRequest:
                                                                       true,
                                                                   transparentBackground:

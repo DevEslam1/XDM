@@ -63,3 +63,30 @@ double gridChildAspectRatio(BuildContext context,
   final ratio = tileWidth / kGridTileHeight;
   return ratio.clamp(0.3, 3.0);
 }
+
+/// Scales layout values from a phone baseline while keeping them within
+/// practical bounds for very small and very large windows.
+double responsiveValue(
+  BuildContext context,
+  double value, {
+  double minScale = 0.88,
+  double maxScale = 1.18,
+}) {
+  final width = MediaQuery.sizeOf(context).width;
+  final scale = (width / 390.0).clamp(minScale, maxScale);
+  return value * scale;
+}
+
+double responsiveFontSize(BuildContext context, double size) =>
+    responsiveValue(context, size, minScale: 0.92, maxScale: 1.10);
+
+EdgeInsets responsiveInsets(
+  BuildContext context, {
+  double horizontal = 16,
+  double vertical = 16,
+}) {
+  return EdgeInsets.symmetric(
+    horizontal: responsiveValue(context, horizontal),
+    vertical: responsiveValue(context, vertical),
+  );
+}

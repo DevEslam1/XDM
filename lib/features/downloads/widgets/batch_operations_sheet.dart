@@ -5,19 +5,24 @@ import '../provider/download_provider.dart';
 import '../models/download_task.dart';
 
 /// Modal bottom sheet allowing users to perform bulk actions on selected tasks.
+enum BatchAction { pause, resume, delete, changeCategory }
+
 class BatchOperationsSheet extends StatefulWidget {
   final List<String> selectedTaskIds;
+  final BatchAction? initialAction;
   final VoidCallback? onCompleted;
 
   const BatchOperationsSheet({
     super.key,
     required this.selectedTaskIds,
+    this.initialAction,
     this.onCompleted,
   });
 
   static Future<void> show(
     BuildContext context, {
     required List<String> selectedTaskIds,
+    BatchAction? initialAction,
     VoidCallback? onCompleted,
   }) {
     return showModalBottomSheet(
@@ -26,6 +31,7 @@ class BatchOperationsSheet extends StatefulWidget {
       isScrollControlled: true,
       builder: (ctx) => BatchOperationsSheet(
         selectedTaskIds: selectedTaskIds,
+        initialAction: initialAction,
         onCompleted: onCompleted,
       ),
     );
@@ -97,6 +103,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           ),
           const Divider(height: 24),
           // Action Buttons
+          if (widget.initialAction == null || widget.initialAction == BatchAction.resume) ...[
           ListTile(
             leading: const Icon(Icons.play_arrow_rounded, color: Colors.green),
             title: Text(L10n.of(context, 'resume_selected')),
@@ -120,6 +127,8 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
               widget.onCompleted?.call();
             },
           ),
+          ],
+          if (widget.initialAction == null || widget.initialAction == BatchAction.pause) ...[
           ListTile(
             leading: const Icon(Icons.pause_rounded, color: Colors.amber),
             title: Text(L10n.of(context, 'pause_selected')),
@@ -136,6 +145,8 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
               widget.onCompleted?.call();
             },
           ),
+          ],
+          if (widget.initialAction == null || widget.initialAction == BatchAction.changeCategory) ...[
           ListTile(
             leading: const Icon(Icons.category_rounded, color: Colors.blue),
             title: Text(L10n.of(context, 'change_category')),
@@ -157,6 +168,8 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
               widget.onCompleted?.call();
             },
           ),
+          ],
+          if (widget.initialAction == null || widget.initialAction == BatchAction.delete) ...[
           StatefulBuilder(
             builder: (context, setCheckboxState) {
               return CheckboxListTile(
@@ -198,6 +211,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
               widget.onCompleted?.call();
             },
           ),
+          ],
         ],
       ),
     );

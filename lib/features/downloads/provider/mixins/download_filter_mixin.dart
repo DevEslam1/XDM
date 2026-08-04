@@ -61,9 +61,9 @@ mixin DownloadFilterMixin {
     notifyListeners();
   }
 
-  void selectAllTasks() {
+  void selectAllTasks({Iterable<String>? visibleTaskIds}) {
     _selectedTaskIds.clear();
-    _selectedTaskIds.addAll(filteredTasks.map((t) => t.id));
+    _selectedTaskIds.addAll(visibleTaskIds ?? filteredTasks.map((t) => t.id));
     notifyListeners();
   }
 

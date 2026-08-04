@@ -1,12 +1,22 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import '../features/settings/provider/settings_provider.dart';
 import 'services/doh_resolver.dart';
 
 /// Globally overrides HttpClient behavior to support DNS-over-HTTPS.
 class DohHttpOverrides extends HttpOverrides {
-  final SettingsProvider settings;
+  final bool Function() _dnsEnabled;
+  final String Function() _dnsProvider;
 
-  DohHttpOverrides(this.settings);
+  DohHttpOverrides(SettingsProvider settings)
+      : this._(() => settings.dnsEnabled, () => settings.dnsProvider);
+
+  DohHttpOverrides.fromValues({
+    required bool dnsEnabled,
+    required String dnsProvider,
+  }) : this._(() => dnsEnabled, () => dnsProvider);
+
+  DohHttpOverrides._(this._dnsEnabled, this._dnsProvider);
 
   @override
   HttpClient createHttpClient(SecurityContext? context) {
@@ -20,11 +30,12 @@ class DohHttpOverrides extends HttpOverrides {
       }
 
       String host = uri.host;
-      if (settings.dnsEnabled) {
+      if (_dnsEnabled()) {
         // Attempt DoH resolution
-        final resolved = await DohResolver.instance.resolve(host, settings.dnsProvider);
+        final resolved = await DohResolver.instance.resolve(host, _dnsProvider());
         if (resolved != null) {
           host = resolved;
+          debugPrint('[DMX DoH] ${uri.host} -> $host via ${_dnsProvider()}');
         }
       }
       

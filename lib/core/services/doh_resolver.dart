@@ -20,7 +20,8 @@ class DohResolver {
     
     // 1. Check in-memory cache
     final now = DateTime.now();
-    final cached = _cache[hostname];
+    final cacheKey = '$provider|$hostname';
+    final cached = _cache[cacheKey];
     if (cached != null && cached.expiry.isAfter(now)) {
       return cached.ip;
     }
@@ -48,7 +49,7 @@ class DohResolver {
             
             if (result != null) {
               // Cache result (fixed 5 min TTL for simplicity, or parse from response)
-              _cache[hostname] = _CacheEntry(
+              _cache[cacheKey] = _CacheEntry(
                 result.ip, 
                 now.add(Duration(seconds: result.ttl > 0 ? result.ttl : 300)),
               );

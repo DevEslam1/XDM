@@ -49,27 +49,11 @@ class AdBlockerService {
 })();
 ''';
 
-  List<ContentBlocker> get contentBlockers {
-    final blockers = <ContentBlocker>[];
-    if (!_enabled) return blockers;
-    for (final domain in _compiledDomainCache) {
-      if (domain.trim().isEmpty) continue;
-      final escaped = RegExp.escape(domain).replaceAll(r'\.', r'\.');
-      blockers.add(ContentBlocker(
-        trigger: ContentBlockerTrigger(
-          urlFilter: '.*$escaped.*',
-          resourceType: const [
-            ContentBlockerTriggerResourceType.IMAGE,
-            ContentBlockerTriggerResourceType.SCRIPT,
-            ContentBlockerTriggerResourceType.STYLE_SHEET,
-            ContentBlockerTriggerResourceType.RAW,
-          ],
-        ),
-        action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-      ));
-    }
-    return blockers;
-  }
+  /// Native content blockers are intentionally disabled here. The downloaded
+  /// domain list can contain tens of thousands of entries; sending that list
+  /// to every native WebView is expensive and duplicates the Dart-side
+  /// [shouldBlockUrl] check used by shouldInterceptRequest.
+  List<ContentBlocker> get contentBlockers => const <ContentBlocker>[];
 
   final List<VoidCallback> _listeners = [];
   void addListener(VoidCallback listener) => _listeners.add(listener);

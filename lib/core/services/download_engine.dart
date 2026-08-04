@@ -16,6 +16,7 @@ import 'package:synchronized/synchronized.dart';
 import 'package:dmx/core/services/bandwidth_governor.dart';
 import 'package:dmx/core/services/connection_manager.dart';
 import 'package:dmx/core/services/download_journal.dart';
+import '../http_overrides.dart';
 import 'package:dmx/core/services/mirror_failover.dart';
 import 'package:dmx/core/services/positional_file_writer.dart';
 import 'package:dmx/core/services/power_monitor.dart';
@@ -133,6 +134,8 @@ class DownloadEngine {
   }
 
   DownloadIsolatePool? _pool;
+  bool _dohEnabled;
+  String _dohProvider;
   Future<DownloadIsolatePool>? _poolInit;
   final _httpEngine = HttpDownloadEngine();
 
@@ -147,8 +150,14 @@ class DownloadEngine {
   Timer? _cleanupTimer;
   bool _closed = false;
 
-  DownloadEngine({Dio? dio, bool enableCleanupTimer = true})
-      : _sharedDio = dio ?? Dio() {
+  DownloadEngine({
+    Dio? dio,
+    bool enableCleanupTimer = true,
+    bool dohEnabled = true,
+    String dohProvider = 'dns.adguard.com',
+  })  : _sharedDio = dio ?? Dio(),
+        _dohEnabled = dohEnabled,
+        _dohProvider = dohProvider {
     if (enableCleanupTimer) {
       _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
         if (_closed) return;
@@ -212,12 +221,25 @@ class DownloadEngine {
     }
   }
 
+  /// Updates DoH settings for subsequent worker jobs and future respawns.
+  /// Existing sockets retain their current connection; new jobs receive the
+  /// latest settings through the worker command.
+  void updateDohSettings(bool enabled, String provider) {
+    _dohEnabled = enabled;
+    _dohProvider = provider;
+    _pool?.updateDohSettings(enabled, provider);
+  }
+
   Future<DownloadIsolatePool> _ensurePool() {
     final existing = _pool;
     if (existing != null) return Future.value(existing);
 
     return _poolInit ??= () async {
-      final pool = DownloadIsolatePool(size: _isolatePoolSize);
+      final pool = DownloadIsolatePool(
+        size: _isolatePoolSize,
+        dohEnabled: _dohEnabled,
+        dohProvider: _dohProvider,
+      );
       await pool.init();
       _pool = pool;
       return pool;
@@ -1010,6 +1032,8 @@ class DownloadEngine {
       mirrorUrls: mirrorUrls,
       adaptiveThreads: adaptiveThreads,
       speedLimitKbps: speedLimitKbps,
+      dnsEnabled: _dohEnabled,
+      dnsProvider: _dohProvider,
     );
 
     final pool = await _ensurePool();

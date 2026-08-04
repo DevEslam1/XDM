@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/intl_formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/utils/file_opener.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
@@ -362,13 +364,13 @@ class _TelemetryHero extends StatelessWidget {
                     animation: pulse,
                     builder: (context, _) {
                     return SizedBox(
-                      width: 110,
-                      height: 110,
+                      width: responsiveValue(context, 110),
+                      height: responsiveValue(context, 110),
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
                           CustomPaint(
-                            size: const Size(110, 110),
+                            size: Size(responsiveValue(context, 110), responsiveValue(context, 110)),
                             painter: _RingPainter(
                               progress: task.progress,
                               color: statusColor,
@@ -678,17 +680,34 @@ class _ActionRail extends StatelessWidget with HapticHelper {
       ),
     );
 
-    return Row(
-      children: actions
-          .map(
-            (a) => Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: _ActionButton(def: a),
-              ),
-            ),
-          )
-          .toList(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 430;
+        if (narrow) {
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: actions
+                .map((a) => SizedBox(
+                      width: (constraints.maxWidth - 8) / 2,
+                      child: _ActionButton(def: a),
+                    ))
+                .toList(),
+          );
+        }
+        return Row(
+          children: actions
+              .map(
+                (a) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _ActionButton(def: a),
+                  ),
+                ),
+              )
+              .toList(),
+        );
+      },
     );
   }
 }
@@ -2729,7 +2748,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
               task.completedAt != null)
             _MetaRow(
               label: L10n.isRtl(context) ? 'وقت الاكتمال' : 'COMPLETION TIME',
-              value: task.completedAt!.toLocal().toString().split('.')[0],
+              value: formatLocalizedDateTime(context, task.completedAt!),
               isDark: isDark,
             ),
           _MetaRow(
@@ -2760,7 +2779,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
             ),
           _MetaRow(
             label: L10n.of(context, 'details_established'),
-            value: task.createdAt.toLocal().toString().split('.')[0],
+            value: formatLocalizedDateTime(context, task.createdAt),
             isDark: isDark,
           ),
           Builder(builder: (context) {
@@ -2783,7 +2802,7 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
                 ),
                 _MetaRow(
                   label: 'TTFB',
-                  value: '${metrics.timeToFirstByteMs}ms',
+                  value: '${formatLocalizedNumber(context, metrics.timeToFirstByteMs)}ms',
                   isDark: isDark,
                 ),
                 if (metrics.resumed)

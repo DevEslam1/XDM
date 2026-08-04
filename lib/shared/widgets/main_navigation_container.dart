@@ -20,6 +20,8 @@ import '../../features/browser/screens/browser_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/widgets/update_dialogs.dart';
+import '../../features/settings/widgets/app_lock_screen.dart';
+import '../../core/services/app_lock_service.dart';
 import 'themed_snackbar.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
@@ -40,6 +42,7 @@ class MainNavigationContainer extends StatefulWidget {
 class _MainNavigationContainerState extends State<MainNavigationContainer>
     with WidgetsBindingObserver {
   String? _lastClipboardUrl;
+  bool _lockScreenVisible = false;
   DateTime _lastClipboardCheckTime = DateTime.fromMillisecondsSinceEpoch(
     0,
     isUtc: true,
@@ -73,8 +76,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       });
     }
     _checkClipboard();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAppUpdates();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _showAppLockIfNeeded();
+      if (mounted) _checkAppUpdates();
     });
   }
 
@@ -116,12 +120,27 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _checkClipboard();
+    if (state == AppLifecycleState.resumed) {
+      _checkClipboard();
+      _showAppLockIfNeeded();
+    }
     if (state == AppLifecycleState.paused) {
       _saveTorrentResumeStateWithTimeout();
     }
   }
 
+  Future<void> _showAppLockIfNeeded() async {
+    if (_lockScreenVisible || !mounted) return;
+    if (!await AppLockService.isLockEnabled() || !mounted) return;
+    _lockScreenVisible = true;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const AppLockScreen(),
+      ),
+    );
+    _lockScreenVisible = false;
+  }
   Future<void> _saveTorrentResumeStateWithTimeout() async {
     try {
       await Future.any([

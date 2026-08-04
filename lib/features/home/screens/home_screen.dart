@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/intl_formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
@@ -64,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen>
     final provider = context.read<DownloadProvider>();
     provider.setStatusFilter('All');
     provider.clearCategoryFilters();
+    provider.clearTaskSelection();
   }
 
   @override
@@ -218,7 +220,12 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-
+  List<String> _visibleTaskIds(DownloadProvider provider) {
+    return provider.filteredTasks
+        .where((task) => _selectedTab == 0 ? _isActiveTask(task) : !_isActiveTask(task))
+        .map((task) => task.id)
+        .toList();
+  }
 
   PreferredSizeWidget _buildSelectionAppBar(
       BuildContext context, bool isDark, Color textClr, Color accentClr) {
@@ -238,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       actions: [
         TextButton(
-          onPressed: () => provider.selectAllTasks(),
+          onPressed: () => provider.selectAllTasks(visibleTaskIds: _visibleTaskIds(provider)),
           child: Text(L10n.of(context, 'select_all_btn'),
               style: TextStyle(color: accentClr)),
         ),
@@ -275,36 +282,42 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Wrap(
+        alignment: WrapAlignment.spaceAround,
+        runAlignment: WrapAlignment.center,
+        runSpacing: 8,
         children: [
           _BatchActionButton(
             icon: Icons.pause_rounded,
             label: L10n.of(context, 'pause_btn'),
             color: textClr,
             onTap: () => BatchOperationsSheet.show(context,
-                selectedTaskIds: selectedIds.toList()),
+                selectedTaskIds: selectedIds.toList(),
+                initialAction: BatchAction.pause),
           ),
           _BatchActionButton(
             icon: Icons.play_arrow_rounded,
             label: L10n.of(context, 'resume_btn'),
             color: textClr,
             onTap: () => BatchOperationsSheet.show(context,
-                selectedTaskIds: selectedIds.toList()),
+                selectedTaskIds: selectedIds.toList(),
+                initialAction: BatchAction.resume),
           ),
           _BatchActionButton(
             icon: Icons.delete_rounded,
             label: L10n.of(context, 'delete_btn'),
             color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
             onTap: () => BatchOperationsSheet.show(context,
-                selectedTaskIds: selectedIds.toList()),
+                selectedTaskIds: selectedIds.toList(),
+                initialAction: BatchAction.delete),
           ),
           _BatchActionButton(
             icon: Icons.folder_rounded,
             label: L10n.of(context, 'change_category'),
             color: accentClr,
             onTap: () => BatchOperationsSheet.show(context,
-                selectedTaskIds: selectedIds.toList()),
+                selectedTaskIds: selectedIds.toList(),
+                initialAction: BatchAction.changeCategory),
           ),
         ],
       ),
@@ -448,7 +461,7 @@ class _HomeScreenState extends State<HomeScreen>
                 hintText: L10n.of(context, 'search_placeholder'),
                 hintStyle: TextStyle(
                   color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                  fontSize: 13,
+                  fontSize: responsiveFontSize(context, 13),
                 ),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -562,7 +575,7 @@ class _HomeScreenState extends State<HomeScreen>
                   color: selected
                       ? Colors.white
                       : (isDark ? Colors.white70 : Colors.black87),
-                  fontSize: 13,
+                  fontSize: responsiveFontSize(context, 13),
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
@@ -582,7 +595,7 @@ class _HomeScreenState extends State<HomeScreen>
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    count > 99 ? '99+' : '$count',
+                    count > 99 ? '99+' : formatLocalizedNumber(context, count),
                     style: TextStyle(
                       color: selected
                           ? Colors.white
@@ -637,7 +650,7 @@ class _HomeScreenState extends State<HomeScreen>
                                 context, 'completed_transmissions_header'),
                         style: TextStyle(
                           color: textClr,
-                          fontSize: 13,
+                          fontSize: responsiveFontSize(context, 13),
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.3,
                         ),
@@ -655,7 +668,7 @@ class _HomeScreenState extends State<HomeScreen>
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '$count',
+                          formatLocalizedNumber(context, count),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -1200,7 +1213,7 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                 totalSizeText,
                 style: TextStyle(
                   color: textClr,
-                  fontSize: 13,
+                  fontSize: responsiveFontSize(context, 13),
                   fontWeight: FontWeight.w800,
                   fontFamily: 'Space Grotesk',
                 ),
@@ -1848,7 +1861,7 @@ class _EmptyState extends StatelessWidget {
                           : AppTheme.lightTextSecondary,
                       letterSpacing: 0.5,
                       fontWeight: FontWeight.w700,
-                      fontSize: 13,
+                      fontSize: responsiveFontSize(context, 13),
                     ),
               ),
               const SizedBox(height: 8),

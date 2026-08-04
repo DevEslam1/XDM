@@ -7,6 +7,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/torrent_service.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/intl_formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/file_opener.dart';
@@ -302,9 +304,11 @@ class _StatusChip extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text(
                     label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: color,
-                      fontSize: 12,
+                      fontSize: responsiveFontSize(context, 12),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -314,7 +318,7 @@ class _StatusChip extends StatelessWidget {
             if (isScheduled) ...[
               const SizedBox(width: 6),
               Tooltip(
-                message: task.scheduledAt!.toLocal().toString(),
+                message: formatLocalizedDateTime(context, task.scheduledAt!),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: AppTheme.chipDecoration(
@@ -328,9 +332,9 @@ class _StatusChip extends StatelessWidget {
                       const Icon(Icons.schedule_rounded, size: 12, color: AppTheme.neonAmber),
                       const SizedBox(width: 4),
                       Text(
-                        'Scheduled for ${task.scheduledAt!.hour.toString().padLeft(2, '0')}:${task.scheduledAt!.minute.toString().padLeft(2, '0')}',
-                        style: const TextStyle(
-                          fontSize: 10,
+                        'Scheduled for ${formatLocalizedTime(context, task.scheduledAt!)}',
+                        style: TextStyle(
+                          fontSize: responsiveFontSize(context, 10),
                           color: AppTheme.neonAmber,
                           fontWeight: FontWeight.bold,
                         ),
@@ -347,7 +351,7 @@ class _StatusChip extends StatelessWidget {
           Text(
             'Waiting for slot ($activeCount/$maxCount active)',
             style: TextStyle(
-              fontSize: 9,
+              fontSize: responsiveFontSize(context, 9),
               color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
             ),
           ),
@@ -447,7 +451,7 @@ class _TelemetryStrip extends StatelessWidget {
                     child: Text(
                       label,
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: responsiveFontSize(context, 10),
                         fontWeight: FontWeight.bold,
                         color:
                             isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,

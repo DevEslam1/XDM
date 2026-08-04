@@ -11,10 +11,14 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:logging/logging.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
+import '../../../core/utils/intl_formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/constants.dart';
 import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/services/update_service.dart';
+import '../../../core/services/app_lock_service.dart';
+import '../widgets/app_lock_screen.dart';
 import '../../../core/services/permission_service.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
@@ -75,6 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   late final TextEditingController _backendUrlController;
   late final TextEditingController _settingsSearchController;
   String _settingsSearchQuery = '';
+  bool _appLockEnabled = false;
   final Map<String, bool> _expandedSections = {};
   late AnimationController _reveal;
 
@@ -95,6 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
     _backendUrlController = TextEditingController(text: settings.backendUrl);
     _settingsSearchController = TextEditingController();
+    _loadAppLockState();
     _settingsSearchController.addListener(() {
       if (mounted) {
         setState(() {
@@ -109,6 +115,24 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Timer? _backendUrlDebounce;
 
+  Future<void> _loadAppLockState() async {
+    final enabled = await AppLockService.isLockEnabled();
+    if (mounted) setState(() => _appLockEnabled = enabled);
+  }
+
+  Future<void> _setAppLock(bool enabled) async {
+    if (enabled) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const AppLockScreen(isSettingUp: true),
+        ),
+      );
+      await _loadAppLockState();
+    } else {
+      await AppLockService.disableLock();
+      if (mounted) setState(() => _appLockEnabled = false);
+    }
+  }
   void _saveBackendUrl(String val, SettingsProvider settings) {
     final trimmed = val.trim();
     if (trimmed.isEmpty ||
@@ -1431,6 +1455,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                         },
                         children: [
                           _SwitchTile(
+                            accentColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+                            title: 'App Lock',
+                            subtitle: 'Protect the app with a PIN',
+                            value: _appLockEnabled,
+                            onChanged: _setAppLock,
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
                             accentColor: isDark
                                 ? AppTheme.neonBlue
                                 : AppTheme.lightNeonBlue,
@@ -1965,7 +1997,7 @@ class _SystemHeaderState extends State<_SystemHeader>
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          DmxAppIcon(size: 50, customColor: violetClr, showGlow: true),
+          DmxAppIcon(size: responsiveValue(context, 50), customColor: violetClr, showGlow: true),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -2426,10 +2458,15 @@ class _SwitchTile extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
-              title: Row(
+              title: Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color:
                           isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
@@ -2695,10 +2732,15 @@ class _DropdownTile<T> extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
                         title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: isDark
                               ? AppTheme.textPrimary
@@ -3478,7 +3520,7 @@ class _CustomDnsModuleState extends State<_CustomDnsModule> {
               Text(
                 isRtl
                     ? '* ينطبق هذا على التحميلات وتحديثات الفلاتر والمتصفح المدمج.'
-                    : '* This applies to downloads, filter updates, and the in-app browser.',
+                    : '* This applies to downloads, filter updates, and the in-app browser. Changes apply to new requests; active downloads keep existing connections.',
                 style: TextStyle(
                   fontSize: 10,
                   fontFamily: 'Inter',
@@ -3756,7 +3798,7 @@ class PerformanceTelemetryCard extends StatelessWidget with HapticHelper {
                       title: isRtl ? 'قنوات الاتصال' : 'Active Connections',
                       value: activeDownloads.isEmpty
                           ? (isRtl ? 'خامل' : 'Idle')
-                          : '$activeThreads ${isRtl ? 'خيوط' : 'threads'}',
+                          : '${formatLocalizedNumber(context, activeThreads)} ${isRtl ? 'خيوط' : 'threads'}',
                       accentColor: accentColor,
                       isDark: isDark,
                     ),
