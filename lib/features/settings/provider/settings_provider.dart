@@ -177,6 +177,15 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   String customUserAgent = '';
   int cleanupDays = 0;
   bool categoryFolders = false;
+  bool antiFingerprinting = true; // Obscure browser WebView automation fingerprints
+
+  static const _antiFingerprintingKey = 'antiFingerprinting';
+
+  Future<void> setAntiFingerprinting(bool value) async {
+    antiFingerprinting = value;
+    await _prefs.setBool(_antiFingerprintingKey, value);
+    notifyListeners();
+  }
 
   void toggleDeveloperMode() {
     developerMode = !developerMode;
@@ -357,6 +366,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     cleanupDays = _prefs.getInt(_cleanupDaysKey) ?? cleanupDays;
     if (![0, 7, 30].contains(cleanupDays)) cleanupDays = 0;
     categoryFolders = _prefs.getBool(_categoryFoldersKey) ?? categoryFolders;
+    antiFingerprinting = _prefs.getBool(_antiFingerprintingKey) ?? antiFingerprinting;
 
     backendUrl = _prefs.getString(_backendUrlKey) ?? backendUrl;
     backendToken = await _secureStorage.read(key: _backendTokenKey) ?? '';

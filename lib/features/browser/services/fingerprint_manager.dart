@@ -60,7 +60,8 @@ class FingerprintManager {
   }
 
   /// Hides navigator.webdriver and injects window.chrome runtime stub to obscure WebView automation fingerprints.
-  Future<void> hideWebViewFingerprints(BrowserTab tab) async {
+  Future<void> hideWebViewFingerprints(BrowserTab tab, [SettingsProvider? settings]) async {
+    if (settings != null && !settings.antiFingerprinting) return;
     try {
       await tab.controller?.evaluateJavascript(source: fingerprintHideJs);
     } catch (e) {

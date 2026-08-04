@@ -28,6 +28,34 @@ import '../../downloads/provider/download_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/update_dialogs.dart';
+import '../../../shared/widgets/empty_state_view.dart';
+
+class _SettingSearchEntry {
+  final String sectionTitle;
+  final String settingTitle;
+  final String? subtitle;
+  final List<String> keywords;
+  final Widget Function(BuildContext context) builder;
+  final Color accentColor;
+
+  const _SettingSearchEntry({
+    required this.sectionTitle,
+    required this.settingTitle,
+    this.subtitle,
+    this.keywords = const [],
+    required this.builder,
+    required this.accentColor,
+  });
+
+  bool matches(String query) {
+    if (query.isEmpty) return true;
+    final q = query.toLowerCase();
+    if (sectionTitle.toLowerCase().contains(q)) return true;
+    if (settingTitle.toLowerCase().contains(q)) return true;
+    if (subtitle?.toLowerCase().contains(q) ?? false) return true;
+    return keywords.any((k) => k.toLowerCase().contains(q));
+  }
+}
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -115,6 +143,223 @@ class _SettingsScreenState extends State<SettingsScreen>
     final q = _settingsSearchQuery.toLowerCase();
     return title.toLowerCase().contains(q) ||
         keywords.any((k) => k.toLowerCase().contains(q));
+  }
+
+  List<_SettingSearchEntry> _buildSearchIndex(
+    BuildContext context,
+    SettingsProvider settings,
+    bool isDark,
+    bool isRtl,
+  ) {
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    return [
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_engine_status'),
+        settingTitle: L10n.of(context, 'settings_auto_resume'),
+        subtitle: L10n.of(context, 'settings_auto_resume_sub'),
+        keywords: const ['resume', 'auto', 'start', 'download', 'reconnect'],
+        accentColor: accent,
+        builder: (ctx) => _SwitchTile(
+          accentColor: accent,
+          title: L10n.of(ctx, 'settings_auto_resume'),
+          subtitle: L10n.of(ctx, 'settings_auto_resume_sub'),
+          value: settings.autoStart,
+          onChanged: (val) {
+            settings.setAutoStart(val);
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_engine_status'),
+        settingTitle: L10n.of(context, 'settings_max_channels'),
+        subtitle: L10n.of(context, 'settings_max_channels_sub'),
+        keywords: const ['parallel', 'simultaneous', 'concurrent', 'downloads', 'channels'],
+        accentColor: accent,
+        builder: (ctx) => _DropdownTile<int>(
+          accentColor: accent,
+          title: L10n.of(ctx, 'settings_max_channels'),
+          subtitle: L10n.of(ctx, 'settings_max_channels_sub'),
+          value: settings.maxDownloads,
+          items: const [1, 2, 3, 5, 8],
+          onChanged: settings.batterySaverMode
+              ? null
+              : (val) {
+                  if (val != null) {
+                    settings.setMaxDownloads(val);
+                    triggerHaptic(settings);
+                  }
+                },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_bandwidth'),
+        settingTitle: L10n.of(context, 'settings_speed_limit'),
+        subtitle: L10n.of(context, 'settings_speed_limit_sub'),
+        keywords: const ['bandwidth', 'rate', 'mb', 'limit', 'throttle', 'speed'],
+        accentColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+        builder: (ctx) => _SliderTile(
+          accentColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+          title: L10n.of(ctx, 'settings_speed_limit'),
+          subtitle: L10n.of(ctx, 'settings_speed_limit_sub'),
+          value: settings.speedLimitMb,
+          min: 0,
+          max: 100,
+          divisions: 100,
+          onChanged: (val) {
+            settings.setSpeedLimit(val);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_network_sec'),
+        settingTitle: L10n.of(context, 'settings_proxy'),
+        subtitle: L10n.of(context, 'settings_proxy_sub'),
+        keywords: const ['proxy', 'socks', 'http', 'network', 'gateway'],
+        accentColor: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+        builder: (ctx) => _SwitchTile(
+          accentColor: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+          title: L10n.of(ctx, 'settings_proxy'),
+          subtitle: L10n.of(ctx, 'settings_proxy_sub'),
+          value: settings.enableProxy,
+          onChanged: (val) {
+            settings.setEnableProxy(val);
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+      if (settings.developerMode)
+        _SettingSearchEntry(
+          sectionTitle: L10n.of(context, 'settings_network_sec'),
+          settingTitle: L10n.of(context, 'settings_bypass_ssl'),
+          subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
+          keywords: const ['ssl', 'certificate', 'tls', 'bypass', 'security', 'developer'],
+          accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+          builder: (ctx) => _SwitchTile(
+            accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            title: L10n.of(ctx, 'settings_bypass_ssl'),
+            subtitle: L10n.of(ctx, 'settings_bypass_ssl_sub'),
+            value: settings.bypassSSL,
+            onChanged: (val) {
+              settings.setBypassSSL(val);
+              triggerHaptic(settings);
+              _maybeConfirmBypassSSL(context, settings);
+            },
+          ),
+        ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_network_sec'),
+        settingTitle: L10n.of(context, 'settings_https_only'),
+        subtitle: L10n.of(context, 'settings_https_only_sub'),
+        keywords: const ['https', 'secure', 'http', 'ssl', 'enforce'],
+        accentColor: accent,
+        builder: (ctx) => _SwitchTile(
+          accentColor: accent,
+          title: L10n.of(ctx, 'settings_https_only'),
+          subtitle: L10n.of(ctx, 'settings_https_only_sub'),
+          value: settings.httpsOnly,
+          onChanged: (val) {
+            settings.setHttpsOnly(val);
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_network_sec'),
+        settingTitle: isRtl
+            ? 'حماية ضد تتبع البصمة الرقمية'
+            : 'Anti-Fingerprinting Protection',
+        subtitle: isRtl
+            ? 'إخفاء بصمات الأتمتة navigator.webdriver في المتصفح لمنع اكتشاف البوتات'
+            : 'Obscure navigator.webdriver and WebView automation signatures to prevent bot detection',
+        keywords: const ['fingerprint', 'automation', 'webdriver', 'privacy', 'bot', 'stealth', 'anti-fingerprint'],
+        accentColor: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+        builder: (ctx) => _SwitchTile(
+          accentColor: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+          title: isRtl
+              ? 'حماية ضد تتبع البصمة الرقمية'
+              : 'Anti-Fingerprinting Protection',
+          subtitle: isRtl
+              ? 'إخفاء بصمات الأتمتة navigator.webdriver في المتصفح لمنع اكتشاف البوتات'
+              : 'Obscure navigator.webdriver and WebView automation signatures to prevent bot detection',
+          value: settings.antiFingerprinting,
+          onChanged: (val) {
+            settings.setAntiFingerprinting(val);
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_visuals'),
+        settingTitle: L10n.of(context, 'settings_dark_mode'),
+        subtitle: L10n.of(context, 'settings_dark_mode_sub'),
+        keywords: const ['dark', 'theme', 'night', 'mode', 'color', 'background'],
+        accentColor: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+        builder: (ctx) => _SwitchTile(
+          accentColor: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+          title: L10n.of(ctx, 'settings_dark_mode'),
+          subtitle: L10n.of(ctx, 'settings_dark_mode_sub'),
+          value: settings.isDarkMode,
+          onChanged: (val) {
+            settings.setThemeMode(val ? 'dark' : 'light');
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_visuals'),
+        settingTitle: L10n.of(context, 'settings_haptics'),
+        subtitle: L10n.of(context, 'settings_haptics_sub'),
+        keywords: const ['vibration', 'haptic', 'feedback', 'touch', 'touchscreen'],
+        accentColor: accent,
+        builder: (ctx) => _SwitchTile(
+          accentColor: accent,
+          title: L10n.of(ctx, 'settings_haptics'),
+          subtitle: L10n.of(ctx, 'settings_haptics_sub'),
+          value: true,
+          onChanged: (val) {
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: L10n.of(context, 'settings_visuals'),
+        settingTitle: L10n.of(context, 'settings_language'),
+        subtitle: L10n.of(context, 'settings_language_sub'),
+        keywords: const ['language', 'locale', 'arabic', 'english', 'german', 'spanish', 'french'],
+        accentColor: accent,
+        builder: (ctx) => _DropdownTile<String>(
+          accentColor: accent,
+          title: L10n.of(ctx, 'settings_language'),
+          subtitle: L10n.of(ctx, 'settings_language_sub'),
+          value: settings.languageCode,
+          items: const ['en', 'ar', 'de', 'es', 'fr'],
+          onChanged: (val) {
+            if (val != null) {
+              settings.setLanguageCode(val);
+              triggerHaptic(settings);
+            }
+          },
+        ),
+      ),
+      _SettingSearchEntry(
+        sectionTitle: 'Developer Mode',
+        settingTitle: 'Enable Developer Mode',
+        subtitle: 'Unlocks advanced debugging tools, SSL configuration, and internal logs',
+        keywords: const ['developer', 'dev', 'debug', 'logs', 'ssl', 'advanced'],
+        accentColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+        builder: (ctx) => _SwitchTile(
+          accentColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+          title: 'Enable Developer Mode',
+          subtitle: 'Unlocks advanced debugging tools, SSL configuration, and internal logs',
+          value: settings.developerMode,
+          onChanged: (val) {
+            settings.toggleDeveloperMode();
+            triggerHaptic(settings);
+          },
+        ),
+      ),
+    ];
   }
 
   Widget _stagger(double start, Widget child) {
@@ -299,7 +544,62 @@ class _SettingsScreenState extends State<SettingsScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  if (_settingsSearchQuery.isNotEmpty) ...[
+                    Builder(
+                      builder: (ctx) {
+                        final results = _buildSearchIndex(context, settings, isDark, isRtl)
+                            .where((e) => e.matches(_settingsSearchQuery))
+                            .toList();
+                        if (results.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: EmptyStateView(
+                              icon: Icons.search_off_rounded,
+                              title: 'No settings found for "$_settingsSearchQuery"',
+                              subtitle:
+                                  'Try searching with different keywords like "proxy", "dark mode", or "speed".',
+                            ),
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12.0),
+                              child: Text(
+                                '${results.length} results for "$_settingsSearchQuery"',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark
+                                      ? AppTheme.neonBlue
+                                      : AppTheme.lightNeonBlue,
+                                ),
+                              ),
+                            ),
+                            ...results.map((entry) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        entry.sectionTitle.toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: entry.accentColor,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      entry.builder(ctx),
+                                    ],
+                                  ),
+                                )),
+                          ],
+                        );
+                      },
+                    ),
+                  ] else ...[
                   if (_sectionMatches(
                       L10n.of(context, 'settings_engine_status'),
                       ['auto resume', 'max channels', 'speed limit']))
@@ -970,6 +1270,23 @@ class _SettingsScreenState extends State<SettingsScreen>
                         _Divider(isDark: isDark),
                         _SwitchTile(
                           accentColor: isDark
+                              ? AppTheme.neonCyan
+                              : AppTheme.lightNeonCyan,
+                          title: isRtl
+                              ? 'حماية ضد تتبع البصمة الرقمية'
+                              : 'ANTI-FINGERPRINTING PROTECTION',
+                          subtitle: isRtl
+                              ? 'إخفاء بصمات الأتمتة navigator.webdriver في المتصفح لمنع اكتشاف البوتات'
+                              : 'Obscure navigator.webdriver and WebView automation signatures to prevent bot detection',
+                          value: settings.antiFingerprinting,
+                          onChanged: (val) {
+                            settings.setAntiFingerprinting(val);
+                            triggerHaptic(settings);
+                          },
+                        ),
+                        _Divider(isDark: isDark),
+                        _SwitchTile(
+                          accentColor: isDark
                               ? AppTheme.neonBlue
                               : AppTheme.lightNeonBlue,
                           title: L10n.of(context, 'settings_bypass_ssl'),
@@ -1390,6 +1707,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   _stagger(0.70, _BackupModule(settings: settings)),
                   const SizedBox(height: 14),
                   _stagger(0.74, _CommsModule(settings: settings)),
+                  ],
                   const SizedBox(height: 24),
                 ],
               ),
