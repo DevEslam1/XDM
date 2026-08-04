@@ -128,7 +128,7 @@ class _SmartUrlBarState extends State<SmartUrlBar> {
               borderSide: BorderSide.none,
             ),
             filled: true,
-            fillColor: (isDark ? AppTheme.surface : Colors.grey.shade200),
+            fillColor: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
           ),
           onSubmitted: (val) {
             setState(() => _showSuggestions = false);

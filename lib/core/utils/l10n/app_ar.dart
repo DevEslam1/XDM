@@ -100,6 +100,9 @@ const Map<String, String> arTranslations = {
   'permission_battery_opening': 'جاري فتح الإعدادات…',
   'permission_continue': 'متابعة',
   'permission_allow': 'السماح',
+  'permission_open_settings': 'فتح الإعدادات',
+  'permission_permanently_denied':
+      'تم رفض الإذن بشكل دائم. يرجى تفعيله من إعدادات النظام.',
   'permission_download_location_title': 'مكان التحميل',
   'permission_download_location_desc': 'اختر مكان حفظ ملفاتك',
   'permission_download_location_button': 'اختر مجلد',

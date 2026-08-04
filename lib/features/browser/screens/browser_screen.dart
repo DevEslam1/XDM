@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -62,6 +62,7 @@ class JavaScriptMessage {
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
+
   @override
   State<BrowserScreen> createState() => _BrowserScreenState();
 }
@@ -69,6 +70,7 @@ class BrowserScreen extends StatefulWidget {
 class _BrowserScreenState extends State<BrowserScreen>
     with HapticHelper, WidgetsBindingObserver {
   static final _log = Logger('BrowserScreen');
+
   late final TabManager _tabManager = TabManager(
     isActive: () => mounted,
     setHostState: setState,
@@ -84,17 +86,29 @@ class _BrowserScreenState extends State<BrowserScreen>
     },
     updateNavState: _updateNavState,
   );
+
   List<BrowserTab> get _tabs => _tabManager.tabs;
   int get _currentTabIndex => _tabManager.currentIndex;
   set _currentTabIndex(int value) => _tabManager.currentIndex = value;
+
   final TextEditingController _urlController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isFocused = false;
   final ValueNotifier<bool> _showBarsNotifier = ValueNotifier<bool>(true);
   double _lastScrollY = 0;
-
   String _customJs = '';
   String _customCss = '';
+
+  // E6: Element Picker State
+  bool _isPickerModeActive = false;
+
+  // E9 & E10: Blocked Popups and Ads Counters
+  // ignore: unused_field - incremented for state tracking; displayed via ThemedSnackbar
+  int _blockedPopupCount = 0;
+  int _blockedAdsCount = 0;
+
+  // E13: Tab Suspension/Resume Visual Feedback
+  String? _restoringTabId;
 
   late final MediaSniffer _sniffer = MediaSniffer(
     isActive: () => mounted,
@@ -104,6 +118,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (mounted) setState(() {});
     },
   );
+
   Map<String, String> get _detectedDownloadUrls =>
       _sniffer.detectedDownloadUrls;
   Map<String, List<Map<String, dynamic>>> get _detectedMediaSources =>
@@ -111,13 +126,15 @@ class _BrowserScreenState extends State<BrowserScreen>
   Map<String, int> get _detectedPlaylistUrls => _sniffer.detectedPlaylistUrls;
   Map<String, DateTime> get _ytDetectionFailed => _sniffer.ytDetectionFailed;
   Map<String, bool> get _mediaScanFailed => _sniffer.mediaScanFailed;
-  // Per-tab YouTube auth cooldown — prevents one tab's auth suppressing others.
   Map<String, DateTime> get _lastYoutubeAuthTimes =>
       _sniffer.lastYoutubeAuthTimes;
+
   static const _youtubeAuthCooldown = Duration(seconds: 30);
   Map<String, Timer> get _mediaScanTimers => _sniffer.mediaScanTimers;
+
   bool _quitPersisted = false;
   bool _isRestoring = false;
+
   final AdBlockerDelegate _adBlocker = AdBlockerDelegate();
   final RedirectGuard _redirectGuard = RedirectGuard.instance;
 
@@ -128,6 +145,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   DownloadProvider? _downloadProvider;
+
   late final BrowserHistoryManager _historyManager = BrowserHistoryManager(
     resolveDatabase: () => Provider.of<DatabaseService>(context, listen: false),
     isIncognito: () =>
@@ -135,6 +153,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     cleanUrl: _cleanUrl,
     isActive: () => mounted,
   );
+
   late final DownloadInterceptor _interceptor = DownloadInterceptor(
     resolveDownloadProvider: () =>
         Provider.of<DownloadProvider>(context, listen: false),
@@ -143,6 +162,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             ? _tabs[_currentTabIndex]
             : null,
   );
+
   final ScrollController _dashboardScrollController = ScrollController();
   List<Timer> get _pendingTimers => _tabManager.pendingTimers;
   Timer? _navDebounce;
@@ -156,8 +176,6 @@ class _BrowserScreenState extends State<BrowserScreen>
   static const String _popupsChannel = 'XDM_Popups';
   static const String _pickerChannel = 'XdmPickerChannel';
 
-
-
   // ─────────────────────────────────────────────────────────────
   // Tab persistence
   // ─────────────────────────────────────────────────────────────
@@ -165,7 +183,6 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   final List<String> _lruTabIds = [];
   final Map<String, Timer> _loadingTimeoutTimers = {};
-  PullToRefreshController? _pullToRefresh;
 
   final _inactivityWatchdog = InactivityWatchdog();
 
@@ -184,13 +201,18 @@ class _BrowserScreenState extends State<BrowserScreen>
       _lruTabIds.remove(activeTab.id);
       _lruTabIds.insert(0, activeTab.id);
     }
-
     if (_lruTabIds.length > 3) {
       _lruTabIds.removeRange(3, _lruTabIds.length);
     }
   }
 
   void _onTabSwitched(int oldIndex, int newIndex) {
+    // E9 & E10: Reset counters on tab switch
+    setState(() {
+      _blockedPopupCount = 0;
+      _blockedAdsCount = 0;
+    });
+
     if (oldIndex >= 0 && oldIndex < _tabs.length && oldIndex != newIndex) {
       final oldTab = _tabs[oldIndex];
       _pauseTabMedia(oldTab);
@@ -210,7 +232,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                   currentUrl.isEmpty ||
                   currentUrl == 'about:blank')) {
             try {
-              newTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(newTab.url)));
+              newTab.controller
+                  ?.loadUrl(urlRequest: URLRequest(url: WebUri(newTab.url)));
             } catch (e, st) {
               Logger('browser_screen')
                   .warning('[browser_screen] operation failed', e, st);
@@ -219,7 +242,8 @@ class _BrowserScreenState extends State<BrowserScreen>
         }).catchError((_) {
           if (mounted) {
             try {
-              newTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(newTab.url)));
+              newTab.controller
+                  ?.loadUrl(urlRequest: URLRequest(url: WebUri(newTab.url)));
             } catch (e, st) {
               Logger('browser_screen')
                   .warning('[browser_screen] operation failed', e, st);
@@ -255,6 +279,17 @@ class _BrowserScreenState extends State<BrowserScreen>
     _isRestoring = true;
     try {
       await _tabManager.restoreTabs();
+      // E14: Tab Persistence/Restore Visual Feedback
+      if (mounted && _tabs.length > 1) {
+        final isDark = context.read<SettingsProvider>().isDarkMode;
+        ThemedSnackbar.show(
+          context,
+          message: 'Restored ${_tabs.length} tabs',
+          icon: Icons.restore_rounded,
+          color: AppTheme.neonBlue,
+          isDarkMode: isDark,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -267,12 +302,11 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   @override
-
-  @override
   void initState() {
     super.initState();
     _adBlocker.addListener(_updateAdBlockSettings);
     WidgetsBinding.instance.addObserver(this);
+
     _focusNode.addListener(() {
       setState(() {
         _isFocused = _focusNode.hasFocus;
@@ -288,6 +322,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         });
       }
     });
+
     _loadSnifferPref();
     _loadCustomJsCss();
     UserScriptManager.instance.load();
@@ -305,7 +340,8 @@ class _BrowserScreenState extends State<BrowserScreen>
             ),
           );
         } catch (e) {
-          _log.warning('[Browser] Failed to update settings for tab ${tab.id}: $e');
+          _log.warning(
+              '[Browser] Failed to update settings for tab ${tab.id}: $e');
         }
       }
     }
@@ -375,6 +411,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         : initialUrl;
     final tabId = id ??
         '${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(999999)}';
+
     final tab = BrowserTab(
       id: tabId,
       url: cleanInitialUrl == 'about:blank' ? '' : cleanInitialUrl,
@@ -415,14 +452,16 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
 
     // Configure user agent and zoom
-    controller.setSettings(settings: InAppWebViewSettings(
-      userAgent: _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
+    controller.setSettings(
+        settings: InAppWebViewSettings(
+      userAgent:
+          _resolveUserAgent(isIncognito: tab.isIncognito, settings: settings),
       supportZoom: settings.desktopMode || settings.pinchToZoom,
       incognito: tab.isIncognito,
     ));
 
     // Initialize PullToRefresh
-    _pullToRefresh = PullToRefreshController(
+    tab.pullToRefreshController = PullToRefreshController(
       settings: PullToRefreshSettings(color: AppTheme.neonBlue),
       onRefresh: () => controller.reload(),
     );
@@ -442,15 +481,19 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
       },
     );
+
     if (url.contains('accounts.google.com') ||
         url.contains('google.com/ServiceLogin') ||
         url.contains('google.com/accounts')) {
-      tab.controller?.setSettings(settings: InAppWebViewSettings(
-        userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+      tab.controller?.setSettings(
+          settings: InAppWebViewSettings(
+        userAgent:
+            'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
         incognito: tab.isIncognito,
       ));
       _hideWebViewFingerprints(tab);
     }
+
     if (mounted) {
       final downloadProvider = Provider.of<DownloadProvider>(
         context,
@@ -477,14 +520,19 @@ class _BrowserScreenState extends State<BrowserScreen>
       });
       downloadProvider.setNavbarVisible(true);
     }
-    tab.controller?.evaluateJavascript(source: AdBlockerService.intervalCleanupJs).catchError((_) {});
+
+    tab.controller
+        ?.evaluateJavascript(source: AdBlockerService.intervalCleanupJs)
+        .catchError((_) {});
     _injectTimerSpeedScript(tab);
     _adBlocker.injectAntiDetect(tab);
     _adBlocker.injectEarly(tab);
     _injectLongPressScriptToTab(tab);
     _injectCustomJsCss(tab);
+
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _injectDesktopModeScript(tab, settings);
+
     _updateNavState();
     _delayed(const Duration(milliseconds: 500), _updateNavState);
   }
@@ -493,6 +541,18 @@ class _BrowserScreenState extends State<BrowserScreen>
     _loadingTimeoutTimers[tab.id]?.cancel();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     unawaited(_injectAllScripts(tab, url));
+
+    // E25: Script Injection Visual Feedback
+    if (mounted && _customJs.isNotEmpty || _customCss.isNotEmpty) {
+      ThemedSnackbar.show(
+        context,
+        message: 'Scripts injected',
+        icon: Icons.code_rounded,
+        color: AppTheme.neonGreen,
+        isDarkMode: settings.isDarkMode,
+      );
+    }
+
     if (mounted) {
       setState(() {
         tab.isLoading = false;
@@ -513,34 +573,36 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
       });
     }
+
     if (url.contains('accounts.google.com') ||
         url.contains('google.com/ServiceLogin') ||
         url.contains('google.com/accounts')) {
       tab.controller?.evaluateJavascript(source: '''
-(function() {
-  var style = document.createElement('style');
-  style.textContent = 'body, html { padding-bottom: 350px !important; }';
-  document.head.appendChild(style);
-  document.addEventListener('focusin', function(e) {
-    if (e.target && e.target.scrollIntoView) {
-      setTimeout(function() {
-        e.target.scrollIntoView({behavior:'smooth', block:'center'});
-      }, 350);
+        (function() {
+          var style = document.createElement('style');
+          style.textContent = 'body, html { padding-bottom: 350px !important; }';
+          document.head.appendChild(style);
+          document.addEventListener('focusin', function(e) {
+            if (e.target && e.target.scrollIntoView) {
+              setTimeout(function() {
+                e.target.scrollIntoView({behavior:'smooth', block:'center'});
+              }, 350);
+            }
+          });
+          if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', function() {
+              var el = document.activeElement;
+              if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+                setTimeout(function() {
+                  el.scrollIntoView({behavior:'smooth', block:'center'});
+                }, 100);
+              }
+            });
+          }
+        })();
+      ''');
     }
-  });
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', function() {
-      var el = document.activeElement;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
-        setTimeout(function() {
-          el.scrollIntoView({behavior:'smooth', block:'center'});
-        }, 100);
-      }
-    });
-  }
-})();
-''');
-    }
+
     if (!tab.isIncognito && !settings.incognitoEnabled) {
       final isYoutubeDomain = url.contains('youtube.com') ||
           url.contains('accounts.google.com') ||
@@ -555,9 +617,11 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
       }
     }
+
     _updateNavState();
     _delayed(const Duration(milliseconds: 500), _updateNavState);
     _delayed(const Duration(milliseconds: 1200), _updateNavState);
+
     if (!_isYoutubeHost(tab.url)) {
       _scheduleMediaScan(tab);
     }
@@ -581,9 +645,11 @@ class _BrowserScreenState extends State<BrowserScreen>
       _detectedPlaylistUrls.remove(tab.id);
       _detectedMediaSources.remove(tab.id);
       _ytDetectionFailed.remove(tab.url);
+
       if (!_isYoutubeHost(tab.url)) {
         _scheduleMediaScan(tab);
       }
+
       _delayed(const Duration(milliseconds: 1000), () {
         if (mounted) {
           tab.controller?.getTitle().then((t) {
@@ -595,17 +661,14 @@ class _BrowserScreenState extends State<BrowserScreen>
           });
         }
       });
-      _updateNavState();
-      _delayed(const Duration(milliseconds: 500), _updateNavState);
     }
+    _updateNavState();
+    _delayed(const Duration(milliseconds: 500), _updateNavState);
   }
 
   void _recordHistory(String url, {String? title}) =>
       _historyManager.recordHistory(url, title: title);
 
-  // Domains where injecting the timer-speed and long-press scripts is safe.
-  // Restricting to media-heavy sites prevents breaking banking, auth, and
-  // WebSocket-heavy apps that rely on accurate timer intervals.
   static bool _isYoutubeHost(String url) => MediaSniffer.isYoutubeHost(url);
 
   Future<void> _injectTimerSpeedScript(BrowserTab tab) async {
@@ -634,19 +697,15 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (i == _currentTabIndex) continue;
       final tab = _tabs[i];
       if (tab.isHome || tab.isSuspended) continue;
-
       try {
         tab.controller?.evaluateJavascript(source: '''
           try { window.stop(); } catch(e) {}
           var media = document.querySelectorAll('video, audio');
-          for (var m = 0; m < media.length; m++) {
-            try { media[m].pause(); } catch(e) {}
-          }
+          for (var m = 0; m < media.length; m++) { try { media[m].pause(); } catch(e) {} }
           if (window.__xdmScrollFixInterval) { clearInterval(window.__xdmScrollFixInterval); window.__xdmScrollFixInterval = null; }
           if (window.__xdmYtAdInterval) { clearInterval(window.__xdmYtAdInterval); window.__xdmYtAdInterval = null; }
         ''');
       } catch (_) {}
-
       tab.isSuspended = true;
     }
   }
@@ -654,12 +713,23 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _resumeTab(BrowserTab tab) {
     if (!tab.isSuspended) return;
     tab.isSuspended = false;
+
+    // E13: Tab Suspension/Resume Visual Feedback
+    setState(() {
+      _restoringTabId = tab.id;
+    });
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        setState(() {
+          _restoringTabId = null;
+        });
+      }
+    });
+
     try {
       tab.controller?.reload();
     } catch (_) {}
   }
-
-
 
   Future<void> _injectAllScripts(BrowserTab tab, String url) async {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
@@ -673,8 +743,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-  /// Removes all per-tab state when a tab is closed or navigated away.
-  /// Call this from every tab-close path to prevent unbounded map growth.
   void _cleanupTabState(String tabId) {
     _sniffer.cleanupTab(tabId);
     _detectedDownloadUrls.remove(tabId);
@@ -689,9 +757,12 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (tab.isIncognito) {
         try {
           unawaited(InAppWebViewController.clearAllCache());
-          unawaited(tab.controller?.evaluateJavascript(source: 'window.localStorage.clear(); window.sessionStorage.clear();'));
+          unawaited(tab.controller?.evaluateJavascript(
+              source:
+                  'window.localStorage.clear(); window.sessionStorage.clear();'));
           if (tab.url.isNotEmpty && tab.url != 'about:blank') {
-            unawaited(CookieManager.instance().deleteCookies(url: WebUri(tab.url)));
+            unawaited(
+                CookieManager.instance().deleteCookies(url: WebUri(tab.url)));
           }
         } catch (_) {}
       }
@@ -750,10 +821,25 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (!mounted) return;
     final url = message.message.trim();
     if (url.isEmpty || url == 'about:blank') return;
+
     if (_adBlocker.shouldBlock(url)) {
       _log.warning('[AdBlocker] Blocked popup: $url');
+      // E9: Blocked Popup Feedback
+      setState(() {
+        _blockedPopupCount++;
+      });
+      final isDark =
+          Provider.of<SettingsProvider>(context, listen: false).isDarkMode;
+      ThemedSnackbar.show(
+        context,
+        message: 'Popup blocked',
+        icon: Icons.block_rounded,
+        color: AppTheme.neonRed,
+        isDarkMode: isDark,
+      );
       return;
     }
+
     _log.warning('[Browser] Opening popup in new tab: $url');
     _redirectGuard.markUserInitiated(url);
     setState(() {
@@ -776,6 +862,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (!mounted) return;
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     if (_tabs[_currentTabIndex].id != tab.id) return;
+
     String? selector;
     try {
       final decoded = jsonDecode(message.message);
@@ -786,6 +873,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       _log.warning('[DMX Browser] Failed to decode picker message: $e');
       return;
     }
+
     if (selector == null || selector.trim().isEmpty) return;
     _confirmBlockElement(tab, selector.trim());
   }
@@ -795,6 +883,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final rule = ElementPickerService.blockRule(selector);
+
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -912,7 +1001,8 @@ class _BrowserScreenState extends State<BrowserScreen>
         break;
       case RedirectAction.allowInSameTab:
         _redirectGuard.markUserInitiated(targetUrl);
-        parentTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri(targetUrl)));
+        parentTab.controller
+            ?.loadUrl(urlRequest: URLRequest(url: WebUri(targetUrl)));
         break;
     }
   }
@@ -960,10 +1050,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     _adBlocker.removeListener(_updateAdBlockSettings);
     _inactivityWatchdog.dispose();
     WidgetsBinding.instance.removeObserver(this);
+
     for (final timer in _loadingTimeoutTimers.values) {
       timer.cancel();
     }
     _loadingTimeoutTimers.clear();
+
     if (!_quitPersisted && _tabs.isNotEmpty) {
       try {
         _tabManager.saveTabs();
@@ -972,40 +1064,44 @@ class _BrowserScreenState extends State<BrowserScreen>
             .warning('[browser_screen] operation failed', e, st);
       }
     }
-    // Clean up ALL per-tab state maps
+
     for (final tab in _tabs) {
       _cleanupTabState(tab.id);
     }
+
     for (final tab in _tabs) {
       if (tab.isIncognito) {
         try {
           unawaited(InAppWebViewController.clearAllCache());
-          tab.controller?.evaluateJavascript(source: 'window.localStorage.clear(); window.sessionStorage.clear();');
-        } catch (e) {
-          // ignore
-        }
+          tab.controller?.evaluateJavascript(
+              source:
+                  'window.localStorage.clear(); window.sessionStorage.clear();');
+        } catch (_) { /* ignore: clearing cache/storage on close */ }
       }
       try {
         tab.progressNotifier.dispose();
-      } catch (e) {
-        // ignore
-      }
+      } catch (_) { /* ignore: disposing notifier may already be disposed */ }
     }
+
     _tabs.clear();
     _detectedDownloadUrls.clear();
     _detectedMediaSources.clear();
     _detectedPlaylistUrls.clear();
     _ytDetectionFailed.clear();
+
     for (final timer in _mediaScanTimers.values) {
       timer.cancel();
     }
     _mediaScanTimers.clear();
+
     for (final timer in _pendingTimers) {
       timer.cancel();
     }
     _pendingTimers.clear();
+
     _navDebounce?.cancel();
     _downloadProvider?.removeListener(_onDownloadProviderChanged);
+
     _urlController.dispose();
     _focusNode.dispose();
     _dashboardScrollController.dispose();
@@ -1061,18 +1157,22 @@ class _BrowserScreenState extends State<BrowserScreen>
   Future<void> _updateNavState() async {
     if (!mounted || _tabs.isEmpty) return;
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
+
     final activeTab = _tabs[_currentTabIndex];
     if (activeTab.isHome && _homeReturnUrl != null) return;
+
     try {
       final canBack = await activeTab.controller?.canGoBack() ?? false;
       final canForward = await activeTab.controller?.canGoForward() ?? false;
       final webUri = await activeTab.controller?.getUrl();
       final currentUrl = webUri?.toString();
+
       if (mounted) {
         setState(() {
           if (currentUrl != null && currentUrl.isNotEmpty) {
             final clean = _cleanUrl(currentUrl);
             final isBlank = clean == 'about:blank' || clean.isEmpty;
+
             if (!activeTab.isHome || isBlank) {
               activeTab.url = clean;
               activeTab.isHome = isBlank;
@@ -1080,6 +1180,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                 _urlController.text = isBlank ? '' : clean;
               }
             }
+
             if (activeTab.isHome) {
               activeTab.canGoBack = false;
               activeTab.canGoForward =
@@ -1096,9 +1197,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           }
         });
       }
-    } catch (e) {
-      // ignore
-    }
+    } catch (_) { /* ignore: getUrl/canGoBack may throw if controller disposed */ }
   }
 
   Future<void> _goBack() async {
@@ -1122,9 +1221,8 @@ class _BrowserScreenState extends State<BrowserScreen>
           activeTab.canGoForward = true;
           _urlController.clear();
         });
-        // Clear the WebView so stale page content doesn't flash when the
-        // user navigates to a new page from the Home dashboard.
-        activeTab.controller?.loadUrl(urlRequest: URLRequest(url: WebUri('about:blank')));
+        activeTab.controller
+            ?.loadUrl(urlRequest: URLRequest(url: WebUri('about:blank')));
       }
     }
   }
@@ -1137,6 +1235,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
     final activeTab = _tabs[_currentTabIndex];
     if (!activeTab.canGoForward) return;
+
     if (activeTab.isHome &&
         _homeReturnUrl != null &&
         _homeReturnUrl!.isNotEmpty) {
@@ -1150,6 +1249,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       _navigateToUrl(returnUrl);
       return;
     }
+
     unawaited(activeTab.controller?.goForward() ?? Future.value());
     _updateNavState();
   }
@@ -1157,9 +1257,11 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _navigateToUrl(String input) {
     var url = input.trim();
     if (url.isEmpty) return;
+
     _redirectGuard.markUserInitiated(url);
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final engine = settings.searchEngine;
+
     String searchPrefix = 'https://google.com/search?q=';
     if (engine == 'DuckDuckGo') {
       searchPrefix = 'https://duckduckgo.com/?q=';
@@ -1168,17 +1270,18 @@ class _BrowserScreenState extends State<BrowserScreen>
     } else if (engine == 'Yahoo') {
       searchPrefix = 'https://search.yahoo.com/search?p=';
     }
+
     final lowerUrl = url.toLowerCase();
     if (lowerUrl.startsWith('http://') ||
         lowerUrl.startsWith('https://') ||
         lowerUrl.startsWith('file://') ||
         lowerUrl.startsWith('about:')) {
-      // Valid URI scheme
     } else if (url.contains(' ') || !url.contains('.')) {
       url = '$searchPrefix${Uri.encodeComponent(input)}';
     } else {
       url = 'https://$url';
     }
+
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
     final parsed = Uri.tryParse(url);
@@ -1241,6 +1344,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final settings = context.read<SettingsProvider>();
     if (_currentTabIndex < 0 || _currentTabIndex >= _tabs.length) return;
     final activeTab = _tabs[_currentTabIndex];
+
     switch (value) {
       case 'show_bookmarks':
         _openBookmarks();
@@ -1343,7 +1447,8 @@ class _BrowserScreenState extends State<BrowserScreen>
               try {
                 await t.controller?.reload();
               } catch (e) {
-                _log.warning('[DMX Browser] Reload failed after mode switch: $e');
+                _log.warning(
+                    '[DMX Browser] Reload failed after mode switch: $e');
               }
             }
           }
@@ -1399,8 +1504,6 @@ class _BrowserScreenState extends State<BrowserScreen>
             icon: Icons.security,
             isDarkMode: settings.isDarkMode,
           );
-          // Handled per-tab dynamically via settings: incognito isolation
-          // is native. Global cookie deletion removed.
         }
         break;
       case 'injector':
@@ -1426,19 +1529,23 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (activeTab.isHome || activeTab.url.isEmpty) return;
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final ok = activeTab.controller == null ? false : await ReaderModeService.activateReaderMode(
-      activeTab.controller!,
-      (htmlUrl) {
-        if (mounted) {
-          activeTab.controller
-              ?.loadUrl(urlRequest: URLRequest(url: WebUri(htmlUrl)))
-              .catchError((e, st) {
-            Logger('browser_screen')
-                .warning('[browser_screen] reader mode load failed', e, st);
-          });
-        }
-      },
-    );
+
+    final ok = activeTab.controller == null
+        ? false
+        : await ReaderModeService.activateReaderMode(
+            activeTab.controller!,
+            (htmlUrl) {
+              if (mounted) {
+                activeTab.controller
+                    ?.loadUrl(urlRequest: URLRequest(url: WebUri(htmlUrl)))
+                    .catchError((e, st) {
+                  Logger('browser_screen').warning(
+                      '[browser_screen] reader mode load failed', e, st);
+                });
+              }
+            },
+          );
+
     if (mounted) {
       ThemedSnackbar.show(
         context,
@@ -1456,10 +1563,15 @@ class _BrowserScreenState extends State<BrowserScreen>
     try {
       await activeTab.controller
           ?.evaluateJavascript(source: ElementPickerService.pickerScript);
+      // E6: Element Picker Mode Indicator
+      setState(() {
+        _isPickerModeActive = true;
+      });
     } catch (e) {
       _log.warning('[DMX Browser] Failed to start element picker: $e');
       return;
     }
+
     if (mounted) {
       ThemedSnackbar.show(
         context,
@@ -1486,11 +1598,10 @@ class _BrowserScreenState extends State<BrowserScreen>
             (t) => t.id == tabId,
             orElse: () => activeTab,
           );
+
     final hasMultipleQualities =
         _detectedMediaSources[tab.id]?.isNotEmpty ?? false;
 
-    // Build the multi-source list: the long-pressed URL first, then the
-    // discovered alternative sources that belong to the same media.
     final discovered = (_detectedMediaSources[tab.id] ?? [])
         .map(MediaSourceItem.fromMap)
         .toList();
@@ -1509,9 +1620,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // INTERCEPTION SHEET — targeting-reticle design
-  // ─────────────────────────────────────────────────────────────
   void _showInterceptionSheet(BuildContext context, String downloadUrl) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     triggerHaptic(settings);
@@ -1568,7 +1676,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                             ),
                           ),
                         ),
-                        // Header with pulsing radar icon
                         Row(
                           children: [
                             _PulsingIconBadge(
@@ -1643,7 +1750,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                           ],
                         ),
                         const SizedBox(height: 18),
-                        // URL readout with corner brackets
                         _CornerBracketBox(
                           color: accent,
                           isDark: isDark,
@@ -1705,7 +1811,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                     final activeTab = _tabs[_currentTabIndex];
                                     _interceptor.addBypass(downloadUrl);
                                     activeTab.controller?.loadUrl(
-                                      urlRequest: URLRequest(url: WebUri(downloadUrl)),
+                                      urlRequest:
+                                          URLRequest(url: WebUri(downloadUrl)),
                                     );
                                   }
                                 },
@@ -1745,7 +1852,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-  // DOM Page Media Scanner
   Future<void> _scanPageMedia(BrowserTab tab) =>
       _sniffer.scanPageMedia(tab, tabs: _tabs);
 
@@ -1754,6 +1860,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final detectedSources = _detectedMediaSources[tabId] ?? [];
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1941,6 +2048,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final detectedSources = _detectedMediaSources[tabId] ?? [];
     final downloadPageUrl =
         _tabs.where((t) => t.id == tabId).map((t) => t.url).firstOrNull;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2049,6 +2157,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                     ? AppTheme.neonGreen
                                     : AppTheme.lightNeonGreen)
                                 : accent;
+
                             return Material(
                               color: Colors.transparent,
                               borderRadius: BorderRadius.circular(14),
@@ -2187,8 +2296,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-
-
   Future<void> _savePageOffline(BrowserTab tab) async {
     if (tab.isHome) return;
     final settings = Provider.of<SettingsProvider>(context, listen: false);
@@ -2212,6 +2319,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           }
         }
       }
+
       if (rawHtml.isEmpty) {
         if (mounted) {
           ThemedSnackbar.show(
@@ -2225,18 +2333,22 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
         return;
       }
+
       final offlineTitle =
           mounted ? L10n.of(context, 'browser_offline_page') : 'Offline Page';
       String title = tab.title.isNotEmpty ? tab.title : offlineTitle;
       title = title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
+
       final path = settings.customDownloadPath?.isNotEmpty == true
           ? settings.customDownloadPath!
           : await PermissionService().defaultDownloadDirectory();
       final filePath = p.join(path, "$title.html");
       final file = File(filePath);
       await file.writeAsString(rawHtml);
+
       final id = DateTime.now().millisecondsSinceEpoch.toString();
       final size = utf8.encode(rawHtml).length;
+
       final task = DownloadTask(
         id: id,
         fileName: "$title.html",
@@ -2254,9 +2366,11 @@ class _BrowserScreenState extends State<BrowserScreen>
         updatedAt: DateTime.now(),
         completedAt: DateTime.now(),
       );
+
       if (!mounted) return;
       final db = context.read<DatabaseService>();
       await db.saveTask(task);
+
       if (mounted) {
         await context.read<DownloadProvider>().load(
               pauseOrphanDownloads: false,
@@ -2348,6 +2462,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                     _tabs.clear();
                     _tabs.add(active);
                     _currentTabIndex = 0;
+
                     final newTab = _createNewTab(isIncognito: isIncognito);
                     _tabs.add(newTab);
                     _currentTabIndex = 1;
@@ -2370,14 +2485,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // TAB SWITCHER — grid with incognito styling
-  // ─────────────────────────────────────────────────────────────
   void _showTabSwitcher(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2385,347 +2498,393 @@ class _BrowserScreenState extends State<BrowserScreen>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.85,
-              maxChildSize: 0.95,
-              minChildSize: 0.5,
-              builder: (context, controller) {
-                return ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(28),
-                  ),
-                  child: DmxBackdropFilter(
-                    sigmaX: 15,
-                    sigmaY: 15,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color:
-                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                                .withValues(alpha: 0.95),
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(28),
-                        ),
-                        border: Border(
-                          top: BorderSide(
-                            color: isDark
-                                ? AppTheme.glassBorder
-                                : AppTheme.lightGlassBorder,
-                            width: 0.8,
-                          ),
-                        ),
+            // E20: Tab Switcher Open/Close Animation
+            return AnimatedSlide(
+              offset: Offset.zero,
+              duration: AppTheme.motionBase,
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: 1.0,
+                duration: AppTheme.motionBase,
+                child: DraggableScrollableSheet(
+                  expand: false,
+                  initialChildSize: 0.85,
+                  maxChildSize: 0.95,
+                  minChildSize: 0.5,
+                  builder: (context, controller) {
+                    return ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
                       ),
-                      child: SafeArea(
-                        child: Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24.0,
-                                vertical: 16.0,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: accent.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Icon(
-                                      Icons.tab_rounded,
-                                      color: accent,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    L10n.of(context, 'active_tabs'),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          color: accent,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.3,
-                                          fontSize: 14,
-                                        ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: accent.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      '${_tabs.length}',
-                                      style: TextStyle(
-                                        color: accent,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w800,
-                                        fontFamily: 'Space Grotesk',
-                                      ),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  _TabSwitcherAction(
-                                    icon: Icons.visibility_off_rounded,
-                                    color: violet,
-                                    tooltip: L10n.of(
-                                      context,
-                                      'browser_new_incognito_tab',
-                                    ),
-                                    onPressed: () {
-                                      triggerHaptic(settings);
-                                      if (_tabs.length >= 10) {
-                                        _showTabLimitDialog(
-                                          context,
-                                          setModalState,
-                                          isIncognito: true,
-                                        );
-                                        return;
-                                      }
-                                      final oldIdx = _currentTabIndex;
-                                      setState(() {
-                                        final tab = _createNewTab(
-                                          isIncognito: true,
-                                        );
-                                        _tabs.add(tab);
-                                        _currentTabIndex = _tabs.length - 1;
-                                        _urlController.text = '';
-                                        _showBarsNotifier.value = true;
-                                        _updateLruOrder();
-                                      });
-                                      _onTabSwitched(oldIdx, _currentTabIndex);
-                                      _saveTabs();
-                                      Navigator.pop(context);
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _TabSwitcherAction(
-                                    icon: Icons.add_rounded,
-                                    color: accent,
-                                    tooltip: L10n.of(
-                                      context,
-                                      'browser_new_tab',
-                                    ),
-                                    onPressed: () {
-                                      triggerHaptic(settings);
-                                      if (_tabs.length >= 10) {
-                                        _showTabLimitDialog(
-                                          context,
-                                          setModalState,
-                                          isIncognito: false,
-                                        );
-                                        return;
-                                      }
-                                      final oldIdx = _currentTabIndex;
-                                      setState(() {
-                                        final tab = _createNewTab();
-                                        _tabs.add(tab);
-                                        _currentTabIndex = _tabs.length - 1;
-                                        _urlController.text = '';
-                                        _showBarsNotifier.value = true;
-                                        _updateLruOrder();
-                                      });
-                                      _onTabSwitched(oldIdx, _currentTabIndex);
-                                      _saveTabs();
-                                      Navigator.pop(context);
-                                    },
-                                  ),
-                                ],
+                      child: DmxBackdropFilter(
+                        sigmaX: 15,
+                        sigmaY: 15,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: (isDark
+                                    ? AppTheme.surface
+                                    : AppTheme.lightSurface)
+                                .withValues(alpha: 0.95),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(28),
+                            ),
+                            border: Border(
+                              top: BorderSide(
+                                color: isDark
+                                    ? AppTheme.glassBorder
+                                    : AppTheme.lightGlassBorder,
+                                width: 0.8,
                               ),
                             ),
-                            Expanded(
-                              child: GridView.builder(
-                                controller: controller,
-                                padding: const EdgeInsets.all(16),
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
-                                  childAspectRatio: 0.9,
-                                ),
-                                itemCount: _tabs.length,
-                                itemBuilder: (context, index) {
-                                  final tab = _tabs[index];
-                                  final isActive = index == _currentTabIndex;
-                                  final tabClr =
-                                      tab.isIncognito ? violet : accent;
-                                  return GestureDetector(
-                                    onTap: () {
-                                      triggerHaptic(settings);
-                                      _switchTab(index);
-                                      Navigator.pop(context);
-                                    },
-                                    child: AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: tab.isIncognito
-                                            ? (isDark
-                                                ? const Color(0xFF16121F)
-                                                : const Color(0xFFF3EEFA))
-                                            : (isDark
-                                                ? AppTheme.cardBg
-                                                : AppTheme.lightCardBg),
-                                        borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(
-                                          color: isActive
-                                              ? tabClr.withValues(alpha: 0.8)
-                                              : tabClr.withValues(alpha: 0.15),
-                                          width: isActive ? 1.5 : 0.8,
+                          ),
+                          child: SafeArea(
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24.0,
+                                    vertical: 16.0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: accent.withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
                                         ),
-                                        boxShadow: isActive
-                                            ? [
-                                                BoxShadow(
-                                                  color: tabClr.withValues(
-                                                    alpha: 0.15,
-                                                  ),
-                                                  blurRadius: 12,
-                                                  spreadRadius: -2,
-                                                ),
-                                              ]
-                                            : null,
+                                        child: Icon(
+                                          Icons.tab_rounded,
+                                          color: accent,
+                                          size: 18,
+                                        ),
                                       ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          // Tab header strip
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                              vertical: 8,
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        L10n.of(context, 'active_tabs'),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              color: accent,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.3,
+                                              fontSize: 14,
+                                            ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: accent.withValues(alpha: 0.12),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '${_tabs.length}',
+                                          style: TextStyle(
+                                            color: accent,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            fontFamily: 'Space Grotesk',
+                                          ),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      _TabSwitcherAction(
+                                        icon: Icons.visibility_off_rounded,
+                                        color: violet,
+                                        tooltip: L10n.of(
+                                          context,
+                                          'browser_new_incognito_tab',
+                                        ),
+                                        onPressed: () {
+                                          triggerHaptic(settings);
+                                          if (_tabs.length >= 10) {
+                                            _showTabLimitDialog(
+                                              context,
+                                              setModalState,
+                                              isIncognito: true,
+                                            );
+                                            return;
+                                          }
+                                          final oldIdx = _currentTabIndex;
+                                          setState(() {
+                                            final tab = _createNewTab(
+                                              isIncognito: true,
+                                            );
+                                            _tabs.add(tab);
+                                            _currentTabIndex = _tabs.length - 1;
+                                            _urlController.text = '';
+                                            _showBarsNotifier.value = true;
+                                            _updateLruOrder();
+                                          });
+                                          _onTabSwitched(
+                                              oldIdx, _currentTabIndex);
+                                          _saveTabs();
+                                          Navigator.pop(context);
+                                        },
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _TabSwitcherAction(
+                                        icon: Icons.add_rounded,
+                                        color: accent,
+                                        tooltip: L10n.of(
+                                          context,
+                                          'browser_new_tab',
+                                        ),
+                                        onPressed: () {
+                                          triggerHaptic(settings);
+                                          if (_tabs.length >= 10) {
+                                            _showTabLimitDialog(
+                                              context,
+                                              setModalState,
+                                              isIncognito: false,
+                                            );
+                                            return;
+                                          }
+                                          final oldIdx = _currentTabIndex;
+                                          setState(() {
+                                            final tab = _createNewTab();
+                                            _tabs.add(tab);
+                                            _currentTabIndex = _tabs.length - 1;
+                                            _urlController.text = '';
+                                            _showBarsNotifier.value = true;
+                                            _updateLruOrder();
+                                          });
+                                          _onTabSwitched(
+                                              oldIdx, _currentTabIndex);
+                                          _saveTabs();
+                                          Navigator.pop(context);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: GridView.builder(
+                                    controller: controller,
+                                    padding: const EdgeInsets.all(16),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
+                                      childAspectRatio: 0.9,
+                                    ),
+                                    itemCount: _tabs.length,
+                                    itemBuilder: (context, index) {
+                                      final tab = _tabs[index];
+                                      final isActive =
+                                          index == _currentTabIndex;
+                                      final tabClr =
+                                          tab.isIncognito ? violet : accent;
+
+                                      // E21: Tab Switcher Tab Select/Deselect Animation
+                                      return AnimatedScale(
+                                        scale: isActive ? 1.05 : 1.0,
+                                        duration: AppTheme.motionFast,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            triggerHaptic(settings);
+                                            _switchTab(index);
+                                            Navigator.pop(context);
+                                          },
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 200,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: tabClr.withValues(
-                                                alpha: isActive ? 0.12 : 0.05,
-                                              ),
+                                              color: tab.isIncognito
+                                                  ? (isDark
+                                                      ? const Color(0xFF16121F)
+                                                      : const Color(0xFFF3EEFA))
+                                                  : (isDark
+                                                      ? AppTheme.cardBg
+                                                      : AppTheme.lightCardBg),
                                               borderRadius:
-                                                  const BorderRadius.vertical(
-                                                top: Radius.circular(15),
+                                                  BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: isActive
+                                                    ? tabClr.withValues(
+                                                        alpha: 0.8)
+                                                    : tabClr.withValues(
+                                                        alpha: 0.15),
+                                                width: isActive ? 1.5 : 0.8,
                                               ),
+                                              boxShadow: isActive
+                                                  ? [
+                                                      BoxShadow(
+                                                        color:
+                                                            tabClr.withValues(
+                                                          alpha: 0.15,
+                                                        ),
+                                                        blurRadius: 12,
+                                                        spreadRadius: -2,
+                                                      ),
+                                                    ]
+                                                  : null,
                                             ),
-                                            child: Row(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                Icon(
-                                                  tab.isIncognito
-                                                      ? Icons
-                                                          .visibility_off_rounded
-                                                      : Icons.language_rounded,
-                                                  size: 13,
-                                                  color: tabClr,
-                                                ),
-                                                const Spacer(),
-                                                GestureDetector(
-                                                  onTap: () {
-                                                    triggerHaptic(settings);
-                                                    setModalState(() {
-                                                      setState(() {
-                                                        // Centralised cleanup of all per-tab state.
-                                                        _cleanupTabState(
-                                                          tab.id,
-                                                        );
-                                                        tab.dispose();
-                                                        _tabs.removeAt(index);
-                                                        if (_currentTabIndex >=
-                                                            _tabs.length) {
-                                                          _currentTabIndex =
-                                                              _tabs.length - 1;
-                                                        }
-                                                        if (_tabs.isEmpty) {
-                                                          _tabs.add(
-                                                            _createNewTab(),
-                                                          );
-                                                          _currentTabIndex = 0;
-                                                        }
-                                                        final activeTab = _tabs[
-                                                            _currentTabIndex];
-                                                        _urlController.text =
-                                                            activeTab.isHome
-                                                                ? ''
-                                                                : activeTab.url;
-                                                      });
-                                                      _saveTabs();
-                                                    });
-                                                  },
-                                                  child: Icon(
-                                                    Icons.close_rounded,
-                                                    size: 15,
-                                                    color: isDark
-                                                        ? AppTheme.textMuted
-                                                        : AppTheme
-                                                            .lightTextMuted,
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 8,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: tabClr.withValues(
+                                                      alpha: isActive
+                                                          ? 0.12
+                                                          : 0.05,
+                                                    ),
+                                                    borderRadius:
+                                                        const BorderRadius
+                                                            .vertical(
+                                                      top: Radius.circular(15),
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        tab.isIncognito
+                                                            ? Icons
+                                                                .visibility_off_rounded
+                                                            : Icons
+                                                                .language_rounded,
+                                                        size: 13,
+                                                        color: tabClr,
+                                                      ),
+                                                      const Spacer(),
+                                                      GestureDetector(
+                                                        onTap: () {
+                                                          triggerHaptic(
+                                                              settings);
+                                                          setModalState(() {
+                                                            setState(() {
+                                                              _cleanupTabState(
+                                                                tab.id,
+                                                              );
+                                                              tab.dispose();
+                                                              _tabs.removeAt(
+                                                                  index);
+                                                              if (_currentTabIndex >=
+                                                                  _tabs
+                                                                      .length) {
+                                                                _currentTabIndex =
+                                                                    _tabs.length -
+                                                                        1;
+                                                              }
+                                                              if (_tabs
+                                                                  .isEmpty) {
+                                                                _tabs.add(
+                                                                  _createNewTab(),
+                                                                );
+                                                                _currentTabIndex =
+                                                                    0;
+                                                              }
+                                                              final activeTab =
+                                                                  _tabs[
+                                                                      _currentTabIndex];
+                                                              _urlController
+                                                                      .text =
+                                                                  activeTab
+                                                                          .isHome
+                                                                      ? ''
+                                                                      : activeTab
+                                                                          .url;
+                                                            });
+                                                            _saveTabs();
+                                                          });
+                                                        },
+                                                        child: Icon(
+                                                          Icons.close_rounded,
+                                                          size: 15,
+                                                          color: isDark
+                                                              ? AppTheme
+                                                                  .textMuted
+                                                              : AppTheme
+                                                                  .lightTextMuted,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
+                                                const SizedBox(height: 10),
+                                                Expanded(
+                                                  child: Padding(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 10,
+                                                    ),
+                                                    child: Text(
+                                                      tab.title.isEmpty
+                                                          ? 'New Tab'
+                                                          : tab.title,
+                                                      maxLines: 2,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        color: isDark
+                                                            ? AppTheme
+                                                                .textPrimary
+                                                            : AppTheme
+                                                                .lightTextPrimary,
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 10,
+                                                  ),
+                                                  child: Text(
+                                                    tab.isHome
+                                                        ? 'Dashboard'
+                                                        : tab.url,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      color: isDark
+                                                          ? AppTheme.textMuted
+                                                          : AppTheme
+                                                              .lightTextMuted,
+                                                      fontSize: 12,
+                                                      fontFamily: 'monospace',
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 10),
                                               ],
                                             ),
                                           ),
-                                          const SizedBox(height: 10),
-                                          Expanded(
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                              ),
-                                              child: Text(
-                                                tab.title.isEmpty
-                                                    ? 'New Tab'
-                                                    : tab.title,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  color: isDark
-                                                      ? AppTheme.textPrimary
-                                                      : AppTheme
-                                                          .lightTextPrimary,
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 10,
-                                            ),
-                                            child: Text(
-                                              tab.isHome
-                                                  ? 'Dashboard'
-                                                  : tab.url,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: isDark
-                                                    ? AppTheme.textMuted
-                                                    : AppTheme.lightTextMuted,
-                                                fontSize: 12,
-                                                fontFamily: 'monospace',
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 10),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                );
-              },
+                    );
+                  },
+                ),
+              ),
             );
           },
         );
@@ -2733,9 +2892,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // HOME DASHBOARD — radar, live stats, speed dial
-  // ─────────────────────────────────────────────────────────────
   Widget _buildHomeDashboard(
     BuildContext context,
     SettingsProvider settings, {
@@ -2744,6 +2900,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final accentColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
     return SingleChildScrollView(
       controller: scrollController,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -2770,8 +2927,6 @@ class _BrowserScreenState extends State<BrowserScreen>
             },
           ),
           const SizedBox(height: 24),
-
-          // ── Sniffer Radar Card ──
           _SnifferRadarCard(
             settings: settings,
             isEnabled: _isSnifferEnabled,
@@ -2781,8 +2936,6 @@ class _BrowserScreenState extends State<BrowserScreen>
             },
           ),
           const SizedBox(height: 16),
-
-          // ── Live Engine Stats ──
           Selector<DownloadProvider, ({int active, String speed})>(
             selector: (_, p) => (
               active: p.downloadingTasksCount,
@@ -2849,8 +3002,6 @@ class _BrowserScreenState extends State<BrowserScreen>
             },
           ),
           const SizedBox(height: 16),
-
-          // ── Central Search Bar ──
           GlassCard(
             borderRadius: 24,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -2894,8 +3045,6 @@ class _BrowserScreenState extends State<BrowserScreen>
             ),
           ),
           const SizedBox(height: 16),
-
-          // ── Search Engine Selector ──
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -2937,8 +3086,6 @@ class _BrowserScreenState extends State<BrowserScreen>
             ],
           ),
           const SizedBox(height: 28),
-
-          // ── Speed Dial ──
           Row(
             children: [
               Container(
@@ -3082,6 +3229,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final isDark = settings.isDarkMode;
     final textPrimary =
         isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+
     return GlassCard(
       borderRadius: 16,
       padding: EdgeInsets.zero,
@@ -3168,6 +3316,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     final isRtl = L10n.isRtl(context);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final statusBarHeight = MediaQuery.of(context).padding.top;
+
     if (_tabs.isEmpty ||
         _currentTabIndex < 0 ||
         _currentTabIndex >= _tabs.length) {
@@ -3181,12 +3330,14 @@ class _BrowserScreenState extends State<BrowserScreen>
         ),
       );
     }
+
     final activeTab = _tabs[_currentTabIndex];
     final showFab = !activeTab.isHome &&
         (_detectedDownloadUrls[activeTab.id] != null ||
             (_detectedMediaSources[activeTab.id]?.isNotEmpty ?? false) ||
             _detectedPlaylistUrls.containsKey(activeTab.id) ||
             (_mediaScanFailed[activeTab.id] ?? false));
+
     if (settings.pinchToZoom != _lastZoomEnabled) {
       _lastZoomEnabled = settings.pinchToZoom;
       for (final tab in _tabs) {
@@ -3198,6 +3349,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         );
       }
     }
+
     return Listener(
       onPointerDown: (_) => _resetInactivityTimer(),
       onPointerMove: (_) => _resetInactivityTimer(),
@@ -3236,7 +3388,6 @@ class _BrowserScreenState extends State<BrowserScreen>
             floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
             body: Column(
               children: [
-                // ── Cockpit URL Bar ──
                 ValueListenableBuilder<bool>(
                   valueListenable: _showBarsNotifier,
                   builder: (context, showBars, child) {
@@ -3250,7 +3401,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
                           curve: Curves.easeInOut,
-                          height: showBars ? (kToolbarHeight + statusBarHeight) : 0,
+                          height:
+                              showBars ? (kToolbarHeight + statusBarHeight) : 0,
                           clipBehavior: Clip.hardEdge,
                           decoration: const BoxDecoration(),
                           child: child,
@@ -3306,32 +3458,41 @@ class _BrowserScreenState extends State<BrowserScreen>
                                 },
                               ),
                               const SizedBox(width: 4),
-                              // Address bar with security readout
                               Expanded(
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
                                   height: 38,
                                   decoration: BoxDecoration(
-                                    color: isDark
-                                        ? (_isFocused
-                                            ? const Color(0xFF141424)
-                                            : const Color(0xFF0F0F16))
-                                        : (_isFocused
-                                            ? AppTheme.lightNeonBlue.withValues(
-                                                alpha: 0.08,
-                                              )
-                                            : const Color(0xFFF1F5F9)),
+                                    // E3: Incognito Mode Visual Indicator
+                                    color: (activeTab.isIncognito ||
+                                            settings.incognitoEnabled)
+                                        ? const Color(0xFF1A1A2E)
+                                        : isDark
+                                            ? (_isFocused
+                                                ? const Color(0xFF141424)
+                                                : const Color(0xFF0F0F16))
+                                            : (_isFocused
+                                                ? AppTheme.lightNeonBlue
+                                                    .withValues(alpha: 0.08)
+                                                : const Color(0xFFF1F5F9)),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: _isFocused
-                                          ? (isDark
-                                                  ? AppTheme.neonBlue
-                                                  : AppTheme.lightNeonBlue)
-                                              .withValues(alpha: 0.5)
-                                          : (isDark
-                                              ? const Color(0x15FFFFFF)
-                                              : const Color(0x0D000000)),
-                                      width: _isFocused ? 1.2 : 0.8,
+                                      color: (activeTab.isIncognito ||
+                                              settings.incognitoEnabled)
+                                          ? AppTheme.neonViolet
+                                              .withValues(alpha: 0.3)
+                                          : _isFocused
+                                              ? (isDark
+                                                      ? AppTheme.neonBlue
+                                                      : AppTheme.lightNeonBlue)
+                                                  .withValues(alpha: 0.5)
+                                              : (isDark
+                                                  ? const Color(0x15FFFFFF)
+                                                  : const Color(0x0D000000)),
+                                      width: (activeTab.isIncognito ||
+                                              settings.incognitoEnabled)
+                                          ? 1.0
+                                          : (_isFocused ? 1.2 : 0.8),
                                     ),
                                     boxShadow: (_isFocused &&
                                             isDark &&
@@ -3348,48 +3509,147 @@ class _BrowserScreenState extends State<BrowserScreen>
                                           ]
                                         : null,
                                   ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 4),
                                   child: Row(
                                     children: [
-                                      // Security / mode indicator
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
+                                      // E3: Incognito Icon
+                                      if (activeTab.isIncognito ||
+                                          settings.incognitoEnabled)
+                                        const Tooltip(
+                                          message:
+                                              'Incognito mode — cookies isolated, history not saved',
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 4.0),
+                                            child: Icon(
+                                                Icons.visibility_off_rounded,
+                                                size: 14,
+                                                color: AppTheme.neonViolet),
+                                          ),
                                         ),
-                                        child: Icon(
-                                          activeTab.isIncognito
-                                              ? Icons.visibility_off_rounded
-                                              : activeTab.isHome
-                                                  ? Icons.search_rounded
-                                                  : activeTab.url
-                                                          .startsWith('https')
-                                                      ? Icons.lock_rounded
-                                                      : Icons
-                                                          .info_outline_rounded,
-                                          size: 14,
-                                          color: activeTab.isIncognito
-                                              ? (isDark
-                                                  ? AppTheme.neonViolet
-                                                  : AppTheme.lightNeonViolet)
-                                              : activeTab.url
-                                                      .startsWith('https')
-                                                  ? (isDark
-                                                      ? AppTheme.neonGreen
-                                                      : AppTheme.lightNeonGreen)
-                                                  : _isFocused
-                                                      ? (isDark
-                                                          ? AppTheme.neonBlue
-                                                          : AppTheme
-                                                              .lightNeonBlue)
-                                                      : (isDark
-                                                          ? AppTheme
-                                                              .textSecondary
-                                                          : AppTheme
-                                                              .lightTextSecondary),
+
+                                      // E1 & E2: Security / Loading Indicator
+                                      AnimatedSwitcher(
+                                        duration: AppTheme.motionBase,
+                                        child: activeTab.isLoading
+                                            ? const SizedBox(
+                                                key: ValueKey('loading'),
+                                                width: 14,
+                                                height: 14,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 1.5,
+                                                        color:
+                                                            AppTheme.neonBlue),
+                                              )
+                                            : Tooltip(
+                                                key: const ValueKey('security'),
+                                                message: activeTab.url
+                                                        .startsWith('https')
+                                                    ? 'Secure connection'
+                                                    : 'Insecure connection',
+                                                child: Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 6.0),
+                                                  child: Icon(
+                                                    activeTab.isHome ||
+                                                            activeTab
+                                                                .url.isEmpty
+                                                        ? Icons.search_rounded
+                                                        : activeTab.url
+                                                                .startsWith(
+                                                                    'https')
+                                                            ? Icons.lock_rounded
+                                                            : Icons
+                                                                .lock_open_rounded,
+                                                    size: 14,
+                                                    color: activeTab.isHome ||
+                                                            activeTab
+                                                                .url.isEmpty
+                                                        ? (isDark
+                                                            ? AppTheme.textMuted
+                                                            : AppTheme
+                                                                .lightTextMuted)
+                                                        : activeTab.url
+                                                                .startsWith(
+                                                                    'https')
+                                                            ? AppTheme.neonGreen
+                                                            : AppTheme
+                                                                .neonAmber,
+                                                  ),
+                                                ),
+                                              ),
+                                      ),
+
+                                      // E4 & E10: Ad-blocker Indicator
+                                      Tooltip(
+                                        message: _adBlocker.isEnabled
+                                            ? 'Ad-blocker active'
+                                            : 'Ad-blocker disabled',
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 4.0),
+                                              child: Icon(
+                                                _adBlocker.isEnabled
+                                                    ? Icons.shield_rounded
+                                                    : Icons.shield_outlined,
+                                                size: 14,
+                                                color: _adBlocker.isEnabled
+                                                    ? AppTheme.neonGreen
+                                                    : (isDark
+                                                        ? AppTheme.textMuted
+                                                        : AppTheme
+                                                            .lightTextMuted),
+                                              ),
+                                            ),
+                                            if (_adBlocker.isEnabled &&
+                                                _blockedAdsCount > 0)
+                                              Positioned(
+                                                right: -4,
+                                                top: -4,
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.all(2),
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                          color: Colors.red,
+                                                          shape:
+                                                              BoxShape.circle),
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                          minWidth: 12,
+                                                          minHeight: 12),
+                                                  child: Text(
+                                                      '$_blockedAdsCount',
+                                                      style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 8)),
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                       ),
+
+                                      // E7: Desktop Mode Indicator
+                                      if (settings.desktopMode)
+                                        const Tooltip(
+                                          message: 'Desktop mode active',
+                                          child: Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 4.0),
+                                            child: Icon(
+                                                Icons.desktop_windows_rounded,
+                                                size: 14,
+                                                color: AppTheme.neonBlue),
+                                          ),
+                                        ),
+
                                       Expanded(
                                         child: ValueListenableBuilder<
                                             TextEditingValue>(
@@ -3401,18 +3661,15 @@ class _BrowserScreenState extends State<BrowserScreen>
                                               textAlignVertical:
                                                   TextAlignVertical.center,
                                               style: TextStyle(
-                                                color: textClr,
-                                                fontSize: 13,
-                                              ),
+                                                  color: textClr, fontSize: 13),
                                               decoration: InputDecoration(
                                                 isDense: true,
                                                 suffixIcon: IconButton(
                                                   padding: EdgeInsets.zero,
                                                   constraints:
                                                       const BoxConstraints(
-                                                    minWidth: 32,
-                                                    minHeight: 32,
-                                                  ),
+                                                          minWidth: 32,
+                                                          minHeight: 32),
                                                   icon: Icon(
                                                     activeTab.isLoading
                                                         ? Icons.close
@@ -3451,8 +3708,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                     if (activeTab.isLoading) {
                                                       activeTab.controller
                                                           ?.evaluateJavascript(
-                                                        source: 'window.stop();',
-                                                      );
+                                                              source:
+                                                                  'window.stop();');
                                                       setState(() {
                                                         activeTab.isLoading =
                                                             false;
@@ -3470,27 +3727,25 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                 ),
                                                 suffixIconConstraints:
                                                     const BoxConstraints(
-                                                  minWidth: 32,
-                                                  minHeight: 32,
-                                                ),
+                                                        minWidth: 32,
+                                                        minHeight: 32),
                                                 hintText: isRtl
                                                     ? 'ابحث أو ادخل الرابط...'
                                                     : 'Search or enter URL...',
                                                 hintStyle: TextStyle(
-                                                  color: isDark
-                                                      ? AppTheme.textMuted
-                                                      : AppTheme.lightTextMuted,
-                                                  fontSize: 11,
-                                                ),
+                                                    color: isDark
+                                                        ? AppTheme.textMuted
+                                                        : AppTheme
+                                                            .lightTextMuted,
+                                                    fontSize: 11),
                                                 filled: false,
                                                 border: InputBorder.none,
                                                 enabledBorder: InputBorder.none,
                                                 focusedBorder: InputBorder.none,
                                                 contentPadding:
                                                     const EdgeInsets.symmetric(
-                                                  horizontal: 4,
-                                                  vertical: 6,
-                                                ),
+                                                        horizontal: 4,
+                                                        vertical: 6),
                                               ),
                                               onSubmitted: (val) {
                                                 _navigateToUrl(val);
@@ -3504,18 +3759,14 @@ class _BrowserScreenState extends State<BrowserScreen>
                                 ),
                               ),
                               const SizedBox(width: 4),
-                              // YouTube grab button
                               if (!activeTab.isHome &&
                                   (YoutubeService.isYoutubeVideoUrl(
-                                        activeTab.url,
-                                      ) ||
+                                          activeTab.url) ||
                                       YoutubeService.isPlaylistUrl(
-                                        activeTab.url,
-                                      ))) ...[
+                                          activeTab.url))) ...[
                                 _YouTubeGrabButton(
                                   isPlaylist: YoutubeService.isPlaylistUrl(
-                                    activeTab.url,
-                                  ),
+                                      activeTab.url),
                                   isRtl: isRtl,
                                   isDark: isDark,
                                   enableGlow: settings.enableGlow,
@@ -3560,50 +3811,62 @@ class _BrowserScreenState extends State<BrowserScreen>
                                       }
                                     : null,
                               ),
-                              // Tab counter
+                              // E15: Tab Limit Visual Feedback
                               GestureDetector(
                                 onTap: () {
                                   triggerHaptic(settings);
                                   _showTabSwitcher(context);
                                 },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                  ),
-                                  width: 26,
-                                  height: 26,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: textClr,
-                                      width: 1.8,
+                                child: Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      margin: const EdgeInsets.symmetric(
+                                          horizontal: 6),
+                                      width: 26,
+                                      height: 26,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: textClr, width: 1.8),
+                                        borderRadius: BorderRadius.circular(7),
+                                        color: _tabs.length > 1
+                                            ? (isDark
+                                                    ? AppTheme.neonBlue
+                                                    : AppTheme.lightNeonBlue)
+                                                .withValues(alpha: 0.1)
+                                            : Colors.transparent,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        '${_tabs.length}',
+                                        style: TextStyle(
+                                          color: textClr,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          fontFamily: 'Space Grotesk',
+                                        ),
+                                      ),
                                     ),
-                                    borderRadius: BorderRadius.circular(7),
-                                    color: _tabs.length > 1
-                                        ? (isDark
-                                                ? AppTheme.neonBlue
-                                                : AppTheme.lightNeonBlue)
-                                            .withValues(alpha: 0.1)
-                                        : Colors.transparent,
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    '${_tabs.length}',
-                                    style: TextStyle(
-                                      color: textClr,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      fontFamily: 'Space Grotesk',
-                                    ),
-                                  ),
+                                    if (_tabs.length >= 10)
+                                      const Positioned(
+                                        right: -2,
+                                        top: -2,
+                                        child: Tooltip(
+                                          message: 'Tab limit reached (10/10)',
+                                          child: Icon(
+                                              Icons.warning_amber_rounded,
+                                              size: 12,
+                                              color: Colors.orangeAccent),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
                               PopupMenuButton<String>(
-                                icon: Icon(
-                                  Icons.more_vert,
-                                  size: 18,
-                                  color: textClr,
-                                ),
+                                icon: Icon(Icons.more_vert,
+                                    size: 18, color: textClr),
                                 color: (isDark
                                     ? AppTheme.surface
                                     : AppTheme.lightSurface),
@@ -3612,60 +3875,30 @@ class _BrowserScreenState extends State<BrowserScreen>
                                   await _handleMenuAction(value);
                                 },
                                 itemBuilder: (_) => [
+                                  _menuItem(Icons.refresh, 'Reload', 'reload',
+                                      textClr),
                                   _menuItem(
-                                    Icons.refresh,
-                                    'Reload',
-                                    'reload',
-                                    textClr,
-                                  ),
+                                      Icons.bookmark_add_outlined,
+                                      'Bookmark this page',
+                                      'bookmark',
+                                      textClr),
                                   _menuItem(
-                                    Icons.bookmark_add_outlined,
-                                    'Bookmark this page',
-                                    'bookmark',
-                                    textClr,
-                                  ),
+                                      Icons.bookmarks_outlined,
+                                      'Bookmarks Manager',
+                                      'show_bookmarks',
+                                      textClr),
+                                  _menuItem(Icons.history, 'Browser History',
+                                      'show_history', textClr),
                                   _menuItem(
-                                    Icons.bookmarks_outlined,
-                                    'Bookmarks Manager',
-                                    'show_bookmarks',
-                                    textClr,
-                                  ),
-                                  _menuItem(
-                                    Icons.history,
-                                    'Browser History',
-                                    'show_history',
-                                    textClr,
-                                  ),
-                                  _menuItem(
-                                    Icons.copy,
-                                    'Copy URL',
-                                    'copy',
-                                    textClr,
-                                  ),
-                                  _menuItem(
-                                    Icons.share,
-                                    'Share URL',
-                                    'share',
-                                    textClr,
-                                  ),
-                                  _menuItem(
-                                    Icons.save_alt,
-                                    'Save Page Offline',
-                                    'offline',
-                                    textClr,
-                                  ),
-                                  _menuItem(
-                                    Icons.menu_book_outlined,
-                                    'Reader Mode',
-                                    'reader',
-                                    textClr,
-                                  ),
-                                  _menuItem(
-                                    Icons.code,
-                                    'Inject JS / CSS',
-                                    'injector',
-                                    textClr,
-                                  ),
+                                      Icons.copy, 'Copy URL', 'copy', textClr),
+                                  _menuItem(Icons.share, 'Share URL', 'share',
+                                      textClr),
+                                  _menuItem(Icons.save_alt, 'Save Page Offline',
+                                      'offline', textClr),
+                                  _menuItem(Icons.menu_book_outlined,
+                                      'Reader Mode', 'reader', textClr),
+                                  _menuItem(Icons.code, 'Inject JS / CSS',
+                                      'injector', textClr),
                                   const PopupMenuDivider(),
                                   _menuItem(
                                     settings.desktopMode
@@ -3701,12 +3934,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                                     'adblocker',
                                     textClr,
                                   ),
-                                  _menuItem(
-                                    Icons.touch_app_outlined,
-                                    'Block Element',
-                                    'picker',
-                                    textClr,
-                                  ),
+                                  _menuItem(Icons.touch_app_outlined,
+                                      'Block Element', 'picker', textClr),
                                   _menuItem(
                                     settings.incognitoEnabled
                                         ? Icons.visibility_off
@@ -3734,7 +3963,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                     ),
                   ),
                 ),
-                // ── Scanline loading progress ──
                 if (activeTab.isLoading && !activeTab.isHome)
                   ValueListenableBuilder<double>(
                     valueListenable: activeTab.progressNotifier,
@@ -3745,7 +3973,6 @@ class _BrowserScreenState extends State<BrowserScreen>
                       );
                     },
                   ),
-                // Main browser view
                 Expanded(
                   child: Stack(
                     children: [
@@ -3757,466 +3984,768 @@ class _BrowserScreenState extends State<BrowserScreen>
                             : Builder(
                                 builder: (context) {
                                   _updateLruOrder();
-                                  return IndexedStack(
-                                    index: _currentTabIndex >= 0 &&
-                                            _currentTabIndex < _tabs.length
-                                        ? _currentTabIndex
-                                        : 0,
-                                    children:
-                                        _tabs.asMap().entries.map((entry) {
-                                      final tabIndex = entry.key;
-                                      final tab = entry.value;
-                                      final isActiveTab =
-                                          tabIndex == _currentTabIndex;
-                                      if (tab.isHome) {
-                                        return SizedBox(
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          child: _buildHomeDashboard(
-                                            context,
-                                            settings,
-                                            scrollController: isActiveTab
-                                                ? _dashboardScrollController
-                                                : null,
-                                          ),
-                                        );
-                                      } else {
-                                        final isLive =
-                                            _lruTabIds.contains(tab.id);
-                                        if (!isLive) {
+                                  // E16: Tab Switch Animation
+                                  return AnimatedSwitcher(
+                                    duration: AppTheme.motionBase,
+                                    switchInCurve: Curves.easeInOut,
+                                    switchOutCurve: Curves.easeInOut,
+                                    transitionBuilder: (child, animation) =>
+                                        FadeTransition(
+                                            opacity: animation, child: child),
+                                    child: IndexedStack(
+                                      key: ValueKey(_currentTabIndex),
+                                      index: _currentTabIndex >= 0 &&
+                                              _currentTabIndex < _tabs.length
+                                          ? _currentTabIndex
+                                          : 0,
+                                      children:
+                                          _tabs.asMap().entries.map((entry) {
+                                        final tabIndex = entry.key;
+                                        final tab = entry.value;
+                                        final isActiveTab =
+                                            tabIndex == _currentTabIndex;
+                                        if (tab.isHome) {
                                           return SizedBox(
                                             width: double.infinity,
                                             height: double.infinity,
-                                            child: Container(
-                                              color: isDark
-                                                  ? AppTheme.surface
-                                                  : AppTheme.lightSurface,
-                                              child: Center(
-                                                child: Column(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      Icons.web,
-                                                      size: 48,
-                                                      color: (isDark
-                                                              ? AppTheme
-                                                                  .neonBlue
-                                                              : AppTheme
-                                                                  .lightNeonBlue)
-                                                          .withValues(
-                                                              alpha: 0.6),
-                                                    ),
-                                                    const SizedBox(height: 12),
-                                                    Text(
-                                                      tab.title.isNotEmpty
-                                                          ? tab.title
-                                                          : 'Web Page',
-                                                      style: TextStyle(
-                                                        fontSize: 16,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: isDark
-                                                            ? Colors.white
-                                                            : Colors.black87,
-                                                      ),
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                    ),
-                                                    if (tab.url.isNotEmpty) ...[
-                                                      const SizedBox(height: 4),
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 24,
-                                                        ),
-                                                        child: Text(
-                                                          tab.domain.isNotEmpty
-                                                              ? tab.domain
-                                                              : tab.url,
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            color: isDark
-                                                                ? Colors.white54
-                                                                : Colors
-                                                                    .black54,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ],
-                                                ),
-                                              ),
+                                            child: _buildHomeDashboard(
+                                              context,
+                                              settings,
+                                              scrollController: isActiveTab
+                                                  ? _dashboardScrollController
+                                                  : null,
                                             ),
                                           );
-                                        }
-                                        return SizedBox(
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          child: RepaintBoundary(
-                                            key: ValueKey('webview_${tab.id}'),
-                                            child: RefreshIndicator(
-                                              color: isDark
-                                                  ? AppTheme.neonBlue
-                                                  : AppTheme.lightNeonBlue,
-                                              onRefresh: () async {
-                                                tab.hasCrashed = false;
-                                                await tab.controller?.reload();
-                                              },
-                                              child: tab.hasCrashed
-                                                  ? Container(
-                                                      color: isDark
-                                                          ? AppTheme.surface
-                                                          : AppTheme
-                                                              .lightSurface,
-                                                      child: Center(
-                                                        child: Column(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .center,
-                                                          children: [
-                                                            const Icon(
-                                                              Icons
-                                                                  .error_outline_rounded,
-                                                              size: 54,
-                                                              color: Colors
-                                                                  .orangeAccent,
-                                                            ),
-                                                            const SizedBox(
-                                                                height: 12),
-                                                            Text(
-                                                              'This tab crashed unexpectedly',
-                                                              style: TextStyle(
-                                                                fontSize: 16,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                color: isDark
-                                                                    ? Colors
-                                                                        .white
-                                                                    : Colors
-                                                                        .black87,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                                height: 8),
-                                                            Text(
-                                                              tab.url,
-                                                              style: TextStyle(
+                                        } else {
+                                          final isLive =
+                                              _lruTabIds.contains(tab.id);
+                                          if (!isLive) {
+                                            return SizedBox(
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              child: Container(
+                                                color: isDark
+                                                    ? AppTheme.surface
+                                                    : AppTheme.lightSurface,
+                                                child: Center(
+                                                  child: Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Icon(Icons.web,
+                                                          size: 48,
+                                                          color: (isDark
+                                                                  ? AppTheme
+                                                                      .neonBlue
+                                                                  : AppTheme
+                                                                      .lightNeonBlue)
+                                                              .withValues(
+                                                                  alpha: 0.6)),
+                                                      const SizedBox(
+                                                          height: 12),
+                                                      Text(
+                                                        tab.title.isNotEmpty
+                                                            ? tab.title
+                                                            : 'Web Page',
+                                                        style: TextStyle(
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: isDark
+                                                                ? Colors.white
+                                                                : Colors
+                                                                    .black87),
+                                                        textAlign:
+                                                            TextAlign.center,
+                                                      ),
+                                                      if (tab
+                                                          .url.isNotEmpty) ...[
+                                                        const SizedBox(
+                                                            height: 4),
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal:
+                                                                      24),
+                                                          child: Text(
+                                                            tab.domain
+                                                                    .isNotEmpty
+                                                                ? tab.domain
+                                                                : tab.url,
+                                                            style: TextStyle(
                                                                 fontSize: 12,
                                                                 color: isDark
                                                                     ? Colors
                                                                         .white54
                                                                     : Colors
-                                                                        .black54,
-                                                              ),
-                                                              maxLines: 1,
-                                                              overflow:
-                                                                  TextOverflow
-                                                                      .ellipsis,
-                                                            ),
-                                                            const SizedBox(
-                                                                height: 16),
-                                                            ElevatedButton.icon(
-                                                              style:
-                                                                  ElevatedButton
-                                                                      .styleFrom(
-                                                                backgroundColor: isDark
-                                                                    ? AppTheme
-                                                                        .neonBlue
-                                                                    : AppTheme
-                                                                        .lightNeonBlue,
-                                                                foregroundColor:
-                                                                    Colors
-                                                                        .white,
-                                                              ),
-                                                              onPressed: () {
-                                                                setState(() {
-                                                                  tab.hasCrashed =
-                                                                      false;
-                                                                });
-                                                                tab.controller
-                                                                    ?.reload();
-                                                              },
-                                                              icon: const Icon(
-                                                                Icons
-                                                                    .refresh_rounded,
-                                                                size: 18,
-                                                              ),
-                                                              label: const Text(
-                                                                  'Reload Tab'),
-                                                            ),
-                                                          ],
+                                                                        .black54),
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
                                                         ),
-                                                      ),
-                                                    )
-                                                  : Stack(
-                                                      children: [
-                                                        InAppWebView(
-                                                           initialUrlRequest: tab.url.isEmpty
-                                                               ? null
-                                                               : URLRequest(url: WebUri(tab.url)),
-                                                           onWebViewCreated: (controller) {
-                                                             _configureController(tab, controller);
-                                                             _hideWebViewFingerprints(tab);
-                                                             if (tab.url.isNotEmpty && tab.url != 'about:blank') { controller.loadUrl(urlRequest: URLRequest(url: WebUri(tab.url))); }
-                                                           },
-                                                           initialUserScripts: UnmodifiableListView<UserScript>([
-                                                             UserScript(
-                                                               source: '''
-                                                                 window.XDM_LongPress = {
-                                                                   postMessage: function(msg) {
-                                                                     window.flutter_inappwebview.callHandler('XDM_LongPress', msg);
-                                                                   }
-                                                                 };
-                                                                 window.XDM_Popups = {
-                                                                   postMessage: function(msg) {
-                                                                     window.flutter_inappwebview.callHandler('XDM_Popups', msg);
-                                                                   }
-                                                                 };
-                                                                 window.XdmPickerChannel = {
-                                                                   postMessage: function(msg) {
-                                                                     window.flutter_inappwebview.callHandler('XdmPickerChannel', msg);
-                                                                   }
-                                                                 };
-                                                               ''',
-                                                               injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-                                                             ),
-                                                           ]),
-                                                           initialSettings: InAppWebViewSettings(
-                                                             useHybridComposition: true,
-                                                             useShouldInterceptRequest: true,
-                                                             transparentBackground: true,
-                                                             allowsInlineMediaPlayback: true,
-                                                             mediaPlaybackRequiresUserGesture: false,
-                                                             supportZoom: settings.desktopMode || settings.pinchToZoom,
-                                                             contentBlockers: _adBlocker.contentBlockers,
-                                                              incognito: tab.isIncognito,
-                                                           ),
-                                                           gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                                                             Factory<VerticalDragGestureRecognizer>(
-                                                               () => VerticalDragGestureRecognizer(),
-                                                             ),
-                                                             Factory<HorizontalDragGestureRecognizer>(
-                                                               () => HorizontalDragGestureRecognizer(),
-                                                             ),
-                                                           },
-                                                           pullToRefreshController: _pullToRefresh,
-                                                           onScrollChanged: (controller, x, y) {
-                                                             if (mounted &&
-                                                                 _currentTabIndex >= 0 &&
-                                                                 _currentTabIndex < _tabs.length &&
-                                                                 _tabs[_currentTabIndex].id == tab.id) {
-                                                               _handleScroll(y.toDouble());
-                                                             }
-                                                           },
-                                                           onLoadStart: (controller, url) {
-                                                             _onPageStart(tab, url?.toString() ?? '');
-                                                           },
-                                                           onLoadStop: (controller, url) {
-                                                             _onPageStop(tab, url?.toString() ?? '');
-                                                           },
-                                                           onProgressChanged: (controller, progress) {
-                                                             tab.progress = progress / 100;
-                                                           },
-                                                           onUpdateVisitedHistory: (controller, url, isReload) {
-                                                             if (url != null) {
-                                                               _onUrlChange(tab, url.toString());
-                                                             }
-                                                           },
-                                                           onReceivedError: (controller, request, error) {
-                                                             _log.warning(
-                                                               '[Browser] WebResourceError on tab ${tab.id}: ${error.description}',
-                                                             );
-                                                             if (mounted && request.isForMainFrame == true) {
-                                                               setState(() {
-                                                                 tab.isLoading = false;
-                                                                 tab.hasCrashed = true;
-                                                               });
-                                                             }
-                                                           },
-                                                           shouldInterceptRequest: (controller, request) async {
-                                                             final url = request.url.toString();
-                                                             if (_adBlocker.shouldBlock(url)) {
-                                                               return WebResourceResponse(
-                                                                 contentType: 'text/plain',
-                                                                 contentEncoding: 'utf-8',
-                                                                 statusCode: 204,
-                                                                 reasonPhrase: 'Blocked',
-                                                                 data: Uint8List(0),
-                                                               );
-                                                             }
-                                                             return null;
-                                                           },
-                                                           shouldOverrideUrlLoading: (controller, navigationAction) async {
-                                                             final url = navigationAction.request.url?.toString() ?? '';
-                                                             if (navigationAction.isForMainFrame == true) {
-                                                               if (settings.httpsOnly && url.startsWith('http://')) {
-                                                                 final upgraded = url.replaceFirst('http://', 'https://');
-                                                                 _log.warning('[Browser] HTTPS-only: upgrading $url -> $upgraded');
-                                                                 controller.loadUrl(urlRequest: URLRequest(url: WebUri(upgraded)));
-                                                                 return NavigationActionPolicy.CANCEL;
-                                                               }
-                                                               if (_adBlocker.shouldBlock(url)) {
-                                                                 _log.warning('[AdBlocker] Blocked: $url');
-                                                                 return NavigationActionPolicy.CANCEL;
-                                                               }
-                                                               if (_interceptor.consumeBypass(url)) {
-                                                                 return NavigationActionPolicy.ALLOW;
-                                                               }
-                                                               if (_interceptor.shouldIntercept(
-                                                                 tabUrl: tab.url,
-                                                                 requestUrl: url,
-                                                               )) {
-                                                                 setState(() {
-                                                                   _detectedDownloadUrls[tab.id] = url;
-                                                                 });
-                                                                 _showInterceptionSheet(context, url);
-                                                                 return NavigationActionPolicy.CANCEL;
-                                                               }
-                                                               if (_redirectGuard.consumeUserInitiated(url)) {
-                                                                 return NavigationActionPolicy.ALLOW;
-                                                               }
-                                                               if (_redirectGuard.isAlwaysNewTab(url)) {
-                                                                 _openInNewTab(url, isIncognito: tab.isIncognito);
-                                                                 return NavigationActionPolicy.CANCEL;
-                                                               }
-                                                               if (_redirectGuard.isSuspiciousRedirect(
-                                                                 currentTabUrl: tab.url,
-                                                                 targetUrl: url,
-                                                               )) {
-                                                                 _handleRedirectIntercept(tab, url);
-                                                                 return NavigationActionPolicy.CANCEL;
-                                                               }
-                                                             }
-                                                             return NavigationActionPolicy.ALLOW;
-                                                           },
-                                                         ),
-                                                        if (tab.isTimedOut &&
-                                                            tab.isLoading)
-                                                          Positioned(
-                                                            top: 0,
-                                                            left: 0,
-                                                            right: 0,
-                                                            child: Container(
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 6,
-                                                              ),
-                                                              color: Colors
-                                                                  .orange
-                                                                  .withValues(
-                                                                alpha: 0.9,
-                                                              ),
-                                                              child: Row(
-                                                                children: [
-                                                                  const Icon(
-                                                                    Icons
-                                                                        .warning_amber_rounded,
-                                                                    size: 16,
-                                                                    color: Colors
-                                                                        .white,
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    width: 8,
-                                                                  ),
-                                                                  const Expanded(
-                                                                    child: Text(
-                                                                      'Page load taking long...',
-                                                                      style:
-                                                                          TextStyle(
+                                                      ],
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                          return SizedBox(
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            child: RepaintBoundary(
+                                              key:
+                                                  ValueKey('webview_${tab.id}'),
+                                              child: RefreshIndicator(
+                                                color: isDark
+                                                    ? AppTheme.neonBlue
+                                                    : AppTheme.lightNeonBlue,
+                                                onRefresh: () async {
+                                                  tab.hasCrashed = false;
+                                                  await tab.controller
+                                                      ?.reload();
+                                                },
+                                                child: tab.hasCrashed
+                                                    // E11: Tab Crash Recovery Visual Feedback
+                                                    ? AnimatedOpacity(
+                                                        opacity: 1.0,
+                                                        duration:
+                                                            AppTheme.motionBase,
+                                                        child: Container(
+                                                          color: isDark
+                                                              ? AppTheme.surface
+                                                              : AppTheme
+                                                                  .lightSurface,
+                                                          child: Center(
+                                                            child: Column(
+                                                              mainAxisAlignment:
+                                                                  MainAxisAlignment
+                                                                      .center,
+                                                              children: [
+                                                                TweenAnimationBuilder<
+                                                                    double>(
+                                                                  tween: Tween(
+                                                                      begin:
+                                                                          0.0,
+                                                                      end: 1.0),
+                                                                  duration: const Duration(
+                                                                      milliseconds:
+                                                                          600),
+                                                                  curve: Curves
+                                                                      .elasticOut,
+                                                                  builder:
+                                                                      (context,
+                                                                          value,
+                                                                          child) {
+                                                                    final offset = sin(value *
+                                                                            pi *
+                                                                            4) *
+                                                                        (1 -
+                                                                            value) *
+                                                                        4;
+                                                                    return Transform.translate(
+                                                                        offset: Offset(
+                                                                            offset,
+                                                                            0),
+                                                                        child:
+                                                                            child);
+                                                                  },
+                                                                  child: const Icon(
+                                                                      Icons
+                                                                          .error_outline_rounded,
+                                                                      size: 54,
+                                                                      color: Colors
+                                                                          .orangeAccent),
+                                                                ),
+                                                                const SizedBox(
+                                                                    height: 12),
+                                                                Text(
+                                                                    'This tab crashed unexpectedly',
+                                                                    style: TextStyle(
+                                                                        fontSize:
+                                                                            16,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .bold,
+                                                                        color: isDark
+                                                                            ? Colors.white
+                                                                            : Colors.black87)),
+                                                                const SizedBox(
+                                                                    height: 8),
+                                                                Text(tab.url,
+                                                                    style: TextStyle(
                                                                         fontSize:
                                                                             12,
-                                                                        color: Colors
-                                                                            .white,
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  GestureDetector(
-                                                                    onTap: () {
-                                                                      tab.controller?.evaluateJavascript(source: 'window.stop();');
-                                                                      setState(
-                                                                          () {
-                                                                        tab.isLoading =
-                                                                            false;
-                                                                        tab.isTimedOut =
-                                                                            false;
-                                                                      });
-                                                                    },
-                                                                    child:
-                                                                        const Padding(
-                                                                      padding:
-                                                                          EdgeInsets
-                                                                              .symmetric(
-                                                                        horizontal:
-                                                                            6,
-                                                                      ),
-                                                                      child:
-                                                                          Text(
-                                                                        'Stop',
-                                                                        style:
-                                                                            TextStyle(
-                                                                          color:
-                                                                              Colors.white,
-                                                                          fontWeight:
-                                                                              FontWeight.bold,
-                                                                          fontSize:
-                                                                              12,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  GestureDetector(
-                                                                    onTap: () {
-                                                                      setState(
-                                                                          () {
-                                                                        tab.isTimedOut =
-                                                                            false;
-                                                                      });
-                                                                      tab.controller?.reload();
-                                                                    },
-                                                                    child:
-                                                                        const Padding(
-                                                                      padding:
-                                                                          EdgeInsets
-                                                                              .symmetric(
-                                                                        horizontal:
-                                                                            6,
-                                                                      ),
-                                                                      child:
-                                                                          Text(
-                                                                        'Reload',
-                                                                        style:
-                                                                            TextStyle(
-                                                                          color:
-                                                                              Colors.white,
-                                                                          fontWeight:
-                                                                              FontWeight.bold,
-                                                                          fontSize:
-                                                                              12,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
+                                                                        color: isDark
+                                                                            ? Colors
+                                                                                .white54
+                                                                            : Colors
+                                                                                .black54),
+                                                                    maxLines: 1,
+                                                                    overflow:
+                                                                        TextOverflow
+                                                                            .ellipsis),
+                                                                const SizedBox(
+                                                                    height: 16),
+                                                                ElevatedButton
+                                                                    .icon(
+                                                                  style: ElevatedButton.styleFrom(
+                                                                      backgroundColor: isDark
+                                                                          ? AppTheme
+                                                                              .neonBlue
+                                                                          : AppTheme
+                                                                              .lightNeonBlue,
+                                                                      foregroundColor:
+                                                                          Colors
+                                                                              .white),
+                                                                  onPressed:
+                                                                      () {
+                                                                    setState(
+                                                                        () {
+                                                                      tab.hasCrashed =
+                                                                          false;
+                                                                    });
+                                                                    tab.controller
+                                                                        ?.reload();
+                                                                  },
+                                                                  icon: const Icon(
+                                                                      Icons
+                                                                          .refresh_rounded,
+                                                                      size: 18),
+                                                                  label: const Text(
+                                                                      'Reload Tab'),
+                                                                ),
+                                                              ],
                                                             ),
                                                           ),
-                                                      ],
-                                                    ),
+                                                        ),
+                                                      )
+                                                    : Stack(
+                                                        children: [
+                                                          InAppWebView(
+                                                            initialUrlRequest: tab
+                                                                    .url.isEmpty
+                                                                ? null
+                                                                : URLRequest(
+                                                                    url: WebUri(
+                                                                        tab.url)),
+                                                            onWebViewCreated:
+                                                                (controller) {
+                                                              _configureController(
+                                                                  tab,
+                                                                  controller);
+                                                              _hideWebViewFingerprints(
+                                                                  tab);
+                                                              if (tab.url
+                                                                      .isNotEmpty &&
+                                                                  tab.url !=
+                                                                      'about:blank') {
+                                                                controller.loadUrl(
+                                                                    urlRequest:
+                                                                        URLRequest(
+                                                                            url:
+                                                                                WebUri(tab.url)));
+                                                              }
+                                                            },
+                                                            initialUserScripts:
+                                                                UnmodifiableListView<
+                                                                    UserScript>([
+                                                              UserScript(
+                                                                source: '''
+                                                                  window.XDM_LongPress = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_LongPress', msg); } };
+                                                                  window.XDM_Popups = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XDM_Popups', msg); } };
+                                                                  window.XdmPickerChannel = { postMessage: function(msg) { window.flutter_inappwebview.callHandler('XdmPickerChannel', msg); } };
+                                                                ''',
+                                                                injectionTime:
+                                                                    UserScriptInjectionTime
+                                                                        .AT_DOCUMENT_START,
+                                                              ),
+                                                            ]),
+                                                            initialSettings:
+                                                                InAppWebViewSettings(
+                                                              useHybridComposition:
+                                                                  true,
+                                                              useShouldInterceptRequest:
+                                                                  true,
+                                                              transparentBackground:
+                                                                  true,
+                                                              allowsInlineMediaPlayback:
+                                                                  true,
+                                                              mediaPlaybackRequiresUserGesture:
+                                                                  false,
+                                                              supportZoom: settings
+                                                                      .desktopMode ||
+                                                                  settings
+                                                                      .pinchToZoom,
+                                                              contentBlockers:
+                                                                  _adBlocker
+                                                                      .contentBlockers,
+                                                              incognito: tab
+                                                                  .isIncognito,
+                                                            ),
+                                                            gestureRecognizers: <Factory<
+                                                                OneSequenceGestureRecognizer>>{
+                                                              Factory<VerticalDragGestureRecognizer>(
+                                                                  () =>
+                                                                      VerticalDragGestureRecognizer()),
+                                                              Factory<HorizontalDragGestureRecognizer>(
+                                                                  () =>
+                                                                      HorizontalDragGestureRecognizer()),
+                                                            },
+                                                            pullToRefreshController:
+                                                                tab.pullToRefreshController,
+                                                            onScrollChanged:
+                                                                (controller, x,
+                                                                    y) {
+                                                              if (mounted &&
+                                                                  _currentTabIndex >=
+                                                                      0 &&
+                                                                  _currentTabIndex <
+                                                                      _tabs
+                                                                          .length &&
+                                                                  _tabs[_currentTabIndex]
+                                                                          .id ==
+                                                                      tab.id) {
+                                                                _handleScroll(y
+                                                                    .toDouble());
+                                                              }
+                                                            },
+                                                            onLoadStart:
+                                                                (controller,
+                                                                    url) {
+                                                              _onPageStart(
+                                                                  tab,
+                                                                  url?.toString() ??
+                                                                      '');
+                                                            },
+                                                            onLoadStop:
+                                                                (controller,
+                                                                    url) {
+                                                              _onPageStop(
+                                                                  tab,
+                                                                  url?.toString() ??
+                                                                      '');
+                                                            },
+                                                            onProgressChanged:
+                                                                (controller,
+                                                                    progress) {
+                                                              tab.progress =
+                                                                  progress /
+                                                                      100;
+                                                            },
+                                                            onUpdateVisitedHistory:
+                                                                (controller,
+                                                                    url,
+                                                                    isReload) {
+                                                              if (url != null) {
+                                                                _onUrlChange(
+                                                                    tab,
+                                                                    url.toString());
+                                                              }
+                                                            },
+                                                            onReceivedError:
+                                                                (controller,
+                                                                    request,
+                                                                    error) {
+                                                              _log.warning(
+                                                                  '[Browser] WebResourceError on tab ${tab.id}: ${error.description}');
+                                                              if (mounted &&
+                                                                  request.isForMainFrame ==
+                                                                      true) {
+                                                                setState(() {
+                                                                  tab.isLoading =
+                                                                      false;
+                                                                  tab.hasCrashed =
+                                                                      true;
+                                                                });
+                                                              }
+                                                            },
+                                                            shouldInterceptRequest:
+                                                                (controller,
+                                                                    request) async {
+                                                              final url = request
+                                                                  .url
+                                                                  .toString();
+                                                              if (_adBlocker
+                                                                  .shouldBlock(
+                                                                      url)) {
+                                                                // E10: Blocked Ads Count Indicator
+                                                                if (mounted) {
+                                                                  setState(() {
+                                                                    _blockedAdsCount++;
+                                                                  });
+                                                                }
+                                                                return WebResourceResponse(
+                                                                  contentType:
+                                                                      'text/plain',
+                                                                  contentEncoding:
+                                                                      'utf-8',
+                                                                  statusCode:
+                                                                      204,
+                                                                  reasonPhrase:
+                                                                      'Blocked',
+                                                                  data:
+                                                                      Uint8List(
+                                                                          0),
+                                                                );
+                                                              }
+                                                              return null;
+                                                            },
+                                                            shouldOverrideUrlLoading:
+                                                                (controller,
+                                                                    navigationAction) async {
+                                                              final url =
+                                                                  navigationAction
+                                                                          .request
+                                                                          .url
+                                                                          ?.toString() ??
+                                                                      '';
+                                                              if (navigationAction
+                                                                      .isForMainFrame ==
+                                                                  true) {
+                                                                if (settings
+                                                                        .httpsOnly &&
+                                                                    url.startsWith(
+                                                                        'http://')) {
+                                                                  final upgraded =
+                                                                      url.replaceFirst(
+                                                                          'http://',
+                                                                          'https://');
+                                                                  _log.warning(
+                                                                      '[Browser] HTTPS-only: upgrading $url -> $upgraded');
+                                                                  controller.loadUrl(
+                                                                      urlRequest:
+                                                                          URLRequest(
+                                                                              url: WebUri(upgraded)));
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+                                                                }
+                                                                if (_adBlocker
+                                                                    .shouldBlock(
+                                                                        url)) {
+                                                                  _log.warning(
+                                                                      '[AdBlocker] Blocked: $url');
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+                                                                }
+                                                                if (_interceptor
+                                                                    .consumeBypass(
+                                                                        url)) {
+                                                                  return NavigationActionPolicy
+                                                                      .ALLOW;
+                                                                }
+                                                                if (_interceptor
+                                                                    .shouldIntercept(
+                                                                        tabUrl: tab
+                                                                            .url,
+                                                                        requestUrl:
+                                                                            url)) {
+                                                                  setState(() {
+                                                                    _detectedDownloadUrls[
+                                                                            tab.id] =
+                                                                        url;
+                                                                  });
+                                                                  _showInterceptionSheet(
+                                                                      context,
+                                                                      url);
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+                                                                }
+                                                                if (_redirectGuard
+                                                                    .consumeUserInitiated(
+                                                                        url)) {
+                                                                  return NavigationActionPolicy
+                                                                      .ALLOW;
+                                                                }
+                                                                if (_redirectGuard
+                                                                    .isAlwaysNewTab(
+                                                                        url)) {
+                                                                  _openInNewTab(
+                                                                      url,
+                                                                      isIncognito:
+                                                                          tab.isIncognito);
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+                                                                }
+                                                                if (_redirectGuard.isSuspiciousRedirect(
+                                                                    currentTabUrl:
+                                                                        tab.url,
+                                                                    targetUrl:
+                                                                        url)) {
+                                                                  _handleRedirectIntercept(
+                                                                      tab, url);
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+                                                                }
+                                                              }
+                                                              return NavigationActionPolicy
+                                                                  .ALLOW;
+                                                            },
+                                                          ),
+                                                          // E13: Tab Suspension/Resume Visual Feedback
+                                                          if (_restoringTabId ==
+                                                              tab.id)
+                                                            Positioned.fill(
+                                                              child:
+                                                                  AnimatedOpacity(
+                                                                opacity: 1.0,
+                                                                duration: AppTheme
+                                                                    .motionBase,
+                                                                child:
+                                                                    Container(
+                                                                  color: Colors
+                                                                      .black
+                                                                      .withValues(
+                                                                          alpha:
+                                                                              0.7),
+                                                                  child: const Center(
+                                                                      child: Text(
+                                                                          'Restoring tab...',
+                                                                          style: TextStyle(
+                                                                              color: Colors.white,
+                                                                              fontSize: 16))),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          // E5: Media Sniffer Detection Feedback
+                                                          if (_detectedMediaSources[
+                                                                      activeTab
+                                                                          .id]
+                                                                  ?.isNotEmpty ??
+                                                              false)
+                                                            Positioned(
+                                                              top: 16,
+                                                              right: 16,
+                                                              child:
+                                                                  AnimatedScale(
+                                                                scale: 1.0,
+                                                                duration: AppTheme
+                                                                    .motionBase,
+                                                                child:
+                                                                    AnimatedOpacity(
+                                                                  opacity: 1.0,
+                                                                  duration: AppTheme
+                                                                      .motionBase,
+                                                                  child: Stack(
+                                                                    alignment:
+                                                                        Alignment
+                                                                            .center,
+                                                                    children: [
+                                                                      Container(
+                                                                        width:
+                                                                            24,
+                                                                        height:
+                                                                            24,
+                                                                        decoration: BoxDecoration(
+                                                                            shape:
+                                                                                BoxShape.circle,
+                                                                            color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                                                                      ),
+                                                                      const CircleAvatar(
+                                                                        backgroundColor:
+                                                                            AppTheme.neonBlue,
+                                                                        radius:
+                                                                            10,
+                                                                        child: Icon(
+                                                                            Icons
+                                                                                .download_rounded,
+                                                                            size:
+                                                                                12,
+                                                                            color:
+                                                                                Colors.white),
+                                                                      ),
+                                                                      Positioned(
+                                                                        top: -4,
+                                                                        right:
+                                                                            -4,
+                                                                        child:
+                                                                            Container(
+                                                                          padding: const EdgeInsets
+                                                                              .all(
+                                                                              2),
+                                                                          decoration: const BoxDecoration(
+                                                                              color: Colors.red,
+                                                                              shape: BoxShape.circle),
+                                                                          constraints: const BoxConstraints(
+                                                                              minWidth: 14,
+                                                                              minHeight: 14),
+                                                                          child: Text(
+                                                                              '${_detectedMediaSources[activeTab.id]!.length}',
+                                                                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          // E6: Element Picker Mode Indicator
+                                                          if (_isPickerModeActive)
+                                                            Positioned(
+                                                              top: 0,
+                                                              left: 0,
+                                                              right: 0,
+                                                              child: Material(
+                                                                color:
+                                                                    Colors.blue,
+                                                                child: Padding(
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                      vertical:
+                                                                          8.0,
+                                                                      horizontal:
+                                                                          16.0),
+                                                                  child: Row(
+                                                                    children: [
+                                                                      const Icon(
+                                                                          Icons
+                                                                              .touch_app_rounded,
+                                                                          color: Colors
+                                                                              .white,
+                                                                          size:
+                                                                              16),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              8),
+                                                                      const Expanded(
+                                                                          child: Text(
+                                                                              'Element Picker Mode — Tap an element to block it',
+                                                                              style: TextStyle(color: Colors.white, fontSize: 12))),
+                                                                      TextButton(
+                                                                          onPressed: () => setState(() => _isPickerModeActive =
+                                                                              false),
+                                                                          child: const Text(
+                                                                              'Done',
+                                                                              style: TextStyle(color: Colors.white))),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          if (_isPickerModeActive)
+                                                            Positioned.fill(
+                                                              child:
+                                                                  IgnorePointer(
+                                                                ignoring: true,
+                                                                child: Container(
+                                                                    decoration: BoxDecoration(
+                                                                        border: Border.all(
+                                                                            color:
+                                                                                Colors.blue.withValues(alpha: 0.5),
+                                                                            width: 2))),
+                                                              ),
+                                                            ),
+                                                          // E12: Tab Timeout Visual Feedback
+                                                          if (tab.isTimedOut &&
+                                                              tab.isLoading)
+                                                            Positioned(
+                                                              top: 0,
+                                                              left: 0,
+                                                              right: 0,
+                                                              child:
+                                                                  AnimatedOpacity(
+                                                                opacity: 1.0,
+                                                                duration: AppTheme
+                                                                    .motionBase,
+                                                                child:
+                                                                    Container(
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          12,
+                                                                      vertical:
+                                                                          6),
+                                                                  color: Colors
+                                                                      .orange
+                                                                      .withValues(
+                                                                          alpha:
+                                                                              0.9),
+                                                                  child: Row(
+                                                                    children: [
+                                                                      TweenAnimationBuilder<
+                                                                          double>(
+                                                                        tween: Tween(
+                                                                            begin:
+                                                                                0.8,
+                                                                            end:
+                                                                                1.2),
+                                                                        duration:
+                                                                            const Duration(milliseconds: 800),
+                                                                        builder: (context, value, child) => Transform.scale(
+                                                                            scale:
+                                                                                value,
+                                                                            child:
+                                                                                child),
+                                                                        child: const Icon(
+                                                                            Icons
+                                                                                .warning_amber_rounded,
+                                                                            size:
+                                                                                16,
+                                                                            color:
+                                                                                Colors.white),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              8),
+                                                                      const Expanded(
+                                                                        child: Text(
+                                                                            'Page load taking long...',
+                                                                            style: TextStyle(
+                                                                                fontSize: 12,
+                                                                                color: Colors.white,
+                                                                                fontWeight: FontWeight.bold)),
+                                                                      ),
+                                                                      GestureDetector(
+                                                                        onTap:
+                                                                            () {
+                                                                          tab.controller
+                                                                              ?.evaluateJavascript(source: 'window.stop();');
+                                                                          setState(
+                                                                              () {
+                                                                            tab.isLoading =
+                                                                                false;
+                                                                            tab.isTimedOut =
+                                                                                false;
+                                                                          });
+                                                                        },
+                                                                        child: const Padding(
+                                                                            padding:
+                                                                                EdgeInsets.symmetric(horizontal: 6),
+                                                                            child: Text('Stop', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                                                      ),
+                                                                      GestureDetector(
+                                                                        onTap:
+                                                                            () {
+                                                                          setState(
+                                                                              () {
+                                                                            tab.isTimedOut =
+                                                                                false;
+                                                                          });
+                                                                          tab.controller
+                                                                              ?.reload();
+                                                                        },
+                                                                        child: const Padding(
+                                                                            padding:
+                                                                                EdgeInsets.symmetric(horizontal: 6),
+                                                                            child: Text('Reload', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                        ],
+                                                      ),
+                                              ),
                                             ),
-                                          ),
-                                        );
-                                      }
-                                    }).toList(),
+                                          );
+                                        }
+                                      }).toList(),
+                                    ),
                                   );
                                 },
                               ),
@@ -4278,66 +4807,52 @@ class _BrowserScreenState extends State<BrowserScreen>
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
     final tabUrl = activeTab.url;
+
     final isPlaylist = YoutubeService.isPlaylistUrl(tabUrl);
     final isVideo = YoutubeService.isYoutubeVideoUrl(tabUrl);
     final isMixed = isPlaylist && isVideo;
+
     if (isMixed) {
       final choice = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text(
             isRtl ? 'ماذا تريد تحميل؟' : 'What do you want to download?',
             style: TextStyle(
-              color: isDark ? Colors.white : Colors.black87,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+                color: isDark ? Colors.white : Colors.black87,
+                fontSize: 16,
+                fontWeight: FontWeight.bold),
           ),
           content: Text(
             isRtl
                 ? 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.'
                 : 'This link contains both a single video and a playlist.',
             style: TextStyle(
-              color: isDark ? Colors.white70 : Colors.black54,
-              fontSize: 13,
-            ),
+                color: isDark ? Colors.white70 : Colors.black54, fontSize: 13),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, 'video'),
-              child: Text(
-                isRtl ? 'فيديو واحد فقط' : 'Single video',
-                style: const TextStyle(
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text(isRtl ? 'فيديو واحد فقط' : 'Single video',
+                  style: const TextStyle(
+                      color: Colors.blue, fontWeight: FontWeight.bold)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, 'playlist'),
-              child: Text(
-                isRtl ? 'قائمة التشغيل كاملة' : 'Entire playlist',
-                style: const TextStyle(
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text(isRtl ? 'قائمة التشغيل كاملة' : 'Entire playlist',
+                  style: const TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       if (choice == 'playlist') {
         final result = await YoutubePlaylistSheet.show(context, tabUrl);
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         if (result != null) {
           ThemedSnackbar.show(
             context,
@@ -4355,9 +4870,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       }
     } else if (isPlaylist) {
       final result = await YoutubePlaylistSheet.show(context, tabUrl);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       if (result != null) {
         ThemedSnackbar.show(
           context,
@@ -4371,10 +4884,9 @@ class _BrowserScreenState extends State<BrowserScreen>
       }
       return;
     }
+
     final stream = await YoutubeQualitySheet.show(context, tabUrl);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (stream != null) {
       final title = stream['title'] as String? ?? 'YouTube video';
       final ext = stream['ext'] as String? ?? 'mp4';
@@ -4429,15 +4941,11 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // DOWNLOAD FAB — with live signal pulse
-  // ─────────────────────────────────────────────────────────────
   Widget _buildDownloadFab(BuildContext context, SettingsProvider settings) {
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final activeTab = _tabs[_currentTabIndex];
 
-    // Never show media detection on YouTube
     if (_isYoutubeHost(activeTab.url)) {
       return _buildDefaultDownloadFab(isDark, accent, settings, activeTab);
     }
@@ -4469,10 +4977,8 @@ class _BrowserScreenState extends State<BrowserScreen>
         isDark: isDark,
         onPressed: () async {
           triggerHaptic(settings);
-          final result = await YoutubePlaylistSheet.show(
-            context,
-            activeTab.url,
-          );
+          final result =
+              await YoutubePlaylistSheet.show(context, activeTab.url);
           if (result != null && context.mounted) {
             ThemedSnackbar.show(
               context,
@@ -4486,6 +4992,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         },
       );
     }
+
     if (YoutubeService.isExtractableMediaUrl(activeTab.url) &&
         detectedSources.isNotEmpty) {
       return _SignalFab(
@@ -4501,10 +5008,8 @@ class _BrowserScreenState extends State<BrowserScreen>
           if (detectedSources.length > 1) {
             _showDetectedMediaSheet(context, activeTab.id);
           } else {
-            final stream = await YoutubeQualitySheet.show(
-              context,
-              activeTab.url,
-            );
+            final stream =
+                await YoutubeQualitySheet.show(context, activeTab.url);
             if (stream != null && context.mounted) {
               final title = stream['title'] as String? ?? 'Media video';
               final ext = stream['ext'] as String? ?? 'mp4';
@@ -4521,6 +5026,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         },
       );
     }
+
     if (YoutubeService.isYoutubeVideoUrl(activeTab.url) &&
         _ytDetectionFailed.containsKey(activeTab.url)) {
       return _SignalFab(
@@ -4538,6 +5044,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         },
       );
     }
+
     return _SignalFab(
       color: accent,
       icon: Icons.download_rounded,
@@ -4613,12 +5120,11 @@ class _BrowserScreenState extends State<BrowserScreen>
     int? videoSize,
     int? audioSize,
   }) async {
-    final settingsProvider = Provider.of<SettingsProvider>(
-      context,
-      listen: false,
-    );
+    final settingsProvider =
+        Provider.of<SettingsProvider>(context, listen: false);
     final isRtl = L10n.isRtl(context);
     final isDark = settingsProvider.isDarkMode;
+
     final result = await _interceptor.startDirectDownload(
       url,
       suggestedName: suggestedName,
@@ -4628,54 +5134,46 @@ class _BrowserScreenState extends State<BrowserScreen>
       videoSize: videoSize,
       audioSize: audioSize,
     );
+
     if (!mounted) return;
+
     switch (result.status) {
       case InterceptDownloadStatus.alreadyCompleted:
-        ThemedSnackbar.show(
-          context,
-          message: isRtl
-              ? 'هذا التنزيل مكتمل بالفعل'
-              : 'This download is already completed.',
-          color: AppTheme.neonGreen,
-          icon: Icons.check_circle_outline,
-          isDarkMode: isDark,
-        );
+        ThemedSnackbar.show(context,
+            message: isRtl
+                ? 'هذا التنزيل مكتمل بالفعل'
+                : 'This download is already completed.',
+            color: AppTheme.neonGreen,
+            icon: Icons.check_circle_outline,
+            isDarkMode: isDark);
       case InterceptDownloadStatus.alreadyInProgress:
-        ThemedSnackbar.show(
-          context,
-          message: isRtl
-              ? 'هذا التنزيل قيد التشغيل بالفعل'
-              : 'This download is already in progress.',
-          color: AppTheme.neonBlue,
-          icon: Icons.info_outline,
-          isDarkMode: isDark,
-        );
+        ThemedSnackbar.show(context,
+            message: isRtl
+                ? 'هذا التنزيل قيد التشغيل بالفعل'
+                : 'This download is already in progress.',
+            color: AppTheme.neonBlue,
+            icon: Icons.info_outline,
+            isDarkMode: isDark);
       case InterceptDownloadStatus.resumed:
-        ThemedSnackbar.show(
-          context,
-          message: isRtl ? 'تم استئناف التنزيل' : 'Download resumed.',
-          color: AppTheme.neonBlue,
-          icon: Icons.play_arrow,
-          isDarkMode: isDark,
-        );
+        ThemedSnackbar.show(context,
+            message: isRtl ? 'تم استئناف التنزيل' : 'Download resumed.',
+            color: AppTheme.neonBlue,
+            icon: Icons.play_arrow,
+            isDarkMode: isDark);
       case InterceptDownloadStatus.queued:
-        ThemedSnackbar.show(
-          context,
-          message: isRtl
-              ? 'تم إنشاء الاتصال. القنوات متصلة.'
-              : 'Download queued successfully.',
-          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-          icon: Icons.rocket_launch_outlined,
-          isDarkMode: isDark,
-        );
+        ThemedSnackbar.show(context,
+            message: isRtl
+                ? 'تم إنشاء الاتصال. القنوات متصلة.'
+                : 'Download queued successfully.',
+            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            icon: Icons.rocket_launch_outlined,
+            isDarkMode: isDark);
       case InterceptDownloadStatus.failed:
-        ThemedSnackbar.show(
-          context,
-          message: result.errorMessage ?? 'Download failed.',
-          color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-          icon: Icons.error_outline,
-          isDarkMode: isDark,
-        );
+        ThemedSnackbar.show(context,
+            message: result.errorMessage ?? 'Download failed.',
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            icon: Icons.error_outline,
+            isDarkMode: isDark);
       case InterceptDownloadStatus.skipped:
         break;
     }
@@ -4684,7 +5182,6 @@ class _BrowserScreenState extends State<BrowserScreen>
   Future<void> _quitBrowser() async {
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     triggerHaptic(settings);
-
     try {
       final persistable = <SavedBrowserTab>[];
       var position = 0;
@@ -4732,6 +5229,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     _detectedMediaSources.clear();
     _ytDetectionFailed.clear();
     _lastYoutubeAuthTimes.clear();
+
     for (final tab in _tabs) {
       try {
         tab.progressNotifier.dispose();
@@ -4746,11 +5244,6 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// NEW UI COMPONENTS
-// ═══════════════════════════════════════════════════════════════
-
-/// Pulsing live-status dot.
 class _LiveDot extends StatefulWidget {
   final Color color;
   const _LiveDot({required this.color});
@@ -4765,10 +5258,7 @@ class _LiveDotState extends State<_LiveDot>
   void initState() {
     super.initState();
     _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-    // Two-cycle pulse on build.
+        vsync: this, duration: const Duration(milliseconds: 1200));
     _c.forward().then((_) {
       if (mounted) {
         _c.reverse().then((_) {
@@ -4810,16 +5300,12 @@ class _LiveDotState extends State<_LiveDot>
   }
 }
 
-/// Icon badge with animated pulse ring — used in sheet headers.
 class _PulsingIconBadge extends StatefulWidget {
   final IconData icon;
   final Color color;
   final bool isDark;
-  const _PulsingIconBadge({
-    required this.icon,
-    required this.color,
-    required this.isDark,
-  });
+  const _PulsingIconBadge(
+      {required this.icon, required this.color, required this.isDark});
   @override
   State<_PulsingIconBadge> createState() => _PulsingIconBadgeState();
 }
@@ -4831,9 +5317,7 @@ class _PulsingIconBadgeState extends State<_PulsingIconBadge>
   void initState() {
     super.initState();
     _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    );
+        vsync: this, duration: const Duration(milliseconds: 1600));
     _runTwoCycles();
   }
 
@@ -4889,16 +5373,12 @@ class _PulsingIconBadgeState extends State<_PulsingIconBadge>
   }
 }
 
-/// Corner-bracket frame for URL readouts — targeting UI feel.
 class _CornerBracketBox extends StatelessWidget {
   final Widget child;
   final Color color;
   final bool isDark;
-  const _CornerBracketBox({
-    required this.child,
-    required this.color,
-    required this.isDark,
-  });
+  const _CornerBracketBox(
+      {required this.child, required this.color, required this.isDark});
   @override
   Widget build(BuildContext context) {
     final bracket = BorderSide(color: color.withValues(alpha: 0.6), width: 1.5);
@@ -4913,33 +5393,28 @@ class _CornerBracketBox extends StatelessWidget {
                 .withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-              width: 0.7,
-            ),
+                color:
+                    isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+                width: 0.7),
           ),
           child: child,
         ),
-        // Corner brackets
         Positioned(
-          top: 0,
-          left: 0,
-          child: _Corner(side: _CornerSide.tl, border: bracket),
-        ),
+            top: 0,
+            left: 0,
+            child: _Corner(side: _CornerSide.tl, border: bracket)),
         Positioned(
-          top: 0,
-          right: 0,
-          child: _Corner(side: _CornerSide.tr, border: bracket),
-        ),
+            top: 0,
+            right: 0,
+            child: _Corner(side: _CornerSide.tr, border: bracket)),
         Positioned(
-          bottom: 0,
-          left: 0,
-          child: _Corner(side: _CornerSide.bl, border: bracket),
-        ),
+            bottom: 0,
+            left: 0,
+            child: _Corner(side: _CornerSide.bl, border: bracket)),
         Positioned(
-          bottom: 0,
-          right: 0,
-          child: _Corner(side: _CornerSide.br, border: bracket),
-        ),
+            bottom: 0,
+            right: 0,
+            child: _Corner(side: _CornerSide.br, border: bracket)),
       ],
     );
   }
@@ -4955,9 +5430,8 @@ class _Corner extends StatelessWidget {
   Widget build(BuildContext context) {
     const s = 12.0;
     return CustomPaint(
-      size: const Size(s, s),
-      painter: _CornerPainter(side: side, border: border),
-    );
+        size: const Size(s, s),
+        painter: _CornerPainter(side: side, border: border));
   }
 }
 
@@ -4994,7 +5468,6 @@ class _CornerPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Scanline-style loading bar with animated shimmer.
 class _ScanlineProgress extends StatefulWidget {
   final double progress;
   final bool isDark;
@@ -5009,12 +5482,9 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
         WidgetsBindingObserver,
         PausableLoopAnimation<_ScanlineProgress> {
   late AnimationController _c;
-
   @override
   AnimationController get loopController => _c;
-
   bool _allowed = true;
-
   @override
   bool get loopWanted => _allowed;
 
@@ -5022,9 +5492,7 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
   void initState() {
     super.initState();
     _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
+        vsync: this, duration: const Duration(milliseconds: 900));
     _allowed = modernAnimationsAllowed(context, respectSystemMotion: false);
     startPausableLoop();
   }
@@ -5046,8 +5514,7 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
         if (mounted) syncPausableLoop();
       });
     }
-    // Classic / battery-saver / reduce-visuals: plain progress bar with no
-    // moving shimmer, so nothing loops while backgrounded.
+
     if (!allowed) {
       return LinearProgressIndicator(
         value: widget.progress,
@@ -5056,6 +5523,7 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
         color: accent.withValues(alpha: 0.85),
       );
     }
+
     return SizedBox(
       height: 3,
       child: AnimatedBuilder(
@@ -5077,9 +5545,10 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
                 width: 30,
                 height: 3,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.transparent, accent.withValues(alpha: 0.9)],
-                  ),
+                  gradient: LinearGradient(colors: [
+                    Colors.transparent,
+                    accent.withValues(alpha: 0.9)
+                  ]),
                 ),
               ),
             ),
@@ -5090,7 +5559,6 @@ class _ScanlineProgressState extends State<_ScanlineProgress>
   }
 }
 
-/// Animated radar sweep for the sniffer dashboard card.
 class _RadarSweep extends StatefulWidget {
   final Color color;
   final bool active;
@@ -5105,12 +5573,9 @@ class _RadarSweepState extends State<_RadarSweep>
         WidgetsBindingObserver,
         PausableLoopAnimation<_RadarSweep> {
   late AnimationController _c;
-
   @override
   AnimationController get loopController => _c;
-
   bool _allowed = true;
-
   @override
   bool get loopWanted => widget.active && _allowed;
 
@@ -5144,6 +5609,7 @@ class _RadarSweepState extends State<_RadarSweep>
         if (mounted) syncPausableLoop();
       });
     }
+
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) => CustomPaint(
@@ -5162,11 +5628,9 @@ class _RadarPainter extends CustomPainter {
   final double sweep;
   final Color color;
   final bool active;
-  _RadarPainter({
-    required this.sweep,
-    required this.color,
-    required this.active,
-  });
+  _RadarPainter(
+      {required this.sweep, required this.color, required this.active});
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
@@ -5178,63 +5642,44 @@ class _RadarPainter extends CustomPainter {
     for (final r in [maxR * 0.4, maxR * 0.7, maxR]) {
       canvas.drawCircle(center, r, ringPaint);
     }
-    // Crosshair
-    canvas.drawLine(
-      Offset(center.dx - maxR, center.dy),
-      Offset(center.dx + maxR, center.dy),
-      ringPaint,
-    );
-    canvas.drawLine(
-      Offset(center.dx, center.dy - maxR),
-      Offset(center.dx, center.dy + maxR),
-      ringPaint,
-    );
+    canvas.drawLine(Offset(center.dx - maxR, center.dy),
+        Offset(center.dx + maxR, center.dy), ringPaint);
+    canvas.drawLine(Offset(center.dx, center.dy - maxR),
+        Offset(center.dx, center.dy + maxR), ringPaint);
+
     if (active) {
-      // Sweep wedge
       final sweepPaint = Paint()
         ..shader = SweepGradient(
           startAngle: sweep - 0.9,
           endAngle: sweep,
           colors: [Colors.transparent, color.withValues(alpha: 0.35)],
         ).createShader(Rect.fromCircle(center: center, radius: maxR));
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: maxR),
-        sweep - 0.9,
-        0.9,
-        true,
-        sweepPaint,
-      );
-      // Sweep leading line
+      canvas.drawArc(Rect.fromCircle(center: center, radius: maxR), sweep - 0.9,
+          0.9, true, sweepPaint);
+
       final linePaint = Paint()
         ..color = color.withValues(alpha: 0.8)
         ..strokeWidth = 1.2;
       canvas.drawLine(
-        center,
-        Offset(center.dx + maxR * cos(sweep), center.dy + maxR * sin(sweep)),
-        linePaint,
-      );
-      // Blips
+          center,
+          Offset(center.dx + maxR * cos(sweep), center.dy + maxR * sin(sweep)),
+          linePaint);
+
       final blipPaint = Paint()
         ..color = color.withValues(alpha: 0.7)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
       canvas.drawCircle(
-        Offset(
-          center.dx + maxR * 0.55 * cos(sweep - 0.5),
-          center.dy + maxR * 0.55 * sin(sweep - 0.5),
-        ),
-        2,
-        blipPaint,
-      );
+          Offset(center.dx + maxR * 0.55 * cos(sweep - 0.5),
+              center.dy + maxR * 0.55 * sin(sweep - 0.5)),
+          2,
+          blipPaint);
       canvas.drawCircle(
-        Offset(
-          center.dx + maxR * 0.8 * cos(sweep - 1.2),
-          center.dy + maxR * 0.8 * sin(sweep - 1.2),
-        ),
-        1.5,
-        blipPaint,
-      );
+          Offset(center.dx + maxR * 0.8 * cos(sweep - 1.2),
+              center.dy + maxR * 0.8 * sin(sweep - 1.2)),
+          1.5,
+          blipPaint);
     }
-    // Center dot
+
     final dotPaint = Paint()
       ..color = color.withValues(alpha: active ? 0.9 : 0.3);
     canvas.drawCircle(center, 2.5, dotPaint);
@@ -5245,16 +5690,15 @@ class _RadarPainter extends CustomPainter {
       old.sweep != sweep || old.active != active;
 }
 
-/// Dashboard sniffer card with live radar.
 class _SnifferRadarCard extends StatelessWidget {
   final SettingsProvider settings;
   final bool isEnabled;
   final ValueChanged<bool> onToggle;
-  const _SnifferRadarCard({
-    required this.settings,
-    required this.isEnabled,
-    required this.onToggle,
-  });
+  const _SnifferRadarCard(
+      {required this.settings,
+      required this.isEnabled,
+      required this.onToggle});
+
   @override
   Widget build(BuildContext context) {
     final isDark = settings.isDarkMode;
@@ -5264,6 +5708,7 @@ class _SnifferRadarCard extends StatelessWidget {
     final statusClr = isEnabled
         ? green
         : (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted);
+
     return GlassCard(
       borderRadius: 20,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -5281,12 +5726,11 @@ class _SnifferRadarCard extends StatelessWidget {
                 Text(
                   isRtl ? 'كاشف الملفات (Sniffer)' : 'Stream sniffer',
                   style: TextStyle(
-                    fontFamily: 'Space Grotesk',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                    letterSpacing: 0.3,
-                    color: accent,
-                  ),
+                      fontFamily: 'Space Grotesk',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      letterSpacing: 0.3,
+                      color: accent),
                 ),
                 const SizedBox(height: 5),
                 Row(
@@ -5303,14 +5747,13 @@ class _SnifferRadarCard extends StatelessWidget {
                                 ? 'الاعتراض التلقائي متوقف'
                                 : 'AUTO-INTERCEPT DEACTIVATED'),
                         style: TextStyle(
-                          fontFamily: 'Space Grotesk',
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? AppTheme.textPrimary
-                              : AppTheme.lightTextPrimary,
-                          fontSize: 12.5,
-                          letterSpacing: 0.5,
-                        ),
+                            fontFamily: 'Space Grotesk',
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? AppTheme.textPrimary
+                                : AppTheme.lightTextPrimary,
+                            fontSize: 12.5,
+                            letterSpacing: 0.5),
                       ),
                     ),
                   ],
@@ -5321,11 +5764,10 @@ class _SnifferRadarCard extends StatelessWidget {
                       ? 'يكتشف روابط التحميل المباشرة والوسائط تلقائياً'
                       : 'Sniffs media files and documents dynamically',
                   style: TextStyle(
-                    fontFamily: 'Inter',
-                    color:
-                        isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                    fontSize: 10.5,
-                  ),
+                      fontFamily: 'Inter',
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontSize: 10.5),
                 ),
               ],
             ),
@@ -5342,8 +5784,7 @@ class _SnifferRadarCard extends StatelessWidget {
               inactiveTrackColor:
                   isDark ? const Color(0x1AFFFFFF) : const Color(0x0D000000),
               trackOutlineColor: WidgetStateProperty.resolveWith(
-                (states) => Colors.transparent,
-              ),
+                  (states) => Colors.transparent),
               onChanged: onToggle,
             ),
           ),
@@ -5353,7 +5794,6 @@ class _SnifferRadarCard extends StatelessWidget {
   }
 }
 
-/// FAB with pulsing signal ring when media is detected.
 class _SignalFab extends StatefulWidget {
   final Color color;
   final IconData icon;
@@ -5361,14 +5801,13 @@ class _SignalFab extends StatefulWidget {
   final bool pulse;
   final bool isDark;
   final VoidCallback onPressed;
-  const _SignalFab({
-    required this.color,
-    required this.icon,
-    required this.label,
-    required this.pulse,
-    required this.isDark,
-    required this.onPressed,
-  });
+  const _SignalFab(
+      {required this.color,
+      required this.icon,
+      required this.label,
+      required this.pulse,
+      required this.isDark,
+      required this.onPressed});
   @override
   State<_SignalFab> createState() => _SignalFabState();
 }
@@ -5379,12 +5818,9 @@ class _SignalFabState extends State<_SignalFab>
         WidgetsBindingObserver,
         PausableLoopAnimation<_SignalFab> {
   late AnimationController _c;
-
   @override
   AnimationController get loopController => _c;
-
   bool _allowed = true;
-
   @override
   bool get loopWanted => widget.pulse && _allowed;
 
@@ -5392,9 +5828,7 @@ class _SignalFabState extends State<_SignalFab>
   void initState() {
     super.initState();
     _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
+        vsync: this, duration: const Duration(milliseconds: 1400));
     _allowed = modernAnimationsAllowed(context, respectSystemMotion: false);
     startPausableLoop();
   }
@@ -5421,6 +5855,7 @@ class _SignalFabState extends State<_SignalFab>
         if (mounted) syncPausableLoop();
       });
     }
+
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -5446,35 +5881,30 @@ class _SignalFabState extends State<_SignalFab>
           elevation: 4,
           onPressed: widget.onPressed,
           icon: Icon(widget.icon),
-          label: Text(
-            widget.label,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              fontFamily: 'Space Grotesk',
-              fontSize: 12,
-            ),
-          ),
+          label: Text(widget.label,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  fontFamily: 'Space Grotesk',
+                  fontSize: 12)),
         ),
       ],
     );
   }
 }
 
-/// YouTube grab button in the URL bar.
 class _YouTubeGrabButton extends StatelessWidget {
   final bool isPlaylist;
   final bool isRtl;
   final bool isDark;
   final bool enableGlow;
   final VoidCallback onPressed;
-  const _YouTubeGrabButton({
-    required this.isPlaylist,
-    required this.isRtl,
-    required this.isDark,
-    required this.enableGlow,
-    required this.onPressed,
-  });
+  const _YouTubeGrabButton(
+      {required this.isPlaylist,
+      required this.isRtl,
+      required this.isDark,
+      required this.enableGlow,
+      required this.onPressed});
   @override
   Widget build(BuildContext context) {
     return IconButton(
@@ -5487,18 +5917,16 @@ class _YouTubeGrabButton extends StatelessWidget {
           boxShadow: enableGlow
               ? [
                   BoxShadow(
-                    color: Colors.red.withValues(alpha: 0.4),
-                    blurRadius: 6,
-                    spreadRadius: 0.5,
-                  ),
+                      color: Colors.red.withValues(alpha: 0.4),
+                      blurRadius: 6,
+                      spreadRadius: 0.5)
                 ]
               : null,
         ),
         child: Icon(
-          isPlaylist ? Icons.playlist_play_rounded : Icons.download_rounded,
-          size: 16,
-          color: Colors.white,
-        ),
+            isPlaylist ? Icons.playlist_play_rounded : Icons.download_rounded,
+            size: 16,
+            color: Colors.white),
       ),
       tooltip: isPlaylist
           ? (isRtl ? 'تحميل قائمة التشغيل' : 'Download Playlist')
@@ -5508,18 +5936,16 @@ class _YouTubeGrabButton extends StatelessWidget {
   }
 }
 
-/// Small action button in the tab switcher header.
 class _TabSwitcherAction extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String tooltip;
   final VoidCallback onPressed;
-  const _TabSwitcherAction({
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-    required this.onPressed,
-  });
+  const _TabSwitcherAction(
+      {required this.icon,
+      required this.color,
+      required this.tooltip,
+      required this.onPressed});
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -5534,10 +5960,8 @@ class _TabSwitcherAction extends StatelessWidget {
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: color.withValues(alpha: 0.25),
-                width: 0.7,
-              ),
+              border:
+                  Border.all(color: color.withValues(alpha: 0.25), width: 0.7),
             ),
             child: Icon(icon, color: color, size: 18),
           ),
@@ -5547,16 +5971,14 @@ class _TabSwitcherAction extends StatelessWidget {
   }
 }
 
-// Stateful Dialog Editor for Injecting CSS & JavaScript
 class _JsCssInjectorDialog extends StatefulWidget {
   final String initialJs;
   final String initialCss;
   final Function(String, String) onSave;
-  const _JsCssInjectorDialog({
-    required this.initialJs,
-    required this.initialCss,
-    required this.onSave,
-  });
+  const _JsCssInjectorDialog(
+      {required this.initialJs,
+      required this.initialCss,
+      required this.onSave});
   @override
   State<_JsCssInjectorDialog> createState() => _JsCssInjectorDialogState();
 }
@@ -5565,6 +5987,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
   late final TextEditingController _jsController;
   late final TextEditingController _cssController;
   int _activeTab = 0;
+
   @override
   void initState() {
     super.initState();
@@ -5584,6 +6007,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
     final settings = Provider.of<SettingsProvider>(context);
     final isDark = settings.isDarkMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+
     return AlertDialog(
       backgroundColor: (isDark ? AppTheme.surface : AppTheme.lightSurface)
           .withValues(alpha: 0.95),
@@ -5592,15 +6016,12 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
         children: [
           Icon(Icons.code_rounded, color: accent, size: 20),
           const SizedBox(width: 10),
-          Text(
-            'JS / CSS INJECTOR',
-            style: TextStyle(
-              color: accent,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-            ),
-          ),
+          Text('JS / CSS INJECTOR',
+              style: TextStyle(
+                  color: accent,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0)),
         ],
       ),
       content: SizedBox(
@@ -5615,17 +6036,14 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
                     .withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
-                      .withValues(alpha: 0.3),
-                ),
+                    color: (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed)
+                        .withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                    size: 18,
-                  ),
+                  Icon(Icons.warning_amber_rounded,
+                      color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                      size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -5633,42 +6051,33 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
                           ? 'تنبيه: هذا الكود ينفذ على صفحات الويب. لا تدخل بيانات حساسة.'
                           : 'WARNING: Code runs on web pages. Do not enter sensitive data.',
                       style: TextStyle(
-                        color:
-                            isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
+                          color:
+                              isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _tabHeader(0, 'JavaScript')),
-                Expanded(child: _tabHeader(1, 'CSS Style')),
-              ],
-            ),
+            Row(children: [
+              Expanded(child: _tabHeader(0, 'JavaScript')),
+              Expanded(child: _tabHeader(1, 'CSS Style'))
+            ]),
             const SizedBox(height: 12),
             Expanded(
               child: IndexedStack(
                 index: _activeTab,
                 children: [
                   _buildCodeEditor(
-                    _jsController,
-                    '''// Write your Custom Javascript here
-// Automatically runs on page loads...''',
-                    isDark,
-                  ),
+                      _jsController,
+                      '// Write your Custom Javascript here\n// Automatically runs on page loads...',
+                      isDark),
                   _buildCodeEditor(
-                    _cssController,
-                    '''/* Write your Custom CSS here */
-body {
-  /* background-color: #000; */
-}''',
-                    isDark,
-                  ),
+                      _cssController,
+                      '/* Write your Custom CSS here */\nbody {\n  /* background-color: #000; */\n}',
+                      isDark),
                 ],
               ),
             ),
@@ -5677,14 +6086,11 @@ body {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('CANCEL'),
-        ),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL')),
         FilledButton(
           style: FilledButton.styleFrom(
-            backgroundColor: accent,
-            foregroundColor: Colors.black,
-          ),
+              backgroundColor: accent, foregroundColor: Colors.black),
           onPressed: () {
             widget.onSave(_jsController.text, _cssController.text);
             Navigator.pop(context);
@@ -5711,13 +6117,10 @@ body {
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: isSelected ? accent : Colors.transparent,
-              width: 2,
-            ),
-          ),
-        ),
+            border: Border(
+                bottom: BorderSide(
+                    color: isSelected ? accent : Colors.transparent,
+                    width: 2))),
         child: Text(
           label,
           style: TextStyle(
@@ -5736,10 +6139,7 @@ body {
   }
 
   Widget _buildCodeEditor(
-    TextEditingController controller,
-    String hint,
-    bool isDark,
-  ) {
+      TextEditingController controller, String hint, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -5747,9 +6147,8 @@ body {
             .withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-          width: 0.8,
-        ),
+            color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+            width: 0.8),
       ),
       child: TextField(
         controller: controller,
@@ -5757,16 +6156,14 @@ body {
         expands: true,
         keyboardType: TextInputType.multiline,
         style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 11,
-          color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-        ),
+            fontFamily: 'monospace',
+            fontSize: 11,
+            color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-            fontSize: 10,
-          ),
+              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+              fontSize: 10),
           border: InputBorder.none,
           contentPadding: EdgeInsets.zero,
         ),

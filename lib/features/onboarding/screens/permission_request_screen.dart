@@ -506,31 +506,76 @@ class _PermissionCard extends StatelessWidget {
               ),
             )
           else
-            SizedBox(
-              height: 34,
-              child: ElevatedButton(
-                onPressed: onRequest,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: accentColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isPermanentlyDenied) ...[
+                  Semantics(
+                    label: L10n.of(context, 'permission_permanently_denied'),
+                    container: true,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              L10n.of(context, 'permission_permanently_denied'),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  elevation: 0,
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                ],
+                SizedBox(
+                  height: 34,
+                  child: ElevatedButton(
+                    onPressed:
+                        isPermanentlyDenied ? openAppSettings : onRequest,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    child: Text(
+                      isPermanentlyDenied
+                          ? L10n.of(context, 'permission_open_settings')
+                          : L10n.of(context, 'permission_allow'),
+                    ),
                   ),
                 ),
-                child: Text(
-                  isPermanentlyDenied
-                      ? (L10n.isRtl(context)
-                          ? 'مرفوض — فتح الإعدادات'
-                          : 'Denied — Open Settings')
-                      : L10n.of(context, 'permission_allow'),
-                ),
-              ),
+              ],
             ),
         ],
       ),

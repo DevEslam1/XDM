@@ -8,6 +8,7 @@ class BrowserTab {
   String url;
   String title;
   bool isIncognito;
+  PullToRefreshController? pullToRefreshController;
   bool isLoading;
   bool hasCrashed;
   bool isTimedOut;

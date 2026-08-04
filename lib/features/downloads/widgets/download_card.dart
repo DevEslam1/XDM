@@ -271,28 +271,88 @@ class _StatusChip extends StatelessWidget {
     final color = _statusColor(task.status, isDark);
     final label =
         overrideLabel ?? L10n.translateStatusName(context, task.status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: AppTheme.chipDecoration(
-        color: color,
-        isDark: isDark,
-        radius: 12,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_icon, size: 14, color: color),
-          const SizedBox(width: 4),
+
+    final isScheduled = task.status == DownloadStatus.paused &&
+        task.scheduledAt != null &&
+        task.scheduledAt!.isAfter(DateTime.now());
+
+    final provider = context.watch<DownloadProvider>();
+    final isQueued = task.status == DownloadStatus.queued;
+    final activeCount = provider.downloadingTasksCount;
+    final maxCount = context.watch<SettingsProvider>().maxDownloads;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: AppTheme.chipDecoration(
+                color: color,
+                isDark: isDark,
+                radius: 12,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_icon, size: 14, color: color),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isScheduled) ...[
+              const SizedBox(width: 6),
+              Tooltip(
+                message: task.scheduledAt!.toLocal().toString(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: AppTheme.chipDecoration(
+                    color: AppTheme.neonAmber,
+                    isDark: isDark,
+                    radius: 8,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.schedule_rounded, size: 12, color: AppTheme.neonAmber),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Scheduled for ${task.scheduledAt!.hour.toString().padLeft(2, '0')}:${task.scheduledAt!.minute.toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.neonAmber,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (isQueued) ...[
+          const SizedBox(height: 2),
           Text(
-            label,
+            'Waiting for slot ($activeCount/$maxCount active)',
             style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
+              fontSize: 9,
+              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -341,6 +401,17 @@ class _TelemetryStrip extends StatelessWidget {
               _TelemetryTile(icon: Icons.speed, label: speedText),
               const SizedBox(width: 16),
               _TelemetryTile(icon: Icons.access_time, label: etaText),
+              const Spacer(),
+              Builder(
+                builder: (context) {
+                  final provider = context.watch<DownloadProvider>();
+                  final history = provider.getSpeedHistory(task.id);
+                  if (task.status == DownloadStatus.downloading && history.length >= 2) {
+                    return _CardSparklineGraph(history: history, color: accent);
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -777,7 +848,8 @@ class _FileCard extends StatelessWidget with HapticHelper {
         );
       },
       onLongPress: () => _showAdvancedControls(context, task, settings),
-      child: Padding(
+      child: ClipRect(
+        child: Padding(
         padding: EdgeInsets.all(compact ? 12 : 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -844,11 +916,13 @@ class _FileCard extends StatelessWidget with HapticHelper {
                 _ControlCluster(task: task),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _ProgressRow(task: task, isDark: isDark, color: statusColor),
-            if (task.statusMessage != null && task.statusMessage!.isNotEmpty)
+            if (task.statusMessage != null &&
+                task.statusMessage!.isNotEmpty &&
+                task.status != DownloadStatus.completed)
               _NoticeRow(
                 text: task.statusMessage!,
                 color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
@@ -879,6 +953,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
                 ),
               ),
           ],
+        ),
         ),
       ),
     );
@@ -929,7 +1004,8 @@ class _MediaCard extends StatelessWidget with HapticHelper {
         );
       },
       onLongPress: () => _showAdvancedControls(context, task, settings),
-      child: Padding(
+      child: ClipRect(
+        child: Padding(
         padding: EdgeInsets.all(compact ? 12 : 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1039,11 +1115,13 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                 _ControlCluster(task: task),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _ProgressRow(task: task, isDark: isDark, color: statusColor),
-            if (task.statusMessage != null && task.statusMessage!.isNotEmpty)
+            if (task.statusMessage != null &&
+                task.statusMessage!.isNotEmpty &&
+                task.status != DownloadStatus.completed)
               _NoticeRow(
                 text: task.statusMessage!,
                 color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
@@ -1059,6 +1137,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                 isDark: isDark,
               ),
           ],
+        ),
         ),
       ),
     );
@@ -1120,7 +1199,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
           },
           onLongPress: () =>
               _showAdvancedControls(context, widget.task, settings),
-          child: Padding(
+          child: ClipRect(
+            child: Padding(
             padding: EdgeInsets.all(widget.compact ? 12 : 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1202,7 +1282,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                     Column(children: [_ControlCluster(task: widget.task)]),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 // Telemetry: downloaded / total / elapsed / remain / speed
                 _TelemetryStrip(
                   task: widget.task,
@@ -1210,7 +1290,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                   accent: statusColor,
                   seedingUploadSpeed: stats.uploadSpeed,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 // Total progress + total percentage
                 _ProgressRow(
                   task: widget.task,
@@ -1276,6 +1356,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                     isDark: isDark,
                   ),
               ],
+            ),
             ),
           ),
         );
@@ -2454,4 +2535,60 @@ class _TelemetryTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CardSparklineGraph extends StatelessWidget {
+  final List<double> history;
+  final Color color;
+
+  const _CardSparklineGraph({required this.history, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 24,
+      width: 80,
+      child: CustomPaint(
+        painter: _SparklinePainter(history, color),
+      ),
+    );
+  }
+}
+
+class _SparklinePainter extends CustomPainter {
+  final List<double> history;
+  final Color color;
+
+  _SparklinePainter(this.history, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (history.length < 2) return;
+    final maxSpeed = history.reduce((a, b) => a > b ? a : b);
+    if (maxSpeed <= 0) return;
+
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path();
+    final stepX = size.width / (history.length - 1);
+
+    for (int i = 0; i < history.length; i++) {
+      final x = i * stepX;
+      final y = size.height - ((history[i] / maxSpeed) * (size.height - 4) + 2);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparklinePainter oldDelegate) => true;
 }

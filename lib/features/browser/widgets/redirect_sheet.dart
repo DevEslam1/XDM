@@ -79,8 +79,23 @@ class RedirectSheet extends StatelessWidget {
     final currentDomain = RedirectGuard.extractDomain(currentTabUrl);
     final sanitizedUrl = _sanitizeUrlDisplay(targetUrl);
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    final reduceMotion = settings.reduceVisuals || settings.batterySaverMode;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      duration: reduceMotion ? Duration.zero : AppTheme.motionBase,
+      curve: Curves.easeOutCubic,
+      builder: (context, val, child) {
+        return Transform.translate(
+          offset: Offset(0, 30 * (1 - val)),
+          child: Opacity(
+            opacity: val,
+            child: child,
+          ),
+        );
+      },
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       child: DmxBackdropFilter(
         sigmaX: 15,
         sigmaY: 15,
@@ -442,6 +457,7 @@ class RedirectSheet extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

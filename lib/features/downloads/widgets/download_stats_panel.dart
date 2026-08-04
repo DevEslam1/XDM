@@ -94,8 +94,8 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
                             color: Colors.transparent,
                             child: Tooltip(
                               message: data.hasActive
-                                  ? L10n.of(context, 'pause_all')
-                                  : L10n.of(context, 'resume_all'),
+                                  ? L10n.of(context, 'pause_all_btn')
+                                  : L10n.of(context, 'resume_all_btn'),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(14),
                                 onTap: () {

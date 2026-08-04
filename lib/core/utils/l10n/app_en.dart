@@ -105,6 +105,9 @@ const Map<String, String> enTranslations = {
   'permission_battery_opening': 'Opening system settings…',
   'permission_continue': 'Continue',
   'permission_allow': 'Allow',
+  'permission_open_settings': 'Open Settings',
+  'permission_permanently_denied':
+      'Permission permanently denied. Please enable it in system settings.',
   'permission_download_location_title': 'Download Location',
   'permission_download_location_desc': 'Choose where to save your files',
   'permission_download_location_button': 'Choose Folder',

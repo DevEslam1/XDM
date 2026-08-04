@@ -8,6 +8,7 @@ import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import 'category_detail_screen.dart';
 
 class CategoriesScreen extends StatelessWidget {
   const CategoriesScreen({super.key});
@@ -178,9 +179,36 @@ class CategoriesScreen extends StatelessWidget {
                           if (settings.vibration) {
                             HapticFeedback.lightImpact();
                           }
-                          final provider = context.read<DownloadProvider>();
-                          provider.setCategoryFilter(name);
-                          provider.setActiveTabIndex(0);
+                          Navigator.of(context).push(
+                            PageRouteBuilder(
+                              pageBuilder: (ctx, animation, secondaryAnimation) =>
+                                  CategoryDetailScreen(
+                                    categoryName: name,
+                                    categoryColor: color,
+                                    categoryIcon: icon,
+                                  ),
+                              transitionsBuilder:
+                                  (ctx, animation, secondaryAnimation, child) {
+                                return FadeTransition(
+                                  opacity: CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOut,
+                                  ),
+                                  child: SlideTransition(
+                                    position: Tween(
+                                      begin: const Offset(0.05, 0),
+                                      end: Offset.zero,
+                                    ).animate(CurvedAnimation(
+                                      parent: animation,
+                                      curve: AppTheme.motionCurve,
+                                    )),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              transitionDuration: AppTheme.motionBase,
+                            ),
+                          );
                         },
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(20),

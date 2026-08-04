@@ -174,7 +174,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         sectionTitle: L10n.of(context, 'settings_engine_status'),
         settingTitle: L10n.of(context, 'settings_max_channels'),
         subtitle: L10n.of(context, 'settings_max_channels_sub'),
-        keywords: const ['parallel', 'simultaneous', 'concurrent', 'downloads', 'channels'],
+        keywords: const [
+          'parallel',
+          'simultaneous',
+          'concurrent',
+          'downloads',
+          'channels'
+        ],
         accentColor: accent,
         builder: (ctx) => _DropdownTile<int>(
           accentColor: accent,
@@ -196,7 +202,14 @@ class _SettingsScreenState extends State<SettingsScreen>
         sectionTitle: L10n.of(context, 'settings_bandwidth'),
         settingTitle: L10n.of(context, 'settings_speed_limit'),
         subtitle: L10n.of(context, 'settings_speed_limit_sub'),
-        keywords: const ['bandwidth', 'rate', 'mb', 'limit', 'throttle', 'speed'],
+        keywords: const [
+          'bandwidth',
+          'rate',
+          'mb',
+          'limit',
+          'throttle',
+          'speed'
+        ],
         accentColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
         builder: (ctx) => _SliderTile(
           accentColor: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
@@ -233,7 +246,14 @@ class _SettingsScreenState extends State<SettingsScreen>
           sectionTitle: L10n.of(context, 'settings_network_sec'),
           settingTitle: L10n.of(context, 'settings_bypass_ssl'),
           subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
-          keywords: const ['ssl', 'certificate', 'tls', 'bypass', 'security', 'developer'],
+          keywords: const [
+            'ssl',
+            'certificate',
+            'tls',
+            'bypass',
+            'security',
+            'developer'
+          ],
           accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
           builder: (ctx) => _SwitchTile(
             accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
@@ -272,7 +292,15 @@ class _SettingsScreenState extends State<SettingsScreen>
         subtitle: isRtl
             ? 'إخفاء بصمات الأتمتة navigator.webdriver في المتصفح لمنع اكتشاف البوتات'
             : 'Obscure navigator.webdriver and WebView automation signatures to prevent bot detection',
-        keywords: const ['fingerprint', 'automation', 'webdriver', 'privacy', 'bot', 'stealth', 'anti-fingerprint'],
+        keywords: const [
+          'fingerprint',
+          'automation',
+          'webdriver',
+          'privacy',
+          'bot',
+          'stealth',
+          'anti-fingerprint'
+        ],
         accentColor: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
         builder: (ctx) => _SwitchTile(
           accentColor: isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
@@ -293,7 +321,14 @@ class _SettingsScreenState extends State<SettingsScreen>
         sectionTitle: L10n.of(context, 'settings_visuals'),
         settingTitle: L10n.of(context, 'settings_dark_mode'),
         subtitle: L10n.of(context, 'settings_dark_mode_sub'),
-        keywords: const ['dark', 'theme', 'night', 'mode', 'color', 'background'],
+        keywords: const [
+          'dark',
+          'theme',
+          'night',
+          'mode',
+          'color',
+          'background'
+        ],
         accentColor: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
         builder: (ctx) => _SwitchTile(
           accentColor: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
@@ -310,7 +345,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         sectionTitle: L10n.of(context, 'settings_visuals'),
         settingTitle: L10n.of(context, 'settings_haptics'),
         subtitle: L10n.of(context, 'settings_haptics_sub'),
-        keywords: const ['vibration', 'haptic', 'feedback', 'touch', 'touchscreen'],
+        keywords: const [
+          'vibration',
+          'haptic',
+          'feedback',
+          'touch',
+          'touchscreen'
+        ],
         accentColor: accent,
         builder: (ctx) => _SwitchTile(
           accentColor: accent,
@@ -326,7 +367,15 @@ class _SettingsScreenState extends State<SettingsScreen>
         sectionTitle: L10n.of(context, 'settings_visuals'),
         settingTitle: L10n.of(context, 'settings_language'),
         subtitle: L10n.of(context, 'settings_language_sub'),
-        keywords: const ['language', 'locale', 'arabic', 'english', 'german', 'spanish', 'french'],
+        keywords: const [
+          'language',
+          'locale',
+          'arabic',
+          'english',
+          'german',
+          'spanish',
+          'french'
+        ],
         accentColor: accent,
         builder: (ctx) => _DropdownTile<String>(
           accentColor: accent,
@@ -345,13 +394,22 @@ class _SettingsScreenState extends State<SettingsScreen>
       _SettingSearchEntry(
         sectionTitle: 'Developer Mode',
         settingTitle: 'Enable Developer Mode',
-        subtitle: 'Unlocks advanced debugging tools, SSL configuration, and internal logs',
-        keywords: const ['developer', 'dev', 'debug', 'logs', 'ssl', 'advanced'],
+        subtitle:
+            'Unlocks advanced debugging tools, SSL configuration, and internal logs',
+        keywords: const [
+          'developer',
+          'dev',
+          'debug',
+          'logs',
+          'ssl',
+          'advanced'
+        ],
         accentColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
         builder: (ctx) => _SwitchTile(
           accentColor: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
           title: 'Enable Developer Mode',
-          subtitle: 'Unlocks advanced debugging tools, SSL configuration, and internal logs',
+          subtitle:
+              'Unlocks advanced debugging tools, SSL configuration, and internal logs',
           value: settings.developerMode,
           onChanged: (val) {
             settings.toggleDeveloperMode();
@@ -479,83 +537,21 @@ class _SettingsScreenState extends State<SettingsScreen>
                 children: [
                   _stagger(0.0, _SystemHeader(settings: settings)),
                   const SizedBox(height: 12),
-                  _stagger(
-                    0.04,
-                    Container(
-                      decoration: BoxDecoration(
-                        color:
-                            isDark ? AppTheme.surface : AppTheme.lightSurface,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color:
-                              isDark ? AppTheme.border : AppTheme.lightBorder,
-                          width: 1.0,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 2),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.search_rounded,
-                            color: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: _settingsSearchController,
-                              style: TextStyle(
-                                color: isDark
-                                    ? AppTheme.textPrimary
-                                    : AppTheme.lightTextPrimary,
-                                fontFamily: 'Inter',
-                                fontSize: 13,
-                              ),
-                              decoration: InputDecoration(
-                                hintText:
-                                    L10n.of(context, 'search_settings_hint'),
-                                hintStyle: TextStyle(
-                                  color: isDark
-                                      ? AppTheme.textMuted
-                                      : AppTheme.lightTextMuted,
-                                  fontSize: 13,
-                                ),
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-                          if (_settingsSearchQuery.isNotEmpty)
-                            IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              color: isDark
-                                  ? AppTheme.textSecondary
-                                  : AppTheme.lightTextSecondary,
-                              onPressed: () {
-                                _settingsSearchController.clear();
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+
                   if (_settingsSearchQuery.isNotEmpty) ...[
                     Builder(
                       builder: (ctx) {
-                        final results = _buildSearchIndex(context, settings, isDark, isRtl)
-                            .where((e) => e.matches(_settingsSearchQuery))
-                            .toList();
+                        final results =
+                            _buildSearchIndex(context, settings, isDark, isRtl)
+                                .where((e) => e.matches(_settingsSearchQuery))
+                                .toList();
                         if (results.isEmpty) {
                           return Padding(
                             padding: const EdgeInsets.all(24.0),
                             child: EmptyStateView(
                               icon: Icons.search_off_rounded,
-                              title: 'No settings found for "$_settingsSearchQuery"',
+                              title:
+                                  'No settings found for "$_settingsSearchQuery"',
                               subtitle:
                                   'Try searching with different keywords like "proxy", "dark mode", or "speed".',
                             ),
@@ -580,7 +576,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                             ...results.map((entry) => Padding(
                                   padding: const EdgeInsets.only(bottom: 12.0),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         entry.sectionTitle.toUpperCase(),
@@ -600,600 +597,723 @@ class _SettingsScreenState extends State<SettingsScreen>
                       },
                     ),
                   ] else ...[
-                  if (_sectionMatches(
-                      L10n.of(context, 'settings_engine_status'),
-                      ['auto resume', 'max channels', 'speed limit']))
+                    if (_sectionMatches(
+                        L10n.of(context, 'settings_engine_status'),
+                        ['auto resume', 'max channels', 'speed limit']))
+                      _stagger(
+                        0.08,
+                        _ConsoleSection(
+                          index: '01',
+                          title: L10n.of(context, 'settings_engine_status'),
+                          accentColor: isDark
+                              ? AppTheme.neonBlue
+                              : AppTheme.lightNeonBlue,
+                          isDark: isDark,
+                          isExpanded: _settingsSearchQuery.isNotEmpty ||
+                              (_expandedSections['engine'] ?? true),
+                          onToggle: () {
+                            triggerHaptic(settings);
+                            setState(() {
+                              _expandedSections['engine'] =
+                                  !(_expandedSections['engine'] ?? true);
+                            });
+                          },
+                          children: [
+                            _SwitchTile(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title: L10n.of(context, 'settings_auto_resume'),
+                              subtitle: L10n.of(
+                                context,
+                                'settings_auto_resume_sub',
+                              ),
+                              value: settings.autoStart,
+                              onChanged: (val) {
+                                settings.setAutoStart(val);
+                                triggerHaptic(settings);
+                              },
+                            ),
+                            _Divider(isDark: isDark),
+                            _DropdownTile<int>(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title: L10n.of(context, 'settings_max_channels'),
+                              subtitle: settings.batterySaverMode
+                                  ? (isRtl
+                                      ? 'محدود بـ ${settings.effectiveMaxDownloads} بسبب موفر البطارية'
+                                      : 'Limited to ${settings.effectiveMaxDownloads} by Battery Saver')
+                                  : L10n.of(
+                                      context, 'settings_max_channels_sub'),
+                              value: settings.maxDownloads,
+                              items: const [1, 2, 3, 5, 8],
+                              onChanged: settings.batterySaverMode
+                                  ? null
+                                  : (val) {
+                                      if (val != null) {
+                                        settings.setMaxDownloads(val);
+                                        triggerHaptic(settings);
+                                      }
+                                    },
+                            ),
+                            _Divider(isDark: isDark),
+                            _DropdownTile<int>(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title:
+                                  L10n.of(context, 'settings_default_threads'),
+                              subtitle: settings.batterySaverMode
+                                  ? (isRtl
+                                      ? 'محدود بـ ${settings.effectiveDefaultThreadCount} بسبب موفر البطارية'
+                                      : 'Limited to ${settings.effectiveDefaultThreadCount} by Battery Saver')
+                                  : L10n.of(
+                                      context,
+                                      'settings_default_threads_sub',
+                                    ),
+                              value: settings.defaultThreadCount,
+                              items: kAvailableThreadOptions,
+                              onChanged: settings.batterySaverMode
+                                  ? null
+                                  : (val) {
+                                      if (val != null) {
+                                        settings.setDefaultThreadCount(val);
+                                        triggerHaptic(settings);
+                                      }
+                                    },
+                            ),
+                            _Divider(isDark: isDark),
+                            _DropdownTile<String>(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title: L10n.of(context, 'settings_lang'),
+                              subtitle: L10n.of(context, 'settings_lang_sub'),
+                              value: settings.languageCode,
+                              items: const ['en', 'ar'],
+                              itemLabels: {'en': 'ENGLISH', 'ar': 'العربية'},
+                              onChanged: (val) {
+                                if (val != null) {
+                                  settings.setLanguageCode(val);
+                                  triggerHaptic(settings);
+                                }
+                              },
+                            ),
+                            _Divider(isDark: isDark),
+                            _PathPickerTile(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title: isRtl
+                                  ? 'مجلد التحميل الافتراضي'
+                                  : 'Default Download Folder',
+                              subtitle:
+                                  settings.customDownloadPath?.isNotEmpty ==
+                                          true
+                                      ? settings.customDownloadPath!
+                                      : (isRtl
+                                          ? 'تلقائي (Downloads/XDM)'
+                                          : 'Default (Downloads/XDM)'),
+                              onTap: () async {
+                                triggerHaptic(settings);
+                                final path =
+                                    await FilePicker.getDirectoryPath();
+                                if (path != null) {
+                                  await settings.setCustomDownloadPath(path);
+                                }
+                              },
+                              onClear:
+                                  settings.customDownloadPath?.isNotEmpty ==
+                                          true
+                                      ? () async {
+                                          triggerHaptic(settings);
+                                          await settings
+                                              .setCustomDownloadPath(null);
+                                        }
+                                      : null,
+                            ),
+                            _Divider(isDark: isDark),
+                            _ActionSettingTile(
+                              accentColor: isDark
+                                  ? AppTheme.neonRed
+                                  : AppTheme.lightNeonRed,
+                              title: isRtl ? 'مسح السجل' : 'Clear History',
+                              subtitle: isRtl
+                                  ? 'حذف كافة التنزيلات المكتملة والفاشلة من السجل'
+                                  : 'Delete all completed and failed downloads from history',
+                              buttonText: isRtl ? 'مسح السجل' : 'Clear History',
+                              isDestructive: true,
+                              onTap: () async {
+                                triggerHaptic(settings);
+                                final provider =
+                                    context.read<DownloadProvider>();
+                                final historyTasks = provider.tasks.where((t) {
+                                  final isSeeding =
+                                      t.status == DownloadStatus.completed &&
+                                          t.isTorrent &&
+                                          t.seedingEnabled;
+                                  return (t.status ==
+                                              DownloadStatus.completed ||
+                                          t.status == DownloadStatus.failed) &&
+                                      !isSeeding;
+                                }).toList();
+                                final count = historyTasks.length;
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: isDark
+                                        ? AppTheme.surface
+                                        : AppTheme.lightSurface,
+                                    title: Text(
+                                      isRtl
+                                          ? 'تأكيد مسح السجل'
+                                          : 'Confirm Clear History',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? AppTheme.textPrimary
+                                            : AppTheme.lightTextPrimary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    content: Text(
+                                      isRtl
+                                          ? 'هل أنت تأكد من إزالة جميع عناصر السجل البالغ عددها $count؟ لا يمكن التراجع عن هذا الإجراء.'
+                                          : 'Are you sure you want to delete all $count history entries? This cannot be undone.',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? AppTheme.textSecondary
+                                            : AppTheme.lightTextSecondary,
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
+                                        child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+                                      ),
+                                      TextButton(
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: AppTheme.neonRed,
+                                        ),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        child: Text(
+                                            isRtl ? 'حذف الكل' : 'Delete All'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed == true && context.mounted) {
+                                  await provider.clearHistoryTasks(
+                                      historyTasks.map((t) => t.id).toList());
+                                  if (context.mounted) {
+                                    ThemedSnackbar.show(
+                                      context,
+                                      message: isRtl
+                                          ? 'تم مسح السجل'
+                                          : 'History cleared',
+                                      color: AppTheme.neonRed,
+                                      icon: Icons.delete_sweep_rounded,
+                                      isDarkMode: isDark,
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 14),
                     _stagger(
-                      0.08,
+                      0.16,
                       _ConsoleSection(
-                        index: '01',
-                        title: L10n.of(context, 'settings_engine_status'),
-                        accentColor:
-                            isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        index: '02',
+                        title: L10n.of(context, 'settings_bandwidth'),
+                        accentColor: isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen,
                         isDark: isDark,
-                        isExpanded: _settingsSearchQuery.isNotEmpty ||
-                            (_expandedSections['engine'] ?? true),
+                        isExpanded: _expandedSections['bandwidth'] ?? false,
                         onToggle: () {
                           triggerHaptic(settings);
                           setState(() {
-                            _expandedSections['engine'] =
-                                !(_expandedSections['engine'] ?? true);
+                            _expandedSections['bandwidth'] =
+                                !(_expandedSections['bandwidth'] ?? false);
                           });
                         },
                         children: [
+                          _SliderTile(
+                            accentColor: isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen,
+                            title: L10n.of(context, 'settings_speed_limit'),
+                            valueLabel: settings.speedLimitMb == 0.0
+                                ? L10n.of(context, 'settings_unlimited')
+                                : '${settings.speedLimitMb.toInt()} MB/s',
+                            subtitle: L10n.of(context, 'settings_limit_to'),
+                            value: settings.speedLimitMb,
+                            min: 0.0,
+                            max: 100.0,
+                            divisions: 10,
+                            onChanged: (val) => settings.setSpeedLimit(val),
+                            onChangeEnd: (val) => triggerHaptic(settings),
+                          ),
+                          _Divider(isDark: isDark),
                           _SwitchTile(
                             accentColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            title: L10n.of(context, 'settings_auto_resume'),
-                            subtitle: L10n.of(
-                              context,
-                              'settings_auto_resume_sub',
-                            ),
-                            value: settings.autoStart,
-                            onChanged: (val) {
-                              settings.setAutoStart(val);
-                              triggerHaptic(settings);
-                            },
-                          ),
-                          _Divider(isDark: isDark),
-                          _DropdownTile<int>(
-                            accentColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            title: L10n.of(context, 'settings_max_channels'),
-                            subtitle: settings.batterySaverMode
-                                ? (isRtl
-                                    ? 'محدود بـ ${settings.effectiveMaxDownloads} بسبب موفر البطارية'
-                                    : 'Limited to ${settings.effectiveMaxDownloads} by Battery Saver')
-                                : L10n.of(context, 'settings_max_channels_sub'),
-                            value: settings.maxDownloads,
-                            items: const [1, 2, 3, 5, 8],
-                            onChanged: settings.batterySaverMode
-                                ? null
-                                : (val) {
-                                    if (val != null) {
-                                      settings.setMaxDownloads(val);
-                                      triggerHaptic(settings);
-                                    }
-                                  },
-                          ),
-                          _Divider(isDark: isDark),
-                          _DropdownTile<int>(
-                            accentColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            title: L10n.of(context, 'settings_default_threads'),
-                            subtitle: settings.batterySaverMode
-                                ? (isRtl
-                                    ? 'محدود بـ ${settings.effectiveDefaultThreadCount} بسبب موفر البطارية'
-                                    : 'Limited to ${settings.effectiveDefaultThreadCount} by Battery Saver')
-                                : L10n.of(
-                                    context,
-                                    'settings_default_threads_sub',
-                                  ),
-                            value: settings.defaultThreadCount,
-                            items: kAvailableThreadOptions,
-                            onChanged: settings.batterySaverMode
-                                ? null
-                                : (val) {
-                                    if (val != null) {
-                                      settings.setDefaultThreadCount(val);
-                                      triggerHaptic(settings);
-                                    }
-                                  },
-                          ),
-                          _Divider(isDark: isDark),
-                          _DropdownTile<String>(
-                            accentColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            title: L10n.of(context, 'settings_lang'),
-                            subtitle: L10n.of(context, 'settings_lang_sub'),
-                            value: settings.languageCode,
-                            items: const ['en', 'ar'],
-                            itemLabels: {'en': 'ENGLISH', 'ar': 'العربية'},
-                            onChanged: (val) {
-                              if (val != null) {
-                                settings.setLanguageCode(val);
-                                triggerHaptic(settings);
-                              }
-                            },
-                          ),
-                          _Divider(isDark: isDark),
-                          _PathPickerTile(
-                            accentColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            title: isRtl
-                                ? 'مجلد التحميل الافتراضي'
-                                : 'Default Download Folder',
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen,
+                            title: L10n.of(context, 'settings_wifi_only'),
                             subtitle:
-                                settings.customDownloadPath?.isNotEmpty == true
-                                    ? settings.customDownloadPath!
-                                    : (isRtl
-                                        ? 'تلقائي (Downloads/XDM)'
-                                        : 'Default (Downloads/XDM)'),
-                            onTap: () async {
+                                L10n.of(context, 'settings_wifi_only_sub'),
+                            value: settings.wifiOnly,
+                            onChanged: (val) {
+                              settings.setWifiOnly(val);
                               triggerHaptic(settings);
-                              final path = await FilePicker.getDirectoryPath();
-                              if (path != null) {
-                                await settings.setCustomDownloadPath(path);
-                              }
                             },
-                            onClear: settings.customDownloadPath?.isNotEmpty ==
-                                    true
-                                ? () async {
-                                    triggerHaptic(settings);
-                                    await settings.setCustomDownloadPath(null);
-                                  }
-                                : null,
                           ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.16,
-                    _ConsoleSection(
-                      index: '02',
-                      title: L10n.of(context, 'settings_bandwidth'),
-                      accentColor:
-                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['bandwidth'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['bandwidth'] =
-                              !(_expandedSections['bandwidth'] ?? false);
-                        });
-                      },
-                      children: [
-                        _SliderTile(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.of(context, 'settings_speed_limit'),
-                          valueLabel: settings.speedLimitMb == 0.0
-                              ? L10n.of(context, 'settings_unlimited')
-                              : '${settings.speedLimitMb.toInt()} MB/s',
-                          subtitle: L10n.of(context, 'settings_limit_to'),
-                          value: settings.speedLimitMb,
-                          min: 0.0,
-                          max: 100.0,
-                          divisions: 10,
-                          onChanged: (val) => settings.setSpeedLimit(val),
-                          onChangeEnd: (val) => triggerHaptic(settings),
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.of(context, 'settings_wifi_only'),
-                          subtitle: L10n.of(context, 'settings_wifi_only_sub'),
-                          value: settings.wifiOnly,
-                          onChanged: (val) {
-                            settings.setWifiOnly(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.isRtl(context)
-                              ? 'تفعيل مشاركة التورنت (Seeding)'
-                              : 'Torrent Seeding',
-                          subtitle: L10n.isRtl(context)
-                              ? 'مشاركة أجزاء الملفات بعد اكتمال التحميل'
-                              : 'Share files back to peers after download completes',
-                          value: settings.globalTorrentSeeding,
-                          onChanged: (val) {
-                            settings.setGlobalTorrentSeeding(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        if (settings.globalTorrentSeeding) ...[
                           _Divider(isDark: isDark),
                           _SwitchTile(
                             accentColor: isDark
                                 ? AppTheme.neonGreen
                                 : AppTheme.lightNeonGreen,
                             title: L10n.isRtl(context)
-                                ? 'تقييد سرعة المشاركة'
-                                : 'Limit Seeding Speed',
+                                ? 'تفعيل مشاركة التورنت (Seeding)'
+                                : 'Torrent Seeding',
                             subtitle: L10n.isRtl(context)
-                                ? 'تحديد حد أقصى لسرعة الرفع'
-                                : 'Set a maximum limit for upload speed',
-                            value: settings.globalTorrentSeedingLimited,
+                                ? 'مشاركة أجزاء الملفات بعد اكتمال التحميل'
+                                : 'Share files back to peers after download completes',
+                            value: settings.globalTorrentSeeding,
                             onChanged: (val) {
-                              settings.setGlobalTorrentSeedingLimited(val);
+                              settings.setGlobalTorrentSeeding(val);
                               triggerHaptic(settings);
                             },
                           ),
-                          if (settings.globalTorrentSeedingLimited) ...[
+                          if (settings.globalTorrentSeeding) ...[
                             _Divider(isDark: isDark),
-                            _SliderTile(
+                            _SwitchTile(
                               accentColor: isDark
                                   ? AppTheme.neonGreen
                                   : AppTheme.lightNeonGreen,
                               title: L10n.isRtl(context)
-                                  ? 'سرعة الرفع القصوى'
-                                  : 'Maximum Upload Speed',
-                              subtitle:
-                                  '${settings.globalTorrentSeedingLimitKbps} kbps',
-                              value: settings.globalTorrentSeedingLimitKbps
-                                  .toDouble(),
-                              min: 100.0,
-                              max: 10000.0,
-                              divisions: 99,
-                              onChanged: (val) =>
-                                  settings.setGlobalTorrentSeedingLimitKbps(
-                                val.round(),
-                              ),
-                              onChangeEnd: (val) => triggerHaptic(settings),
+                                  ? 'تقييد سرعة المشاركة'
+                                  : 'Limit Seeding Speed',
+                              subtitle: L10n.isRtl(context)
+                                  ? 'تحديد حد أقصى لسرعة الرفع'
+                                  : 'Set a maximum limit for upload speed',
+                              value: settings.globalTorrentSeedingLimited,
+                              onChanged: (val) {
+                                settings.setGlobalTorrentSeedingLimited(val);
+                                triggerHaptic(settings);
+                              },
                             ),
+                            if (settings.globalTorrentSeedingLimited) ...[
+                              _Divider(isDark: isDark),
+                              _SliderTile(
+                                accentColor: isDark
+                                    ? AppTheme.neonGreen
+                                    : AppTheme.lightNeonGreen,
+                                title: L10n.isRtl(context)
+                                    ? 'سرعة الرفع القصوى'
+                                    : 'Maximum Upload Speed',
+                                subtitle:
+                                    '${settings.globalTorrentSeedingLimitKbps} kbps',
+                                value: settings.globalTorrentSeedingLimitKbps
+                                    .toDouble(),
+                                min: 100.0,
+                                max: 10000.0,
+                                divisions: 99,
+                                onChanged: (val) =>
+                                    settings.setGlobalTorrentSeedingLimitKbps(
+                                  val.round(),
+                                ),
+                                onChangeEnd: (val) => triggerHaptic(settings),
+                              ),
+                            ],
                           ],
-                        ],
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.of(context, 'settings_auto_retry'),
-                          subtitle: L10n.of(context, 'settings_auto_retry_sub'),
-                          value: settings.autoRetryEnabled,
-                          onChanged: (val) {
-                            settings.setAutoRetryEnabled(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        // FIX(6): Max concurrent files per torrent dropdown
-                        _Divider(isDark: isDark),
-                        _DropdownTile<int>(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.isRtl(context)
-                              ? 'أقصى عدد ملفات متزامنة لكل تورنت'
-                              : 'Max Concurrent Files Per Torrent',
-                          subtitle: L10n.isRtl(context)
-                              ? 'حد عدد الملفات التي يتم تحميلها بالتوازي في التورنت الواحد (0 = الكل)'
-                              : 'Limit files downloading simultaneously per torrent (0 = all)',
-                          value: settings.maxConcurrentFilesPerTorrent,
-                          items: const [0, 1, 2, 3, 5, 10],
-                          itemLabels: {
-                            0: L10n.isRtl(context)
-                                ? 'الكل (غير محدود)'
-                                : 'All (Unlimited)',
-                            1: '1',
-                            2: '2',
-                            3: '3',
-                            5: '5',
-                            10: '10',
-                          },
-                          onChanged: (val) {
-                            if (val != null) {
-                              settings.setMaxConcurrentFilesPerTorrent(val);
-                              triggerHaptic(settings);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.24,
-                    _ConsoleSection(
-                      index: '03',
-                      title: L10n.of(context, 'settings_cockpit'),
-                      accentColor: isDark
-                          ? AppTheme.neonViolet
-                          : AppTheme.lightNeonViolet,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['cockpit'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['cockpit'] =
-                              !(_expandedSections['cockpit'] ?? false);
-                        });
-                      },
-                      children: [
-                        _DropdownTile<String>(
-                          accentColor: isDark
-                              ? AppTheme.neonViolet
-                              : AppTheme.lightNeonViolet,
-                          title:
-                              L10n.isRtl(context) ? 'سمة المظهر' : 'THEME MODE',
-                          subtitle: L10n.isRtl(context)
-                              ? 'اختر سمة مظهر التطبيق'
-                              : 'Select application theme mode',
-                          value: settings.themeMode,
-                          items: const ['light', 'dark', 'system'],
-                          itemLabels: {
-                            'light': L10n.isRtl(context) ? 'فاتح' : 'LIGHT',
-                            'dark': L10n.isRtl(context) ? 'داكن' : 'DARK',
-                            'system': L10n.isRtl(context)
-                                ? 'تلقائي'
-                                : 'SYSTEM DEFAULT',
-                          },
-                          onChanged: (val) {
-                            if (val != null) {
-                              settings.setThemeMode(val);
-                              triggerHaptic(settings);
-                            }
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonViolet
-                              : AppTheme.lightNeonViolet,
-                          title: L10n.of(context, 'settings_classic_ui'),
-                          subtitle: settings.batterySaverMode
-                              ? (isRtl
-                                  ? 'مفعل بواسطة موفر البطارية'
-                                  : 'Forced ON by Battery Saver')
-                              : L10n.of(context, 'settings_classic_ui_sub'),
-                          value: settings.classicUi,
-                          onChanged: settings.batterySaverMode
-                              ? null
-                              : (val) {
-                                  settings.setClassicUi(val);
-                                  triggerHaptic(settings);
-                                },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonViolet
-                              : AppTheme.lightNeonViolet,
-                          title: L10n.of(context, 'settings_glow'),
-                          subtitle: L10n.of(context, 'settings_glow_sub'),
-                          value: settings.enableGlow,
-                          onChanged: (val) {
-                            settings.setEnableGlow(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SliderTile(
-                          accentColor: isDark
-                              ? AppTheme.neonViolet
-                              : AppTheme.lightNeonViolet,
-                          title: L10n.of(context, 'settings_grid'),
-                          valueLabel: '${settings.gridOpacity.toInt()}%',
-                          subtitle: L10n.of(context, 'settings_grid_sub'),
-                          value: settings.gridOpacity,
-                          min: 0.0,
-                          max: 40.0,
-                          divisions: 8,
-                          onChanged: (val) => settings.setGridOpacity(val),
-                          onChangeEnd: (val) => triggerHaptic(settings),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.32,
-                    _ConsoleSection(
-                      index: '04',
-                      title: L10n.of(context, 'settings_alerters'),
-                      accentColor:
-                          isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['alerters'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['alerters'] =
-                              !(_expandedSections['alerters'] ?? false);
-                        });
-                      },
-                      children: [
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonAmber
-                              : AppTheme.lightNeonAmber,
-                          title: L10n.isRtl(context)
-                              ? 'الإشعارات العامة'
-                              : 'GLOBAL NOTIFICATIONS',
-                          subtitle: L10n.isRtl(context)
-                              ? 'تفعيل أو تعطيل جميع إشعارات التطبيق'
-                              : 'Enable or disable all app notifications',
-                          value: settings.notificationsEnabled,
-                          onChanged: (val) {
-                            settings.setNotificationsEnabled(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonAmber
-                              : AppTheme.lightNeonAmber,
-                          title: L10n.of(context, 'settings_chime'),
-                          subtitle: L10n.of(context, 'settings_chime_sub'),
-                          value: settings.soundNotification,
-                          onChanged: (val) {
-                            settings.setSoundNotification(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.of(context, 'settings_auto_retry'),
-                          subtitle: L10n.of(context, 'settings_auto_retry_sub'),
-                          value: settings.autoRetryEnabled,
-                          onChanged: (val) {
-                            settings.setAutoRetryEnabled(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        // FIX(6): Max concurrent files per torrent setting
-                        _Divider(isDark: isDark),
-                        _DropdownTile<int>(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.isRtl(context)
-                              ? 'أقصى عدد ملفات متزامنة لكل تورنت'
-                              : 'Max Concurrent Files Per Torrent',
-                          subtitle: L10n.isRtl(context)
-                              ? 'حد عدد الملفات التي تتم تحميلها بالتازي في التورنت الواحد (0 = الكل)'
-                              : 'Limit files downloading simultaneously per torrent (0 = all)',
-                          value: settings.maxConcurrentFilesPerTorrent,
-                          items: const [0, 1, 2, 3, 5, 10],
-                          itemLabels: {
-                            0: L10n.isRtl(context)
-                                ? 'الكل (غير محدود)'
-                                : 'All (Unlimited)',
-                            1: '1',
-                            2: '2',
-                            3: '3',
-                            5: '5',
-                            10: '10',
-                          },
-                          onChanged: (val) {
-                            if (val != null) {
-                              settings.setMaxConcurrentFilesPerTorrent(val);
-                              triggerHaptic(settings);
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.40,
-                    _ConsoleSection(
-                      index: '05',
-                      title: L10n.isRtl(context)
-                          ? 'مراقب الأداء والتحكم بالنظام'
-                          : 'TELEMETRY & PERFORMANCE',
-                      accentColor:
-                          isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['telemetry'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['telemetry'] =
-                              !(_expandedSections['telemetry'] ?? false);
-                        });
-                      },
-                      children: [PerformanceTelemetryCard(settings: settings)],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.48,
-                    _ConsoleSection(
-                      index: '06',
-                      title: L10n.of(context, 'settings_youtube_backend'),
-                      accentColor:
-                          isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['backend'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['backend'] =
-                              !(_expandedSections['backend'] ?? false);
-                        });
-                      },
-                      children: [
-                        _TextFieldTile(
-                          accentColor:
-                              isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-                          title: L10n.isRtl(context)
-                              ? 'عنوان الخادم الخلفي (URL)'
-                              : 'Backend URL',
-                          subtitle: L10n.isRtl(context)
-                              ? 'عنوان الخادم الخلفي لـ yt-dlp (http/https)'
-                              : 'Backend URL for yt-dlp (http:// or https://)',
-                          controller: _backendUrlController,
-                          onChanged: (val) =>
-                              _onBackendUrlChanged(val, settings),
-                          onSubmitted: (val) => _saveBackendUrl(val, settings),
-                        ),
-                        _Divider(isDark: isDark),
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: NeonGlowButton(
-                            isFilled: false,
-                            color: isDark
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
                                 ? AppTheme.neonGreen
                                 : AppTheme.lightNeonGreen,
-                            text: L10n.isRtl(context)
-                                ? 'اختبار الاتصال'
-                                : 'TEST CONNECTION',
-                            onPressed: () async {
+                            title: L10n.of(context, 'settings_auto_retry'),
+                            subtitle:
+                                L10n.of(context, 'settings_auto_retry_sub'),
+                            value: settings.autoRetryEnabled,
+                            onChanged: (val) {
+                              settings.setAutoRetryEnabled(val);
                               triggerHaptic(settings);
-                              if (settings.backendUrl.isEmpty) {
+                            },
+                          ),
+                          // FIX(6): Max concurrent files per torrent dropdown
+                          _Divider(isDark: isDark),
+                          _DropdownTile<int>(
+                            accentColor: isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen,
+                            title: L10n.isRtl(context)
+                                ? 'أقصى عدد ملفات متزامنة لكل تورنت'
+                                : 'Max Concurrent Files Per Torrent',
+                            subtitle: L10n.isRtl(context)
+                                ? 'حد عدد الملفات التي يتم تحميلها بالتوازي في التورنت الواحد (0 = الكل)'
+                                : 'Limit files downloading simultaneously per torrent (0 = all)',
+                            value: settings.maxConcurrentFilesPerTorrent,
+                            items: const [0, 1, 2, 3, 5, 10],
+                            itemLabels: {
+                              0: L10n.isRtl(context)
+                                  ? 'الكل (غير محدود)'
+                                  : 'All (Unlimited)',
+                              1: '1',
+                              2: '2',
+                              3: '3',
+                              5: '5',
+                              10: '10',
+                            },
+                            onChanged: (val) {
+                              if (val != null) {
+                                settings.setMaxConcurrentFilesPerTorrent(val);
+                                triggerHaptic(settings);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.24,
+                      _ConsoleSection(
+                        index: '03',
+                        title: L10n.of(context, 'settings_cockpit'),
+                        accentColor: isDark
+                            ? AppTheme.neonViolet
+                            : AppTheme.lightNeonViolet,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['cockpit'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['cockpit'] =
+                                !(_expandedSections['cockpit'] ?? false);
+                          });
+                        },
+                        children: [
+                          _DropdownTile<String>(
+                            accentColor: isDark
+                                ? AppTheme.neonViolet
+                                : AppTheme.lightNeonViolet,
+                            title: L10n.isRtl(context)
+                                ? 'سمة المظهر'
+                                : 'THEME MODE',
+                            subtitle: L10n.isRtl(context)
+                                ? 'اختر سمة مظهر التطبيق'
+                                : 'Select application theme mode',
+                            value: settings.themeMode,
+                            items: const ['light', 'dark', 'system'],
+                            itemLabels: {
+                              'light': L10n.isRtl(context) ? 'فاتح' : 'LIGHT',
+                              'dark': L10n.isRtl(context) ? 'داكن' : 'DARK',
+                              'system': L10n.isRtl(context)
+                                  ? 'تلقائي'
+                                  : 'SYSTEM DEFAULT',
+                            },
+                            onChanged: (val) {
+                              if (val != null) {
+                                settings.setThemeMode(val);
+                                triggerHaptic(settings);
+                              }
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonViolet
+                                : AppTheme.lightNeonViolet,
+                            title: L10n.of(context, 'settings_classic_ui'),
+                            subtitle: settings.batterySaverMode
+                                ? (isRtl
+                                    ? 'مفعل بواسطة موفر البطارية'
+                                    : 'Forced ON by Battery Saver')
+                                : L10n.of(context, 'settings_classic_ui_sub'),
+                            value: settings.classicUi,
+                            onChanged: settings.batterySaverMode
+                                ? null
+                                : (val) {
+                                    settings.setClassicUi(val);
+                                    triggerHaptic(settings);
+                                  },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonViolet
+                                : AppTheme.lightNeonViolet,
+                            title: L10n.of(context, 'settings_glow'),
+                            subtitle: L10n.of(context, 'settings_glow_sub'),
+                            value: settings.enableGlow,
+                            onChanged: (val) {
+                              settings.setEnableGlow(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SliderTile(
+                            accentColor: isDark
+                                ? AppTheme.neonViolet
+                                : AppTheme.lightNeonViolet,
+                            title: L10n.of(context, 'settings_grid'),
+                            valueLabel: '${settings.gridOpacity.toInt()}%',
+                            subtitle: L10n.of(context, 'settings_grid_sub'),
+                            value: settings.gridOpacity,
+                            min: 0.0,
+                            max: 40.0,
+                            divisions: 8,
+                            onChanged: (val) => settings.setGridOpacity(val),
+                            onChangeEnd: (val) => triggerHaptic(settings),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.32,
+                      _ConsoleSection(
+                        index: '04',
+                        title: L10n.of(context, 'settings_alerters'),
+                        accentColor: isDark
+                            ? AppTheme.neonAmber
+                            : AppTheme.lightNeonAmber,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['alerters'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['alerters'] =
+                                !(_expandedSections['alerters'] ?? false);
+                          });
+                        },
+                        children: [
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonAmber
+                                : AppTheme.lightNeonAmber,
+                            title: L10n.isRtl(context)
+                                ? 'الإشعارات العامة'
+                                : 'GLOBAL NOTIFICATIONS',
+                            subtitle: L10n.isRtl(context)
+                                ? 'تفعيل أو تعطيل جميع إشعارات التطبيق'
+                                : 'Enable or disable all app notifications',
+                            value: settings.notificationsEnabled,
+                            onChanged: (val) {
+                              settings.setNotificationsEnabled(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonAmber
+                                : AppTheme.lightNeonAmber,
+                            title: L10n.of(context, 'settings_chime'),
+                            subtitle: L10n.of(context, 'settings_chime_sub'),
+                            value: settings.soundNotification,
+                            onChanged: (val) {
+                              settings.setSoundNotification(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen,
+                            title: L10n.of(context, 'settings_auto_retry'),
+                            subtitle:
+                                L10n.of(context, 'settings_auto_retry_sub'),
+                            value: settings.autoRetryEnabled,
+                            onChanged: (val) {
+                              settings.setAutoRetryEnabled(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          // FIX(6): Max concurrent files per torrent setting
+                          _Divider(isDark: isDark),
+                          _DropdownTile<int>(
+                            accentColor: isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen,
+                            title: L10n.isRtl(context)
+                                ? 'أقصى عدد ملفات متزامنة لكل تورنت'
+                                : 'Max Concurrent Files Per Torrent',
+                            subtitle: L10n.isRtl(context)
+                                ? 'حد عدد الملفات التي تتم تحميلها بالتازي في التورنت الواحد (0 = الكل)'
+                                : 'Limit files downloading simultaneously per torrent (0 = all)',
+                            value: settings.maxConcurrentFilesPerTorrent,
+                            items: const [0, 1, 2, 3, 5, 10],
+                            itemLabels: {
+                              0: L10n.isRtl(context)
+                                  ? 'الكل (غير محدود)'
+                                  : 'All (Unlimited)',
+                              1: '1',
+                              2: '2',
+                              3: '3',
+                              5: '5',
+                              10: '10',
+                            },
+                            onChanged: (val) {
+                              if (val != null) {
+                                settings.setMaxConcurrentFilesPerTorrent(val);
+                                triggerHaptic(settings);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.40,
+                      _ConsoleSection(
+                        index: '05',
+                        title: L10n.isRtl(context)
+                            ? 'مراقب الأداء والتحكم بالنظام'
+                            : 'TELEMETRY & PERFORMANCE',
+                        accentColor:
+                            isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['telemetry'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['telemetry'] =
+                                !(_expandedSections['telemetry'] ?? false);
+                          });
+                        },
+                        children: [
+                          PerformanceTelemetryCard(settings: settings)
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.48,
+                      _ConsoleSection(
+                        index: '06',
+                        title: L10n.of(context, 'settings_youtube_backend'),
+                        accentColor:
+                            isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['backend'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['backend'] =
+                                !(_expandedSections['backend'] ?? false);
+                          });
+                        },
+                        children: [
+                          _TextFieldTile(
+                            accentColor: isDark
+                                ? AppTheme.neonRed
+                                : AppTheme.lightNeonRed,
+                            title: L10n.isRtl(context)
+                                ? 'عنوان الخادم الخلفي (URL)'
+                                : 'Backend URL',
+                            subtitle: L10n.isRtl(context)
+                                ? 'عنوان الخادم الخلفي لـ yt-dlp (http/https)'
+                                : 'Backend URL for yt-dlp (http:// or https://)',
+                            controller: _backendUrlController,
+                            onChanged: (val) =>
+                                _onBackendUrlChanged(val, settings),
+                            onSubmitted: (val) =>
+                                _saveBackendUrl(val, settings),
+                          ),
+                          _Divider(isDark: isDark),
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: NeonGlowButton(
+                              isFilled: false,
+                              color: isDark
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.lightNeonGreen,
+                              text: L10n.isRtl(context)
+                                  ? 'اختبار الاتصال'
+                                  : 'TEST CONNECTION',
+                              onPressed: () async {
+                                triggerHaptic(settings);
+                                if (settings.backendUrl.isEmpty) {
+                                  ThemedSnackbar.show(
+                                    context,
+                                    message: L10n.isRtl(context)
+                                        ? 'يرجى تعيين عنوان الخادم الخلفي أولاً.'
+                                        : 'Please configure backend URL first.',
+                                    color: isDark
+                                        ? AppTheme.neonRed
+                                        : AppTheme.lightNeonRed,
+                                    icon: Icons.error_outline,
+                                    isDarkMode: isDark,
+                                  );
+                                  return;
+                                }
                                 ThemedSnackbar.show(
                                   context,
                                   message: L10n.isRtl(context)
-                                      ? 'يرجى تعيين عنوان الخادم الخلفي أولاً.'
-                                      : 'Please configure backend URL first.',
+                                      ? 'جاري اختبار الخادم الخلفي...'
+                                      : 'Testing backend connection...',
                                   color: isDark
-                                      ? AppTheme.neonRed
-                                      : AppTheme.lightNeonRed,
-                                  icon: Icons.error_outline,
+                                      ? AppTheme.neonBlue
+                                      : AppTheme.lightNeonBlue,
+                                  icon: Icons.sync,
                                   isDarkMode: isDark,
                                 );
-                                return;
-                              }
-                              ThemedSnackbar.show(
-                                context,
-                                message: L10n.isRtl(context)
-                                    ? 'جاري اختبار الخادم الخلفي...'
-                                    : 'Testing backend connection...',
-                                color: isDark
-                                    ? AppTheme.neonBlue
-                                    : AppTheme.lightNeonBlue,
-                                icon: Icons.sync,
-                                isDarkMode: isDark,
-                              );
-                              try {
-                                XdmBackendClient().refreshConfig();
-                                final response =
-                                    await XdmBackendClient().health();
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(
-                                    context,
-                                  ).hideCurrentSnackBar();
-                                  final status =
-                                      response['status'] as String? ??
-                                          'unknown';
-                                  if (status == 'ok') {
+                                try {
+                                  XdmBackendClient().refreshConfig();
+                                  final response =
+                                      await XdmBackendClient().health();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).hideCurrentSnackBar();
+                                    final status =
+                                        response['status'] as String? ??
+                                            'unknown';
+                                    if (status == 'ok') {
+                                      ThemedSnackbar.show(
+                                        context,
+                                        message: L10n.isRtl(context)
+                                            ? 'تم الاتصال! الخادم الخلفي يعمل.'
+                                            : 'Backend connection successful!',
+                                        color: isDark
+                                            ? AppTheme.neonGreen
+                                            : AppTheme.lightNeonGreen,
+                                        icon: Icons.check_circle_outline,
+                                        isDarkMode: isDark,
+                                      );
+                                    } else {
+                                      ThemedSnackbar.show(
+                                        context,
+                                        message: L10n.isRtl(context)
+                                            ? 'الخادم الخلفي لا يعمل (الحالة: $status)'
+                                            : 'Backend not responding (status: $status)',
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
+                                        icon: Icons.error_outline,
+                                        isDarkMode: isDark,
+                                      );
+                                    }
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).hideCurrentSnackBar();
                                     ThemedSnackbar.show(
                                       context,
                                       message: L10n.isRtl(context)
-                                          ? 'تم الاتصال! الخادم الخلفي يعمل.'
-                                          : 'Backend connection successful!',
-                                      color: isDark
-                                          ? AppTheme.neonGreen
-                                          : AppTheme.lightNeonGreen,
-                                      icon: Icons.check_circle_outline,
-                                      isDarkMode: isDark,
-                                    );
-                                  } else {
-                                    ThemedSnackbar.show(
-                                      context,
-                                      message: L10n.isRtl(context)
-                                          ? 'الخادم الخلفي لا يعمل (الحالة: $status)'
-                                          : 'Backend not responding (status: $status)',
+                                          ? 'فشل في اختبار الاتصال: ${e.toString()}'
+                                          : 'Connection test failed: $e',
                                       color: isDark
                                           ? AppTheme.neonRed
                                           : AppTheme.lightNeonRed,
@@ -1202,528 +1322,520 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     );
                                   }
                                 }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(
-                                    context,
-                                  ).hideCurrentSnackBar();
-                                  ThemedSnackbar.show(
-                                    context,
-                                    message: L10n.isRtl(context)
-                                        ? 'فشل في اختبار الاتصال: ${e.toString()}'
-                                        : 'Connection test failed: $e',
-                                    color: isDark
-                                        ? AppTheme.neonRed
-                                        : AppTheme.lightNeonRed,
-                                    icon: Icons.error_outline,
-                                    isDarkMode: isDark,
-                                  );
-                                }
-                              }
-                            },
-                          ),
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonRed
-                              : AppTheme.lightNeonRed,
-                          title: L10n.isRtl(context)
-                              ? 'مستخرج محلي احتياطي'
-                              : 'Local extractor fallback',
-                          subtitle: L10n.isRtl(context)
-                              ? 'استخدم المستخرج المحلي للجهاز عندما يكون الخادم الخلفي غير قابل للوصول (أندرويد)'
-                              : 'Use the on-device extractor when the backend is unreachable (Android)',
-                          value: settings.useLocalYtFallback,
-                          onChanged: (val) {
-                            settings.setUseLocalYtFallback(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.56,
-                    _ConsoleSection(
-                      index: '07',
-                      title: L10n.of(context, 'settings_adv_console'),
-                      accentColor:
-                          isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['advanced'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['advanced'] =
-                              !(_expandedSections['advanced'] ?? false);
-                        });
-                      },
-                      children: [
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_subfolders'),
-                          subtitle: L10n.of(context, 'settings_subfolders_sub'),
-                          value: settings.categoryFolders,
-                          onChanged: (val) {
-                            settings.setCategoryFolders(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _TextFieldTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_ua'),
-                          subtitle: L10n.of(context, 'settings_ua_sub'),
-                          controller: _uaController,
-                          onSubmitted: (val) =>
-                              settings.setCustomUserAgent(val),
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonCyan
-                              : AppTheme.lightNeonCyan,
-                          title: isRtl
-                              ? 'حماية ضد تتبع البصمة الرقمية'
-                              : 'ANTI-FINGERPRINTING PROTECTION',
-                          subtitle: isRtl
-                              ? 'إخفاء بصمات الأتمتة navigator.webdriver في المتصفح لمنع اكتشاف البوتات'
-                              : 'Obscure navigator.webdriver and WebView automation signatures to prevent bot detection',
-                          value: settings.antiFingerprinting,
-                          onChanged: (val) {
-                            settings.setAntiFingerprinting(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_bypass_ssl'),
-                          subtitle: L10n.of(context, 'settings_bypass_ssl_sub'),
-                          value: settings.bypassSSL,
-                          onChanged: (val) {
-                            settings.setBypassSSL(val);
-                            triggerHaptic(settings);
-                            _maybeConfirmBypassSSL(context, settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_https_only'),
-                          subtitle: L10n.of(context, 'settings_https_only_sub'),
-                          value: settings.httpsOnly,
-                          onChanged: (val) {
-                            settings.setHttpsOnly(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_proxy'),
-                          subtitle: L10n.of(context, 'settings_proxy_sub'),
-                          value: settings.enableProxy,
-                          onChanged: (val) {
-                            settings.setEnableProxy(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        if (settings.enableProxy) ...[
-                          _Divider(isDark: isDark),
-                          _TextFieldTile(
-                            accentColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
-                            title: L10n.isRtl(context)
-                                ? 'عنوان الوكيل (Host)'
-                                : 'PROXY HOST',
-                            subtitle: L10n.isRtl(context)
-                                ? 'اسم المضيف أو عنوان IP'
-                                : 'Host name or IP address',
-                            controller: _proxyHostController,
-                            onSubmitted: (val) {
-                              settings.setProxyHost(val.trim());
-                              settings.setProxyAddress(
-                                '${val.trim()}:${settings.proxyPort}',
-                              );
-                            },
+                              },
+                            ),
                           ),
                           _Divider(isDark: isDark),
-                          _TextFieldTile(
+                          _SwitchTile(
                             accentColor: isDark
-                                ? AppTheme.neonBlue
-                                : AppTheme.lightNeonBlue,
+                                ? AppTheme.neonRed
+                                : AppTheme.lightNeonRed,
                             title: L10n.isRtl(context)
-                                ? 'منفذ الوكيل (Port)'
-                                : 'PROXY PORT',
+                                ? 'مستخرج محلي احتياطي'
+                                : 'Local extractor fallback',
                             subtitle: L10n.isRtl(context)
-                                ? 'منفذ الاتصال بالوكيل'
-                                : 'Port number for connection',
-                            controller: _proxyPortController,
-                            onSubmitted: (val) {
-                              final port = int.tryParse(val.trim()) ?? 8080;
-                              settings.setProxyPort(port);
-                              settings.setProxyAddress(
-                                '${settings.proxyHost}:$port',
-                              );
+                                ? 'استخدم المستخرج المحلي للجهاز عندما يكون الخادم الخلفي غير قابل للوصول (أندرويد)'
+                                : 'Use the on-device extractor when the backend is unreachable (Android)',
+                            value: settings.useLocalYtFallback,
+                            onChanged: (val) {
+                              settings.setUseLocalYtFallback(val);
+                              triggerHaptic(settings);
                             },
                           ),
                         ],
-                        _Divider(isDark: isDark),
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: NeonGlowButton(
-                            isFilled: false,
-                            color: isDark
-                                ? AppTheme.neonRed
-                                : AppTheme.lightNeonRed,
-                            text: L10n.isRtl(context)
-                                ? 'إعادة تعيين إلى الافتراضيات'
-                                : 'RESET TO DEFAULTS',
-                            onPressed: () async {
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.56,
+                      _ConsoleSection(
+                        index: '07',
+                        title: L10n.of(context, 'settings_adv_console'),
+                        accentColor:
+                            isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['advanced'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['advanced'] =
+                                !(_expandedSections['advanced'] ?? false);
+                          });
+                        },
+                        children: [
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_subfolders'),
+                            subtitle:
+                                L10n.of(context, 'settings_subfolders_sub'),
+                            value: settings.categoryFolders,
+                            onChanged: (val) {
+                              settings.setCategoryFolders(val);
                               triggerHaptic(settings);
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  backgroundColor: isDark
-                                      ? AppTheme.surface
-                                      : AppTheme.lightSurface,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    side: BorderSide(
-                                      color: isDark
-                                          ? AppTheme.neonRed
-                                          : AppTheme.lightNeonRed,
-                                      width: 1.0,
-                                    ),
-                                  ),
-                                  title: Text(
-                                    L10n.isRtl(context)
-                                        ? 'إعادة تعيين الإعدادات'
-                                        : 'RESET SETTINGS',
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? AppTheme.neonRed
-                                          : AppTheme.lightNeonRed,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  content: Text(
-                                    L10n.isRtl(context)
-                                        ? 'هل أنت متأكد من رغبتك في إعادة تعيين جميع الإعدادات إلى القيم الافتراضية؟'
-                                        : 'Are you sure you want to reset all settings to their default values?',
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? AppTheme.textPrimary
-                                          : AppTheme.lightTextPrimary,
-                                    ),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: Text(
-                                        L10n.isRtl(context)
-                                            ? 'إلغاء'
-                                            : 'CANCEL',
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? AppTheme.textSecondary
-                                              : AppTheme.lightTextSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      child: Text(
-                                        L10n.isRtl(context)
-                                            ? 'إعادة تعيين'
-                                            : 'RESET',
-                                        style: TextStyle(
-                                          color: isDark
-                                              ? AppTheme.neonRed
-                                              : AppTheme.lightNeonRed,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirm == true) {
-                                await settings.resetToDefaults();
-                                _uaController.text = settings.customUserAgent;
-                                _proxyHostController.text = settings.proxyHost;
-                                _proxyPortController.text =
-                                    settings.proxyPort.toString();
-                                _proxyUsernameController.text =
-                                    settings.proxyUsername;
-                                _proxyPasswordController.text =
-                                    settings.proxyPassword;
-                                if (context.mounted) {
-                                  ThemedSnackbar.show(
-                                    context,
-                                    message: L10n.isRtl(context)
-                                        ? 'تمت إعادة تعيين الإعدادات بنجاح!'
-                                        : 'Settings reset to default values!',
-                                    color: isDark
-                                        ? AppTheme.neonGreen
-                                        : AppTheme.lightNeonGreen,
-                                    icon: Icons.check_circle_outline,
-                                    isDarkMode: isDark,
-                                  );
-                                }
-                              }
                             },
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.64,
-                    _ConsoleSection(
-                      index: '08',
-                      title: L10n.of(context, 'settings_adblock_title'),
-                      accentColor:
-                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['adblock'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['adblock'] =
-                              !(_expandedSections['adblock'] ?? false);
-                        });
-                      },
-                      children: [
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonGreen
-                              : AppTheme.lightNeonGreen,
-                          title: L10n.of(context, 'settings_enable_adblock'),
-                          subtitle:
-                              L10n.of(context, 'settings_enable_adblock_sub'),
-                          value: AdBlockerService.instance.isEnabled,
-                          onChanged: (val) async {
-                            await AdBlockerService.instance.setEnabled(val);
-                            triggerHaptic(settings);
-                            setState(() {});
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                '${L10n.of(context, 'settings_adblock_rules')}: ${AdBlockerService.instance.ruleCount}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? AppTheme.textSecondary
-                                      : AppTheme.lightTextSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              NeonGlowButton(
-                                isFilled: false,
-                                color: isDark
-                                    ? AppTheme.neonGreen
-                                    : AppTheme.lightNeonGreen,
-                                text: _isUpdatingAdBlock
-                                    ? L10n.of(context,
-                                        'settings_updating_adblock_hosts')
-                                    : L10n.of(context,
-                                        'settings_update_adblock_hosts'),
-                                onPressed: _isUpdatingAdBlock
-                                    ? null
-                                    : () async {
-                                        triggerHaptic(settings);
-                                        setState(
-                                            () => _isUpdatingAdBlock = true);
-                                        ThemedSnackbar.show(
-                                          context,
-                                          message: L10n.of(
-                                            context,
-                                            'settings_adblock_updating_msg',
-                                          ),
-                                          color: isDark
-                                              ? AppTheme.neonBlue
-                                              : AppTheme.lightNeonBlue,
-                                          icon: Icons.sync,
-                                          isDarkMode: isDark,
-                                        );
-                                        final success = await AdBlockerService
-                                            .instance
-                                            .updateFilters(force: true);
-                                        if (mounted && context.mounted) {
-                                          setState(
-                                              () => _isUpdatingAdBlock = false);
-                                          ScaffoldMessenger.of(context)
-                                              .hideCurrentSnackBar();
-                                          if (success) {
-                                            ThemedSnackbar.show(
-                                              context,
-                                              message:
-                                                  '${L10n.of(context, 'settings_adblock_success_msg')} (${AdBlockerService.instance.ruleCount})',
-                                              color: isDark
-                                                  ? AppTheme.neonGreen
-                                                  : AppTheme.lightNeonGreen,
-                                              icon: Icons.check_circle_outline,
-                                              isDarkMode: isDark,
-                                            );
-                                          } else {
-                                            ThemedSnackbar.show(
-                                              context,
-                                              message: L10n.of(
-                                                context,
-                                                'settings_adblock_failed_msg',
-                                              ),
-                                              color: isDark
-                                                  ? AppTheme.neonRed
-                                                  : AppTheme.lightNeonRed,
-                                              icon: Icons.error_outline,
-                                              isDarkMode: isDark,
-                                            );
-                                          }
-                                        }
-                                      },
-                              ),
-                            ],
+                          _Divider(isDark: isDark),
+                          _TextFieldTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_ua'),
+                            subtitle: L10n.of(context, 'settings_ua_sub'),
+                            controller: _uaController,
+                            onSubmitted: (val) =>
+                                settings.setCustomUserAgent(val),
                           ),
-                        ),
-                      ],
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonCyan
+                                : AppTheme.lightNeonCyan,
+                            title: isRtl
+                                ? 'حماية ضد تتبع البصمة الرقمية'
+                                : 'ANTI-FINGERPRINTING PROTECTION',
+                            subtitle: isRtl
+                                ? 'إخفاء بصمات الأتمتة navigator.webdriver في المتصفح لمنع اكتشاف البوتات'
+                                : 'Obscure navigator.webdriver and WebView automation signatures to prevent bot detection',
+                            value: settings.antiFingerprinting,
+                            onChanged: (val) {
+                              settings.setAntiFingerprinting(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_bypass_ssl'),
+                            subtitle:
+                                L10n.of(context, 'settings_bypass_ssl_sub'),
+                            value: settings.bypassSSL,
+                            onChanged: (val) {
+                              settings.setBypassSSL(val);
+                              triggerHaptic(settings);
+                              _maybeConfirmBypassSSL(context, settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_https_only'),
+                            subtitle:
+                                L10n.of(context, 'settings_https_only_sub'),
+                            value: settings.httpsOnly,
+                            onChanged: (val) {
+                              settings.setHttpsOnly(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_proxy'),
+                            subtitle: L10n.of(context, 'settings_proxy_sub'),
+                            value: settings.enableProxy,
+                            onChanged: (val) {
+                              settings.setEnableProxy(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          if (settings.enableProxy) ...[
+                            _Divider(isDark: isDark),
+                            _TextFieldTile(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title: L10n.isRtl(context)
+                                  ? 'عنوان الوكيل (Host)'
+                                  : 'PROXY HOST',
+                              subtitle: L10n.isRtl(context)
+                                  ? 'اسم المضيف أو عنوان IP'
+                                  : 'Host name or IP address',
+                              controller: _proxyHostController,
+                              onSubmitted: (val) {
+                                settings.setProxyHost(val.trim());
+                                settings.setProxyAddress(
+                                  '${val.trim()}:${settings.proxyPort}',
+                                );
+                              },
+                            ),
+                            _Divider(isDark: isDark),
+                            _TextFieldTile(
+                              accentColor: isDark
+                                  ? AppTheme.neonBlue
+                                  : AppTheme.lightNeonBlue,
+                              title: L10n.isRtl(context)
+                                  ? 'منفذ الوكيل (Port)'
+                                  : 'PROXY PORT',
+                              subtitle: L10n.isRtl(context)
+                                  ? 'منفذ الاتصال بالوكيل'
+                                  : 'Port number for connection',
+                              controller: _proxyPortController,
+                              onSubmitted: (val) {
+                                final port = int.tryParse(val.trim()) ?? 8080;
+                                settings.setProxyPort(port);
+                                settings.setProxyAddress(
+                                  '${settings.proxyHost}:$port',
+                                );
+                              },
+                            ),
+                          ],
+                          _Divider(isDark: isDark),
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: NeonGlowButton(
+                              isFilled: false,
+                              color: isDark
+                                  ? AppTheme.neonRed
+                                  : AppTheme.lightNeonRed,
+                              text: L10n.isRtl(context)
+                                  ? 'إعادة تعيين إلى الافتراضيات'
+                                  : 'RESET TO DEFAULTS',
+                              onPressed: () async {
+                                triggerHaptic(settings);
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    backgroundColor: isDark
+                                        ? AppTheme.surface
+                                        : AppTheme.lightSurface,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      side: BorderSide(
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
+                                        width: 1.0,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      L10n.isRtl(context)
+                                          ? 'إعادة تعيين الإعدادات'
+                                          : 'RESET SETTINGS',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? AppTheme.neonRed
+                                            : AppTheme.lightNeonRed,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    content: Text(
+                                      L10n.isRtl(context)
+                                          ? 'هل أنت متأكد من رغبتك في إعادة تعيين جميع الإعدادات إلى القيم الافتراضية؟'
+                                          : 'Are you sure you want to reset all settings to their default values?',
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? AppTheme.textPrimary
+                                            : AppTheme.lightTextPrimary,
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: Text(
+                                          L10n.isRtl(context)
+                                              ? 'إلغاء'
+                                              : 'CANCEL',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? AppTheme.textSecondary
+                                                : AppTheme.lightTextSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: Text(
+                                          L10n.isRtl(context)
+                                              ? 'إعادة تعيين'
+                                              : 'RESET',
+                                          style: TextStyle(
+                                            color: isDark
+                                                ? AppTheme.neonRed
+                                                : AppTheme.lightNeonRed,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await settings.resetToDefaults();
+                                  _uaController.text = settings.customUserAgent;
+                                  _proxyHostController.text =
+                                      settings.proxyHost;
+                                  _proxyPortController.text =
+                                      settings.proxyPort.toString();
+                                  _proxyUsernameController.text =
+                                      settings.proxyUsername;
+                                  _proxyPasswordController.text =
+                                      settings.proxyPassword;
+                                  if (context.mounted) {
+                                    ThemedSnackbar.show(
+                                      context,
+                                      message: L10n.isRtl(context)
+                                          ? 'تمت إعادة تعيين الإعدادات بنجاح!'
+                                          : 'Settings reset to default values!',
+                                      color: isDark
+                                          ? AppTheme.neonGreen
+                                          : AppTheme.lightNeonGreen,
+                                      icon: Icons.check_circle_outline,
+                                      isDarkMode: isDark,
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.65,
-                    _ConsoleSection(
-                      index: '08b',
-                      title: L10n.isRtl(context)
-                          ? 'مضيفو حجب الإعلانات المخصصون'
-                          : 'CUSTOM AD-BLOCK HOSTS',
-                      accentColor:
-                          isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['custom_adblock'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['custom_adblock'] =
-                              !(_expandedSections['custom_adblock'] ?? false);
-                        });
-                      },
-                      children: [
-                        _CustomAdBlockModule(
-                          isDark: isDark,
-                          onRefresh: () => AdBlockerService.instance.refresh(),
-                        ),
-                      ],
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.64,
+                      _ConsoleSection(
+                        index: '08',
+                        title: L10n.of(context, 'settings_adblock_title'),
+                        accentColor: isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['adblock'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['adblock'] =
+                                !(_expandedSections['adblock'] ?? false);
+                          });
+                        },
+                        children: [
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonGreen
+                                : AppTheme.lightNeonGreen,
+                            title: L10n.of(context, 'settings_enable_adblock'),
+                            subtitle:
+                                L10n.of(context, 'settings_enable_adblock_sub'),
+                            value: AdBlockerService.instance.isEnabled,
+                            onChanged: (val) async {
+                              await AdBlockerService.instance.setEnabled(val);
+                              triggerHaptic(settings);
+                              setState(() {});
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  '${L10n.of(context, 'settings_adblock_rules')}: ${AdBlockerService.instance.ruleCount}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? AppTheme.textSecondary
+                                        : AppTheme.lightTextSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                NeonGlowButton(
+                                  isFilled: false,
+                                  color: isDark
+                                      ? AppTheme.neonGreen
+                                      : AppTheme.lightNeonGreen,
+                                  text: _isUpdatingAdBlock
+                                      ? L10n.of(context,
+                                          'settings_updating_adblock_hosts')
+                                      : L10n.of(context,
+                                          'settings_update_adblock_hosts'),
+                                  onPressed: _isUpdatingAdBlock
+                                      ? null
+                                      : () async {
+                                          triggerHaptic(settings);
+                                          setState(
+                                              () => _isUpdatingAdBlock = true);
+                                          ThemedSnackbar.show(
+                                            context,
+                                            message: L10n.of(
+                                              context,
+                                              'settings_adblock_updating_msg',
+                                            ),
+                                            color: isDark
+                                                ? AppTheme.neonBlue
+                                                : AppTheme.lightNeonBlue,
+                                            icon: Icons.sync,
+                                            isDarkMode: isDark,
+                                          );
+                                          final success = await AdBlockerService
+                                              .instance
+                                              .updateFilters(force: true);
+                                          if (mounted && context.mounted) {
+                                            setState(() =>
+                                                _isUpdatingAdBlock = false);
+                                            ScaffoldMessenger.of(context)
+                                                .hideCurrentSnackBar();
+                                            if (success) {
+                                              ThemedSnackbar.show(
+                                                context,
+                                                message:
+                                                    '${L10n.of(context, 'settings_adblock_success_msg')} (${AdBlockerService.instance.ruleCount})',
+                                                color: isDark
+                                                    ? AppTheme.neonGreen
+                                                    : AppTheme.lightNeonGreen,
+                                                icon:
+                                                    Icons.check_circle_outline,
+                                                isDarkMode: isDark,
+                                              );
+                                            } else {
+                                              ThemedSnackbar.show(
+                                                context,
+                                                message: L10n.of(
+                                                  context,
+                                                  'settings_adblock_failed_msg',
+                                                ),
+                                                color: isDark
+                                                    ? AppTheme.neonRed
+                                                    : AppTheme.lightNeonRed,
+                                                icon: Icons.error_outline,
+                                                isDarkMode: isDark,
+                                              );
+                                            }
+                                          }
+                                        },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.655,
-                    _ConsoleSection(
-                      index: '08c',
-                      title: L10n.isRtl(context)
-                          ? 'إعدادات DNS المخصصة (DoH)'
-                          : 'CUSTOM DNS (DoH) SETTINGS',
-                      accentColor:
-                          isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['custom_dns'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['custom_dns'] =
-                              !(_expandedSections['custom_dns'] ?? false);
-                        });
-                      },
-                      children: [
-                        _CustomDnsModule(
-                          settings: settings,
-                          isDark: isDark,
-                        ),
-                      ],
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.65,
+                      _ConsoleSection(
+                        index: '08b',
+                        title: L10n.isRtl(context)
+                            ? 'مضيفو حجب الإعلانات المخصصون'
+                            : 'CUSTOM AD-BLOCK HOSTS',
+                        accentColor: isDark
+                            ? AppTheme.neonGreen
+                            : AppTheme.lightNeonGreen,
+                        isDark: isDark,
+                        isExpanded:
+                            _expandedSections['custom_adblock'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['custom_adblock'] =
+                                !(_expandedSections['custom_adblock'] ?? false);
+                          });
+                        },
+                        children: [
+                          _CustomAdBlockModule(
+                            isDark: isDark,
+                            onRefresh: () =>
+                                AdBlockerService.instance.refresh(),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(
-                    0.66,
-                    _ConsoleSection(
-                      index: '09',
-                      title: L10n.of(context, 'settings_accessibility_title'),
-                      accentColor:
-                          isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                      isDark: isDark,
-                      isExpanded: _expandedSections['accessibility'] ?? false,
-                      onToggle: () {
-                        triggerHaptic(settings);
-                        setState(() {
-                          _expandedSections['accessibility'] =
-                              !(_expandedSections['accessibility'] ?? false);
-                        });
-                      },
-                      children: [
-                        _SwitchTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: isRtl
-                              ? 'تقليل المؤثرات البصرية'
-                              : 'REDUCE MOTION & VISUALS',
-                          subtitle: isRtl
-                              ? 'إيقاف تأثيرات التوهج والضبابية لتحسين سهولة القراءة والأداء'
-                              : 'Disable animation, glow, and blur effects to improve readability and performance',
-                          value: settings.reduceVisuals,
-                          onChanged: (val) {
-                            settings.setReduceVisuals(val);
-                            triggerHaptic(settings);
-                          },
-                        ),
-                        _Divider(isDark: isDark),
-                        _SliderTile(
-                          accentColor: isDark
-                              ? AppTheme.neonBlue
-                              : AppTheme.lightNeonBlue,
-                          title: L10n.of(context, 'settings_text_scaling'),
-                          valueLabel:
-                              '${(settings.textScaleFactor * 100).toInt()}%',
-                          subtitle:
-                              L10n.of(context, 'settings_text_scaling_sub'),
-                          value: settings.textScaleFactor,
-                          min: 0.8,
-                          max: 2.0,
-                          divisions: 12,
-                          onChanged: (val) => settings.setTextScaleFactor(val),
-                          onChangeEnd: (val) => triggerHaptic(settings),
-                        ),
-                      ],
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.655,
+                      _ConsoleSection(
+                        index: '08c',
+                        title: L10n.isRtl(context)
+                            ? 'إعدادات DNS المخصصة (DoH)'
+                            : 'CUSTOM DNS (DoH) SETTINGS',
+                        accentColor:
+                            isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['custom_dns'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['custom_dns'] =
+                                !(_expandedSections['custom_dns'] ?? false);
+                          });
+                        },
+                        children: [
+                          _CustomDnsModule(
+                            settings: settings,
+                            isDark: isDark,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  _stagger(0.70, _BackupModule(settings: settings)),
-                  const SizedBox(height: 14),
-                  _stagger(0.74, _CommsModule(settings: settings)),
+                    const SizedBox(height: 14),
+                    _stagger(
+                      0.66,
+                      _ConsoleSection(
+                        index: '09',
+                        title: L10n.of(context, 'settings_accessibility_title'),
+                        accentColor:
+                            isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                        isDark: isDark,
+                        isExpanded: _expandedSections['accessibility'] ?? false,
+                        onToggle: () {
+                          triggerHaptic(settings);
+                          setState(() {
+                            _expandedSections['accessibility'] =
+                                !(_expandedSections['accessibility'] ?? false);
+                          });
+                        },
+                        children: [
+                          _SwitchTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: isRtl
+                                ? 'تقليل المؤثرات البصرية'
+                                : 'REDUCE MOTION & VISUALS',
+                            subtitle: isRtl
+                                ? 'إيقاف تأثيرات التوهج والضبابية لتحسين سهولة القراءة والأداء'
+                                : 'Disable animation, glow, and blur effects to improve readability and performance',
+                            value: settings.reduceVisuals,
+                            onChanged: (val) {
+                              settings.setReduceVisuals(val);
+                              triggerHaptic(settings);
+                            },
+                          ),
+                          _Divider(isDark: isDark),
+                          _SliderTile(
+                            accentColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                            title: L10n.of(context, 'settings_text_scaling'),
+                            valueLabel:
+                                '${(settings.textScaleFactor * 100).toInt()}%',
+                            subtitle:
+                                L10n.of(context, 'settings_text_scaling_sub'),
+                            value: settings.textScaleFactor,
+                            min: 0.8,
+                            max: 2.0,
+                            divisions: 12,
+                            onChanged: (val) =>
+                                settings.setTextScaleFactor(val),
+                            onChangeEnd: (val) => triggerHaptic(settings),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _stagger(0.70, _BackupModule(settings: settings)),
+                    const SizedBox(height: 14),
+                    _stagger(0.74, _CommsModule(settings: settings)),
                   ],
                   const SizedBox(height: 24),
                 ],
@@ -2243,16 +2355,45 @@ class _SwitchTile extends StatelessWidget {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
-              title: Text(
-                title,
-                style: TextStyle(
-                  color:
-                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                  fontFamily: 'Space Grotesk',
-                  fontSize: 14.0,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
-                ),
+              title: Row(
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color:
+                          isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  if (onChanged == null) ...[
+                    const SizedBox(width: 6),
+                    const Tooltip(
+                      message: 'Controlled by Battery Saver mode',
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.battery_saver_rounded,
+                            size: 14,
+                            color: AppTheme.neonAmber,
+                          ),
+                          SizedBox(width: 2),
+                          Text(
+                            'Battery Saver Override',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.neonAmber,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ),
               subtitle: Text(
                 subtitle,
@@ -2483,16 +2624,45 @@ class _DropdownTile<T> extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: isDark
-                          ? AppTheme.textPrimary
-                          : AppTheme.lightTextPrimary,
-                      fontFamily: 'Space Grotesk',
-                      fontSize: 14.0,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                          fontFamily: 'Space Grotesk',
+                          fontSize: 14.0,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (onChanged == null) ...[
+                        const SizedBox(width: 6),
+                        const Tooltip(
+                          message: 'Controlled by Battery Saver mode',
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.battery_saver_rounded,
+                                size: 14,
+                                color: AppTheme.neonAmber,
+                              ),
+                              SizedBox(width: 2),
+                              Text(
+                                'Battery Saver Override',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppTheme.neonAmber,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -3196,7 +3366,9 @@ class _CustomDnsModuleState extends State<_CustomDnsModule> {
                 onPressed: () async {
                   ThemedSnackbar.show(
                     context,
-                    message: isRtl ? 'جاري اختبار الاتصال...' : 'Testing resolution...',
+                    message: isRtl
+                        ? 'جاري اختبار الاتصال...'
+                        : 'Testing resolution...',
                     color: accentColor,
                     isDarkMode: widget.isDark,
                     icon: Icons.sync,
@@ -4267,6 +4439,89 @@ abstract final class _BackupHelper {
           : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
       icon: success ? Icons.check_circle_outline : Icons.error_outline,
       isDarkMode: isDark,
+    );
+  }
+}
+
+class _ActionSettingTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String buttonText;
+  final VoidCallback onTap;
+  final Color accentColor;
+  final bool isDestructive;
+
+  const _ActionSettingTile({
+    required this.title,
+    required this.subtitle,
+    required this.buttonText,
+    required this.onTap,
+    required this.accentColor,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.16),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: isDark
+                          ? AppTheme.textPrimary
+                          : AppTheme.lightTextPrimary,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color:
+                          isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                      fontFamily: 'Inter',
+                      fontSize: 12.0,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: onTap,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDestructive ? AppTheme.neonRed : accentColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+              child: Text(buttonText),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

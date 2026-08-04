@@ -11,12 +11,14 @@ import '../../downloads/models/download_task.dart';
 import '../../downloads/widgets/download_card.dart';
 import '../../downloads/widgets/download_stats_panel.dart';
 import '../../downloads/widgets/filter_chips_bar.dart';
+import '../../downloads/widgets/batch_operations_sheet.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
-import '../../../shared/widgets/themed_snackbar.dart';
+// themed_snackbar removed - unused in this file
 import '../../add_download/widgets/add_download_dialog.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
+import '../../../shared/widgets/skeleton_loader.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -81,19 +83,27 @@ class _HomeScreenState extends State<HomeScreen>
         final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
         final isRtl = L10n.isRtl(context);
 
+        final isInSelectionMode =
+            context.watch<DownloadProvider>().isSelectionMode;
+
         return GeometricGridBackground(
           child: Scaffold(
             backgroundColor: Colors.transparent,
             extendBody: true,
             floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-            appBar: _buildAppBar(
-              context,
-              isDark: isDark,
-              classicUi: classicUi,
-              textClr: textClr,
-              accentClr: accentClr,
-              isRtl: isRtl,
-            ),
+            appBar: isInSelectionMode
+                ? _buildSelectionAppBar(context, isDark, textClr, accentClr)
+                : _buildAppBar(
+                    context,
+                    isDark: isDark,
+                    classicUi: classicUi,
+                    textClr: textClr,
+                    accentClr: accentClr,
+                    isRtl: isRtl,
+                  ),
+            bottomNavigationBar: isInSelectionMode
+                ? _buildBatchActionBar(context, isDark, textClr, accentClr)
+                : null,
             body: SafeArea(
               child: Center(
                 child: SizedBox(
@@ -102,9 +112,7 @@ class _HomeScreenState extends State<HomeScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 12),
-                      // FIX(14): iOS has no persistent background downloads —
-                      // surface that clearly so users don't assume downloads
-                      // continue while the app is backgrounded.
+                      // FIX(14): iOS has no persistent background downloads
                       ..._buildIosBackgroundBanner(isDark, isRtl),
                       _buildAnimatedSegmentedControl(
                         context,
@@ -164,6 +172,7 @@ class _HomeScreenState extends State<HomeScreen>
                               )
                             : const SizedBox.shrink(),
                       ),
+
                       // Filter Chips
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -196,15 +205,105 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
             ),
-            floatingActionButton: _buildFAB(context, isDark, classicUi),
+            floatingActionButton: isInSelectionMode
+                ? null
+                : _buildFAB(context, isDark, classicUi),
           ),
         );
       },
     );
   }
 
-  /// FIX(14): persistent iOS-only banner. BackgroundService only keeps Dart
-  /// alive on Android; on iOS the app is suspended and downloads pause.
+
+
+  PreferredSizeWidget _buildSelectionAppBar(
+      BuildContext context, bool isDark, Color textClr, Color accentClr) {
+    final provider = context.watch<DownloadProvider>();
+    final count = provider.selectedTaskIds.length;
+
+    return AppBar(
+      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+      elevation: 0,
+      leading: IconButton(
+        icon: Icon(Icons.close_rounded, color: textClr),
+        onPressed: () => provider.clearTaskSelection(),
+      ),
+      title: Text('$count selected',
+          style: TextStyle(color: textClr, fontWeight: FontWeight.w600)),
+      actions: [
+        TextButton(
+          onPressed: () => provider.selectAllTasks(),
+          child: Text('Select All', style: TextStyle(color: accentClr)),
+        ),
+        TextButton(
+          onPressed: () => provider.clearTaskSelection(),
+          child: Text('Deselect', style: TextStyle(color: textClr)),
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildBatchActionBar(
+      BuildContext context, bool isDark, Color textClr, Color accentClr) {
+    final provider = context.watch<DownloadProvider>();
+    final selectedIds = provider.selectedTaskIds;
+    final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
+
+    return Container(
+      padding: EdgeInsets.only(
+          bottom: safeAreaBottom + 8, top: 12, left: 16, right: 16),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        border: Border(
+            top: BorderSide(
+                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                width: 0.8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _BatchActionButton(
+            icon: Icons.pause_rounded,
+            label: 'Pause',
+            color: textClr,
+            onTap: () => BatchOperationsSheet.show(context,
+                selectedTaskIds: selectedIds.toList()),
+          ),
+          _BatchActionButton(
+            icon: Icons.play_arrow_rounded,
+            label: 'Resume',
+            color: textClr,
+            onTap: () => BatchOperationsSheet.show(context,
+                selectedTaskIds: selectedIds.toList()),
+          ),
+          _BatchActionButton(
+            icon: Icons.delete_rounded,
+            label: 'Delete',
+            color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+            onTap: () => BatchOperationsSheet.show(context,
+                selectedTaskIds: selectedIds.toList()),
+          ),
+          _BatchActionButton(
+            icon: Icons.folder_rounded,
+            label: 'Move',
+            color: accentClr,
+            onTap: () => BatchOperationsSheet.show(context,
+                selectedTaskIds: selectedIds.toList()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// FIX(14): persistent iOS-only banner.
   List<Widget> _buildIosBackgroundBanner(bool isDark, bool isRtl) {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return const [];
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
@@ -316,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen>
     return Container(
       height: 40,
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.surface : AppTheme.lightBgSunken,
+        color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark ? AppTheme.border : AppTheme.lightBorder,
@@ -390,7 +489,6 @@ class _HomeScreenState extends State<HomeScreen>
                   t.status == DownloadStatus.failed) &&
               !isSeeding;
         }).length;
-
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
@@ -504,12 +602,10 @@ class _HomeScreenState extends State<HomeScreen>
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         children: [
-          // Section title
           Expanded(
             child: Selector<DownloadProvider, int>(
               selector: (_, p) {
@@ -574,7 +670,6 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
           ),
-          // Sort button
           Selector<DownloadProvider, ({SortOption option, bool ascending})>(
             selector: (_, p) =>
                 (option: p.sortOption, ascending: p.sortAscending),
@@ -659,7 +754,6 @@ class _HomeScreenState extends State<HomeScreen>
             },
           ),
           const SizedBox(width: 8),
-          // Clear history button (Completed tab only)
           Selector<DownloadProvider, int>(
             selector: (_, p) => p.filteredTasks.length,
             builder: (context, length, _) {
@@ -740,7 +834,6 @@ class _HomeScreenState extends State<HomeScreen>
     final downloadProvider = context.watch<DownloadProvider>();
     final isNavbarVisible = downloadProvider.isNavbarVisible;
     final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
-
     final double bottomPadding;
     switch (screenType) {
       case ScreenType.phone:
@@ -755,7 +848,6 @@ class _HomeScreenState extends State<HomeScreen>
         bottomPadding = 0.0;
         break;
     }
-
     return AnimatedPadding(
       padding: EdgeInsets.only(bottom: bottomPadding),
       duration: AppTheme.motionBase,
@@ -816,7 +908,6 @@ class _HomeScreenState extends State<HomeScreen>
     final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
     final secClr =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-
     showDialog(
       context: context,
       builder: (ctx) {
@@ -828,7 +919,6 @@ class _HomeScreenState extends State<HomeScreen>
                   task.status == DownloadStatus.failed) &&
               !isSeeding;
         }).toList();
-
         return Directionality(
           textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
           child: AlertDialog(
@@ -912,15 +1002,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// App Bar Icon Button
-// ─────────────────────────────────────────────────────────────────────────────
 class _AppBarIconButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String? tooltip;
   final VoidCallback onPressed;
-
   const _AppBarIconButton({
     required this.icon,
     required this.color,
@@ -943,13 +1029,44 @@ class _AppBarIconButton extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Redesigned Analytics Panel
-// ─────────────────────────────────────────────────────────────────────────────
+class _BatchActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _BatchActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(label,
+                style: TextStyle(
+                    color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RedesignedAnalyticsPanel extends StatelessWidget {
   final Map<String, double> categorySizes;
   final SettingsProvider settings;
-
   const _RedesignedAnalyticsPanel({
     required this.categorySizes,
     required this.settings,
@@ -961,11 +1078,9 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final isRtl = L10n.isRtl(context);
-
     final sizes = categorySizes;
     final totalSizeMb = sizes.values.fold(0.0, (sum, val) => sum + val);
     final hasNoData = totalSizeMb == 0.0;
-
     final totalSizeText = totalSizeMb >= 1024
         ? '${(totalSizeMb / 1024).toStringAsFixed(2)} GB'
         : '${totalSizeMb.toStringAsFixed(1)} MB';
@@ -1055,7 +1170,6 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Icon(
@@ -1086,10 +1200,8 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Chart + Legend
           Row(
             children: [
-              // Donut chart
               SizedBox(
                 width: 120,
                 height: 120,
@@ -1137,7 +1249,6 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                         sectionsSpace: 2.0,
                       ),
                     ),
-                    // Center label
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1152,7 +1263,6 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              // Legend items
               Expanded(
                 child: hasNoData
                     ? Center(
@@ -1264,9 +1374,6 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Render item descriptor – keeps widget construction lazy inside itemBuilder
-// ─────────────────────────────────────────────────────────────────────────────
 class _RenderItem {
   final bool isPlaylist;
   final String? playlistId;
@@ -1297,9 +1404,6 @@ class _RenderItem {
       : this._(isPlaylist: false, task: task);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Download Task List
-// ─────────────────────────────────────────────────────────────────────────────
 class _DownloadTaskList extends StatelessWidget {
   final int selectedTab;
   final bool isDark;
@@ -1315,289 +1419,287 @@ class _DownloadTaskList extends StatelessWidget {
     this.onClearSearch,
   });
 
-  Widget _buildLoadingSkeleton(bool isDark, BuildContext context) {
-    final cardBg = isDark ? AppTheme.surface : AppTheme.lightSurface;
-    final baseShimmer = isDark ? Colors.white10 : Colors.black12;
-    return ListView.separated(
-      padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
-      itemCount: 3,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (_, __) => Container(
-        height: 110,
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: isDark ? AppTheme.border : AppTheme.lightBorder,
-            width: 0.8,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: baseShimmer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 140,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: baseShimmer,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: 80,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: baseShimmer,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Container(
-                height: 6,
-                decoration: BoxDecoration(
-                  color: baseShimmer,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (context.watch<DownloadProvider>().isLoadingTasks) {
-      return _buildLoadingSkeleton(isDark, context);
-    }
+    final isLoading = context.watch<DownloadProvider>().isLoadingTasks;
+    final provider = context.watch<DownloadProvider>();
+    final isInSelectionMode = provider.isSelectionMode;
 
-    return Selector<DownloadProvider, List<DownloadTask>>(
-      shouldRebuild: (prev, next) {
-        if (prev.length != next.length) return true;
-        for (var i = 0; i < prev.length; i++) {
-          final oldTask = prev[i];
-          final newTask = next[i];
-          if (oldTask.id != newTask.id ||
-              oldTask.status != newTask.status ||
-              oldTask.downloadedBytes != newTask.downloadedBytes ||
-              oldTask.fileSize != newTask.fileSize ||
-              oldTask.threadCount != newTask.threadCount ||
-              !listEquals(oldTask.chunks, newTask.chunks) ||
-              (oldTask.speed - newTask.speed).abs() > 50 ||
-              oldTask.eta != newTask.eta) {
-            return true;
+    Widget child;
+    if (isLoading) {
+      child = const SkeletonList(itemCount: 4, itemHeight: 110);
+    } else {
+      child = Selector<DownloadProvider, List<DownloadTask>>(
+        shouldRebuild: (prev, next) {
+          if (prev.length != next.length) return true;
+          for (var i = 0; i < prev.length; i++) {
+            final oldTask = prev[i];
+            final newTask = next[i];
+            if (oldTask.id != newTask.id ||
+                oldTask.status != newTask.status ||
+                oldTask.downloadedBytes != newTask.downloadedBytes ||
+                oldTask.fileSize != newTask.fileSize ||
+                oldTask.threadCount != newTask.threadCount ||
+                !listEquals(oldTask.chunks, newTask.chunks) ||
+                (oldTask.speed - newTask.speed).abs() > 50 ||
+                oldTask.eta != newTask.eta) {
+              return true;
+            }
           }
-        }
-        return false;
-      },
-      selector: (_, provider) => provider.filteredTasks,
-      builder: (context, fullList, _) {
-        final displayTasks = fullList.where((task) {
-          final isSeeding = task.status == DownloadStatus.completed &&
-              task.isTorrent &&
-              task.seedingEnabled;
-          if (selectedTab == 0) {
-            return (task.status != DownloadStatus.completed &&
-                    task.status != DownloadStatus.failed) ||
-                isSeeding;
-          } else {
-            return (task.status == DownloadStatus.completed ||
-                    task.status == DownloadStatus.failed) &&
-                !isSeeding;
-          }
-        }).toList();
+          return false;
+        },
+        selector: (_, p) => p.filteredTasks,
+        builder: (context, fullList, _) {
+          final displayTasks = fullList.where((task) {
+            final isSeeding = task.status == DownloadStatus.completed &&
+                task.isTorrent &&
+                task.seedingEnabled;
+            if (selectedTab == 0) {
+              return (task.status != DownloadStatus.completed &&
+                      task.status != DownloadStatus.failed) ||
+                  isSeeding;
+            } else {
+              return (task.status == DownloadStatus.completed ||
+                      task.status == DownloadStatus.failed) &&
+                  !isSeeding;
+            }
+          }).toList();
 
-        final groups = <String, List<DownloadTask>>{};
-        final singles = <DownloadTask>[];
-        for (final t in displayTasks) {
-          if (t.isPlaylistItem) {
-            groups.putIfAbsent(t.playlistId!, () => []).add(t);
-          } else {
-            singles.add(t);
+          final groups = <String, List<DownloadTask>>{};
+          final singles = <DownloadTask>[];
+          for (final t in displayTasks) {
+            if (t.isPlaylistItem) {
+              groups.putIfAbsent(t.playlistId!, () => []).add(t);
+            } else {
+              singles.add(t);
+            }
           }
-        }
 
-        // Build a mixed list preserving order: playlists first-seen, then singles
-        final renderItems = <_RenderItem>[];
-        final seenPlaylists = <String>{};
-        for (final t in displayTasks) {
-          if (t.isPlaylistItem) {
-            if (seenPlaylists.contains(t.playlistId)) continue;
-            seenPlaylists.add(t.playlistId!);
-            renderItems.add(
-              _RenderItem.playlist(
-                playlistId: t.playlistId!,
-                title: t.playlistTitle ?? 'Playlist',
-                items: groups[t.playlistId!]!,
-              ),
+          final renderItems = <_RenderItem>[];
+          final seenPlaylists = <String>{};
+          for (final t in displayTasks) {
+            if (t.isPlaylistItem) {
+              if (seenPlaylists.contains(t.playlistId)) continue;
+              seenPlaylists.add(t.playlistId!);
+              renderItems.add(
+                _RenderItem.playlist(
+                  playlistId: t.playlistId!,
+                  title: t.playlistTitle ?? 'Playlist',
+                  items: groups[t.playlistId!]!,
+                ),
+              );
+            } else {
+              renderItems.add(_RenderItem.single(task: t));
+            }
+          }
+
+          if (displayTasks.isEmpty) {
+            return _EmptyState(
+              selectedTab: selectedTab,
+              isDark: isDark,
+              isRtl: isRtl,
+              settings: settings,
+              onClearSearch: onClearSearch,
             );
-          } else {
-            renderItems.add(_RenderItem.single(task: t));
           }
-        }
 
-        if (displayTasks.isEmpty) {
-          return _EmptyState(
-            selectedTab: selectedTab,
-            isDark: isDark,
-            isRtl: isRtl,
-            settings: settings,
-            onClearSearch: onClearSearch,
-          );
-        }
-
-          final provider = context.watch<DownloadProvider>();
           final isReorderable = selectedTab == 0 &&
-              (provider.statusFilter == 'All' || provider.statusFilter == 'Queued') &&
+              provider.sortOption == SortOption.manual &&
               provider.searchQuery.isEmpty &&
               provider.categoryFilters.isEmpty;
 
           final Widget contentWidget;
           if (isReorderable) {
-            contentWidget = RefreshIndicator(
-              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-              backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              strokeWidth: 2.5,
-              onRefresh: () async {
-                HapticFeedback.lightImpact();
-                await context.read<DownloadProvider>().load(
-                      pauseOrphanDownloads: false,
-                    );
-              },
-              child: ReorderableListView.builder(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenPadding(context).left,
-                ),
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                itemCount: renderItems.length,
-                onReorderItem: (oldIndex, newIndex) {
-                  runHaptic(context.read<SettingsProvider>());
-                  final actualNewIndex = oldIndex < newIndex ? newIndex + 1 : newIndex;
-                  context
-                      .read<DownloadProvider>()
-                      .reorderTasks(provider.filteredTasks, oldIndex, actualNewIndex);
-                },
-                itemBuilder: (context, index) {
-                  final item = renderItems[index];
-                  final Widget card;
-                  if (item.isPlaylist) {
-                    card = PlaylistGroupCard(
-                      key: ValueKey('playlist_${item.playlistId}'),
-                      playlistId: item.playlistId!,
-                      title: item.title!,
-                      items: item.items!,
-                    );
-                  } else {
-                    card = DownloadCard(
-                      key: ValueKey(item.task!.id),
-                      task: item.task!,
-                      compact: true,
-                      showDragHandle: true,
-                      index: index,
-                    );
-                  }
-                  return Padding(
-                    key: ValueKey(item.isPlaylist ? 'playlist_${item.playlistId}' : item.task!.id),
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: RepaintBoundary(child: card),
-                  );
-                },
+            contentWidget = ReorderableListView.builder(
+              padding: EdgeInsets.symmetric(
+                horizontal: screenPadding(context).left,
               ),
-            );
-          } else {
-            contentWidget = RefreshIndicator(
-              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-              backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              strokeWidth: 2.5,
-              onRefresh: () async {
-                HapticFeedback.lightImpact();
-                await context.read<DownloadProvider>().load(
-                      pauseOrphanDownloads: false,
-                    );
-                if (context.mounted) {
-                  ThemedSnackbar.show(
-                    context,
-                    message: isRtl
-                        ? 'تم إعادة تحميل السجلات'
-                        : 'Transmission logs reloaded',
-                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                    icon: Icons.sync_rounded,
-                    isDarkMode: isDark,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              itemCount: renderItems.length,
+              onReorderItem: (oldIndex, newIndex) {
+                runHaptic(context.read<SettingsProvider>());
+                final actualNewIndex =
+                    oldIndex < newIndex ? newIndex + 1 : newIndex;
+                context.read<DownloadProvider>().reorderTasks(
+                    provider.filteredTasks, oldIndex, actualNewIndex);
+              },
+              itemBuilder: (context, index) {
+                final item = renderItems[index];
+                final isSelected =
+                    provider.selectedTaskIds.contains(item.task?.id);
+                Widget card;
+                if (item.isPlaylist) {
+                  card = PlaylistGroupCard(
+                    key: ValueKey('playlist_${item.playlistId}'),
+                    playlistId: item.playlistId!,
+                    title: item.title!,
+                    items: item.items!,
+                  );
+                } else {
+                  card = DownloadCard(
+                    key: ValueKey(item.task!.id),
+                    task: item.task!,
+                    compact: true,
+                    showDragHandle: false,
+                    index: index,
                   );
                 }
+
+                card = Row(
+                  children: [
+                    if (isReorderable && !item.isPlaylist)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: Icon(Icons.drag_handle_rounded,
+                            size: 16,
+                            color: isDark
+                                ? AppTheme.textMuted
+                                : AppTheme.lightTextMuted),
+                      ),
+                    if (isInSelectionMode && !item.isPlaylist)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: Checkbox(
+                          value: isSelected,
+                          onChanged: (val) =>
+                              provider.toggleTaskSelection(item.task!.id),
+                          activeColor: isDark
+                              ? AppTheme.neonBlue
+                              : AppTheme.lightNeonBlue,
+                        ),
+                      ),
+                    Expanded(child: card),
+                  ],
+                );
+
+                if (!item.isPlaylist) {
+                  card = GestureDetector(
+                    onLongPress: () {
+                      if (!isInSelectionMode) {
+                        provider.toggleTaskSelection(item.task!.id);
+                      }
+                    },
+                    onTap: () {
+                      if (isInSelectionMode) {
+                        provider.toggleTaskSelection(item.task!.id);
+                      }
+                    },
+                    child: card,
+                  );
+                }
+
+                return Padding(
+                  key: ValueKey(item.isPlaylist
+                      ? 'playlist_${item.playlistId}'
+                      : item.task!.id),
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: RepaintBoundary(child: card),
+                );
               },
-              child: ListView.separated(
-                padding: EdgeInsets.symmetric(
-                  horizontal: screenPadding(context).left,
-                ),
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                itemCount: renderItems.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final item = renderItems[index];
-                  final Widget card;
-                  if (item.isPlaylist) {
-                    card = PlaylistGroupCard(
-                      key: ValueKey('playlist_${item.playlistId}'),
-                      playlistId: item.playlistId!,
-                      title: item.title!,
-                      items: item.items!,
-                    );
-                  } else {
-                    card = DownloadCard(
-                      key: ValueKey(item.task!.id),
-                      task: item.task!,
-                      compact: true,
-                      showDragHandle: false,
-                      index: index,
-                    );
-                  }
-                  return RepaintBoundary(child: card);
-                },
+            );
+          } else {
+            contentWidget = ListView.separated(
+              padding: EdgeInsets.symmetric(
+                horizontal: screenPadding(context).left,
               ),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              itemCount: renderItems.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final item = renderItems[index];
+                final isSelected =
+                    provider.selectedTaskIds.contains(item.task?.id);
+                Widget card;
+                if (item.isPlaylist) {
+                  card = PlaylistGroupCard(
+                    key: ValueKey('playlist_${item.playlistId}'),
+                    playlistId: item.playlistId!,
+                    title: item.title!,
+                    items: item.items!,
+                  );
+                } else {
+                  card = DownloadCard(
+                    key: ValueKey(item.task!.id),
+                    task: item.task!,
+                    compact: true,
+                    showDragHandle: false,
+                    index: index,
+                  );
+                }
+
+                if (!item.isPlaylist) {
+                  card = Row(
+                    children: [
+                      if (isInSelectionMode)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Checkbox(
+                            value: isSelected,
+                            onChanged: (val) =>
+                                provider.toggleTaskSelection(item.task!.id),
+                            activeColor: isDark
+                                ? AppTheme.neonBlue
+                                : AppTheme.lightNeonBlue,
+                          ),
+                        ),
+                      Expanded(child: card),
+                    ],
+                  );
+                  card = GestureDetector(
+                    onLongPress: () {
+                      if (!isInSelectionMode) {
+                        provider.toggleTaskSelection(item.task!.id);
+                      }
+                    },
+                    onTap: () {
+                      if (isInSelectionMode) {
+                        provider.toggleTaskSelection(item.task!.id);
+                      }
+                    },
+                    child: card,
+                  );
+                }
+
+                return RepaintBoundary(child: card);
+              },
             );
           }
-
           return Directionality(
             textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
             child: contentWidget,
           );
-      },
+        },
+      );
+    }
+
+    final Widget animatedChild = AnimatedSwitcher(
+      duration: AppTheme.motionBase,
+      child: child,
     );
+
+    if (selectedTab == 0) {
+      return RefreshIndicator(
+        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        strokeWidth: 2.5,
+        onRefresh: () async {
+          HapticFeedback.lightImpact();
+          await context.read<DownloadProvider>().load(
+                pauseOrphanDownloads: false,
+              );
+        },
+        child: animatedChild,
+      );
+    }
+
+    return animatedChild;
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Empty State
-// ─────────────────────────────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final int selectedTab;
   final bool isDark;
@@ -1618,7 +1720,6 @@ class _EmptyState extends StatelessWidget {
     final provider = context.watch<DownloadProvider>();
     final query = provider.searchQuery;
     final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
     if (query.isNotEmpty) {
       return Center(
         child: Padding(

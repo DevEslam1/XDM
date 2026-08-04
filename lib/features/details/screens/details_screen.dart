@@ -626,6 +626,18 @@ class _ActionRail extends StatelessWidget with HapticHelper {
           },
         ),
       );
+      actions.add(
+        _ActionDef(
+          icon: Icons.visibility_rounded,
+          label: isRtl ? 'معاينة' : 'PREVIEW',
+          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+          filled: false,
+          onTap: () {
+            triggerHaptic(settings);
+            _showPreviewBottomSheet(context, task, isDark, isRtl);
+          },
+        ),
+      );
     }
     actions.add(
       _ActionDef(
@@ -672,6 +684,80 @@ class _ActionRail extends StatelessWidget with HapticHelper {
           .toList(),
     );
   }
+}
+
+void _showPreviewBottomSheet(BuildContext context, DownloadTask task, bool isDark, bool isRtl) {
+  final ext = p.extension(task.localFilePath).toLowerCase();
+  Widget previewWidget;
+  if (['.jpg', '.png', '.gif', '.webp', '.bmp'].contains(ext)) {
+    previewWidget = Image.file(
+      File(task.localFilePath),
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) =>
+          Icon(Icons.broken_image_rounded, size: 64, color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed),
+    );
+  } else if (['.mp4', '.mkv', '.avi', '.mov'].contains(ext)) {
+    previewWidget = Icon(Icons.movie_rounded, size: 64, color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet);
+  } else if (['.mp3', '.wav', '.flac', '.aac'].contains(ext)) {
+    previewWidget = Icon(Icons.audiotrack_rounded, size: 64, color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
+  } else {
+    previewWidget = Icon(Icons.description_rounded, size: 64, color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted);
+  }
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (context) {
+      return Container(
+        decoration: AppTheme.glassDecoration(isDark: isDark),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 200,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.surface.withValues(alpha: 0.5) : AppTheme.lightSurface.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder),
+              ),
+              child: Center(child: previewWidget),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              task.fileName,
+              style: TextStyle(
+                color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${task.sizeFormatted} • $ext',
+              style: TextStyle(
+                color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              task.localFilePath,
+              style: TextStyle(
+                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 class _ActionDef {
@@ -969,7 +1055,12 @@ class _ChannelsPanel extends StatelessWidget with HapticHelper {
                             curve: AppTheme.motionCurve,
                             child: Container(
                               height: 6,
-                              decoration: AppTheme.progressFill(statusColor),
+                              decoration: task.status == DownloadStatus.completed
+                                  ? BoxDecoration(
+                                      color: statusColor,
+                                      borderRadius: BorderRadius.circular(4),
+                                    )
+                                  : AppTheme.progressFill(statusColor),
                             ),
                           ),
                         ],
@@ -2475,6 +2566,57 @@ class _MetadataPanel extends StatelessWidget with HapticHelper {
             onEdit: () =>
                 _showUpdateUrlDialog(context, task, provider, settings),
           ),
+          if (task.mirrorUrls != null && task.mirrorUrls!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    L10n.isRtl(context) ? 'رابط المرآة النشط' : 'ACTIVE MIRROR',
+                    style: AppTheme.microLabel(isDark: isDark, size: 8),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          task.url,
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: 12,
+                            weight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: task.mirrorUrls!.join('\n'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue),
+                          ),
+                          child: Text(
+                            '${task.mirrorUrls!.length} mirrors',
+                            style: TextStyle(
+                              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           if (task.downloadPageUrl != null && task.downloadPageUrl!.isNotEmpty)
             _MetaRow(
               label: L10n.isRtl(context)
