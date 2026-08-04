@@ -1455,9 +1455,12 @@ class DownloadProvider extends ChangeNotifier
         final fut = _activeFutures[id];
         if (fut != null) {
           try {
-            await fut.timeout(const Duration(seconds: 5));
+            await fut.timeout(const Duration(seconds: 8), onTimeout: () { // FIX-B8: Increased timeout to 8s
+              debugPrint('[DMX] B8: Engine future timed out on pause');
+            });
           } catch (_) {}
         }
+
         _cancelTokens.remove(id);
       }
 
@@ -1943,8 +1946,27 @@ class DownloadProvider extends ChangeNotifier
 
     final stateChunks = await _readDmxStateChunks(
         task.tempFilePath, task.threadCount);
-    final chunks = stateChunks ??
+    var chunks = stateChunks ??
         List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
+
+    // FIX-B4: Scale chunks up to match journal-recovered bytes if stateChunks lags
+    if (stateChunks != null &&
+        stateChunks.isNotEmpty &&
+        task.fileSize > 0 &&
+        realBytesOnDisk > 0) {
+      final chunkSum = stateChunks.fold<double>(0.0, (s, c) => s + c);
+      final expectedFraction =
+          (realBytesOnDisk / task.fileSize / stateChunks.length)
+              .clamp(0.0, 1.0);
+      final chunkAvg = chunkSum / stateChunks.length;
+      if (chunkAvg < expectedFraction - 0.001) {
+        final scale = expectedFraction / (chunkAvg > 0 ? chunkAvg : 1.0);
+        chunks = stateChunks
+            .map((c) => (c * scale).clamp(0.0, 1.0))
+            .toList();
+      }
+    }
+
 
     await _setTask(
       task.copyWith(
@@ -2118,7 +2140,7 @@ class DownloadProvider extends ChangeNotifier
     // 2. For torrents, pause + remove from session IMMEDIATELY
     if (task.isTorrent) {
       final torrentId = _torrentIds[id];
-      if (torrentId != null) {
+      if (torrentId != null && TorrentService.isTorrentAlive(torrentId)) { // FIX-B10: Guard with alive check
         try {
           TorrentService.pauseTorrent(torrentId);
           TorrentService.removeTorrent(torrentId, deleteFiles: false);
@@ -2127,8 +2149,12 @@ class DownloadProvider extends ChangeNotifier
         }
         _torrentIds.remove(id);
         providerTorrentIds.remove(id);
+      } else {
+        _torrentIds.remove(id);
+        providerTorrentIds.remove(id);
       }
     }
+
 
     // 3. Remove from UI IMMEDIATELY (optimistic update)
     _tasks.removeWhere((t) => t.id == id);
@@ -2285,7 +2311,11 @@ class DownloadProvider extends ChangeNotifier
 
       _activeFutures.remove(id);
 
+      final notifId = _notifications.idFor(id);
+      _notifications.cancelNotification(notifId);
       final savedNotificationId = _notifications.removeId(id);
+
+
 
       _tasks.removeWhere((task) => task.id == id);
 
@@ -3323,6 +3353,17 @@ class DownloadProvider extends ChangeNotifier
     final itagChanged =
         oldItag != null && newItag != null && oldItag != newItag;
 
+    // FIX-B3: Extract and compare audio stream itag
+    final oldAudioItag = task.mergedAudioUrl != null
+        ? Uri.tryParse(task.mergedAudioUrl!)?.queryParameters['itag']
+        : null;
+    final newAudioItag = newAudioUrl != null
+        ? Uri.tryParse(newAudioUrl)?.queryParameters['itag']
+        : null;
+    final audioItagChanged = oldAudioItag != null &&
+        newAudioItag != null &&
+        oldAudioItag != newAudioItag;
+
     final isYoutube = task.downloadPageUrl != null &&
 
         (task.downloadPageUrl!.contains('youtube.com/') ||
@@ -3342,7 +3383,8 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
-    if (itagChanged) {
+    final streamIdentityChanged = itagChanged || audioItagChanged;
+    if (streamIdentityChanged) {
       // FIX-AUDIT-3: Only restart if the MIME type actually changed.
       // Same MIME = same codec/container = existing bytes are valid.
       final oldMime = Uri.tryParse(task.url)?.queryParameters['mime'];
@@ -3355,6 +3397,7 @@ class DownloadProvider extends ChangeNotifier
       }
       // Same MIME, different itag → just swap URL, keep progress
       await updateTaskUrl(id, newUrl, newAudioUrl: newAudioUrl, isRefresh: true);
+
       final updated = _findTask(id);
       if (updated != null &&
           (updated.status == DownloadStatus.paused ||
@@ -3464,14 +3507,21 @@ class DownloadProvider extends ChangeNotifier
     // FIX-C3: Force realBytesOnDisk to 0 when deleteTempFiles is true so task is reset clean
     final videoBytes = deleteTempFiles
         ? 0
-        : await _readDmxStateBytes(task.tempFilePath);
+        : await _readDmxStateBytes(
+            task.tempFilePath,
+            threadCount: task.threadCount, // FIX-B1: Pass task threadCount
+          );
     var audioBytes = 0;
     final targetAudioUrl = newAudioUrl ?? task.mergedAudioUrl;
     if (!deleteTempFiles &&
         targetAudioUrl != null &&
         targetAudioUrl.isNotEmpty) {
-      audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+      audioBytes = await _readDmxStateBytes(
+        '${task.tempFilePath}.audio',
+        threadCount: 2, // FIX-B1: Pass threadCount 2 for audio
+      );
     }
+
     final realBytesOnDisk = deleteTempFiles ? 0 : (videoBytes + audioBytes);
 
 

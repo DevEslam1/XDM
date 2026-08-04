@@ -798,15 +798,25 @@ class DownloadOrchestrator {
           }
         }
         debugPrint('[DMX] Original video replaced with merged file');
-        // FIX-B3 & FIX-B4: Clean up audio and video temp/state/journal files on merge success
-        try { await audioFile.delete(); } catch (_) {}
-        try { await File('${current.tempFilePath}.audio.dmxstate').delete(); } catch (_) {}
-        try { await File('${current.tempFilePath}.audio.journal').delete(); } catch (_) {}
+        // FIX-B2: Clean up audio sidecars after successful merge
+        for (final audioSidecar in [
+          '${current.tempFilePath}.audio',
+          '${current.tempFilePath}.audio.dmxstate',
+          '${current.tempFilePath}.audio.journal',
+        ]) {
+          try {
+            final f = File(audioSidecar);
+            if (await f.exists()) await f.delete();
+          } catch (e) {
+            debugPrint('[DMX] B2 cleanup failed for $audioSidecar: $e');
+          }
+        }
         if (current.tempFilePath != current.localFilePath) {
           try { await videoFile.delete(); } catch (_) {}
           try { await File('${current.tempFilePath}.dmxstate').delete(); } catch (_) {}
           try { await File('${current.tempFilePath}.journal').delete(); } catch (_) {}
         }
+
 
       } else {
         throw Exception('Merged output file not found after FFmpeg success');
@@ -1390,14 +1400,17 @@ class DownloadOrchestrator {
             // The 0.99 heuristic is REMOVED because it can merge truncated audio.
             // FIX-C2: Also consider audio complete when liveAudioSize <= 0 but audioLen > 0
             // FIX-05: Only treat audio as complete when size is known AND downloaded bytes >= liveAudioSize
+            // FIX-B9: If size unknown but file exists and has data, treat as complete
             final isAudioComplete = liveAudioTask.audioProgress >= 1.0 ||
                 (audioExists &&
                     audioLen > 0 &&
                     liveAudioSize > 0 &&
-                    audioLen >= liveAudioSize);
+                    audioLen >= liveAudioSize) ||
+                (audioExists && audioLen > 0 && liveAudioSize <= 0 && audioLen > 0);
             if (isAudioComplete) {
               debugPrint('[DMX-FIX-05] Audio stream complete ($audioLen / $liveAudioSize bytes)');
             }
+
 
 
 
@@ -1632,7 +1645,15 @@ class DownloadOrchestrator {
                               '[DMX] YT refresh exhausted $maxRefreshAttempts attempts',
                             );
                             _ytRefreshAttempts.remove(task.id);
+                            final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
+                            if (idx != -1) {
+                              _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                                statusMessage:
+                                    'Possible throttling — download may be slow. Consider retrying.',
+                              );
+                            }
                           }
+
                         } catch (err) {
                           debugPrint(
                             '[DMX] YT refresh attempt $attempts failed: $err',
@@ -2117,10 +2138,12 @@ class DownloadOrchestrator {
       int totalTorrentSize = task.fileSize;
       if (totalTorrentSize <= 0 && (task.torrentFiles?.isNotEmpty ?? false)) {
         totalTorrentSize = task.torrentFiles!.fold<int>(0, (sum, f) {
-          final size = (f['size'] as num?)?.toInt() ?? 0;
+          final size = (f['length'] as num?)?.toInt() ?? (f['size'] as num?)?.toInt() ?? 0;
           return sum + size;
         });
       }
+
+
       if (totalTorrentSize > 0) {
         final hasSpace = await _host.downloadEngine.hasEnoughDiskSpace(
           task.savePath,
@@ -2337,31 +2360,36 @@ class DownloadOrchestrator {
           final audioComplete = task.audioProgress >= 1.0 ||
               (audioLen > 0 && task.audioSize > 0 && audioLen >= task.audioSize);
 
-
-          final videoComplete = task.fileSize > 0 &&
-              (videoLen >=
-                  (task.fileSize - task.audioSize).clamp(0, task.fileSize));
-
-          if (audioComplete && videoComplete) {
+          if (videoTransferSize <= 0) {
             debugPrint(
-                '[DMX] YT-6 FIX: Both streams complete, resuming merge-only');
-            await _host.setTaskState(task.copyWith(
-              status: DownloadStatus.downloading,
-              statusMessage: DownloadStatusMessages.merging,
-            ));
+              '[DMX] B5: Skipping merge-only path — video size unknown. '
+              'Falling through to normal download path.',
+            );
+          } else {
+            final videoComplete = task.fileSize > 0 &&
+                (videoLen >=
+                    (task.fileSize - task.audioSize).clamp(0, task.fileSize));
 
-            final merged = await _mergeAudioVideo(task.id, audioFile.path);
-            if (merged) {
-              await _finalizeDownload(
-                  task.id, _host.notifications.idFor(task.id));
-            } else {
-
+            if (audioComplete && videoComplete) {
+              debugPrint(
+                  '[DMX] YT-6 FIX: Both streams complete, resuming merge-only');
               await _host.setTaskState(task.copyWith(
-                status: DownloadStatus.failed,
-                errorMessage: 'Merge failed. Tap retry to attempt merge again.',
+                status: DownloadStatus.downloading,
+                statusMessage: DownloadStatusMessages.merging,
               ));
+
+              final merged = await _mergeAudioVideo(task.id, audioFile.path);
+              if (merged) {
+                await _finalizeDownload(
+                    task.id, _host.notifications.idFor(task.id));
+              } else {
+                await _host.setTaskState(task.copyWith(
+                  status: DownloadStatus.failed,
+                  errorMessage: DownloadStatusMessages.ffmpegMergeFailed,
+                ));
+              }
+              return;
             }
-            return;
           }
         }
       }

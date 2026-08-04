@@ -1444,10 +1444,11 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
         final isChecking = widget.task.statusMessage?.contains('checking') == true ||
             widget.task.statusMessage?.contains('Checking') == true;
         final effectiveDownloaded = isChecking
-            ? 0
+            ? downloaded // FIX-B7: keep last known value to avoid flicker
             : (widget.task.status == DownloadStatus.completed && selected
                 ? length
                 : downloaded);
+
 
         return {...f, 'downloadedBytes': effectiveDownloaded};
       }).toList();

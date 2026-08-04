@@ -229,11 +229,15 @@ class AdBlockerService {
     if (!_enabled) return false;
     final lower = url.toLowerCase();
 
-    // Never block reCAPTCHA, Google authentication, or gstatic resources
+    // Never block reCAPTCHA, Google authentication, gstatic, or core JS frameworks
     if (lower.contains('recaptcha') ||
         lower.contains('gstatic.com') ||
         lower.contains('accounts.google.com') ||
-        lower.contains('google.com/recaptcha')) {
+        lower.contains('google.com/recaptcha') ||
+        lower.contains('jquery') ||
+        lower.contains('bootstrap') ||
+        lower.contains('fontawesome') ||
+        lower.contains('cdnjs.cloudflare.com')) {
       return false;
     }
 
@@ -515,12 +519,16 @@ div[class*="modal-ad"]:not(#page-manager),
 [class*="promo-download"], [class*="ad-cta"],
 [class*="redirect-btn"], [class*="ad-redirect"],
 [class*="pop-redirect"], [class*="overlay-redirect"],
-/* ═══ GENERIC OVERLAYS / POPUPS ═══ */
+/* ═══ GENERIC OVERLAYS / POPUPS / ANTI-ADBLOCK ═══ */
 [class*="cookie-consent"], [class*="cookie-banner"],
 [class*="newsletter-popup"], [class*="subscribe-popup"],
 [class*="push-notification"], [class*="notification-prompt"],
 [class*="exit-intent"], [class*="exit-popup"],
-[class*="welcome-ad"], [class*="splash-ad"]
+[class*="welcome-ad"], [class*="splash-ad"],
+[class*="adblock-overlay"], [id*="adblock-overlay"],
+[class*="adblock-modal"], [id*="adblock-modal"],
+[class*="anti-adblock"], [id*="anti-adblock"],
+[class*="quick-adblock"], [id*="quick-adblock"]
 { visibility: hidden !important;
   height: 0 !important;
   overflow: hidden !important;
@@ -551,6 +559,34 @@ body {
 (function() {
   if (window.__xdmAdBlockEarly) return;
   window.__xdmAdBlockEarly = true;
+
+  /* ── Anti-Adblock Detection Neutrals & Fake Globals ── */
+  try {
+    window.canRunAds = true;
+    window.isAdBlockActive = false;
+    window.adBlockerDetected = false;
+    window.google_ad_status = 1;
+    window.google_ad_client = 'ca-pub-0000000000000000';
+    
+    function _FakeABDetector() {
+      this.on = function(detected, fn) {
+        if (!detected && typeof fn === 'function') { try { fn(); } catch(e){} }
+        return this;
+      };
+      this.onDetected = function() { return this; };
+      this.onNotDetected = function(fn) { if (typeof fn === 'function') { try { fn(); } catch(e){} } return this; };
+      this.check = function() {};
+      this.emitEvent = function() {};
+      this.clearEvent = function() {};
+      this.setOption = function() {};
+    }
+    window.FuckAdBlock = _FakeABDetector;
+    window.fuckAdBlock = new _FakeABDetector();
+    window.BlockAdBlock = _FakeABDetector;
+    window.blockAdBlock = new _FakeABDetector();
+    window.SniffAdBlock = _FakeABDetector;
+    window.sniffAdBlock = new _FakeABDetector();
+  } catch(e) {}
 
   /* ── Shared ad-domain check ── */
   var _adDomains = ['doubleclick','googlesyndication','googleadservices',
@@ -754,26 +790,68 @@ body {
     observer.observe(document.body, { childList: true, subtree: true });
   } catch(e) {}
 
-  /* ── Unblock page scroll (ad overlays often set overflow:hidden) ── */
-  try {
-    if (window.getComputedStyle(document.body).overflow === 'hidden') {
-      document.body.style.setProperty('overflow', 'auto', 'important');
-      document.body.style.setProperty('overflow-y', 'scroll', 'important');
-    }
-    if (window.getComputedStyle(document.documentElement).overflow === 'hidden') {
-      document.documentElement.style.setProperty('overflow', 'auto', 'important');
-      document.documentElement.style.setProperty('overflow-y', 'scroll', 'important');
-    }
-    // Also fix YouTube-specific scroll containers
-    var ytdApp = document.querySelector('ytd-app, #page-manager, ytd-browse');
-    if (ytdApp) {
-      var st = window.getComputedStyle(ytdApp);
-      if (st.overflow === 'hidden' || st.overflowY === 'hidden') {
-        ytdApp.style.setProperty('overflow', 'auto', 'important');
-        ytdApp.style.setProperty('overflow-y', 'auto', 'important');
+  /* ── Anti-Adblock Banner Neutralizer (Akwam, EgyBest, etc.) ── */
+  function _neutralizeAntiAdblockBanners() {
+    var targets = [
+      'ad blocker',
+      'adblocker',
+      'adblock',
+      'ad-blocker',
+      'blocker',
+      'using an ad',
+      'close your ad',
+      'disable your ad',
+      'disabled my ad',
+      'deaktiviere deinen werbeblocker',
+      'désactiver votre bloqueur',
+      'desactive el bloqueador',
+      'منع الاعلانات',
+      'منع الإعلانات',
+      'مانع الاعلانات',
+      'مانع الإعلانات',
+      'اغلقت مانع',
+      'أغلقت مانع',
+      'القائمة البيضاء',
+      'ادوات منع',
+      'أدوات منع',
+      'quick adblock detection'
+    ];
+
+    try {
+      var nodes = document.querySelectorAll('div, section, aside, article, p, span, h1, h2, h3, h4, a, button, .alert, .warning, .notice, [class*="block"], [class*="ad"], [class*="modal"], [class*="popup"], [class*="overlay"]');
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (el.children.length > 6) continue;
+        var txt = (el.textContent || '').toLowerCase();
+        for (var j = 0; j < targets.length; j++) {
+          if (txt.indexOf(targets[j]) !== -1) {
+            var cur = el;
+            while (cur && cur.parentElement && cur.parentElement !== document.body && cur.parentElement !== document.documentElement) {
+              cur = cur.parentElement;
+            }
+            if (cur && cur !== document.body && cur !== document.documentElement) {
+              _stealthHide(cur);
+              try { cur.style.setProperty('display', 'none', 'important'); } catch(e) {}
+            }
+            try {
+              if (document.body) {
+                document.body.style.setProperty('overflow', 'auto', 'important');
+                document.body.style.setProperty('overflow-y', 'auto', 'important');
+              }
+              if (document.documentElement) {
+                document.documentElement.style.setProperty('overflow', 'auto', 'important');
+                document.documentElement.style.setProperty('overflow-y', 'auto', 'important');
+              }
+            } catch(e) {}
+            break;
+          }
+        }
       }
-    }
-  } catch(e) {}
+    } catch(e) {}
+  }
+
+  _neutralizeAntiAdblockBanners();
+  setInterval(_neutralizeAntiAdblockBanners, 600);
 })();
 ''';
 
