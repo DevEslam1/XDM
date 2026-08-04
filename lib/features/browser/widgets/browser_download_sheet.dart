@@ -6,6 +6,7 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/url_utils.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../downloads/models/download_task.dart';
@@ -75,19 +76,32 @@ class BrowserDownloadSheet extends StatefulWidget {
 }
 
 class _BrowserDownloadSheetState extends State<BrowserDownloadSheet>
-    with SingleTickerProviderStateMixin, HapticHelper {
+    with SingleTickerProviderStateMixin, HapticHelper, WidgetsBindingObserver, PausableLoopAnimation<BrowserDownloadSheet> {
+
+
   bool _isSubmitting = false;
 
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1400),
-  )..repeat(reverse: true);
+  );
+
+  @override
+  AnimationController get loopController => _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    startPausableLoop();
+  }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _pulse.dispose();
     super.dispose();
   }
+
 
   DetectedMediaKind get _kind =>
       BrowserDetector.detect(widget.url)?.kind ?? DetectedMediaKind.unknown;

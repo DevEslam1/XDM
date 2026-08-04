@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import '../mixins/pausable_loop_animation.dart';
 
 class NeonGlowButton extends StatefulWidget {
   final VoidCallback? onPressed;
@@ -32,9 +33,13 @@ class NeonGlowButton extends StatefulWidget {
 }
 
 class _NeonGlowButtonState extends State<NeonGlowButton>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<NeonGlowButton> {
+
   late final AnimationController _shimmer;
   bool _pressed = false;
+
+  @override
+  AnimationController get loopController => _shimmer;
 
   @override
   void initState() {
@@ -42,14 +47,17 @@ class _NeonGlowButtonState extends State<NeonGlowButton>
     _shimmer = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2600),
-    )..repeat();
+    );
+    startPausableLoop();
   }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _shimmer.dispose();
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {

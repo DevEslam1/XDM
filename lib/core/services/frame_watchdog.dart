@@ -2,6 +2,13 @@ import 'dart:ui';
 import 'package:flutter/scheduler.dart';
 import 'package:logging/logging.dart';
 
+/// Target performance budget constants for UI rendering.
+class PerformanceBudget {
+  static const double maxJankRatio = 0.05;
+  static const double maxBuildTimeMs = 16.6;
+  static const double maxRasterTimeMs = 16.6;
+}
+
 /// Silent jank monitor. Logs when >5% of frames miss the adaptive frame budget.
 class FrameWatchdog {
   static final _log = Logger('FrameWatchdog');
@@ -14,8 +21,11 @@ class FrameWatchdog {
   static double get frameBudgetMs => 1000.0 / _refreshRate;
   
   static double get _budgetMs => frameBudgetMs;
-  static const _alertThreshold = 0.05;
+  static const _alertThreshold = PerformanceBudget.maxJankRatio;
   static bool _isRunning = false;
+
+  /// Callback triggered when jank ratio exceeds the alert threshold.
+  static void Function(double jankRatio)? onJankDetected;
 
   /// Call once at app startup to detect the display refresh rate.
   static Future<void> detectRefreshRate() async {
@@ -65,6 +75,7 @@ class FrameWatchdog {
             '[Jank] ${(rate * 100).toStringAsFixed(1)}% frames dropped '
             '($_dropped/$_total) in ${elapsed.inSeconds}s',
           );
+          onJankDetected?.call(rate);
         }
       }
       _dropped = 0;
@@ -73,9 +84,25 @@ class FrameWatchdog {
     }
   }
 
+  /// Test hook to simulate window evaluation with explicit dropped/total frames.
+  static void simulateWindowForTesting(int dropped, int total) {
+    _dropped = dropped;
+    _total = total;
+    if (total > 0) {
+      final rate = dropped / total;
+      if (rate > _alertThreshold) {
+        onJankDetected?.call(rate);
+      }
+    }
+    _dropped = 0;
+    _total = 0;
+    _windowStart = DateTime.now();
+  }
+
   static void stop() {
     if (!_isRunning) return;
     _isRunning = false;
     SchedulerBinding.instance.removeTimingsCallback(_onTimings);
   }
 }
+

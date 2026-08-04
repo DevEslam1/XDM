@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/torrent_models.dart';
 import '../../../core/services/tracker_manager.dart';
+import '../../../core/utils/localization.dart';
 
 class TrackerPanel extends StatefulWidget {
   final int torrentId;
@@ -31,7 +32,7 @@ class _TrackerPanelState extends State<TrackerPanel> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Tracker'),
+        title: Text(L10n.of(ctx, 'add_tracker')),
         content: TextField(
           controller: _urlController,
           decoration: const InputDecoration(
@@ -42,7 +43,7 @@ class _TrackerPanelState extends State<TrackerPanel> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(L10n.of(ctx, 'cancel_btn')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -53,12 +54,12 @@ class _TrackerPanelState extends State<TrackerPanel> {
               Navigator.pop(ctx);
               if (!added && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Invalid or duplicate tracker URL')),
+                  SnackBar(
+                      content: Text(L10n.of(context, 'invalid_tracker_url'))),
                 );
               }
             },
-            child: const Text('Add'),
+            child: Text(L10n.of(ctx, 'add_btn')),
           ),
         ],
       ),
@@ -100,13 +101,13 @@ class _TrackerPanelState extends State<TrackerPanel> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.refresh),
-                        tooltip: 'Announce Now',
+                        tooltip: L10n.of(context, 'announce_now'),
                         onPressed: () =>
                             widget.trackerManager.reannounce(widget.torrentId),
                       ),
                       ElevatedButton.icon(
                         icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Add Tracker'),
+                        label: Text(L10n.of(context, 'add_tracker')),
                         onPressed: _showAddTrackerDialog,
                       ),
                     ],
@@ -136,8 +137,8 @@ class _TrackerPanelState extends State<TrackerPanel> {
                       direction: DismissDirection.endToStart,
                       background: Container(
                         color: Colors.red,
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.only(right: 16.0),
+                        alignment: AlignmentDirectional.centerEnd,
+                        padding: const EdgeInsetsDirectional.only(end: 16.0),
                         child: const Icon(Icons.delete, color: Colors.white),
                       ),
                       onDismissed: (_) {

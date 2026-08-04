@@ -45,7 +45,7 @@ class BrowserTabBar extends StatelessWidget {
         children: [
           // Tab counter block
           Container(
-            margin: const EdgeInsets.only(left: 10, right: 6),
+            margin: const EdgeInsetsDirectional.only(start: 10, end: 6),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
@@ -135,7 +135,7 @@ class _TabChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
         constraints: const BoxConstraints(maxWidth: 170, minWidth: 90),
-        margin: const EdgeInsets.only(right: 6),
+        margin: const EdgeInsetsDirectional.only(end: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           color: isActive
@@ -208,7 +208,7 @@ class _TabChip extends StatelessWidget {
               GestureDetector(
                 onTap: onClose,
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsetsDirectional.only(start: 6),
                   child: Icon(Icons.close_rounded, size: 14, color: muted),
                 ),
               ),

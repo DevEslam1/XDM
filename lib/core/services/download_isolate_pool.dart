@@ -79,18 +79,58 @@ class IsolateMessage {
 /// Pool of long-lived worker isolates.
 class DownloadIsolatePool {
   final int size;
+  final bool powerAware;
   final List<_Worker> _workers = [];
 
-  /// Max concurrent jobs admitted to a single worker before jobs queue.
-  static const int _maxJobsPerWorker = 2;
+  int _currentMaxJobsPerWorker = 2;
+  int get maxJobsPerWorker => _currentMaxJobsPerWorker;
+
+  int get workerCount => _workers.length;
 
   /// Priority-aware job queue. Higher priority = processed first.
   final List<_PendingJob> _pendingQueue = [];
 
   Timer? _healthCheckTimer;
   bool _draining = false;
+  VoidCallback? _powerListener;
 
-  DownloadIsolatePool({this.size = 4});
+  DownloadIsolatePool({this.size = 4, this.powerAware = false}) {
+    _powerListener = _handlePowerStateChange;
+    PowerMonitor.throttleFactorNotifier.addListener(_powerListener!);
+    _handlePowerStateChange();
+  }
+
+  void _handlePowerStateChange() {
+    if (PowerMonitor.batterySaverMode == BatterySaverMode.aggressive) {
+      _currentMaxJobsPerWorker = 1;
+    } else {
+      _currentMaxJobsPerWorker = 2;
+    }
+
+    if (!powerAware) return;
+
+    final level = PowerMonitor.batteryLevel;
+    if (level < 20) {
+      _adjustPoolSize(1);
+    } else if (level < 30) {
+      _adjustPoolSize(2);
+    } else if (level > 30) {
+      _adjustPoolSize(size);
+    }
+  }
+
+  void _adjustPoolSize(int targetSize) {
+    if (_workers.length > targetSize) {
+      final toKill = _workers
+          .where((w) => w._jobs.isEmpty && !w._shuttingDown)
+          .take(_workers.length - targetSize)
+          .toList();
+      for (final worker in toKill) {
+        worker.kill();
+        _workers.remove(worker);
+      }
+    }
+  }
 
   Future<void> init() async {
     for (int i = 0; i < size; i++) {
@@ -109,6 +149,7 @@ class DownloadIsolatePool {
         // Continue with remaining workers
       }
     }
+    _handlePowerStateChange();
   }
 
   DownloadJob submit(DownloadCommand command, {int priority = 0}) {
@@ -122,7 +163,7 @@ class DownloadIsolatePool {
 
     // Prefer the least-busy worker that still has capacity.
     _Worker? bestWorker;
-    var bestLoad = _maxJobsPerWorker;
+    var bestLoad = _currentMaxJobsPerWorker;
     for (final w in aliveWorkers) {
       final load = w._jobs.length;
       if (load < bestLoad) {
@@ -169,7 +210,7 @@ class DownloadIsolatePool {
 
     final worker =
         _workers.where((w) => w.id == workerId && w._isAlive).firstOrNull;
-    if (worker == null || worker._jobs.length >= _maxJobsPerWorker) return;
+    if (worker == null || worker._jobs.length >= _currentMaxJobsPerWorker) return;
 
     final next = _pendingQueue.removeAt(0);
     worker.submitJob(next.command, next.job);
@@ -235,17 +276,19 @@ class DownloadIsolatePool {
     _draining = false;
   }
 
-  /// Memory pressure callback — reduce pool size to a safe minimum (2 idle
-  /// workers remain).
+  /// Memory pressure callback — reduces pool size by terminating idle workers.
   void onMemoryPressure() {
     _log.warning('[Pool] Memory pressure detected. Reducing pool size.');
-    final toKill = _workers
+    final idleWorkers = _workers
         .where((w) => w._jobs.isEmpty && !w._shuttingDown)
-        .skip(2)
         .toList();
-    for (final worker in toKill) {
-      worker.kill();
-      _workers.remove(worker);
+    if (idleWorkers.isNotEmpty) {
+      // Kill at least 1 idle worker or half of idle workers
+      final countToKill = max(1, idleWorkers.length ~/ 2);
+      for (final worker in idleWorkers.take(countToKill)) {
+        worker.kill();
+        _workers.remove(worker);
+      }
     }
   }
 
@@ -260,6 +303,11 @@ class DownloadIsolatePool {
     _healthCheckTimer?.cancel();
     _healthCheckTimer = null;
     _pendingQueue.clear();
+
+    if (_powerListener != null) {
+      PowerMonitor.throttleFactorNotifier.removeListener(_powerListener!);
+      _powerListener = null;
+    }
 
     for (final w in _workers) {
       await w.shutdown();

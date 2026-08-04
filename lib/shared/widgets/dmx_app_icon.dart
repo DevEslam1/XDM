@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import '../mixins/pausable_loop_animation.dart';
 
 class DmxAppIcon extends StatefulWidget {
   final double size;
@@ -19,8 +20,12 @@ class DmxAppIcon extends StatefulWidget {
 }
 
 class _DmxAppIconState extends State<DmxAppIcon>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<DmxAppIcon> {
+
   late final AnimationController _ring;
+
+  @override
+  AnimationController get loopController => _ring;
 
   @override
   void initState() {
@@ -28,14 +33,17 @@ class _DmxAppIconState extends State<DmxAppIcon>
     _ring = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 6),
-    )..repeat();
+    );
+    startPausableLoop();
   }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _ring.dispose();
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {

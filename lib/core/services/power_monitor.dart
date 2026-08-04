@@ -1,17 +1,26 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 
 /// Thermal status categories.
 enum ThermalStatus { none, fair, moderate, severe, critical }
 
+/// Battery saver operating modes.
+enum BatterySaverMode { off, moderate, aggressive }
+
 /// Central power intelligence. Every subsystem reads from here.
 class PowerMonitor {
   static final _log = Logger('PowerMonitor');
   static final Battery _battery = Battery();
   static const _channel = MethodChannel('com.dmx.app/thermal');
+
+  static const int kBatterySaverAggressiveThreshold = 20;
+  static const int kBatterySaverModerateThreshold = 40;
+  static const int kBatterySaverRestoreThreshold = 30;
+  static const int kThermalLimitedMaxThreads = 2;
 
   static BatteryState _state = BatteryState.unknown;
   static int _level = 100;
@@ -20,6 +29,10 @@ class PowerMonitor {
   static Timer? _thermalTimer;
   static bool _screenOn = true;
 
+  /// Notifies subscribers immediately whenever [throttleFactor] changes.
+  static final ValueNotifier<double> throttleFactorNotifier =
+      ValueNotifier<double>(1.0);
+
   static BatteryState get batteryState => _state;
   static int get batteryLevel => _level;
   static ThermalStatus get thermal => _thermal;
@@ -27,17 +40,62 @@ class PowerMonitor {
       _state == BatteryState.charging || _state == BatteryState.full;
   static bool get screenOff => !_screenOn;
 
+  static BatterySaverMode get batterySaverMode {
+    if (isCharging) return BatterySaverMode.off;
+    if (_level < kBatterySaverAggressiveThreshold) {
+      return BatterySaverMode.aggressive;
+    }
+    if (_level < kBatterySaverModerateThreshold) {
+      return BatterySaverMode.moderate;
+    }
+    return BatterySaverMode.off;
+  }
+
+  /// Thermal and battery-aware thread limiter.
+  static int get maxAllowedThreads {
+    if (batterySaverMode == BatterySaverMode.aggressive) {
+      return 1;
+    }
+    if (_thermal == ThermalStatus.severe || _thermal == ThermalStatus.critical) {
+      return kThermalLimitedMaxThreads;
+    }
+    return 16;
+  }
+
   static void setScreenOn(bool on) {
     _screenOn = on;
+    _notifyThrottleFactor();
+  }
+
+  @visibleForTesting
+  static void setBatteryLevelForTesting(int level) {
+    _level = level;
+    _notifyThrottleFactor();
+  }
+
+  @visibleForTesting
+  static void setBatteryStateForTesting(BatteryState state) {
+    _state = state;
+    _notifyThrottleFactor();
+  }
+
+  @visibleForTesting
+  static void setThermalStatusForTesting(ThermalStatus status) {
+    _thermal = status;
+    _notifyThrottleFactor();
+  }
+
+  static void _notifyThrottleFactor() {
+    throttleFactorNotifier.value = throttleFactor;
   }
 
   /// Master "aggression" scalar: 1.0 = full power, 0.3 = conserve hard.
   static double get throttleFactor {
     var f = 1.0;
     if (!isCharging) {
-      if (_level < 20) {
+      if (_level < kBatterySaverAggressiveThreshold) {
         f *= 0.5;
-      } else if (_level < 40) {
+      } else if (_level < kBatterySaverModerateThreshold) {
         f *= 0.75;
       }
     }
@@ -54,16 +112,24 @@ class PowerMonitor {
       default:
         break;
     }
-    return f.clamp(0.3, 1.0);
+    double floor = 0.3;
+    if (batterySaverMode == BatterySaverMode.moderate) {
+      floor = 0.6;
+    } else if (batterySaverMode == BatterySaverMode.aggressive) {
+      floor = 0.3;
+    }
+    return f.clamp(floor, 1.0);
   }
 
   static Future<void> init() async {
     try {
       _sub = _battery.onBatteryStateChanged.listen((s) {
         _state = s;
+        _notifyThrottleFactor();
         _log.info('[Power] State: $s');
       });
       _level = await _battery.batteryLevel;
+      _notifyThrottleFactor();
     } catch (e) {
       _log.warning('[Power] Battery listener init failed: $e');
     }
@@ -91,6 +157,7 @@ class PowerMonitor {
           }
         }
         _level = await _battery.batteryLevel;
+        _notifyThrottleFactor();
       } catch (e) {
         _log.info('[PowerMonitor] thermal poll skipped: $e');
       }
@@ -102,3 +169,4 @@ class PowerMonitor {
     _thermalTimer?.cancel();
   }
 }
+

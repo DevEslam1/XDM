@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/utils/localization.dart';
 import '../provider/download_provider.dart';
 import '../models/download_task.dart';
 
@@ -54,9 +55,9 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           ),
         ],
       ),
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
+      padding: EdgeInsetsDirectional.only(
+        start: 20,
+        end: 20,
         top: 16,
         bottom: MediaQuery.of(context).padding.bottom + 20,
       ),
@@ -82,7 +83,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
                   color: theme.colorScheme.primary),
               const SizedBox(width: 12),
               Text(
-                'Batch Actions ($count selected)',
+                L10n.of(context, 'selected_count', args: {'count': count}),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -98,7 +99,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           // Action Buttons
           ListTile(
             leading: const Icon(Icons.play_arrow_rounded, color: Colors.green),
-            title: const Text('Resume Selected'),
+            title: Text(L10n.of(context, 'resume_selected')),
             onTap: () async {
               final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
@@ -121,7 +122,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           ),
           ListTile(
             leading: const Icon(Icons.pause_rounded, color: Colors.amber),
-            title: const Text('Pause Selected'),
+            title: Text(L10n.of(context, 'pause_selected')),
             onTap: () async {
               final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
@@ -137,7 +138,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
           ),
           ListTile(
             leading: const Icon(Icons.category_rounded, color: Colors.blue),
-            title: const Text('Change Category'),
+            title: Text(L10n.of(context, 'change_category')),
             onTap: () async {
               final navigator = Navigator.of(context);
               final provider = context.read<DownloadProvider>();
@@ -160,7 +161,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             builder: (context, setCheckboxState) {
               return CheckboxListTile(
                 value: _deleteFiles,
-                title: const Text('Also delete downloaded files from disk'),
+                title: Text(L10n.of(context, 'delete_files_disk')),
                 controlAffinity: ListTileControlAffinity.leading,
                 activeColor: Colors.redAccent,
                 onChanged: (val) {
@@ -175,7 +176,7 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
             leading: const Icon(Icons.delete_forever_rounded,
                 color: Colors.redAccent),
             title: Text(
-              'Delete Selected ($count)',
+              L10n.of(context, 'delete_downloads_count', args: {'count': count}),
               style: const TextStyle(
                   color: Colors.redAccent, fontWeight: FontWeight.bold),
             ),
@@ -214,13 +215,16 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
     return showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('Select Category'),
+        title: Text(L10n.of(ctx, 'select_category')),
         children: categories.map((cat) {
           return SimpleDialogOption(
             onPressed: () => Navigator.of(ctx).pop(cat),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(cat, style: const TextStyle(fontSize: 16)),
+              child: Text(
+                L10n.translateCategory(ctx, cat),
+                style: const TextStyle(fontSize: 16),
+              ),
             ),
           );
         }).toList(),
@@ -232,21 +236,25 @@ class _BatchOperationsSheetState extends State<BatchOperationsSheet> {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete $count Downloads?'),
+        title: Text(
+          count == 1
+              ? L10n.of(ctx, 'delete_download_single')
+              : L10n.of(ctx, 'delete_downloads_count', args: {'count': count}),
+        ),
         content: Text(
           _deleteFiles
-              ? 'This will permanently remove the selected download entries and delete their local files.'
-              : 'This will remove the selected download entries from the list.',
+              ? L10n.of(ctx, 'delete_files_label')
+              : L10n.of(ctx, 'delete_desc'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(L10n.of(ctx, 'cancel_btn')),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: const Text('Delete'),
+            child: Text(L10n.of(ctx, 'delete_btn')),
           ),
         ],
       ),

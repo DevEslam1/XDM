@@ -622,7 +622,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     Widget? trailing,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 8, left: 4),
+      padding: const EdgeInsetsDirectional.only(top: 8, bottom: 8, start: 4),
       child: Row(
         children: [
           Icon(icon, size: 14, color: color),

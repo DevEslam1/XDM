@@ -58,7 +58,8 @@ class _SettingSearchEntry {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final String? initialSection;
+  const SettingsScreen({super.key, this.initialSection});
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -1935,8 +1936,12 @@ class _SystemHeaderState extends State<_SystemHeader>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
+    );
+    if (!SettingsProvider.instance.batterySaverMode) {
+      _controller.repeat(reverse: true);
+    }
   }
+
 
   @override
   void dispose() {

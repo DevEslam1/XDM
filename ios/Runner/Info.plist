@@ -158,6 +158,13 @@
 				<false/>
 			</dict>
 		</dict>
-	</dict>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>StartDownloadIntent</string>
+		<string>PauseAllDownloadsIntent</string>
+		<string>ResumeAllDownloadsIntent</string>
+		<string>GetDownloadStatusIntent</string>
+		<string>DownloadFileIntent</string>
+	</array>
 </dict>
 </plist>

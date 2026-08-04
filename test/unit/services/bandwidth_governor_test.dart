@@ -1,4 +1,7 @@
+import 'package:battery_plus/battery_plus.dart';
 import 'package:dmx/core/services/bandwidth_governor.dart';
+import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/power_monitor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -100,6 +103,41 @@ void main() {
       gov.removeTaskLimit('task2');
       final fallbackWait = await gov.acquire(2000, taskId: 'task2');
       expect(fallbackWait, greaterThan(0));
+      gov.dispose();
+    });
+
+    test('perConsumerBytesPerSecond reflects throttleFactor = 0.5', () {
+      PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
+      PowerMonitor.setBatteryLevelForTesting(15);
+      final gov = BandwidthGovernor(10000);
+      gov.registerConsumer();
+      // Base share = 10000. Throttle factor = 0.5. Result = 5000.
+      expect(gov.perConsumerBytesPerSecond, equals(5000));
+      gov.dispose();
+      PowerMonitor.setBatteryLevelForTesting(100);
+      PowerMonitor.setBatteryStateForTesting(BatteryState.unknown);
+    });
+
+    test('powerThrottleActive returns true when throttleFactor < 1.0', () {
+      PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
+      PowerMonitor.setBatteryLevelForTesting(35);
+      final gov = BandwidthGovernor(10000);
+      expect(gov.powerThrottleActive, isTrue);
+      gov.dispose();
+      PowerMonitor.setBatteryLevelForTesting(100);
+      PowerMonitor.setBatteryStateForTesting(BatteryState.unknown);
+    });
+
+    test('Battery saver aggressive -> maxJobsPerWorker = 1', () {
+      final pool = DownloadIsolatePool(size: 2);
+      PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
+      PowerMonitor.setBatteryLevelForTesting(15);
+      expect(pool.maxJobsPerWorker, equals(1));
+      PowerMonitor.setBatteryLevelForTesting(100);
+      PowerMonitor.setBatteryStateForTesting(BatteryState.unknown);
+      expect(pool.maxJobsPerWorker, equals(2));
+      pool.shutdown();
     });
   });
 }
+

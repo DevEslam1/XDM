@@ -75,8 +75,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
             key: ValueKey('dismiss_${task.id}'),
             direction: DismissDirection.horizontal,
             background: Container(
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.only(left: 20),
+              alignment: AlignmentDirectional.centerStart,
+              padding: const EdgeInsetsDirectional.only(start: 20),
               decoration: BoxDecoration(
                 color: AppTheme.neonGreen.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
@@ -91,8 +91,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
               ),
             ),
             secondaryBackground: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20),
+              alignment: AlignmentDirectional.centerEnd,
+              padding: const EdgeInsetsDirectional.only(end: 20),
               decoration: BoxDecoration(
                 color: AppTheme.neonRed.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
@@ -1463,7 +1463,7 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
       );
     } catch (e) {
       return Padding(
-        padding: const EdgeInsets.only(left: 12, bottom: 8),
+        padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
         child: Text(
           'Corrupted torrent file list',
           style: AppTheme.microLabel(
@@ -1533,7 +1533,7 @@ class _TorrentFileRow extends StatelessWidget {
     if (file.isEmpty || nameRaw == null) {
       final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
       return Padding(
-        padding: const EdgeInsets.only(left: 12, bottom: 8),
+        padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
         child: Text(
           'Unknown file',
           style:
@@ -1551,7 +1551,7 @@ class _TorrentFileRow extends StatelessWidget {
     final name = (file['name'] as String? ?? '').replaceAll('+', ' ');
 
     return Padding(
-      padding: const EdgeInsets.only(left: 12, bottom: 8),
+      padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
       child: Row(
         children: [
           Icon(
@@ -1995,7 +1995,7 @@ void _showAdvancedControls(
                   Icons.folder_open_rounded,
                   color: AppTheme.neonGreen,
                 ),
-                title: Text('Open File', style: TextStyle(color: textClr)),
+                title: Text(L10n.of(context, 'open_file_btn'), style: TextStyle(color: textClr)),
                 onTap: () async {
                   Navigator.pop(context);
                   if (task.localFilePath.isNotEmpty &&
@@ -2014,7 +2014,7 @@ void _showAdvancedControls(
                   Icons.delete_outline,
                   color: AppTheme.neonRed,
                 ),
-                title: Text('Delete', style: TextStyle(color: textClr)),
+                title: Text(L10n.of(context, 'delete_btn'), style: TextStyle(color: textClr)),
                 onTap: () {
                   Navigator.pop(context);
                   _confirmDelete(context, task, provider);
@@ -2026,7 +2026,7 @@ void _showAdvancedControls(
                     Icons.info_outline_rounded,
                     color: AppTheme.neonAmber,
                   ),
-                  title: Text('Properties', style: TextStyle(color: textClr)),
+                  title: Text(L10n.of(context, 'properties'), style: TextStyle(color: textClr)),
                   onTap: () {
                     Navigator.pop(context);
                     _showTorrentProperties(context, task, settings);
@@ -2051,15 +2051,15 @@ void _showUpdateLinkDialog(
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Update Link'),
+      title: Text(L10n.of(context, 'update_link')),
       content: TextField(
         controller: urlController,
-        decoration: const InputDecoration(hintText: 'Enter new URL'),
+        decoration: InputDecoration(hintText: L10n.of(context, 'enter_new_url')),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(L10n.of(context, 'cancel_btn')),
         ),
         ElevatedButton(
           onPressed: () async {
@@ -2069,7 +2069,7 @@ void _showUpdateLinkDialog(
               urlController.text.trim(),
             );
           },
-          child: const Text('Update'),
+          child: Text(L10n.of(context, 'update_btn')),
         ),
       ],
     ),

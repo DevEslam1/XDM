@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:logging/logging.dart';
 import '../app_theme.dart';
+import '../../features/categories/screens/category_detail_screen.dart';
 import '../../features/details/screens/details_screen.dart';
 import '../../features/downloads/models/download_task.dart';
 import '../../features/downloads/provider/download_provider.dart';
@@ -26,8 +27,12 @@ import 'widget_data_bridge.dart';
 ///   `dmx://resume/<task-id>`              → resume task
 ///   `dmx://open/<task-id>`                → open completed downloaded file
 ///   `dmx://settings`                      → open settings
+///   `dmx://settings/<section>`            → open settings section (general, network, appearance, advanced)
+///   `dmx://category/<name>`               → open category detail screen
 ///   `dmx://add?url=<encoded-http(s)-url>` → show the add-download flow
-///   `dmx://pause_all` / `dmx://resume_all` → toggle every download
+///   `dmx://share?url=<encoded-url>`       → handle shared URL
+///   `dmx://pause_all` / `dmx://pause-all`  → pause all downloads
+///   `dmx://resume_all` / `dmx://resume-all` → resume all downloads
 class WidgetDeepLinkHandler {
   static final _log = Logger('WidgetDeepLinkHandler');
 
@@ -73,24 +78,88 @@ class WidgetDeepLinkHandler {
         break;
       case 'settings':
         navigatorKey?.currentState?.push(
-          MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+          MaterialPageRoute<void>(
+            builder: (_) => SettingsScreen(initialSection: id),
+          ),
         );
         break;
+      case 'category':
+        if (id != null && id.isNotEmpty) _openCategoryDetail(id);
+        break;
       case 'add':
+      case 'share':
         final target = uri.queryParameters['url'];
         if (target != null && target.isNotEmpty) {
           _handleAddUrl(target);
         }
         break;
       case 'pause_all':
+      case 'pause-all':
         _toggleAll(pause: true);
         break;
       case 'resume_all':
+      case 'resume-all':
         _toggleAll(pause: false);
         break;
       default:
         _log.fine('Unhandled dmx:// route: ${uri.host}');
     }
+  }
+
+  static void _openCategoryDetail(String categoryName) {
+    final navigator = navigatorKey?.currentState;
+    if (navigator == null) return;
+
+    final nameLower = categoryName.trim().toLowerCase();
+    String normalizedName = 'Other';
+    IconData icon = Icons.insert_drive_file_outlined;
+    Color color = AppTheme.neonBlue;
+
+    switch (nameLower) {
+      case 'video':
+        normalizedName = 'Video';
+        icon = Icons.movie_outlined;
+        color = AppTheme.neonBlue;
+        break;
+      case 'audio':
+        normalizedName = 'Audio';
+        icon = Icons.audiotrack_outlined;
+        color = AppTheme.neonViolet;
+        break;
+      case 'document':
+      case 'documents':
+        normalizedName = 'Document';
+        icon = Icons.description_outlined;
+        color = AppTheme.neonGreen;
+        break;
+      case 'archive':
+      case 'archives':
+        normalizedName = 'Archive';
+        icon = Icons.folder_zip_outlined;
+        color = AppTheme.neonAmber;
+        break;
+      case 'apk':
+      case 'apks':
+        normalizedName = 'APK';
+        icon = Icons.android_outlined;
+        color = const Color(0xFFF15BB5);
+        break;
+      default:
+        normalizedName = categoryName;
+        icon = Icons.insert_drive_file_outlined;
+        color = AppTheme.textSecondary;
+        break;
+    }
+
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => CategoryDetailScreen(
+          categoryName: normalizedName,
+          categoryColor: color,
+          categoryIcon: icon,
+        ),
+      ),
+    );
   }
 
   static void _openTaskDetails(String taskId) {

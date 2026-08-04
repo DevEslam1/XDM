@@ -66,7 +66,12 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
 
   /// Whether the loop should run while the app is in the foreground.
   /// Override to gate on classic/battery-saver mode, `widget.active`, etc.
-  bool get loopWanted => true;
+  bool get loopWanted {
+    try {
+      if (SettingsProvider.instance.batterySaverMode) return false;
+    } catch (_) {}
+    return true;
+  }
 
   bool _foreground = true;
 
@@ -88,7 +93,11 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
   }
 
   void _sync() {
-    final shouldRun = _foreground && loopWanted;
+    bool batterySaver = false;
+    try {
+      batterySaver = SettingsProvider.instance.batterySaverMode;
+    } catch (_) {}
+    final shouldRun = _foreground && loopWanted && !batterySaver;
     if (shouldRun) {
       if (!loopController.isAnimating) loopController.repeat();
     } else {
@@ -103,3 +112,4 @@ mixin PausableLoopAnimation<T extends StatefulWidget>
     _sync();
   }
 }
+

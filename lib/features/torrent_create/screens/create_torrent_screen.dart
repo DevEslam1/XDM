@@ -236,8 +236,8 @@ class _CreateTorrentScreenState extends State<CreateTorrentScreen> {
             ),
             const SizedBox(height: 16),
             SwitchListTile(
-              title: const Text('Private Torrent'),
-              subtitle: const Text('Disables DHT and PEX peer discovery'),
+              title: Text(L10n.of(context, 'private_torrent')),
+              subtitle: Text(L10n.of(context, 'disables_dht_pex')),
               value: _isPrivate,
               onChanged: (val) => setState(() => _isPrivate = val),
             ),

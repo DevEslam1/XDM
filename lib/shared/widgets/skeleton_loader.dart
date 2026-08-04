@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../mixins/pausable_loop_animation.dart';
 
 /// // UI-4: Theme-aware shimmer loading card placeholder.
 class SkeletonCard extends StatefulWidget {
@@ -17,9 +18,13 @@ class SkeletonCard extends StatefulWidget {
 }
 
 class _SkeletonCardState extends State<SkeletonCard>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<SkeletonCard> {
+
   late AnimationController _controller;
   late Animation<double> _animation;
+
+  @override
+  AnimationController get loopController => _controller;
 
   @override
   void initState() {
@@ -27,17 +32,20 @@ class _SkeletonCardState extends State<SkeletonCard>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
+    );
     _animation = Tween<double>(begin: 0.3, end: 0.7).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
+    startPausableLoop();
   }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _controller.dispose();
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {

@@ -33,29 +33,69 @@ class L10n {
     return _cache.putIfAbsent(lang, () => _loadLocale(lang));
   }
 
-  static String translate(String lang, String key) {
-    final trans = _getTranslations(lang);
-    if (trans.containsKey(key)) return trans[key]!;
-    final fallback = _getTranslations('en')[key];
-    if (fallback != null) {
-      if (kDebugMode) {
-        debugPrint(
-            'P0-6: Missing localization key "$key" in locale "$lang", using English fallback.');
+  static String translate(
+    String lang,
+    String key, {
+    Map<String, dynamic>? args,
+  }) {
+    var targetKey = key;
+    if (args != null && args.containsKey('count')) {
+      final rawCount = args['count'];
+      final count = rawCount is int
+          ? rawCount
+          : (rawCount is num
+              ? rawCount.toInt()
+              : int.tryParse(rawCount.toString()));
+      if (count == 1 && targetKey.endsWith('_plural')) {
+        final singularKey = targetKey.substring(0, targetKey.length - 7);
+        targetKey = singularKey;
       }
-      return fallback;
     }
-    if (kDebugMode) {
-      debugPrint('P0-6: Missing localization key "$key" in all locales.');
+
+    final trans = _getTranslations(lang);
+    String? template;
+    if (trans.containsKey(targetKey)) {
+      template = trans[targetKey];
+    } else if (trans.containsKey(key)) {
+      template = trans[key];
+    } else {
+      template =
+          _getTranslations('en')[targetKey] ?? _getTranslations('en')[key];
+      if (template != null && kDebugMode) {
+        debugPrint(
+            'P0-6: Missing localization key "$targetKey" in locale "$lang", using English fallback.');
+      }
     }
-    return key;
+
+    if (template == null) {
+      if (kDebugMode) {
+        debugPrint('P0-6: Missing localization key "$key" in all locales.');
+      }
+      return key;
+    }
+
+    if (args != null && args.isNotEmpty) {
+      var result = template;
+      args.forEach((argKey, value) {
+        result = result.replaceAll('{$argKey}', value.toString());
+      });
+      return result;
+    }
+
+    return template;
   }
 
-  static String of(BuildContext context, String key, {bool listen = false}) {
+  static String of(
+    BuildContext context,
+    String key, {
+    bool listen = false,
+    Map<String, dynamic>? args,
+  }) {
     final lang = Provider.of<SettingsProvider>(
       context,
       listen: listen,
     ).languageCode;
-    return translate(lang, key);
+    return translate(lang, key, args: args);
   }
 
   static bool isRtl(BuildContext context, {bool listen = false}) {

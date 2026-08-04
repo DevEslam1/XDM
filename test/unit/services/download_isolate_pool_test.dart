@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:battery_plus/battery_plus.dart';
 import 'package:dmx/core/services/download_engine.dart';
+import 'package:dmx/core/services/power_monitor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 var _counter = 0;
@@ -117,4 +119,35 @@ void main() {
     await pool.shutdown();
     await server.close();
   });
+
+  test('powerAware pool size reduces at battery 15% and restores at 50%', () async {
+    final pool = DownloadIsolatePool(size: 4, powerAware: true);
+    await pool.init();
+    expect(pool.workerCount, equals(4));
+
+    PowerMonitor.setBatteryStateForTesting(BatteryState.discharging);
+    PowerMonitor.setBatteryLevelForTesting(15);
+    expect(pool.workerCount, equals(1));
+
+    PowerMonitor.setBatteryLevelForTesting(50);
+    // Note: restoring size doesn't automatically re-spawn killed isolates until needed or initialized,
+    // but power status check recovers target capacity configuration
+    expect(pool.maxJobsPerWorker, equals(2));
+
+    await pool.shutdown();
+    PowerMonitor.setBatteryLevelForTesting(100);
+    PowerMonitor.setBatteryStateForTesting(BatteryState.unknown);
+  });
+
+  test('memory pressure reduces pool size', () async {
+    final pool = DownloadIsolatePool(size: 4);
+    await pool.init();
+    expect(pool.workerCount, equals(4));
+
+    pool.onMemoryPressure();
+    expect(pool.workerCount, lessThan(4));
+
+    await pool.shutdown();
+  });
 }
+

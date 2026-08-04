@@ -914,7 +914,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-        title: const Text('Block element'),
+        title: Text(L10n.of(context, 'block_element')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -940,7 +940,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CANCEL'),
+            child: Text(L10n.of(context, 'cancel_btn_uppercase')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -953,7 +953,7 @@ class _BrowserScreenState extends State<BrowserScreen>
               if (mounted) {
                 ThemedSnackbar.show(
                   context,
-                  message: 'Element blocked: $selector',
+                  message: L10n.of(context, 'element_blocked', args: {'selector': selector}),
                   color: accent,
                   icon: Icons.block,
                   isDarkMode: settings.isDarkMode,
@@ -963,7 +963,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                 }
               }
             },
-            child: const Text('BLOCK'),
+            child: Text(L10n.of(context, 'block_btn')),
           ),
         ],
       ),
@@ -2438,9 +2438,9 @@ class _BrowserScreenState extends State<BrowserScreen>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return AlertDialog(
           backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          title: const Text('Tab Limit Reached (10 Max)'),
-          content: const Text(
-            'You have reached the limit of 10 tabs. Would you like to close inactive tabs to open a new one?',
+          title: Text(L10n.of(context, 'tab_limit_reached')),
+          content: Text(
+            L10n.of(context, 'browser_max_tabs'),
           ),
           actions: [
             TextButton(
@@ -2473,7 +2473,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                   Navigator.pop(switcherContext);
                 }
               },
-              child: const Text('Close Oldest Inactive'),
+              child: Text(L10n.of(context, 'close_oldest_inactive')),
             ),
             TextButton(
               onPressed: () {
@@ -2500,11 +2500,11 @@ class _BrowserScreenState extends State<BrowserScreen>
                 });
                 Navigator.pop(switcherContext);
               },
-              child: const Text('Close All Other Tabs'),
+              child: Text(L10n.of(context, 'close_all_other_tabs')),
             ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+              child: Text(L10n.of(context, 'cancel_btn')),
             ),
           ],
         );
@@ -4750,10 +4750,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                                 false;
                                                                           });
                                                                         },
-                                                                        child: const Padding(
+                                                                        child: Padding(
                                                                             padding:
-                                                                                EdgeInsets.symmetric(horizontal: 6),
-                                                                            child: Text('Stop', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                                                                const EdgeInsets.symmetric(horizontal: 6),
+                                                                            child: Text(L10n.of(context, 'stop_loading'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
                                                                       ),
                                                                       GestureDetector(
                                                                         onTap:
@@ -4766,10 +4766,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           tab.controller
                                                                               ?.reload();
                                                                         },
-                                                                        child: const Padding(
+                                                                        child: Padding(
                                                                             padding:
-                                                                                EdgeInsets.symmetric(horizontal: 6),
-                                                                            child: Text('Reload', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
+                                                                                const EdgeInsets.symmetric(horizontal: 6),
+                                                                            child: Text(L10n.of(context, 'reload_page'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
                                                                       ),
                                                                     ],
                                                                   ),
@@ -6054,7 +6054,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
         children: [
           Icon(Icons.code_rounded, color: accent, size: 20),
           const SizedBox(width: 10),
-          Text('JS / CSS INJECTOR',
+          Text(L10n.of(context, 'browser_js_css_injector'),
               style: TextStyle(
                   color: accent,
                   fontSize: 14,
@@ -6085,9 +6085,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      L10n.isRtl(context)
-                          ? 'تنبيه: هذا الكود ينفذ على صفحات الويب. لا تدخل بيانات حساسة.'
-                          : 'WARNING: Code runs on web pages. Do not enter sensitive data.',
+                      L10n.of(context, 'browser_js_css_warning'),
                       style: TextStyle(
                           color:
                               isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
@@ -6125,7 +6123,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL')),
+            child: Text(L10n.of(context, 'cancel_btn_uppercase'))),
         FilledButton(
           style: FilledButton.styleFrom(
               backgroundColor: accent, foregroundColor: Colors.black),
@@ -6133,7 +6131,7 @@ class _JsCssInjectorDialogState extends State<_JsCssInjectorDialog> {
             widget.onSave(_jsController.text, _cssController.text);
             Navigator.pop(context);
           },
-          child: const Text('APPLY'),
+          child: Text(L10n.of(context, 'browser_apply_uppercase')),
         ),
       ],
     );

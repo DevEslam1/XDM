@@ -25,8 +25,10 @@ import '../../../shared/widgets/neon_glow_button.dart';
 import '../widgets/media_quality_sheet.dart';
 import '../widgets/youtube_playlist_sheet.dart';
 import 'package:logging/logging.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 
 class AddDownloadDialog extends StatefulWidget {
+
   final String? prefilledUrl;
   final String? prefilledName;
   final String? downloadPageUrl;
@@ -61,7 +63,7 @@ class AddDownloadDialog extends StatefulWidget {
 }
 
 class _AddDownloadDialogState extends State<AddDownloadDialog>
-    with HapticHelper, TickerProviderStateMixin {
+    with HapticHelper, TickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<AddDownloadDialog> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _referrerController = TextEditingController();
@@ -97,6 +99,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
   late final AnimationController _scanController;
 
+  @override
+  AnimationController get loopController => _scanController;
+
   final List<String> _categories = [
     'Auto',
     'Video',
@@ -114,7 +119,9 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _scanController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
-    )..repeat();
+    );
+    startPausableLoop();
+
 
     final settings = context.read<SettingsProvider>();
     if (_threadsList.contains(settings.defaultThreadCount)) {
@@ -221,9 +228,11 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
     _extController.dispose();
     _pathController.dispose();
     _urlFocus.dispose();
+    stopPausableLoop();
     _scanController.dispose();
     super.dispose();
   }
+
 
   Future<void> _pasteFromClipboard() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);

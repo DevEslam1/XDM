@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import 'logging_service.dart';
 import 'youtube_service.dart';
+import '../utils/url_utils.dart';
 import '../../features/add_download/widgets/add_download_dialog.dart';
 import '../../features/add_download/widgets/media_quality_sheet.dart';
 import '../../features/add_download/widgets/youtube_playlist_sheet.dart';
@@ -9,6 +11,8 @@ import '../../features/downloads/provider/download_provider.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import '../../shared/widgets/themed_snackbar.dart';
 import '../utils/localization.dart';
+
+final _log = LoggingService.logger('ShareUrlHandler');
 
 class ShareUrlHandler {
   static Future<void> handle(
@@ -20,16 +24,15 @@ class ShareUrlHandler {
     final trimmedUrl = url.trim();
     final uri = Uri.tryParse(trimmedUrl);
     final scheme = uri?.scheme.toLowerCase() ?? '';
-    if (uri == null ||
-        (scheme != 'http' &&
-            scheme != 'https' &&
-            scheme != 'magnet' &&
-            scheme != 'file')) {
+    final allowedSchemes = {'http', 'https', 'magnet', 'file'};
+    if (uri == null || !allowedSchemes.contains(scheme)) {
+      _log.warning('[ShareUrlHandler] Rejected URL with unsupported scheme "$scheme": $trimmedUrl');
       debugPrint('[ShareUrlHandler] Rejected URL with scheme: ${uri?.scheme}');
       return;
     }
     // Reject file:// URLs from share intent for security
     if (uri.isScheme('file') && isShareLaunch) {
+      _log.warning('[ShareUrlHandler] Rejected file:// URL from share intent: $trimmedUrl');
       debugPrint('[ShareUrlHandler] Rejected file:// URL from share intent');
       return;
     }
@@ -111,10 +114,21 @@ class ShareUrlHandler {
         }
       }
     } else {
+      String? requestedFileName;
+      if (isMagnetUrl(trimmedUrl)) {
+        final parsed = parseMagnetUrl(trimmedUrl);
+        final dn = parsed['name'];
+        if (dn != null && dn.isNotEmpty) {
+          requestedFileName = dn;
+        }
+      }
       await showDialog(
         context: context,
-        builder: (_) =>
-            AddDownloadDialog(prefilledUrl: url, isShareLaunch: isShareLaunch),
+        builder: (_) => AddDownloadDialog(
+          prefilledUrl: url,
+          prefilledName: requestedFileName,
+          isShareLaunch: isShareLaunch,
+        ),
       );
     }
   }

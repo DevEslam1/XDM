@@ -131,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   left: 16.0,
                                   right: 16.0,
                                   top: 4.0,
-                                  bottom: 14.0,
+                                  bottom: 20.0,
                                 ),
                                 child: Selector<DownloadProvider,
                                     Map<String, double>>(
@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   left: 16.0,
                                   right: 16.0,
                                   top: 4.0,
-                                  bottom: 14.0,
+                                  bottom: 20.0,
                                 ),
                                 child: DownloadStatsPanel(),
                               )
@@ -232,16 +232,20 @@ class _HomeScreenState extends State<HomeScreen>
         icon: Icon(Icons.close_rounded, color: textClr),
         onPressed: () => provider.clearTaskSelection(),
       ),
-      title: Text('$count selected',
-          style: TextStyle(color: textClr, fontWeight: FontWeight.w600)),
+      title: Text(
+        L10n.of(context, 'selected_count', args: {'count': count}),
+        style: TextStyle(color: textClr, fontWeight: FontWeight.w600),
+      ),
       actions: [
         TextButton(
           onPressed: () => provider.selectAllTasks(),
-          child: Text('Select All', style: TextStyle(color: accentClr)),
+          child: Text(L10n.of(context, 'select_all_btn'),
+              style: TextStyle(color: accentClr)),
         ),
         TextButton(
           onPressed: () => provider.clearTaskSelection(),
-          child: Text('Deselect', style: TextStyle(color: textClr)),
+          child: Text(L10n.of(context, 'deselect_btn'),
+              style: TextStyle(color: textClr)),
         ),
         const SizedBox(width: 8),
       ],
@@ -255,8 +259,8 @@ class _HomeScreenState extends State<HomeScreen>
     final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
 
     return Container(
-      padding: EdgeInsets.only(
-          bottom: safeAreaBottom + 8, top: 12, left: 16, right: 16),
+      padding: EdgeInsetsDirectional.only(
+          bottom: safeAreaBottom + 8, top: 12, start: 16, end: 16),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.surface : AppTheme.lightSurface,
         border: Border(
@@ -276,28 +280,28 @@ class _HomeScreenState extends State<HomeScreen>
         children: [
           _BatchActionButton(
             icon: Icons.pause_rounded,
-            label: 'Pause',
+            label: L10n.of(context, 'pause_btn'),
             color: textClr,
             onTap: () => BatchOperationsSheet.show(context,
                 selectedTaskIds: selectedIds.toList()),
           ),
           _BatchActionButton(
             icon: Icons.play_arrow_rounded,
-            label: 'Resume',
+            label: L10n.of(context, 'resume_btn'),
             color: textClr,
             onTap: () => BatchOperationsSheet.show(context,
                 selectedTaskIds: selectedIds.toList()),
           ),
           _BatchActionButton(
             icon: Icons.delete_rounded,
-            label: 'Delete',
+            label: L10n.of(context, 'delete_btn'),
             color: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
             onTap: () => BatchOperationsSheet.show(context,
                 selectedTaskIds: selectedIds.toList()),
           ),
           _BatchActionButton(
             icon: Icons.folder_rounded,
-            label: 'Move',
+            label: L10n.of(context, 'change_category'),
             color: accentClr,
             onTap: () => BatchOperationsSheet.show(context,
                 selectedTaskIds: selectedIds.toList()),
@@ -1555,7 +1559,7 @@ class _DownloadTaskList extends StatelessWidget {
                   children: [
                     if (isReorderable && !item.isPlaylist)
                       Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
+                        padding: const EdgeInsetsDirectional.only(end: 8.0),
                         child: Icon(Icons.drag_handle_rounded,
                             size: 16,
                             color: isDark
@@ -1564,7 +1568,7 @@ class _DownloadTaskList extends StatelessWidget {
                       ),
                     if (isInSelectionMode && !item.isPlaylist)
                       Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
+                        padding: const EdgeInsetsDirectional.only(end: 8.0),
                         child: Checkbox(
                           value: isSelected,
                           onChanged: (val) =>
@@ -1640,7 +1644,7 @@ class _DownloadTaskList extends StatelessWidget {
                     children: [
                       if (isInSelectionMode)
                         Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
+                          padding: const EdgeInsetsDirectional.only(end: 8.0),
                           child: Checkbox(
                             value: isSelected,
                             onChanged: (val) =>

@@ -12,31 +12,33 @@ class SingleInstanceService {
   factory SingleInstanceService() => _instance;
   SingleInstanceService._internal();
 
+  @visibleForTesting
+  factory SingleInstanceService.createForTest({File? customTokenFile}) {
+    final service = SingleInstanceService._internal();
+    service._overrideTokenFile = customTokenFile;
+    return service;
+  }
+
+  File? _overrideTokenFile;
   static final _log = LoggingService.logger('SingleInstanceService');
 
   static const int _port = 37128;
   HttpServer? _server;
   StreamSubscription<HttpRequest>? _serverSubscription;
+  Timer? _heartbeatTimer;
   void Function(String url)? _onUrlListener;
   String? _initialUrl;
   String? _securityToken;
 
   String? get initialUrl => _initialUrl;
 
-  /// Pure token file path — NO side effects (FIX(25)). Directory creation and
-  /// permissions are handled by [_ensureTokenDirectory].
-  ///
-  /// On Linux/macOS: `~/.config/xdm/xdm_instance_<port>.token` with dir 0700.
-  /// On Windows: `%APPDATA%/xdm/xdm_instance_<port>.token` (user-ACL protected).
-  ///
-  /// NEVER falls back to world-readable system temp ([Directory.systemTemp]).
-  static File get _tokenFile {
+  File get _tokenFile {
+    if (_overrideTokenFile != null) return _overrideTokenFile!;
     if (Platform.isLinux || Platform.isMacOS) {
       final userHome = Platform.environment['HOME'];
       if (userHome != null && userHome.isNotEmpty) {
         return File('$userHome/.config/xdm/xdm_instance_$_port.token');
       }
-      // Fail closed if HOME is unset.
       return File('/nonexistent/xdm_instance_$_port.token');
     } else if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'] ??
@@ -44,38 +46,23 @@ class SingleInstanceService {
       if (appData != null && appData.isNotEmpty) {
         return File('$appData\\xdm\\xdm_instance_$_port.token');
       }
-      // Fail closed on Windows too.
       return File('C:\\nonexistent\\xdm_instance_$_port.token');
     }
-    // Web or unknown platform — no-op
     return File('/nonexistent/xdm_instance_$_port.token');
   }
 
-  /// FIX(25): creates the secure token directory (and sets 0700 on Unix) as an
-  /// explicit step, instead of doing I/O inside the `_tokenFile` getter.
-  /// Best-effort: failures are logged; [dispose] and callers still guard
-  /// against a missing file.
   Future<void> _ensureTokenDirectory() async {
     try {
-      if (Platform.isLinux || Platform.isMacOS) {
-        final userHome = Platform.environment['HOME'];
-        if (userHome == null || userHome.isEmpty) return;
-        final configDir = Directory('$userHome/.config/xdm');
-        if (!configDir.existsSync()) {
-          configDir.createSync(recursive: true);
-        }
+      final file = _tokenFile;
+      final parentDir = file.parent;
+      if (!parentDir.existsSync()) {
+        parentDir.createSync(recursive: true);
+      }
+      if ((Platform.isLinux || Platform.isMacOS) && _overrideTokenFile == null) {
         try {
-          await Process.run('chmod', ['700', configDir.path]);
+          await Process.run('chmod', ['700', parentDir.path]);
         } catch (e) {
           _log.info('[SingleInstanceService] chmod on token dir skipped: $e');
-        }
-      } else if (Platform.isWindows) {
-        final appData = Platform.environment['APPDATA'] ??
-            Platform.environment['LOCALAPPDATA'];
-        if (appData == null || appData.isEmpty) return;
-        final configDir = Directory('$appData\\xdm');
-        if (!configDir.existsSync()) {
-          configDir.createSync(recursive: true);
         }
       }
     } catch (e) {
@@ -83,9 +70,6 @@ class SingleInstanceService {
     }
   }
 
-  /// Timing-safe string comparison to prevent timing side-channel attacks.
-  /// Pads both inputs to [_maxTokenLength] so that length mismatches do not
-  /// short-circuit and leak the token length.
   static const int _maxTokenLength = 256;
 
   static bool _timingSafeEqual(String a, String b) {
@@ -115,25 +99,23 @@ class SingleInstanceService {
     }
 
     _securityToken = _generateSecurityToken();
-
-    // FIX(25): prepare the token directory up-front (getter is side-effect free).
     await _ensureTokenDirectory();
 
-    // FIX(9/10): detect a live primary up-front using the token file (which
-    // now records the actual bound port) + a TCP heartbeat. With port-0
-    // binding we can no longer rely on a bind conflict to discover the
-    // primary, so we probe before binding.
     final primaryInfo = await _readTokenFile();
-    if (primaryInfo != null && await _isPrimaryAlive(primaryInfo.$2)) {
-      // Primary is alive: forward the launch URL (if any), then this
-      // secondary instance exits.
-      if (candidateUrl != null && candidateUrl.isNotEmpty) {
-        await _forwardTo(primaryInfo.$1, primaryInfo.$2, candidateUrl);
+    if (primaryInfo != null) {
+      final (token, port, timestamp) = primaryInfo;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final isHeartbeatStale = timestamp > 0 && (nowMs - timestamp > 90000);
+
+      if (!isHeartbeatStale && await _isPrimaryAlive(port)) {
+        if (candidateUrl != null && candidateUrl.isNotEmpty) {
+          await _forwardTo(token, port, candidateUrl);
+        }
+        return false;
       }
-      return false;
     }
 
-    // No live primary — clean the stale token file, then become the primary.
+    // No live primary or heartbeat stale — clean stale token file, become primary.
     try {
       if (await _tokenFile.exists()) await _tokenFile.delete();
     } catch (e) {
@@ -144,49 +126,36 @@ class SingleInstanceService {
       await _startServer(candidateUrl);
       return true;
     } catch (e) {
-      _log.warning('Init error', e);
+      _log.warning('Init error, treating as primary', e);
       _initialUrl = candidateUrl;
       return true;
     }
   }
 
   Future<void> _startServer(String? candidateUrl) async {
-    // FIX(9): bind to port 0 so the OS assigns an ephemeral, guaranteed-free
-    // port. The fixed default port could be stolen by another process,
-    // breaking the "single instance" guarantee. The actual bound port is
-    // recorded in the token file so secondary instances can reach us.
     await _ensureTokenDirectory();
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final actualPort = _server!.port;
-    _initialUrl = candidateUrl;
 
-    // Token file format: "<token>\n<port>". Port is on its own line so a
-    // secondary instance can find us without assuming a fixed port.
-    final tokenContents = '$_securityToken\n$actualPort';
-
-    final tokenF = _tokenFile;
-    if (!Platform.isWindows) {
-      final tempTokenF = File('${tokenF.path}.tmp');
+    // Bind with a 3-second startup timeout (B1)
+    try {
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port)
+          .timeout(const Duration(seconds: 3));
+    } catch (e) {
+      _log.warning(
+        'Bind to fixed port $_port failed/timed out, attempting port 0: $e',
+      );
       try {
-        await tempTokenF.writeAsString(tokenContents);
-        await Process.run('chmod', ['600', tempTokenF.path]);
-        await tempTokenF.rename(tokenF.path);
-      } catch (e) {
-        _log.warning(
-          'Atomic token write failed, falling back to direct write',
-          e,
-        );
-        await tokenF.writeAsString(tokenContents);
-        try {
-          await Process.run('chmod', ['600', tokenF.path]);
-        } catch (e) {
-          _log.info('[SingleInstanceService] chmod on token file skipped: $e');
-        }
+        _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0)
+            .timeout(const Duration(seconds: 3));
+      } catch (e2) {
+        _log.severe('Failed to bind server within timeout: $e2');
+        _initialUrl = candidateUrl;
+        return;
       }
-    } else {
-      // AppData directory is already restricted to the user by default ACLs on Windows
-      await tokenF.writeAsString(tokenContents);
     }
+
+    _initialUrl = candidateUrl;
+    await _writeTokenFileWithLock();
+    _startHeartbeatTimer();
 
     _serverSubscription = _server?.listen((HttpRequest request) async {
       try {
@@ -217,7 +186,78 @@ class SingleInstanceService {
     });
   }
 
-  /// TCP heartbeat: does something accept connections on [port]?
+  void _startHeartbeatTimer() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      await _writeTokenFileWithLock();
+    });
+  }
+
+  Future<void> _writeTokenFileWithLock() async {
+    if (_securityToken == null) return;
+    try {
+      await _ensureTokenDirectory();
+      final file = _tokenFile;
+      final contents =
+          '$_securityToken\n${_server?.port ?? _port}\n${DateTime.now().millisecondsSinceEpoch}';
+
+      final raf = await file.open(mode: FileMode.write);
+      try {
+        await raf.lock(FileLock.exclusive);
+        await raf.writeString(contents);
+        await raf.flush();
+      } finally {
+        await raf.unlock();
+        await raf.close();
+      }
+    } catch (e) {
+      _log.warning('Atomic write with lock failed: $e');
+    }
+  }
+
+  Future<(String, int, int)?> _readTokenFile() async {
+    try {
+      final file = _tokenFile;
+      if (!await file.exists()) return null;
+
+      String contents = '';
+      final raf = await file.open(mode: FileMode.read);
+      try {
+        await raf.lock(FileLock.shared);
+        final length = await raf.length();
+        final bytes = await raf.read(length);
+        contents = utf8.decode(bytes).trim();
+      } finally {
+        await raf.unlock();
+        await raf.close();
+      }
+
+      if (contents.isEmpty) return null;
+      final lines = contents.split('\n');
+      final token = lines.first.trim();
+      if (token.isEmpty) return null;
+
+      int port = _port;
+      if (lines.length >= 2) {
+        final parsed = int.tryParse(lines[1].trim());
+        if (parsed != null && parsed > 0) port = parsed;
+      }
+
+      int timestamp = 0;
+      if (lines.length >= 3) {
+        final parsedTs = int.tryParse(lines[2].trim());
+        if (parsedTs != null) timestamp = parsedTs;
+      }
+
+      return (token, port, timestamp);
+    } catch (e) {
+      _log.info(
+        '[SingleInstanceService] reading token file failed: $e',
+      );
+      return null;
+    }
+  }
+
   Future<bool> _isPrimaryAlive(int port) async {
     try {
       final socket = await Socket.connect(
@@ -233,32 +273,6 @@ class SingleInstanceService {
     }
   }
 
-  /// Reads (token, port) from the token file. Handles both the current
-  /// `"<token>\n<port>"` format and legacy single-line files (which default to
-  /// the fixed [_port]).
-  Future<(String, int)?> _readTokenFile() async {
-    try {
-      if (!await _tokenFile.exists()) return null;
-      final contents = (await _tokenFile.readAsString()).trim();
-      if (contents.isEmpty) return null;
-      final lines = contents.split('\n');
-      final token = lines.first.trim();
-      if (token.isEmpty) return null;
-      int port = _port;
-      if (lines.length >= 2) {
-        final parsed = int.tryParse(lines[1].trim());
-        if (parsed != null && parsed > 0) port = parsed;
-      }
-      return (token, port);
-    } catch (e) {
-      _log.info(
-        '[SingleInstanceService] reading token file failed, returning null: $e',
-      );
-      return null;
-    }
-  }
-
-  /// Forwards [candidateUrl] to the primary instance on [port] using [token].
   Future<bool> _forwardTo(String token, int port, String candidateUrl) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 3);
@@ -288,6 +302,8 @@ class SingleInstanceService {
   }
 
   void dispose() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     _serverSubscription?.cancel();
     _serverSubscription = null;
     _server?.close(force: true);

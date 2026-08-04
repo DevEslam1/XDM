@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/services/share_url_handler.dart';
@@ -11,9 +12,21 @@ class ShareLaunchScreen extends StatefulWidget {
 }
 
 class _ShareLaunchScreenState extends State<ShareLaunchScreen> {
+  Timer? _timeoutTimer;
+
   @override
   void initState() {
     super.initState();
+
+    _timeoutTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted) {
+        debugPrint(
+          '[ShareLaunchScreen] Share screen timed out after 10 seconds, dismissing automatically.',
+        );
+        SystemNavigator.pop();
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       try {
@@ -21,12 +34,19 @@ class _ShareLaunchScreenState extends State<ShareLaunchScreen> {
       } catch (e) {
         debugPrint('[ShareLaunchScreen] Error handling share URL: $e');
       } finally {
+        _timeoutTimer?.cancel();
         if (mounted) {
           await Future.delayed(const Duration(milliseconds: 200));
           SystemNavigator.pop();
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _timeoutTimer?.cancel();
+    super.dispose();
   }
 
   @override

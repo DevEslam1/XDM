@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'dart:math';
 
 import 'package:synchronized/synchronized.dart';
@@ -21,9 +22,27 @@ class BandwidthGovernor {
   DateTime _lastRefill = DateTime.now();
 
   final Lock _lock = Lock();
+  VoidCallback? _powerListener;
 
   BandwidthGovernor([this._globalBytesPerSecond = 0, double burstFactor = 1.0])
-      : _burstFactor = burstFactor.clamp(1.0, 4.0);
+      : _burstFactor = burstFactor.clamp(1.0, 4.0) {
+    _powerListener = () {
+      _lock.synchronized(() {
+        _refill();
+      });
+    };
+    PowerMonitor.throttleFactorNotifier.addListener(_powerListener!);
+  }
+
+  void dispose() {
+    if (_powerListener != null) {
+      PowerMonitor.throttleFactorNotifier.removeListener(_powerListener!);
+      _powerListener = null;
+    }
+  }
+
+  /// True when power monitoring is active and throttling bandwidth.
+  bool get powerThrottleActive => PowerMonitor.throttleFactor < 1.0;
 
   int get globalBytesPerSecond => _globalBytesPerSecond;
 

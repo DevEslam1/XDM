@@ -13,14 +13,15 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:synchronized/synchronized.dart';
 
-import 'bandwidth_governor.dart';
-import 'connection_manager.dart';
-import 'download_journal.dart';
-import 'mirror_failover.dart';
-import 'positional_file_writer.dart';
-import 'retry_interceptor.dart';
-import 'torrent_service.dart';
-import 'torrent_resume_store.dart';
+import 'package:dmx/core/services/bandwidth_governor.dart';
+import 'package:dmx/core/services/connection_manager.dart';
+import 'package:dmx/core/services/download_journal.dart';
+import 'package:dmx/core/services/mirror_failover.dart';
+import 'package:dmx/core/services/positional_file_writer.dart';
+import 'package:dmx/core/services/power_monitor.dart';
+import 'package:dmx/core/services/retry_interceptor.dart';
+import 'package:dmx/core/services/torrent_service.dart';
+import 'package:dmx/core/services/torrent_resume_store.dart';
 import '../../features/settings/provider/settings_provider.dart';
 import 'engines/http_download_engine.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
@@ -104,6 +105,10 @@ class DownloadEngine {
   static const int _progressReportIntervalMs = 500;
   static const int _stateSaveIntervalMs = 2000;
   static const int _isolatePoolSize = 4;
+
+  int get effectiveProgressReportIntervalMs =>
+      PowerMonitor.throttleFactor < 1.0 ? 1000 : _progressReportIntervalMs;
+
 
   final List<CancelToken> _activeCancelTokens = [];
 
@@ -870,7 +875,10 @@ class DownloadEngine {
     _activeCancelTokens.add(cancelToken);
 
     // If threadCount > 0, override the task's threadCount
-    final int effectiveThreadCount = threadCount > 0 ? threadCount : 1;
+    final int defaultCount = SettingsProvider.instance.effectiveDefaultThreadCount;
+    final int effectiveThreadCount = (threadCount > 0 ? threadCount : defaultCount)
+        .clamp(1, PowerMonitor.maxAllowedThreads);
+
 
     int resolvedFileSize = knownFileSize;
     bool resolvedSupportsResume = supportsResume;
@@ -1869,8 +1877,10 @@ class DownloadEngine {
         resolvedFileSize,
         cancelToken: cancelToken,
       );
+      threadCount = threadCount.clamp(1, PowerMonitor.maxAllowedThreads);
 
       debugPrint('[DownloadEngine] Final thread count: $threadCount');
+
 
       String? savedEtag;
       String? savedLastModified;
@@ -2190,7 +2200,8 @@ class DownloadEngine {
           final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
 
           final shouldReport = isCompleted ||
-              nowMs - lastReportTime >= _progressReportIntervalMs;
+              nowMs - lastReportTime >= effectiveProgressReportIntervalMs;
+
 
           final shouldSave =
               isCompleted || nowMs - lastStateSaveTime >= _stateSaveIntervalMs;
@@ -2979,8 +2990,9 @@ class DownloadEngine {
 
         final isCompleted = totalSize > 0 && downloadedTotal >= totalSize;
 
-        if (nowMs - lastReportTime >= _progressReportIntervalMs ||
+        if (nowMs - lastReportTime >= effectiveProgressReportIntervalMs ||
             isCompleted) {
+
           lastReportTime = nowMs;
 
           Future.microtask(() {

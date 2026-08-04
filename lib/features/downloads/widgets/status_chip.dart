@@ -36,7 +36,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(StatusChip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_shouldPulse(widget.task)) {
+    if (_shouldPulse(widget.task) && !SettingsProvider.instance.batterySaverMode) {
       _startPulse();
     } else {
       _stopPulse();
@@ -44,6 +44,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
   }
 
   void _startPulse() {
+    if (SettingsProvider.instance.batterySaverMode) return;
     if (_controller == null) {
       _controller = AnimationController(
         vsync: this,
@@ -58,6 +59,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
       _controller!.repeat(reverse: true);
     }
   }
+
 
   void _stopPulse() {
     _controller?.dispose();

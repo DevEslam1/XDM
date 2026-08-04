@@ -325,7 +325,7 @@ class _SnackbarBodyState extends State<_SnackbarBody>
                     ),
                   // Dismiss
                   Padding(
-                    padding: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsetsDirectional.only(end: 6),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: widget.onClose,

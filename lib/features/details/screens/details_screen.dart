@@ -19,6 +19,7 @@ import '../../settings/provider/settings_provider.dart';
 import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import 'package:dmx/core/services/logging_service.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 
 class DetailsScreen extends StatefulWidget {
   final String taskId;
@@ -28,10 +29,13 @@ class DetailsScreen extends StatefulWidget {
 }
 
 class _DetailsScreenState extends State<DetailsScreen>
-    with HapticHelper, TickerProviderStateMixin {
+    with HapticHelper, TickerProviderStateMixin, WidgetsBindingObserver, PausableLoopAnimation<DetailsScreen> {
   late AnimationController _reveal;
   late AnimationController _pulse;
   final bool _graphExpanded = true;
+
+  @override
+  AnimationController get loopController => _pulse;
 
   @override
   void initState() {
@@ -41,15 +45,18 @@ class _DetailsScreenState extends State<DetailsScreen>
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
+    );
+    startPausableLoop();
   }
 
   @override
   void dispose() {
+    stopPausableLoop();
     _reveal.dispose();
     _pulse.dispose();
     super.dispose();
   }
+
 
   Widget _stagger(double start, Widget child) {
     return FadeTransition(

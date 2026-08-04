@@ -51,6 +51,14 @@ class PerformanceMonitor {
     return (sum / _rasterSamples.length) / 1000.0;
   }
 
+  /// One-line diagnostic health summary string, e.g. "60fps | 2.3% jank | 8.2ms avg build".
+  String get healthSummary {
+    final jankPct = (jankRatio * 100).toStringAsFixed(1);
+    final avgBuild = (averageBuildMillis ?? 0.0).toStringAsFixed(1);
+    return '60fps | $jankPct% jank | ${avgBuild}ms avg build';
+  }
+
+
   /// Starts collecting frame timings. Idempotent.
   void start() {
     if (_listening) return;

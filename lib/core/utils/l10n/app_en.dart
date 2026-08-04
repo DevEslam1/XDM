@@ -10,11 +10,9 @@ const Map<String, String> enTranslations = {
   'settings_auto_resume': 'Auto-resume Downloads',
   'settings_auto_resume_sub': 'Resume unfinished downloads on app launch',
   'settings_adaptive_threads': 'Adaptive Thread Count',
-  'settings_adaptive_threads_sub':
-      'Automatically adjust thread count based on download speed trends',
+  'settings_adaptive_threads_sub': 'Automatically adjust thread count based on download speed trends',
   'settings_auto_verify_checksum': 'Auto-verify file integrity',
-  'settings_auto_verify_checksum_sub':
-      'Compute SHA-256 hash after each download completes',
+  'settings_auto_verify_checksum_sub': 'Compute SHA-256 hash after each download completes',
   'settings_max_channels': 'Max Concurrent Downloads',
   'settings_max_channels_sub': 'Limit active parallel downloads',
   'settings_bandwidth': 'Network & Speed Limits',
@@ -38,12 +36,10 @@ const Map<String, String> enTranslations = {
   'settings_lang': 'Language',
   'settings_lang_sub': 'Select app display language',
   'settings_default_threads': 'Default Connection Threads',
-  'settings_default_threads_sub':
-      'Number of parallel connection threads for new downloads',
+  'settings_default_threads_sub': 'Number of parallel connection threads for new downloads',
   'settings_about': 'About XDM',
   'settings_firmware': 'Version',
-  'settings_about_desc':
-      'High-performance multi-threaded download manager and web browser.',
+  'settings_about_desc': 'High-performance multi-threaded download manager and web browser.',
   'add_download': 'Add new download',
   'add_download_url': 'Download url / link',
   'add_download_name': 'File name (optional)',
@@ -74,8 +70,7 @@ const Map<String, String> enTranslations = {
   'clipboard_ignore': 'Ignore',
   'clipboard_establish': 'Download',
   'onboarding_title_0': 'Make it yours',
-  'onboarding_sub_0':
-      'Pick your language, theme, and interface style. You can change these anytime in Settings.',
+  'onboarding_sub_0': 'Pick your language, theme, and interface style. You can change these anytime in Settings.',
   'onboarding_setup_language': 'LANGUAGE',
   'onboarding_setup_theme': 'THEME',
   'onboarding_setup_mode': 'INTERFACE',
@@ -85,23 +80,18 @@ const Map<String, String> enTranslations = {
   'onboarding_mode_modern': 'Modern',
   'onboarding_mode_classic': 'Classic',
   'onboarding_title_1': 'Speed engine',
-  'onboarding_sub_1':
-      'Multi-threaded downloads with smart resume for maximum speed.',
+  'onboarding_sub_1': 'Multi-threaded downloads with smart resume for maximum speed.',
   'onboarding_title_2': 'Any site',
-  'onboarding_sub_2':
-      'Download from YouTube, Facebook, Twitter, TikTok, Instagram, and hundreds more.',
+  'onboarding_sub_2': 'Download from YouTube, Facebook, Twitter, TikTok, Instagram, and hundreds more.',
   'onboarding_title_3': 'Torrent ready',
-  'onboarding_sub_3':
-      'Full torrent support with DHT, encryption, per-file selection, and seeding.',
+  'onboarding_sub_3': 'Full torrent support with DHT, encryption, per-file selection, and seeding.',
   'onboarding_title_4': 'Smart control',
-  'onboarding_sub_4':
-      'Auto-categorization, scheduling, Wi-Fi guard, and dark/light themes.',
+  'onboarding_sub_4': 'Auto-categorization, scheduling, Wi-Fi guard, and dark/light themes.',
   'onboarding_start': 'Get started',
   'onboarding_next': 'Next',
   'onboarding_skip': 'Skip',
   'permission_title': 'App Permissions',
-  'permission_subtitle':
-      'Allow the following permissions for the best experience',
+  'permission_subtitle': 'Allow the following permissions for the best experience',
   'permission_storage_title': 'Storage',
   'permission_storage_desc': 'Save downloaded files to your device',
   'permission_notifications_title': 'Notifications',
@@ -112,14 +102,12 @@ const Map<String, String> enTranslations = {
   'permission_continue': 'Continue',
   'permission_allow': 'Allow',
   'permission_open_settings': 'Open Settings',
-  'permission_permanently_denied':
-      'Permission permanently denied. Please enable it in system settings.',
+  'permission_permanently_denied': 'Permission permanently denied. Please enable it in system settings.',
   'permission_download_location_title': 'Download Location',
   'permission_download_location_desc': 'Choose where to save your files',
   'permission_download_location_button': 'Choose Folder',
   'permission_download_location_change': 'Change',
-  'permission_download_location_required':
-      'Choose a download folder to continue',
+  'permission_download_location_required': 'Choose a download folder to continue',
   'details_title': 'Download details',
   'details_channels': 'Connections',
   'details_active_threads': 'Threads active',
@@ -136,8 +124,7 @@ const Map<String, String> enTranslations = {
   'details_established': 'Added on',
   'details_inactive_eta': 'Eta: inactive',
   'details_threads_warning_title': 'Restructure connection threads?',
-  'details_threads_warning_desc':
-      'Changing connection threads on an active or paused download will reset progress. Do you want to proceed?',
+  'details_threads_warning_desc': 'Changing connection threads on an active or paused download will reset progress. Do you want to proceed?',
   'sort_date': 'Date',
   'sort_status': 'Status',
   'sort_tooltip': 'Sort',
@@ -163,7 +150,6 @@ const Map<String, String> enTranslations = {
   'category_overview': 'Storage analytics',
   'category_files': 'Files',
   'empty_transmissions': 'No active downloads yet',
-
   'settings_youtube_backend': 'Backend configuration',
   'settings_adv_console': 'Advanced settings',
   'settings_ua': 'Custom user-agent',
@@ -172,22 +158,16 @@ const Map<String, String> enTranslations = {
   'settings_proxy_sub': 'Redirect connection data streams',
   'settings_proxy_address': 'Proxy address (ip:port)',
   'settings_bypass_ssl': 'Trust all ssl certificates',
-  'settings_bypass_ssl_sub':
-      'Bypass SSL validation (WARNING: MITM vulnerability)',
+  'settings_bypass_ssl_sub': 'Bypass SSL validation (WARNING: MITM vulnerability)',
   'bypass_ssl_dialog_title': 'Disable SSL Verification?',
-  'bypass_ssl_dialog_body':
-      'This exposes all downloads to man-in-the-middle attacks. '
-          'Only enable on trusted networks.',
+  'bypass_ssl_dialog_body': 'This exposes all downloads to man-in-the-middle attacks. ',
   'bypass_ssl_dialog_confirm': 'I Understand the Risk',
   'settings_https_only': 'HTTPS-only mode',
-  'settings_https_only_sub':
-      'Upgrade all http:// navigation to https:// where possible',
+  'settings_https_only_sub': 'Upgrade all http:// navigation to https:// where possible',
   'settings_reduce_visuals': 'Reduce visual effects',
-  'settings_reduce_visuals_sub':
-      'Disable blur and glow effects for better performance',
+  'settings_reduce_visuals_sub': 'Disable blur and glow effects for better performance',
   'settings_classic_ui': 'Classic ui mode',
   'settings_classic_ui_sub': 'Switch to a flat native UI design styling',
-
   'settings_cleanup': 'Auto-cleanup logs',
   'settings_cleanup_sub': 'Purge completed task histories',
   'settings_subfolders': 'Categorized directories',
@@ -258,9 +238,8 @@ const Map<String, String> enTranslations = {
   'limit_upload_speed': 'Limit upload speed',
   'unlimited_upload': 'Unlimited upload',
   'update_download_link': 'Update download link',
-  'enter_new_url': 'Enter the new URL to continue downloading:',
-  'link_updated_success':
-      'Link updated successfully. You can resume download now.',
+  'enter_new_url': 'Enter new URL',
+  'link_updated_success': 'Link updated successfully. You can resume download now.',
   'torrent_connection_status': 'Torrent connection status',
   'download': 'Download',
   'upload': 'Upload',
@@ -284,10 +263,7 @@ const Map<String, String> enTranslations = {
   'video_label': 'VIDEO',
   'audio_label': 'AUDIO',
   'quality_label': 'QUALITY',
-  'yt_legal_warning':
-      'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
-
-  // Browser – general
+  'yt_legal_warning': 'Notice: Download content only if you own it or have explicit authorization from the copyright holder.',
   'browser_new_tab': 'New Tab',
   'browser_dashboard': 'Dashboard',
   'browser_bookmark_saved': 'Bookmark saved',
@@ -308,17 +284,11 @@ const Map<String, String> enTranslations = {
   'browser_already_completed': 'This download is already completed.',
   'browser_already_in_progress': 'This download is already in progress.',
   'browser_download_resumed': 'Download resumed.',
-  'browser_transmission_established':
-      'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
-
-  // Browser – interception sheet
+  'browser_transmission_established': 'TRANSMISSION ESTABLISHED. CHANNELS CONNECTED.',
   'browser_intercepted_signal': 'INTERCEPTED DOWNLOAD SIGNAL',
-  'browser_xdm_scanner':
-      'XDM Scanner intercepted a downloadable stream signal:',
+  'browser_xdm_scanner': 'XDM Scanner intercepted a downloadable stream signal:',
   'browser_continue_browsing': 'CONTINUE BROWSING',
   'browser_download_btn': 'DOWNLOAD',
-
-  // Browser – redirect guard sheet
   'redirect_intercepted': 'Redirect Intercepted',
   'redirect_subtitle': 'Page is redirecting to an external site',
   'redirect_from': 'From:',
@@ -329,29 +299,21 @@ const Map<String, String> enTranslations = {
   'redirect_allow_same_tab': 'Allow redirect in current tab',
   'redirect_dismiss_hint': 'Swipe down or tap outside to block redirect',
   'redirect_bg_opened': 'Opened tab in background',
-
-  // Browser – quality / media picker
   'browser_select_video_quality': 'SELECT VIDEO QUALITY',
   'browser_alternative_stream': 'Alternative Stream',
   'browser_no_alternative_streams': 'No alternative streams detected',
   'browser_detected_media': 'DETECTED MEDIA ON PAGE',
   'browser_media_stream': 'Media Stream',
-
-  // Browser – JS-injected labels
   'browser_video_stream_default': 'Video Stream (Default)',
   'browser_resolution': 'Resolution ',
   'browser_video_poster': 'Video Poster Image',
   'browser_audio_stream': 'Audio Stream',
   'browser_lazy_video': 'Lazy-Loaded Video',
   'browser_embedded_video': 'Embedded Video',
-
-  // Browser – default filenames
   'browser_offline_page': 'Offline_Page',
   'browser_youtube_video': 'YouTube Video',
   'browser_media_video': 'Media Video',
   'browser_torrent_download': 'Torrent Download',
-
-  // Browser – tooltips
   'browser_new_incognito_tab': 'New Incognito Tab',
   'browser_close': 'Close browser',
   'browser_stop_loading': 'Stop loading',
@@ -359,20 +321,14 @@ const Map<String, String> enTranslations = {
   'browser_refresh': 'Refresh page',
   'browser_download_playlist': 'Download Playlist',
   'browser_download_video': 'Download Video',
-
-  // Browser – hint text
   'browser_search_web': 'Search the web...',
   'browser_search_or_enter_url': 'Search or enter URL...',
-
-  // Browser – dashboard sections
   'browser_search_engine': 'Search Engine:',
   'browser_stream_sniffer_status': 'STREAM SNIFFER STATUS',
   'browser_auto_intercept_active': 'AUTO-INTERCEPT ACTIVE',
   'browser_auto_intercept_off': 'AUTO-INTERCEPT DEACTIVATED',
   'browser_sniff_description': 'Sniffs media files and documents dynamically',
   'browser_quick_signals': 'QUICK SIGNALS (BOOKMARKS)',
-
-  // Browser – popup menu
   'browser_menu_reload': 'Reload',
   'browser_menu_bookmark_page': 'Bookmark this page',
   'browser_menu_bookmarks_manager': 'Bookmarks Manager',
@@ -387,30 +343,20 @@ const Map<String, String> enTranslations = {
   'browser_menu_media_detector_off': 'Media detector: OFF',
   'browser_menu_exit_incognito': 'Exit incognito',
   'browser_menu_new_incognito': 'New incognito tab',
-
-  // Browser – dialogs
   'browser_download_choice': 'What do you want to download?',
-  'browser_single_and_playlist':
-      'This link contains both a single video and a playlist.',
+  'browser_single_and_playlist': 'This link contains both a single video and a playlist.',
   'browser_single_video': 'Single Video',
   'browser_entire_playlist': 'Entire Playlist',
-
-  // Browser – FAB
   'browser_fab_playlist': 'PLAYLIST',
   'browser_fab_media': 'MEDIA',
   'browser_fab_youtube_retry': 'YOUTUBE (RETRY)',
   'browser_fab_downloads': 'DOWNLOADS',
-
-  // Browser – JS/CSS Injector
   'browser_js_css_injector': 'JS / CSS INJECTOR',
-  'browser_js_css_warning':
-      'WARNING: Code runs on web pages. Do not enter sensitive data.',
+  'browser_js_css_warning': 'WARNING: Code runs on web pages. Do not enter sensitive data.',
   'browser_javascript': 'JavaScript',
   'browser_css_style': 'CSS Style',
   'browser_cancel_uppercase': 'CANCEL',
   'browser_apply_uppercase': 'APPLY',
-
-  // Browser – history sheet
   'browser_history_title': 'BROWSER HISTORY',
   'browser_download_history': 'DOWNLOAD HISTORY',
   'browser_surfing_history': 'Surfing History',
@@ -424,12 +370,10 @@ const Map<String, String> enTranslations = {
   'browser_no_history_found': 'No history found',
   'browser_no_history_desc': 'Websites you visit will be listed here.',
   'browser_no_downloads_yet': 'No downloads yet',
-  'browser_no_downloads_desc':
-      'Files you download from the browser will appear here.',
+  'browser_no_downloads_desc': 'Files you download from the browser will appear here.',
   'browser_clear_history_title': 'CLEAR HISTORY?',
   'browser_clear_history_desc': 'Are you sure you want to clear all history?',
-  'browser_clear_history_content':
-      'Are you sure you want to clear all browsing history?',
+  'browser_clear_history_content': 'Are you sure you want to clear all browsing history?',
   'browser_export_failed': 'Export failed',
   'browser_copied_url_for': 'Copied URL for:',
   'browser_status_done': 'DONE',
@@ -437,8 +381,6 @@ const Map<String, String> enTranslations = {
   'browser_status_paused': 'PAUSED',
   'browser_status_failed': 'FAILED',
   'browser_status_queued': 'QUEUED',
-
-  // Browser – bookmark manager
   'browser_bookmarks': 'BOOKMARKS',
   'browser_add_bookmark': 'Add bookmark',
   'browser_edit_bookmark': 'Edit bookmark',
@@ -451,8 +393,6 @@ const Map<String, String> enTranslations = {
   'browser_save_btn': 'SAVE',
   'browser_quit': 'Quit browser',
   'browser_tabs_restored': 'Previous tabs restored',
-
-  // Browser – user scripts
   'browser_scripts': 'SCRIPTS',
   'browser_add_script': 'Add script',
   'browser_edit_script': 'Edit script',
@@ -464,30 +404,20 @@ const Map<String, String> enTranslations = {
   'browser_script_type': 'Type',
   'browser_script_js': 'JS',
   'browser_script_css': 'CSS',
-
-  // Settings – AdBlock
   'settings_adblock_title': 'ADBLOCKER & HOST FILTERS',
   'settings_enable_adblock': 'ENABLE ADBLOCKER',
-  'settings_enable_adblock_sub':
-      'Block ads, popups, and tracking scripts in browser',
+  'settings_enable_adblock_sub': 'Block ads, popups, and tracking scripts in browser',
   'settings_adblock_rules': 'Loaded Blocklist Rules',
   'settings_update_adblock_hosts': 'UPDATE ADBLOCK HOSTS',
   'settings_updating_adblock_hosts': 'UPDATING...',
-  'settings_adblock_updating_msg':
-      'Downloading and updating AdBlock hosts (EasyList)...',
+  'settings_adblock_updating_msg': 'Downloading and updating AdBlock hosts (EasyList)...',
   'settings_adblock_success_msg': 'AdBlock hosts updated successfully!',
-  'settings_adblock_failed_msg':
-      'Failed to update AdBlock hosts. Check network.',
-
-  // Settings – Accessibility
+  'settings_adblock_failed_msg': 'Failed to update AdBlock hosts. Check network.',
   'settings_accessibility_title': 'ACCESSIBILITY CONTROLS',
   'settings_text_scaling': 'TEXT SCALING FACTOR',
-  'settings_text_scaling_sub':
-      'Adjust font sizing dynamically across the application',
+  'settings_text_scaling_sub': 'Adjust font sizing dynamically across the application',
   'search_settings_hint': 'Search settings...',
   'double_tap_details_hint': 'Double tap to view detailed telemetry & options',
-
-  // System & UI Dialogs
   'update_changelog': 'Changelog:',
   'update_general_fixes': 'General performance improvements and bug fixes.',
   'btn_later': 'Later',
@@ -525,11 +455,58 @@ const Map<String, String> enTranslations = {
   'completed_tab': 'Completed',
   'active_transmissions_header': 'ACTIVE DOWNLOADS',
   'completed_transmissions_header': 'HISTORY / COMPLETED',
-  'items_count': 'items',
+  'items_count': '{count} item',
   'no_results_for': 'No results for',
   'new_update_available': 'New update available v',
   'clipboard_link_detected': 'Link detected in clipboard',
   'download_action': 'Download',
   'start_btn': 'Start',
   'file_missing_msg': 'File missing on disk, moved to Failed tab',
+  'settings_dark_mode': 'Dark Mode',
+  'settings_dark_mode_sub': 'Enable dark theme styling',
+  'settings_language': 'Language',
+  'settings_language_sub': 'Select app display language',
+  'settings_haptics': 'Haptic Feedback',
+  'settings_haptics_sub': 'Vibrate device on button taps and tab switches',
+  'settings_visuals': 'Visual Effects',
+  'settings_network_sec': 'Network & Security',
+  'settings_speed_limit_sub': 'Set global download speed limit',
+  'browser_clear_btn': 'Clear',
+  'copy_diagnostics': 'COPY DIAGNOSTICS',
+  'block_element': 'Block element',
+  'block_btn': 'BLOCK',
+  'tab_limit_reached': 'Tab Limit Reached (10 Max)',
+  'close_oldest_inactive': 'Close Oldest Inactive',
+  'close_all_other_tabs': 'Close All Other Tabs',
+  'stop_loading': 'Stop',
+  'reload_page': 'Reload',
+  'add_tracker': 'Add Tracker',
+  'invalid_tracker_url': 'Invalid or duplicate tracker URL',
+  'resume_selected': 'Resume Selected',
+  'pause_selected': 'Pause Selected',
+  'change_category': 'Change Category',
+  'delete_files_disk': 'Also delete downloaded files from disk',
+  'select_category': 'Select Category',
+  'delete_downloads_count': 'Delete {count} Downloads?',
+  'delete_download_single': 'Delete 1 Download?',
+  'open_file': 'Open File',
+  'properties': 'Properties',
+  'update_link': 'Update Link',
+  'update_btn': 'Update',
+  'selected_count': '{count} selected',
+  'selected_count_singular': '1 selected',
+  'select_all_btn': 'Select All',
+  'deselect_btn': 'Deselect',
+  'security_pin_set': 'Security PIN set successfully',
+  'private_torrent': 'Private Torrent',
+  'disables_dht_pex': 'Disables DHT and PEX peer discovery',
+  'tap_element_block': 'Tap an element on the page to block it',
+  'restored_tabs': 'Restored {count} tabs',
+  'restored_tabs_singular': 'Restored 1 tab',
+  'popup_blocked': 'Popup blocked',
+  'element_blocked': 'Element blocked: {selector}',
+  'announce_now': 'Announce Now',
+  'link_copied': 'Link copied',
+  'items_count_singular': '1 item',
+  'items_count_plural': '{count} items',
 };

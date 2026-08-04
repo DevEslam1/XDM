@@ -732,6 +732,17 @@ class TorrentService {
     }
   }
 
+  static void resumeTorrent(int id) {
+    if (!isInitialized) return;
+    if (id >= 0) {
+      try {
+        LibtorrentFlutter.instance.resumeTorrent(id);
+      } catch (e) {
+        _log.warning('resumeTorrent failed for id $id: $e');
+      }
+    }
+  }
+
   static bool loadResumeData(int id, List<int> data) {
     if (!isInitialized || id < 0) return false;
     return _CapabilityGate.instance

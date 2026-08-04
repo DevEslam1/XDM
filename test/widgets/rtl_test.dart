@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dmx/features/downloads/widgets/download_card.dart';
 import 'package:dmx/features/home/screens/home_screen.dart';
 import 'package:dmx/features/settings/screens/settings_screen.dart';
+import 'package:dmx/features/details/screens/details_screen.dart';
 import '../helpers/test_helpers.dart';
 
 void main() {
@@ -39,6 +40,24 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('DetailsScreen renders correctly in RTL', (tester) async {
+      final task = createTestTask(id: 'task-rtl-details');
+      final provider = createMockDownloadProvider(tasks: [task]);
+
+      await tester.pumpWidget(createTestApp(
+        child: Directionality(
+          textDirection: TextDirection.rtl,
+          child: DetailsScreen(taskId: task.id),
+        ),
+        downloadProvider: provider,
+        locale: const Locale('ar'),
+      ));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(DetailsScreen), findsOneWidget);
     });
 
     testWidgets('Settings renders correctly in RTL', (tester) async {

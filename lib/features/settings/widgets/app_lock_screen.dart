@@ -1,3 +1,4 @@
+import 'package:dmx/core/utils/localization.dart';
 import 'package:flutter/material.dart';
 import '../../../core/services/app_lock_service.dart';
 
@@ -33,7 +34,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
       await AppLockService.setPin(pin);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Security PIN set successfully')),
+          SnackBar(content: Text(L10n.of(context, 'security_pin_set'))),
         );
         Navigator.of(context).pop();
       }

@@ -34,7 +34,8 @@ class ShareViewController: UIViewController {
                 attachment.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] item, _ in
                     DispatchQueue.main.async {
                         if let text = item as? String {
-                            self?.openMainApp(with: text)
+                            let extracted = self?.extractUrlOrMagnet(from: text) ?? text
+                            self?.openMainApp(with: extracted)
                         } else {
                             self?.close()
                         }
@@ -44,6 +45,17 @@ class ShareViewController: UIViewController {
             }
         }
         close()
+    }
+
+    private func extractUrlOrMagnet(from text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = trimmed.range(of: "magnet:\\?[^\\s<\">]+", options: .regularExpression) {
+            return String(trimmed[range])
+        }
+        if let range = trimmed.range(of: "https?://[^\\s<\">]+", options: .regularExpression) {
+            return String(trimmed[range])
+        }
+        return trimmed
     }
 
     private func openMainApp(with urlString: String) {

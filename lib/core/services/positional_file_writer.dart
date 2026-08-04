@@ -29,10 +29,14 @@ class PositionalFileWriter {
 
   bool _closed = false;
 
+  final List<DateTime> _lastFlushTimes;
+
   PositionalFileWriter._(this._file, this.threadCount, this._bufferSize)
       : _buffers = List.generate(threadCount, (_) => BytesBuilder(copy: false)),
         _bufferFilePositions = List.filled(threadCount, 0),
+        _lastFlushTimes = List.generate(threadCount, (_) => DateTime.now()),
         _threadLocks = List.generate(threadCount, (_) => Lock());
+
 
   /// Opens a new file for multi-thread writing.
   ///
@@ -138,11 +142,15 @@ class PositionalFileWriter {
 
       buffer.add(data);
 
-      if (buffer.length >= _bufferSize) {
+      final elapsedMs =
+          DateTime.now().difference(_lastFlushTimes[threadIndex]).inMilliseconds;
+
+      if (buffer.length >= _bufferSize || elapsedMs >= 500) {
         await _flushLocked(threadIndex);
       }
     });
   }
+
 
   /// Flushes buffered bytes for one thread.
   Future<void> flush(int threadIndex) async {

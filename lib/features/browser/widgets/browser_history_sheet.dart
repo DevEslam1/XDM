@@ -1047,7 +1047,7 @@ class _HeaderAction extends StatelessWidget {
           child: Container(
             width: 34,
             height: 34,
-            margin: const EdgeInsets.only(left: 4),
+            margin: const EdgeInsetsDirectional.only(start: 4),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: (danger
@@ -1091,7 +1091,7 @@ class _TileAction extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.only(left: 8),
+        padding: const EdgeInsetsDirectional.only(start: 8),
         child: Icon(icon, size: 15, color: color),
       ),
     );

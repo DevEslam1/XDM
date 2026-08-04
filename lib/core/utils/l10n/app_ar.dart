@@ -1,4 +1,5 @@
 const Map<String, String> arTranslations = {
+  // TODO: Refine Arabic plural rules for dual/few/many
   'app_title': 'XDM',
   'title_transmissions': 'التنزيلات',
   'title_categories': 'التصنيفات',
@@ -9,6 +10,10 @@ const Map<String, String> arTranslations = {
   'settings_engine_status': 'حالة المحرك',
   'settings_auto_resume': 'الاستئناف التلقائي للتنزيلات',
   'settings_auto_resume_sub': 'استئناف التنزيلات المتبقية عند فتح التطبيق',
+  'settings_adaptive_threads': 'العدد التكيفي للخيوط',
+  'settings_adaptive_threads_sub': 'تعديل عدد الخيوط تلقائياً بناءً على سرعة التنزيل',
+  'settings_auto_verify_checksum': 'التحقق التلقائي من سلامة الملف',
+  'settings_auto_verify_checksum_sub': 'حساب التجزئة SHA-256 بعد اكتمال كل تنزيل',
   'settings_max_channels': 'أقصى عدد للتنزيلات المتزامنة',
   'settings_max_channels_sub': 'تحديد عدد الملفات التي يتم تنزيلها في وقت واحد',
   'settings_bandwidth': 'إعدادات الشبكة والسرعة',
@@ -66,8 +71,7 @@ const Map<String, String> arTranslations = {
   'clipboard_ignore': 'تجاهل',
   'clipboard_establish': 'تنزيل',
   'onboarding_title_0': 'خصص تجربتك',
-  'onboarding_sub_0':
-      'اختر اللغة والمظهر ونمط الواجهة. يمكنك تغيير ذلك في أي وقت من الإعدادات.',
+  'onboarding_sub_0': 'اختر اللغة والمظهر ونمط الواجهة. يمكنك تغيير ذلك في أي وقت من الإعدادات.',
   'onboarding_setup_language': 'اللغة',
   'onboarding_setup_theme': 'المظهر',
   'onboarding_setup_mode': 'الواجهة',
@@ -79,13 +83,11 @@ const Map<String, String> arTranslations = {
   'onboarding_title_1': 'محرك السرعة',
   'onboarding_sub_1': 'تنزيل متعدد الخيوط مع استئناف ذكي لأقصى سرعة.',
   'onboarding_title_2': 'أي موقع',
-  'onboarding_sub_2':
-      'تنزيل من يوتيوب، فيسبوك، تويتر، تيك توك، إنستغرام، ومئات المواقع الأخرى.',
+  'onboarding_sub_2': 'تنزيل من يوتيوب، فيسبوك، تويتر، تيك توك، إنستغرام، ومئات المواقع الأخرى.',
   'onboarding_title_3': 'تورنت',
   'onboarding_sub_3': 'دعم كامل للتورنت مع DHT، تشفير، اختيار الملفات، والبذر.',
   'onboarding_title_4': 'تحكم ذكي',
-  'onboarding_sub_4':
-      'تصنيف تلقائي، جدولة، حماية الواي فاي، وثيمات مظلمة/فاتحة.',
+  'onboarding_sub_4': 'تصنيف تلقائي، جدولة، حماية الواي فاي، وثيمات مظلمة/فاتحة.',
   'onboarding_start': 'بدء الاستخدام',
   'onboarding_next': 'التالي',
   'onboarding_skip': 'تخطي',
@@ -101,8 +103,7 @@ const Map<String, String> arTranslations = {
   'permission_continue': 'متابعة',
   'permission_allow': 'السماح',
   'permission_open_settings': 'فتح الإعدادات',
-  'permission_permanently_denied':
-      'تم رفض الإذن بشكل دائم. يرجى تفعيله من إعدادات النظام.',
+  'permission_permanently_denied': 'تم رفض الإذن بشكل دائم. يرجى تفعيله من إعدادات النظام.',
   'permission_download_location_title': 'مكان التحميل',
   'permission_download_location_desc': 'اختر مكان حفظ ملفاتك',
   'permission_download_location_button': 'اختر مجلد',
@@ -124,8 +125,7 @@ const Map<String, String> arTranslations = {
   'details_established': 'تاريخ الإضافة',
   'details_inactive_eta': 'الوقت المقدر: غير نشط',
   'details_threads_warning_title': 'إعادة تعيين خيوط الاتصال؟',
-  'details_threads_warning_desc':
-      'تغيير خيوط الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى إعادة تعيين تقدمك. هل تريد الاستمرار؟',
+  'details_threads_warning_desc': 'تغيير خيوط الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى إعادة تعيين تقدمك. هل تريد الاستمرار؟',
   'sort_date': 'التاريخ',
   'sort_status': 'الحالة',
   'sort_tooltip': 'ترتيب',
@@ -151,7 +151,6 @@ const Map<String, String> arTranslations = {
   'category_overview': 'تحليل مساحة التخزين',
   'category_files': 'ملفات',
   'empty_transmissions': 'لا توجد تنزيلات نشطة حالياً',
-
   'settings_youtube_backend': 'إعدادات الخادم الخلفي',
   'settings_adv_console': 'إعدادات متقدمة',
   'settings_ua': 'عميل مستخدم مخصص (User-Agent)',
@@ -162,9 +161,7 @@ const Map<String, String> arTranslations = {
   'settings_bypass_ssl': 'الوثوق بجميع شهادات SSL',
   'settings_bypass_ssl_sub': 'تجاوز التحقق من الشهادات (تحذير: عرضة للاختراق)',
   'bypass_ssl_dialog_title': 'تعطيل التحقق من SSL؟',
-  'bypass_ssl_dialog_body':
-      'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). '
-          'قم بتمكينه فقط على الشبكات الموثوقة.',
+  'bypass_ssl_dialog_body': 'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). ',
   'bypass_ssl_dialog_confirm': 'أتفهم المخاطر',
   'settings_https_only': 'وضع HTTPS فقط',
   'settings_https_only_sub': 'ترقية كل روابط http:// إلى https:// عند الإمكان',
@@ -172,7 +169,6 @@ const Map<String, String> arTranslations = {
   'settings_reduce_visuals_sub': 'تعطيل تأثيرات التمويه والتوهج لتحسين الأداء',
   'settings_classic_ui': 'المظهر الكلاسيكي',
   'settings_classic_ui_sub': 'التبديل إلى نمط واجهة مستخدم مسطح وبسيط',
-
   'settings_cleanup': 'التنظيف التلقائي للسجلات',
   'settings_cleanup_sub': 'حذف تاريخ المهام المكتملة',
   'settings_subfolders': 'مجلدات التصنيفات الفرعية',
@@ -220,10 +216,6 @@ const Map<String, String> arTranslations = {
   'unknown_label': 'غير معروف',
   'url_empty_error': 'الرجاء إدخال رابط',
   'url_invalid_error': 'الرجاء إدخال رابط صالح',
-  'file_name_label': 'اسم الملف:',
-  'save_path_label': 'مسار الحفظ:',
-  'filename_empty_error': 'اسم الملف لا يمكن أن يكون فارغاً',
-  'auto_retry_label': 'إعادة محاولة تلقائية',
   'open_file_btn': 'فتح الملف',
   'delete_success': 'تم حذف التنزيل بنجاح',
   'task_not_found': 'لم يتم العثور على مهمة التنزيل',
@@ -247,7 +239,7 @@ const Map<String, String> arTranslations = {
   'limit_upload_speed': 'حد سرعة الرفع',
   'unlimited_upload': 'رفع غير محدود',
   'update_download_link': 'تحديث رابط التنزيل',
-  'enter_new_url': 'أدخل الرابط الجديد لاستكمال التنزيل:',
+  'enter_new_url': 'إدخال الرابط الجديد',
   'link_updated_success': 'تم تحديث الرابط بنجاح. يمكنك استئناف التنزيل الآن.',
   'torrent_connection_status': 'حالة اتصال التورنت',
   'download': 'تنزيل',
@@ -256,6 +248,10 @@ const Map<String, String> arTranslations = {
   'transferred': 'تم النقل',
   'confirm_close_tab_title': 'تأكيد إغلاق التبويب',
   'confirm_close_tab_desc': 'يوجد تنزيل نشط في هذا التبويب. هل تريد الإغلاق؟',
+  'file_name_label': 'اسم الملف:',
+  'save_path_label': 'مسار الحفظ:',
+  'filename_empty_error': 'اسم الملف لا يمكن أن يكون فارغاً',
+  'auto_retry_label': 'إعادة محاولة تلقائية',
   'yt_playlist': 'قائمة تشغيل يوتيوب',
   'loading_playlist': 'جاري تحميل قائمة التشغيل...',
   'retry_btn': 'إعادة المحاولة',
@@ -268,10 +264,7 @@ const Map<String, String> arTranslations = {
   'video_label': 'فيديو',
   'audio_label': 'صوت',
   'quality_label': 'الجودة',
-  'yt_legal_warning':
-      'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
-
-  // Browser – general
+  'yt_legal_warning': 'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
   'browser_new_tab': 'تبويب جديد',
   'browser_dashboard': 'لوحة التحكم',
   'browser_bookmark_saved': 'تم حفظ الإشارة المرجعية',
@@ -293,14 +286,10 @@ const Map<String, String> arTranslations = {
   'browser_already_in_progress': 'هذا التنزيل قيد التشغيل بالفعل.',
   'browser_download_resumed': 'تم استئناف التنزيل.',
   'browser_transmission_established': 'تم إنشاء الاتصال. القنوات متصلة.',
-
-  // Browser – interception sheet
   'browser_intercepted_signal': 'تم التقاط إشارة تنزيل',
   'browser_xdm_scanner': 'اكتشف مستعرض XDM إشارة تنزيل قابلة للاعتراض:',
   'browser_continue_browsing': 'متابعة التصفح',
   'browser_download_btn': 'تحميل',
-
-  // Browser – redirect guard sheet
   'redirect_intercepted': 'تم كشف تحويل تلقائي',
   'redirect_subtitle': 'الموقع يحاول توجيهك لصفحة خارجية',
   'redirect_from': 'من:',
@@ -311,29 +300,21 @@ const Map<String, String> arTranslations = {
   'redirect_allow_same_tab': 'اسمح بالتحويل في نفس التابة',
   'redirect_dismiss_hint': 'سحب للأسفل أو لمس الخارج = إلغاء التحويل',
   'redirect_bg_opened': 'تم فتح التبويب في الخلفية',
-
-  // Browser – quality / media picker
   'browser_select_video_quality': 'اختر جودة الفيديو',
   'browser_alternative_stream': 'بث بديل',
   'browser_no_alternative_streams': 'لم يتم اكتشاف تدفقات بديلة',
   'browser_detected_media': 'وسائط مكتشفة على الصفحة',
   'browser_media_stream': 'تدفق الوسائط',
-
-  // Browser – JS-injected labels
   'browser_video_stream_default': 'تدفق الفيديو (افتراضي)',
   'browser_resolution': 'الدقة ',
   'browser_video_poster': 'صورة ملصق الفيديو',
   'browser_audio_stream': 'تدفق الصوت',
   'browser_lazy_video': 'فيديو محمل ببطء',
   'browser_embedded_video': 'فيديو مدمج',
-
-  // Browser – default filenames
   'browser_offline_page': 'صفحة_غير_متصلة',
   'browser_youtube_video': 'فيديو يوتيوب',
   'browser_media_video': 'فيديو وسائط',
   'browser_torrent_download': 'تنزيل تورنت',
-
-  // Browser – tooltips
   'browser_new_incognito_tab': 'تبويب خفي جديد',
   'browser_close': 'إغلاق المتصفح',
   'browser_stop_loading': 'إلغاء التحميل',
@@ -341,20 +322,14 @@ const Map<String, String> arTranslations = {
   'browser_refresh': 'إعادة تحميل الصفحة',
   'browser_download_playlist': 'تحميل قائمة التشغيل',
   'browser_download_video': 'تحميل الفيديو',
-
-  // Browser – hint text
   'browser_search_web': 'ابحث في الويب...',
   'browser_search_or_enter_url': 'ابحث أو ادخل الرابط...',
-
-  // Browser – dashboard sections
   'browser_search_engine': 'محرك البحث:',
   'browser_stream_sniffer_status': 'حالة كاشف الملفات',
   'browser_auto_intercept_active': 'الاعتراض التلقائي نشط',
   'browser_auto_intercept_off': 'الاعتراض التلقائي متوقف',
   'browser_sniff_description': 'يكتشف روابط التحميل المباشرة والوسائط تلقائياً',
   'browser_quick_signals': 'إشارات سريعة (روابط)',
-
-  // Browser – popup menu
   'browser_menu_reload': 'إعادة تحميل',
   'browser_menu_bookmark_page': 'إشارة مرجعية لهذه الصفحة',
   'browser_menu_bookmarks_manager': 'مدير الإشارات المرجعية',
@@ -369,29 +344,20 @@ const Map<String, String> arTranslations = {
   'browser_menu_media_detector_off': 'كاشف الوسائط: معطل',
   'browser_menu_exit_incognito': 'الخروج من التصفح الخفي',
   'browser_menu_new_incognito': 'تبويب خفي جديد',
-
-  // Browser – dialogs
   'browser_download_choice': 'ماذا تريد تحميل؟',
   'browser_single_and_playlist': 'هذا الرابط يحتوي على فيديو وقائمة تشغيل.',
   'browser_single_video': 'فيديو واحد فقط',
   'browser_entire_playlist': 'قائمة التشغيل كاملة',
-
-  // Browser – FAB
   'browser_fab_playlist': 'قائمة التشغيل',
   'browser_fab_media': 'الوسائط',
   'browser_fab_youtube_retry': 'يوتيوب (إعادة المحاولة)',
   'browser_fab_downloads': 'التنزيلات',
-
-  // Browser – JS/CSS Injector
   'browser_js_css_injector': 'محقن JS / CSS',
-  'browser_js_css_warning':
-      'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
+  'browser_js_css_warning': 'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
   'browser_javascript': 'JavaScript',
   'browser_css_style': 'نمط CSS',
   'browser_cancel_uppercase': 'إلغاء',
   'browser_apply_uppercase': 'تطبيق',
-
-  // Browser – history sheet
   'browser_history_title': 'سجل المتصفح',
   'browser_download_history': 'سجل التنزيلات',
   'browser_surfing_history': 'سجل التصفح',
@@ -408,8 +374,7 @@ const Map<String, String> arTranslations = {
   'browser_no_downloads_desc': 'ستظهر الملفات التي تنزلها من المتصفح هنا.',
   'browser_clear_history_title': 'مسح السجل؟',
   'browser_clear_history_desc': 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟',
-  'browser_clear_history_content':
-      'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
+  'browser_clear_history_content': 'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
   'browser_export_failed': 'فشل التصدير',
   'browser_copied_url_for': 'تم نسخ الرابط لـ:',
   'browser_status_done': 'مكتمل',
@@ -417,8 +382,6 @@ const Map<String, String> arTranslations = {
   'browser_status_paused': 'موقوف',
   'browser_status_failed': 'فشل',
   'browser_status_queued': 'في الانتظار',
-
-  // Browser – bookmark manager
   'browser_bookmarks': 'الإشارات المرجعية',
   'browser_add_bookmark': 'إضافة إشارة مرجعية',
   'browser_edit_bookmark': 'تعديل الإشارة المرجعية',
@@ -431,8 +394,6 @@ const Map<String, String> arTranslations = {
   'browser_save_btn': 'حفظ',
   'browser_quit': 'إنهاء المتصفح',
   'browser_tabs_restored': 'تمت استعادة التبويبات السابقة',
-
-  // Browser – user scripts
   'browser_scripts': 'السكريبتات',
   'browser_add_script': 'إضافة سكريبت',
   'browser_edit_script': 'تعديل سكريبت',
@@ -444,27 +405,20 @@ const Map<String, String> arTranslations = {
   'browser_script_type': 'النوع',
   'browser_script_js': 'JS',
   'browser_script_css': 'CSS',
-
-  // Settings – AdBlock
   'settings_adblock_title': 'حظر الإعلانات وقواعد المضيفين',
   'settings_enable_adblock': 'حظر الإعلانات في المتصفح',
   'settings_enable_adblock_sub': 'حظر الإعلانات والنوافذ المنبثقة والمتتبعات',
   'settings_adblock_rules': 'قواعد وقوائم التصفية المحملة',
   'settings_update_adblock_hosts': 'تحديث قائمة المضيفين (UPDATE HOSTS)',
   'settings_updating_adblock_hosts': 'جاري التحديث...',
-  'settings_adblock_updating_msg':
-      'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
+  'settings_adblock_updating_msg': 'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
   'settings_adblock_success_msg': 'تم تحديث قائمة المضيفين بنجاح!',
   'settings_adblock_failed_msg': 'فشل تحديث قائمة المضيفين. تحقق من الاتصال.',
-
-  // Settings – Accessibility
   'settings_accessibility_title': 'خيارات سهولة الوصول (إمكانية الوصول)',
   'settings_text_scaling': 'مقياس حجم الخط',
   'settings_text_scaling_sub': 'تعديل وتكبير حجم نصوص التطبيق بشكل حيوي',
   'search_settings_hint': 'البحث في الإعدادات...',
   'double_tap_details_hint': 'انقر مرتين لعرض البيانات والخيارات التفصيلية',
-
-  // System & UI Dialogs
   'update_changelog': 'ما الجديد في هذا الإصدار:',
   'update_general_fixes': 'تحسينات عامة وإصلاح أخطاء.',
   'btn_later': 'لاحقاً',
@@ -502,11 +456,58 @@ const Map<String, String> arTranslations = {
   'completed_tab': 'المكتملة',
   'active_transmissions_header': 'التنزيلات النشطة',
   'completed_transmissions_header': 'سجل التنزيلات',
-  'items_count': 'عنصر',
+  'items_count': 'عنصر واحد',
   'no_results_for': 'لا نتائج لـ',
   'new_update_available': 'تحديث جديد متاح v',
   'clipboard_link_detected': 'تم اكتشاف رابط في الحافظة',
   'download_action': 'تحميل',
   'start_btn': 'بدء',
   'file_missing_msg': 'تعذر العثور على الملف، تم نقله إلى قائمة الإخفاق',
+  'settings_dark_mode': 'الوضع الداكن',
+  'settings_dark_mode_sub': 'تفعيل النمط المظلم',
+  'settings_language': 'اللغة',
+  'settings_language_sub': 'تحديد لغة عرض التطبيق',
+  'settings_haptics': 'التفاعل اللمسي',
+  'settings_haptics_sub': 'اهتزاز عند التفاعل',
+  'settings_visuals': 'التأثيرات البصرية',
+  'settings_network_sec': 'الشبكة والأمان',
+  'settings_speed_limit_sub': 'تعيين حد سرعة التنزيل العام',
+  'browser_clear_btn': 'مسح',
+  'copy_diagnostics': 'نسخ التشخيصات',
+  'block_element': 'حظر العنصر',
+  'block_btn': 'حظر',
+  'tab_limit_reached': 'تم الوصول إلى الحد الأقصى للمبوبات (10 كحد أقصى)',
+  'close_oldest_inactive': 'إغلاق الأقدم غير النشط',
+  'close_all_other_tabs': 'إغلاق جميع التبويبات الأخرى',
+  'stop_loading': 'إيقاف',
+  'reload_page': 'إعادة تحميل',
+  'add_tracker': 'إضافة تتبع',
+  'invalid_tracker_url': 'رابط التتبع غير صالح أو مكرر',
+  'resume_selected': 'استئناف المحدد',
+  'pause_selected': 'إيقاف المحدد مؤقتاً',
+  'change_category': 'تغيير التصنيف',
+  'delete_files_disk': 'حذف الملفات المحملة أيضاً من القرص',
+  'select_category': 'اختيار التصنيف',
+  'delete_downloads_count': 'حذف {count} تنزيل؟',
+  'delete_download_single': 'حذف تنزيل واحد؟',
+  'open_file': 'فتح الملف',
+  'properties': 'الخصائص',
+  'update_link': 'تحديث الرابط',
+  'update_btn': 'تحديث',
+  'selected_count': 'تم تحديد {count}',
+  'selected_count_singular': 'تم تحديد 1',
+  'select_all_btn': 'تحديد الكل',
+  'deselect_btn': 'إلغاء التحديد',
+  'security_pin_set': 'تم تعيين رمز الأمان بنجاح',
+  'private_torrent': 'تورنت خاص',
+  'disables_dht_pex': 'يعطل اكتشاف النظراء عبر DHT و PEX',
+  'tap_element_block': 'انقر على عنصر في الصفحة لحظره',
+  'restored_tabs': 'تمت استعادة {count} تبويب',
+  'restored_tabs_singular': 'تمت استعادة تبويب واحد',
+  'popup_blocked': 'تم حظر النافذة المنبثقة',
+  'element_blocked': 'تم حظر العنصر: {selector}',
+  'announce_now': 'الإعلان الآن',
+  'link_copied': 'تم نسخ الرابط',
+  'items_count_singular': 'عنصر واحد',
+  'items_count_plural': '{count} عناصر',
 };
