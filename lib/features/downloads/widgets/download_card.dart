@@ -1554,7 +1554,14 @@ class _TorrentFileRow extends StatelessWidget {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final name = (file['name'] as String? ?? '').replaceAll('+', ' ');
 
+    final isEstimated = file['progressEstimated'] == true;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final progressText = isEstimated
+        ? '~${(p * 100).toStringAsFixed(0)}%'
+        : '${(p * 100).toStringAsFixed(0)}%';
+
     return Padding(
+
       padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
       child: Row(
         children: [
@@ -1611,20 +1618,44 @@ class _TorrentFileRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
+          // ── FIX-9: Show estimated indicator ──
           // Per-file percentage
           SizedBox(
-            width: 36,
-            child: Text(
-              '${(p * 100).toStringAsFixed(0)}%',
-              textAlign: TextAlign.end,
-              style: AppTheme.dataStyle(
-                isDark: isDark,
-                size: 10,
-                weight: FontWeight.w800,
-                color: done ? greenClr : accent,
-              ),
+
+            width: 44,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (isEstimated)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 2),
+                    child: Tooltip(
+                      message: 'Estimated — waiting for engine data',
+                      child: Icon(
+                        Icons.help_outline,
+                        size: 9,
+                        color: mutedClr,
+                      ),
+                    ),
+                  ),
+                Text(
+                  progressText,
+                  textAlign: TextAlign.end,
+                  style: AppTheme.dataStyle(
+                    isDark: isDark,
+                    size: 10,
+                    weight: FontWeight.w800,
+                    color: done
+                        ? greenClr
+                        : isEstimated
+                            ? textClr.withValues(alpha: 0.6)
+                            : accent,
+                  ),
+                ),
+              ],
             ),
           ),
+
           const SizedBox(width: 8),
           SizedBox(
             child: Text(

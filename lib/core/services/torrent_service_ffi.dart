@@ -837,13 +837,25 @@ class TorrentService {
 
         return List.generate(files.length, (i) {
           final f = files[i];
+          int resolvedDownloadedBytes;
+
+          if (progress != null && i < progress.length) {
+            final rawBytes = (progress[i] as num?)?.toInt() ?? -1;
+            if (rawBytes >= 0) {
+              resolvedDownloadedBytes = rawBytes.clamp(0, f.size);
+            } else {
+              // ── FIX-5: -1 means libtorrent has no data yet ──
+              resolvedDownloadedBytes = 0;
+            }
+          } else {
+            resolvedDownloadedBytes = 0;
+          }
+
           return TorrentFileItem(
             index: f.index,
             name: f.name,
             size: f.size,
-            downloadedBytes: (progress != null && i < progress.length)
-                ? ((progress[i] as num?)?.toInt() ?? 0).clamp(0, f.size)
-                : -1,
+            downloadedBytes: resolvedDownloadedBytes,
             priority: (priorities != null && i < priorities.length)
                 ? ((priorities[i] as num?)?.toInt() ?? 4)
                 : 4,
@@ -852,6 +864,7 @@ class TorrentService {
                 : true,
           );
         });
+
       } catch (e) {
         _log.warning('getFiles failed for id $id: $e');
       }

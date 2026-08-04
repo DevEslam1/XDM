@@ -17,6 +17,7 @@ import '../../../core/services/background_service.dart';
 import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
 import '../../../core/services/logging_service.dart';
 import '../../../core/services/notification_service.dart';
@@ -1413,9 +1414,16 @@ class DownloadProvider extends ChangeNotifier
     // Cancel any lingering progress notification (M2).
     _notifications.cancelForTask(id);
 
+    // Re-check live task after engine shutdown / completion
+    final latest = _findTask(id);
+    if (latest == null) return;
+    if (latest.status == DownloadStatus.completed) {
+      _cancelTokens.remove(id);
+      return;
+    }
+
     // Sync DB bytes with the authoritative state file
-    final stateBytes = await _readDmxStateBytes(task.tempFilePath);
-    final latest = _findTask(id) ?? task;
+    final stateBytes = await _readDmxStateBytes(latest.tempFilePath);
     final synced = stateBytes > 0 &&
             (latest.status == DownloadStatus.downloading ||
                 latest.status == DownloadStatus.paused)
@@ -1433,6 +1441,7 @@ class DownloadProvider extends ChangeNotifier
         pausedByUser: true,
       ),
     );
+
 
     _downloadEngine.updateSpeedLimit(
       _effectiveSpeedLimit(),
@@ -1490,7 +1499,11 @@ class DownloadProvider extends ChangeNotifier
       return;
     }
 
+    _retryTimers[id]?.cancel();
+    _retryTimers.remove(id);
     _retryCounts.remove(id);
+    _resumeRejectionRestarts.remove(id);
+
 
     // ── FIX: Re-read actual bytes from .dmxstate (same as retryTask) ──
     int realBytesOnDisk = task.downloadedBytes; // fallback
@@ -1608,7 +1621,11 @@ class DownloadProvider extends ChangeNotifier
     final task = _findTask(id);
     if (task == null || task.status == DownloadStatus.completed) return;
 
+    _retryTimers[id]?.cancel();
+    _retryTimers.remove(id);
     _retryCounts.remove(id);
+    _resumeRejectionRestarts.remove(id);
+
 
     // ── Read ACTUAL progress from .dmxstate, never from pre-allocated file length ──
     final videoBytes = await _readDmxStateBytes(task.tempFilePath);
@@ -1651,32 +1668,71 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Reads the sum of chunk progress from a `.dmxstate` sidecar file.
-  /// Returns 0 when the file is missing, corrupt, or empty.
+  /// ── FIX-4: Robust .dmxstate reading with journal fallback ──
   static Future<int> _readDmxStateBytes(String tempFilePath) async {
     final stateFile = File('$tempFilePath.dmxstate');
-    if (await stateFile.exists()) {
-      try {
-        final content = await stateFile.readAsString();
-        final decoded = jsonDecode(content);
-        if (decoded is Map && decoded['progress'] is List) {
-          return (decoded['progress'] as List)
-              .fold<int>(0, (sum, chunk) => sum + ((chunk as num).toInt()));
+    if (!await stateFile.exists()) {
+      // Fallback: try journal before falling back to file length
+      final journalPath = '$tempFilePath.journal';
+      final journalFile = File(journalPath);
+      if (await journalFile.exists()) {
+        try {
+          final journalBytes = await DownloadJournal.recover(journalPath);
+          if (journalBytes != null && journalBytes.isNotEmpty) {
+            final total = journalBytes.fold<int>(0, (sum, b) => sum + b);
+            debugPrint(
+              '[DMX] .dmxstate missing, recovered $total bytes from journal',
+            );
+            return total;
+          }
+        } catch (e) {
+          debugPrint('[DMX] Journal recovery also failed: $e');
         }
-      } catch (e, st) {
-        _log.warning('[download_provider] operation failed', e, st);
-        // Corrupt state → treat as fresh start
+      }
+      try {
+        final tempFile = File(tempFilePath);
+        if (await tempFile.exists()) {
+          return await tempFile.length();
+        }
+      } catch (_) {}
+      return 0;
+    }
+
+    try {
+      final content = await stateFile.readAsString();
+      final decoded = jsonDecode(content);
+      if (decoded is Map) {
+        final progressList = decoded['progress'] as List?;
+        if (progressList != null) {
+          BigInt total = BigInt.zero;
+          for (final chunk in progressList) {
+            total += BigInt.from((chunk as num).toInt());
+          }
+          return total.toInt();
+        }
+      }
+    } catch (e) {
+      debugPrint('[DMX] .dmxstate corrupt, trying journal: $e');
+      final journalPath = '$tempFilePath.journal';
+      final journalFile = File(journalPath);
+      if (await journalFile.exists()) {
+        try {
+          final journalBytes = await DownloadJournal.recover(journalPath);
+          if (journalBytes != null && journalBytes.isNotEmpty) {
+            final total = journalBytes.fold<int>(0, (sum, b) => sum + b);
+            debugPrint(
+              '[DMX] Recovered $total bytes from journal after corrupt .dmxstate',
+            );
+            return total;
+          }
+        } catch (je) {
+          debugPrint('[DMX] Journal recovery failed too: $je');
+        }
       }
     }
-    // Fallback if no .dmxstate exists (e.g. single-threaded download or finished stream file)
-    try {
-      final tempFile = File(tempFilePath);
-      if (await tempFile.exists()) {
-        return await tempFile.length();
-      }
-    } catch (_) {}
     return 0;
   }
+
 
   /// Reads per-chunk progress percentages from a `.dmxstate` sidecar file.
   /// Returns null when the file is missing, corrupt, or empty.
@@ -1745,7 +1801,9 @@ class DownloadProvider extends ChangeNotifier
     _pendingProgressUpdates.remove(id);
     effectiveThreadOverrides.remove(id);
     _retryCounts.remove(id);
+    _resumeRejectionRestarts.remove(id);
     _ytLowSpeedCounts.remove(id);
+
     _ytThrottlingRefreshing.remove(id);
 
     _retryTimers[id]?.cancel();
@@ -1868,7 +1926,9 @@ class DownloadProvider extends ChangeNotifier
       _lastDbSaveBytes.remove(id);
       _pendingProgressUpdates.remove(id);
       _retryCounts.remove(id);
+      _resumeRejectionRestarts.remove(id);
       _ytLowSpeedCounts.remove(id);
+
       _ytThrottlingRefreshing.remove(id);
       _lastTorrentFileDiskSync.remove(id);
       _downloadMetrics.remove(id);
@@ -2703,6 +2763,21 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
+    if (sizeChanged) {
+      for (final path in [
+        '${task.tempFilePath}.dmxstate',
+        '${task.tempFilePath}.audio.dmxstate',
+        '${task.tempFilePath}.journal',
+      ]) {
+        try {
+          final f = File(path);
+          if (await f.exists()) await f.delete();
+        } catch (e) {
+          debugPrint('[DMX] Deleting stale state file $path failed: $e');
+        }
+      }
+    }
+
     final audioChanged = clearAudioUrl ||
         (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl);
     if (audioChanged) {
@@ -2774,9 +2849,29 @@ class DownloadProvider extends ChangeNotifier
     final itagChanged =
         oldItag != null && newItag != null && oldItag != newItag;
 
+    final isYoutube = task.downloadPageUrl != null &&
+
+        (task.downloadPageUrl!.contains('youtube.com/') ||
+            task.downloadPageUrl!.contains('youtu.be/'));
+
+    if (!isYoutube) {
+      try {
+        final meta = await _downloadEngine.resolveMetadata(url: newUrl);
+        if (meta.fileSize > 0 &&
+            task.fileSize > 0 &&
+            (meta.fileSize - task.fileSize).abs() > 2048) {
+          await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
+          return;
+        }
+      } catch (_) {
+        /* probe failed → fall through to normal resume */
+      }
+    }
+
     if (itagChanged) {
       await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
     } else {
+
       // updateTaskUrl already handles resume internally for downloading tasks
       await updateTaskUrl(
         id,

@@ -206,8 +206,19 @@ class DownloadOrchestrator {
             debugPrint('[DMX] Corrupt resume state: $e');
           }
         } else {
-          debugPrint(
-              '[DMX] .dmxstate missing for task with downloadedBytes > 0, resetting progress');
+          final tempFile = File(task.tempFilePath);
+          if (await tempFile.exists()) {
+            final fileSize = await tempFile.length();
+            if (fileSize >= task.fileSize && task.fileSize > 0) {
+              debugPrint(
+                  '[DMX] .dmxstate missing but temp file is complete on disk ($fileSize/${task.fileSize}), preserving task');
+              validState = true;
+            }
+          }
+          if (!validState) {
+            debugPrint(
+                '[DMX] .dmxstate missing for task with downloadedBytes > 0, resetting progress');
+          }
         }
 
         if (!validState) {
@@ -229,18 +240,19 @@ class DownloadOrchestrator {
       // FIX-H1: Validate audio .dmxstate sidecar for YouTube audio downloads.
       // If the sidecar is missing, reset audioProgress so the audio stream is
       // re-downloaded from the beginning rather than resuming from a stale value.
-      if (task.mergedAudioUrl != null &&
-          task.mergedAudioUrl!.isNotEmpty &&
-          task.audioSize > 0) {
-        final audioTempPath = '${task.tempFilePath}.audio';
-        final audioStateFile = File('$audioTempPath.dmxstate');
-        if (!await audioStateFile.exists() && task.audioProgress > 0) {
-          debugPrint('[DMX] Audio .dmxstate missing, resetting audioProgress');
-          final updated = task.copyWith(audioProgress: 0.0);
+      final audioStatePath = '${task.tempFilePath}.audio.dmxstate';
+      if (task.mergedAudioUrl != null && task.audioSize > 0) {
+        if (!await File(audioStatePath).exists()) {
+          // fall back to actual audio bytes on disk
+          final audioBytes =
+              await _readDmxStateBytes('${task.tempFilePath}.audio');
+          final fraction = (audioBytes / task.audioSize).clamp(0.0, 1.0);
+          final updated = task.copyWith(audioProgress: fraction);
           await _host.setTaskState(updated);
           task = updated;
         }
       }
+
     } catch (e) {
       debugPrint('[DMX] validateResumeState exception: $e');
     }
@@ -519,6 +531,19 @@ class DownloadOrchestrator {
       throw Exception('Audio file is empty: $actualAudioPath');
     }
 
+
+    // ── FIX-1: Validate audio file integrity before merge ──
+    final expectedAudioSize = current.audioSize;
+    if (expectedAudioSize > 0 && audioLen < expectedAudioSize) {
+      final deficit = expectedAudioSize - audioLen;
+      final deficitPct =
+          (deficit / expectedAudioSize * 100).toStringAsFixed(1);
+      throw Exception(
+        'Audio file incomplete: $audioLen / $expectedAudioSize bytes '
+        '($deficitPct% missing). File: $actualAudioPath',
+      );
+    }
+
     Duration? expectedDuration;
     try {
       final probe = await FFprobeKit.execute(
@@ -601,11 +626,7 @@ class DownloadOrchestrator {
         throw Exception('Merged output file not found after FFmpeg success');
       }
     } else {
-      // FFmpeg merge failed � don't fail the task. Keep the video-only
-      // stream accessible and mark the task completed with a note.
-      try {
-        await audioFile.delete();
-      } catch (_) {}
+      // ── FIX-2: Preserve audio files on merge failure ──
       var videoOnlyPath =
           '${p.withoutExtension(actualVideoPath)}_video_only$videoExt';
       try {
@@ -616,23 +637,30 @@ class DownloadOrchestrator {
         debugPrint('[DMX] Failed to rename video-only file: $e');
         videoOnlyPath = actualVideoPath;
       }
+
+      debugPrint(
+        '[DMX] FFmpeg merge failed. Audio preserved at: $actualAudioPath\n'
+        '[DMX] Video-only saved at: $videoOnlyPath\n'
+        '[DMX] Retry will resume audio from existing state.',
+      );
+
+      final audioBytes =
+          await _readDmxStateBytes('${current.tempFilePath}.audio');
+      final fraction = current.audioSize > 0
+          ? (audioBytes / current.audioSize).clamp(0.0, 1.0)
+          : 0.0;
+
       await _host.setTaskState(
         current.copyWith(
-          status: DownloadStatus.completed,
-          downloadedBytes:
-              current.fileSize > 0 ? current.fileSize : current.downloadedBytes,
-          speed: 0,
-          clearEta: true,
-          statusMessage: DownloadStatusMessages.mergeFailedVideoOnly,
+          status: DownloadStatus.failed,
+          errorMessage: '${DownloadStatusMessages.ffmpegMergeFailed} Audio preserved — retry to re-attempt merge.',
           localFilePath: videoOnlyPath,
-          completedAt: DateTime.now(),
+          audioProgress: fraction,
         ),
       );
-      debugPrint(
-        '[DMX] FFmpeg merge failed. Saved video-only file: $videoOnlyPath',
-      );
-      return true;
+      return false;
     }
+
     return true;
   }
 
@@ -917,15 +945,15 @@ class DownloadOrchestrator {
     final stateFilePath = '${task.tempFilePath}.dmxstate';
     final hasStateFile = await File(stateFilePath).exists();
 
-    if (task.threadCount > 1 && hasStateFile) {
-      // Multi-threaded: file is pre-allocated, lengthSync is meaningless.
-      // Read actual chunk progress from .dmxstate.
-      videoBytesFromDisk = await _readDmxStateBytes(task.tempFilePath);
+    if (task.threadCount > 1) {
+      // Pre-allocated file length is meaningless without the state file.
+      videoBytesFromDisk =
+          hasStateFile ? await _readDmxStateBytes(task.tempFilePath) : 0;
     } else {
-      // Single-threaded: file grows incrementally, lengthSync is accurate.
       final tempFile = File(task.tempFilePath);
       videoBytesFromDisk = tempFile.existsSync() ? await tempFile.length() : 0;
     }
+
 
     // Also fix audio bytes — same pre-allocation issue applies
     int audioBytesFromDisk = 0;
@@ -1657,6 +1685,7 @@ class DownloadOrchestrator {
 
     final hasWifiOrEthernet = _host.networkMonitor.hasWifiOrEthernet;
     if (_host.providerSettingsProvider.wifiOnly && !hasWifiOrEthernet) {
+      _host.networkMonitor.markWifiWaiting(task.id);
       await _host.setTaskState(
         task.copyWith(
           status: DownloadStatus.paused,
@@ -1665,6 +1694,7 @@ class DownloadOrchestrator {
       );
       return;
     }
+
 
     if (_host.downloadingTasksCount == 0) {
       BackgroundService.start();
@@ -1855,6 +1885,24 @@ class DownloadOrchestrator {
         (task.downloadPageUrl!.contains('youtube.com/') ||
             task.downloadPageUrl!.contains('youtu.be/'));
 
+    if (isYoutube && task.downloadPageUrl != null && realTotalDownloaded > 0) {
+      try {
+        final fresh =
+            await YoutubeService.getFreshStreams(task.downloadPageUrl!);
+        if (fresh != null && fresh['url'] != null) {
+          debugPrint(
+              '[DMX] Proactively refreshed YouTube stream URL on resume');
+          task = task.copyWith(
+            url: fresh['url'] as String,
+            mergedAudioUrl: fresh['audioUrl'],
+          );
+        }
+      } catch (e) {
+        debugPrint(
+            '[DMX] Proactive YouTube stream refresh on resume failed: $e');
+      }
+    }
+
     // Ensure audioSize is properly set for combined downloads.
     // Skip for YouTube — googlevideo.com CDN URLs 429 on extra HEAD requests
     // and the audio size is already provided by the stream resolution step.
@@ -2007,6 +2055,12 @@ class DownloadOrchestrator {
       }
       debugPrint('Stacktrace: $stackTrace');
       debugPrint('==================================================');
+
+      if (!cancelToken.isCancelled) {
+        try {
+          cancelToken.cancel('Task failed, cleaning up in-flight requests');
+        } catch (_) {}
+      }
 
       await _host.flushPendingProgress(task.id);
       final current = _host.findTaskById(task.id);

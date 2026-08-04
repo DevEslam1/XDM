@@ -52,6 +52,11 @@ class NetworkMonitor {
       _currentConnectivity.contains(ConnectivityResult.wifi) ||
       _currentConnectivity.contains(ConnectivityResult.ethernet);
 
+  void markWifiWaiting(String taskId) {
+    _tasksPausedDueToWifiOnly.add(taskId);
+  }
+
+
   void init() {
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       results,

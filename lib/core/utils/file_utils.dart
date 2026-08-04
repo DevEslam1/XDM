@@ -204,7 +204,27 @@ int scanFolderBytesSync(String path) {
               downloaded = storedDownloaded;
             } else if (diskLen > 0 && diskLen < length) {
               downloaded = diskLen;
+            } else if (diskLen >= length) {
+              try {
+                final raf = file.openSync();
+                final probeSize = diskLen < 4096 ? diskLen : 4096;
+                final probe = raf.readSync(probeSize);
+                raf.closeSync();
+                final hasContent = probe.any((b) => b != 0);
+                if (hasContent) {
+                  downloaded = length;
+                } else {
+                  downloaded = 0;
+                  LoggingService.logger('FileUtils').info(
+                    '[FileUtils] File "$relPath" appears pre-allocated '
+                    '(full size but empty content). Setting downloaded=0.',
+                  );
+                }
+              } catch (probeErr) {
+                downloaded = 0;
+              }
             }
+
           }
         }
       } catch (e) {

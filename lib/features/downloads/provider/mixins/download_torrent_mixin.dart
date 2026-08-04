@@ -175,7 +175,9 @@ mixin DownloadTorrentMixin {
         copy['progressEstimated'] = false;
       } else {
         copy['downloadedBytes'] = 0;
+        copy['progressEstimated'] = false;
       }
+
       copy['speed'] = 0.0;
       return copy;
     }).toList();

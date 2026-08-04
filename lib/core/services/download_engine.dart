@@ -1517,13 +1517,17 @@ class DownloadEngine {
                     );
 
             int resolvedBytes;
+            bool isEstimated;
+
             if (f.downloadedBytes >= 0) {
               // True per-file progress from libtorrent
               resolvedBytes = f.downloadedBytes;
+              isEstimated = false;
             } else {
               // No true progress available, use stale bytes as fallback
               final staleBytes = (existing?['downloadedBytes'] as int?) ?? 0;
               resolvedBytes = staleBytes;
+              isEstimated = true;
             }
 
             return <String, dynamic>{
@@ -1533,8 +1537,9 @@ class DownloadEngine {
               'priority': existing?['priority'] as int? ?? f.priority,
               'downloadedBytes': resolvedBytes,
               'speed': 0.0,
-              'progressEstimated': f.downloadedBytes < 0,
+              'progressEstimated': isEstimated,
             };
+
           }).toList();
         } catch (e) {
           debugPrint('[DownloadEngine] TorrentService.getFiles failed: $e');
@@ -2194,17 +2199,26 @@ class DownloadEngine {
             final chunkStart = i * partSize;
             const int sampleSize = 64 * 1024; // 64 KB
 
-            final sample1Len = min(sampleSize, downloadedInChunk);
-            final sample1Start = chunkStart;
-
-            final sample2Len = min(sampleSize, downloadedInChunk);
-            final sample2Start = chunkStart + downloadedInChunk - sample2Len;
-
+            // Check start, middle, and end of each chunk
             final samplesToCheck = <_RangeSample>[
-              _RangeSample(sample1Start, sample1Len),
-              if (sample2Start != sample1Start)
-                _RangeSample(sample2Start, sample2Len),
+              _RangeSample(chunkStart, min(sampleSize, downloadedInChunk)),
             ];
+
+            if (downloadedInChunk > 128 * 1024) {
+              final midOffset = downloadedInChunk ~/ 2;
+              samplesToCheck.add(
+                _RangeSample(
+                  chunkStart + midOffset,
+                  min(sampleSize, downloadedInChunk - midOffset),
+                ),
+              );
+            }
+
+            if (downloadedInChunk > sampleSize) {
+              final endOffset = downloadedInChunk - sampleSize;
+              samplesToCheck.add(_RangeSample(chunkStart + endOffset, sampleSize));
+            }
+
 
             bool chunkValid = true;
 
