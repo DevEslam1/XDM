@@ -401,11 +401,16 @@ mixin DownloadTorrentMixin {
       }
     }
 
+    // FIX-02: Stamp files with lastFileSyncMs timestamp for DB/UI sync tracking
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final stampedFiles = files.map((f) => {...f, 'lastFileSyncMs': timestamp}).toList();
+
     final updated = task.copyWith(
-      torrentFiles: files,
+      torrentFiles: stampedFiles,
       fileSize: selectedSize > 0 ? selectedSize : task.fileSize,
       category: updatedCategory,
     );
+
 
     providerTasks[index] = updated;
     filteredTasksDirty = true;

@@ -2384,11 +2384,28 @@ class DownloadEngine {
 
             await tempStateFile.writeAsString(jsonEncode(stateData));
             await tempStateFile.rename(stateFile.path);
+
+            // FIX-03: Update in-memory chunk ratios for caller before DB save
+            if (totalSize > 0 && partSize > 0) {
+              final ratios = List<double>.generate(threadCount, (i) {
+                final chunkEnd = (i == threadCount - 1) ? totalSize - i * partSize : partSize;
+                return chunkEnd > 0 ? (snapshot[i] / chunkEnd).clamp(0.0, 1.0) : 0.0;
+              });
+              onProgress(DownloadProgress(
+                downloadedBytes: snapshot.reduce((a, b) => a + b),
+                fileSize: totalSize,
+                speed: 0,
+                eta: null,
+                chunks: ratios,
+              ));
+
+            }
           });
         } catch (e) {
           debugPrint('Failed to save state: $e');
         }
       }
+
 
       Future<void> reportProgress() async {
         final nowMs = stopwatch.elapsedMilliseconds;

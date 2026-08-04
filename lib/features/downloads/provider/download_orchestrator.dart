@@ -1740,6 +1740,23 @@ class DownloadOrchestrator {
                     }
                   }
 
+                  var resolvedFiles = diskVerifiedFiles ?? progress.torrentFiles;
+                  // FIX-02: Force selected files to full length when torrent is completed or 100%
+                  if (resolvedFiles != null &&
+                      (base.status == DownloadStatus.completed ||
+                          (base.fileSize > 0 && progress.downloadedBytes >= base.fileSize))) {
+                    resolvedFiles = resolvedFiles.map((f) {
+                      final copy = Map<String, dynamic>.from(f);
+                      if (copy['selected'] != false) {
+                        copy['downloadedBytes'] = (copy['length'] as num?)?.toInt() ??
+                            (copy['size'] as num?)?.toInt() ??
+                            0;
+                        copy['progressEstimated'] = false;
+                      }
+                      return copy;
+                    }).toList();
+                  }
+
                   pushCombinedProgress(
                     chunksOverride: progress.chunks ??
                         _host.buildChunks(
@@ -1750,14 +1767,14 @@ class DownloadOrchestrator {
                           progress.downloadedBytes,
                         ),
                     supportsResumeOverride: progress.supportsResume,
-                    torrentFilesOverride:
-                        diskVerifiedFiles ?? progress.torrentFiles,
+                    torrentFilesOverride: resolvedFiles,
                     fileNameOverride: newFileName,
                     localFilePathOverride: newLocalPath,
                     tempFilePathOverride: newTempPath,
                     categoryOverride: newCategory,
                     statusMessageOverride: progress.statusMessage,
                   );
+
 
                   // When the torrent metadata name update changes localFilePath,
                   // persist it to the database immediately so _finalizeDownload

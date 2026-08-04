@@ -1766,8 +1766,9 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
   double get _overallProgress {
     final total = widget.items.fold<int>(0, (s, t) => s + t.resolvedFileSize);
     if (total <= 0) return 0.0;
-    final done = widget.items.fold<int>(0, (s, t) => s + t.downloadedBytes);
+    final done = widget.items.fold<int>(0, (s, t) => s + t.displayDownloadedBytes); // FIX-01: Clamp downloadedBytes in playlist sum
     return (done / total).clamp(0.0, 1.0);
+
   }
 
   bool get _anyDownloading =>
