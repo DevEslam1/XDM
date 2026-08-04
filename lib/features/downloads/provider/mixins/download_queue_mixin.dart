@@ -147,8 +147,13 @@ mixin DownloadQueueMixin {
       for (final task in queued) {
         if (activeCount + startedThisPass >= maxActive) break;
 
-        // Skip if this task already has a pending override (already being started)
-        if (effectiveThreadOverrides.containsKey(task.id)) continue;
+        // FIX-C-M4: Skip if this task already has a pending override or is currently downloading
+        final isRunning = providerTasks.any(
+          (t) => t.id == task.id && t.status == DownloadStatus.downloading,
+        );
+        if (effectiveThreadOverrides.containsKey(task.id) || isRunning) continue;
+
+
 
         // Enforce global connection cap: distribute connections evenly across
         // all concurrent downloads (including the ones being started this pass).

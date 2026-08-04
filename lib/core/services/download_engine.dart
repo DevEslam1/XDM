@@ -3572,6 +3572,13 @@ class DownloadEngine {
 
     if (selected.isEmpty || totalDownloaded <= 0) return;
 
+    // FIX-7: Clamp totalDownloaded to sum of selected file lengths
+    final totalSelectedSize = selected.fold<int>(
+      0,
+      (sum, f) => sum + ((f['length'] as num?)?.toInt() ?? 0),
+    );
+    final clampedTotal = totalDownloaded.clamp(0, totalSelectedSize);
+
     final groups = <int, List<Map<String, dynamic>>>{};
 
     for (final f in selected) {
@@ -3581,7 +3588,8 @@ class DownloadEngine {
 
     final sortedKeys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
 
-    int remaining = totalDownloaded;
+    int remaining = clampedTotal;
+
 
     for (final priority in sortedKeys) {
       if (remaining <= 0) {

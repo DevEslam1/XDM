@@ -496,41 +496,54 @@ class _ChunkedProgressBar extends StatelessWidget {
         height: 8,
       );
     } else {
-      bar = Row(
-        children: List.generate(chunks.length, (i) {
-          final p = chunks[i].clamp(0.0, 1.0);
-          return Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(
-                left: i == 0 ? 0 : 2.5,
-                right: i == chunks.length - 1 ? 0 : 2.5,
-              ),
-              child: Stack(
-                children: [
-                  Container(
-                    height: 8,
-                    decoration: AppTheme.progressTrack(
-                      isDark: isDark,
-                      radius: 3,
+      // FIX(UI4): Isolate multi-chunk bar repaints
+      bar = RepaintBoundary(
+        child: Selector<DownloadProvider, List<double>>(
+          selector: (_, p) {
+            final t = p.taskById(task.id);
+            return t?.chunks ?? [];
+          },
+          builder: (_, liveChunks, __) {
+            final activeChunks = liveChunks.isNotEmpty ? liveChunks : chunks;
+            return Row(
+              children: List.generate(activeChunks.length, (i) {
+                final p = activeChunks[i].clamp(0.0, 1.0);
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: i == 0 ? 0 : 2.5,
+                      right: i == activeChunks.length - 1 ? 0 : 2.5,
+                    ),
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 8,
+                          decoration: AppTheme.progressTrack(
+                            isDark: isDark,
+                            radius: 3,
+                          ),
+                        ),
+                        FractionallySizedBox(
+                          widthFactor: p,
+                          child: Container(
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: color,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  FractionallySizedBox(
-                    widthFactor: p,
-                    child: Container(
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
+                );
+              }),
+            );
+          },
+        ),
       );
     }
+
     final Widget effectiveBar;
     if (task.status == DownloadStatus.downloading) {
       effectiveBar = TweenAnimationBuilder<double>(
@@ -1123,6 +1136,46 @@ class _MediaCard extends StatelessWidget with HapticHelper {
             _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
             const SizedBox(height: 8),
             _ProgressRow(task: task, isDark: isDark, color: statusColor),
+            // FIX(YT-3): Show secondary audio progress indicator when audio stream is present
+            if (task.mergedAudioUrl != null && task.audioSize > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.audiotrack_rounded,
+                      size: 11,
+                      color: mutedClr,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Audio: ${task.audioProgressPercentString}',
+                      style: AppTheme.microLabel(
+                        isDark: isDark,
+                        color: mutedClr,
+                        size: 8.5,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(1.5),
+                        child: LinearProgressIndicator(
+                          value: task.audioProgress.clamp(0.0, 1.0),
+                          minHeight: 3,
+                          backgroundColor: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.black.withValues(alpha: 0.06),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             if (task.statusMessage != null &&
                 task.statusMessage!.isNotEmpty &&
                 task.status != DownloadStatus.completed)
@@ -1252,13 +1305,17 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                             spacing: 6,
                             runSpacing: 4,
                             children: [
+                              // FIX(T-4): Show "Fetching metadata…" when magnet fileSize == 0 and downloading
                               _StatusChip(
                                 task: widget.task,
                                 isDark: isDark,
-                                overrideLabel: seeding
-                                    ? (isRtl ? 'مشاركة' : 'SEEDING')
-                                    : null,
+                                overrideLabel: (widget.task.isTorrent &&
+                                        widget.task.resolvedFileSize == 0 &&
+                                        widget.task.status == DownloadStatus.downloading)
+                                    ? (isRtl ? 'جاري جلب البيانات…' : 'Fetching metadata…')
+                                    : (seeding ? (isRtl ? 'مشاركة' : 'SEEDING') : null),
                               ),
+
                               _PeerChip(
                                 icon: Icons.arrow_upward_rounded,
                                 label: '${stats.seeds}',
@@ -1556,9 +1613,14 @@ class _TorrentFileRow extends StatelessWidget {
 
     final isEstimated = file['progressEstimated'] == true;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-    final progressText = isEstimated
-        ? '~${(p * 100).toStringAsFixed(0)}%'
-        : '${(p * 100).toStringAsFixed(0)}%';
+    // FIX(T-2): Show indeterminate indicator when downloadedBytes == 0 and selected
+    final showIndeterminate = downloaded == 0 && !isEstimated && selected && !done;
+    final progressText = showIndeterminate
+        ? '…'
+        : (isEstimated
+            ? '~${(p * 100).toStringAsFixed(0)}%'
+            : '${(p * 100).toStringAsFixed(0)}%');
+
 
     return Padding(
 
@@ -1630,7 +1692,9 @@ class _TorrentFileRow extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(right: 2),
                     child: Tooltip(
-                      message: 'Estimated — waiting for engine data',
+                      message: isEstimated
+                          ? 'Estimated — waiting for engine data'
+                          : 'Confirmed by engine',
                       child: Icon(
                         Icons.help_outline,
                         size: 9,
@@ -1638,6 +1702,7 @@ class _TorrentFileRow extends StatelessWidget {
                       ),
                     ),
                   ),
+
                 Text(
                   progressText,
                   textAlign: TextAlign.end,

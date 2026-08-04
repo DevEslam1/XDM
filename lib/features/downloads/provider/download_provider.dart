@@ -10,8 +10,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/services/torrent_resume_store.dart';
 import '../../../core/services/torrent_service.dart';
+
 import '../../../core/services/update_service.dart';
+import '../../../core/services/youtube_service.dart';
+
 // ignore_for_file: prefer_initializing_formals
 import '../../../core/services/background_service.dart';
 import '../../../core/services/database/app_database.dart';
@@ -1370,8 +1374,10 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> pauseTask(String id) async {
-    final task = _findTask(id);
+    var task = _findTask(id);
     if (task == null) return;
+
+
 
     _retryCounts.remove(id);
     _speedHistories.remove(id);
@@ -1386,8 +1392,40 @@ class DownloadProvider extends ChangeNotifier
     if (task.status == DownloadStatus.downloading) {
       final torrentId = _torrentIds[id];
       if (torrentId != null) {
+        // FIX(T-1): Use a map lookup instead of firstWhere to avoid wrong-file fallback
+        try {
+          final liveFiles = TorrentService.getFiles(torrentId);
+          if (liveFiles.isNotEmpty && task.torrentFiles != null) {
+            final liveMap = {for (final lf in liveFiles) lf.name: lf};
+            final updatedFiles = task.torrentFiles!.map((f) {
+              final name = f['name'] as String? ?? '';
+              final match = liveMap[name];
+              if (match != null) {
+                return {...f, 'downloadedBytes': match.downloadedBytes};
+              }
+              return f;
+            }).toList();
+            task = task.copyWith(torrentFiles: updatedFiles);
+          }
+        } catch (e) {
+          debugPrint('[DMX] FIX(T-1): Failed to snapshot per-file bytes: $e');
+        }
+
+
+        // FIX-06: Save fast-resume data BEFORE pausing so a crash
+        // between pause and app-exit doesn't lose resume state.
+        try {
+          await TorrentResumeStore.saveAll(
+            {torrentId},
+            (tid) => TorrentService.progressFor(tid),
+          );
+        } catch (e) {
+          debugPrint('[DMX] FIX-06: Failed to save resume data on pause: $e');
+        }
         await TorrentService.pauseTorrent(torrentId);
       }
+
+
 
       // Cancel the token only.
       try {
@@ -1408,6 +1446,9 @@ class DownloadProvider extends ChangeNotifier
       _cancelTokens.remove(id);
     }
 
+    // FIX(S1): Clear stale thread override on pause
+    effectiveThreadOverrides.remove(id);
+
     // Flush any pending throttled progress to disk.
     await _flushPendingProgress(id);
 
@@ -1417,18 +1458,68 @@ class DownloadProvider extends ChangeNotifier
     // Re-check live task after engine shutdown / completion
     final latest = _findTask(id);
     if (latest == null) return;
-    if (latest.status == DownloadStatus.completed) {
+    // FIX(P8): Don't overwrite a genuine failed/completed state
+    if (latest.status == DownloadStatus.completed ||
+        latest.status == DownloadStatus.failed) {
       _cancelTokens.remove(id);
       return;
     }
 
+    // FIX(D1): Skip disk-byte reconciliation for torrents — libtorrent pre-allocates files
+    if (latest.isTorrent) {
+      final snapshotFiles = latest.torrentFiles ?? task?.torrentFiles;
+      await _setTask(
+        latest.copyWith(
+          status: DownloadStatus.paused,
+          speed: 0,
+          clearEta: true,
+          clearError: true,
+          clearStatusMessage: true,
+          clearScheduledAt: true,
+          pausedByUser: true,
+          torrentFiles: snapshotFiles,
+        ),
+      );
+      return;
+    }
+
+
     // Sync DB bytes with the authoritative state file
-    final stateBytes = await _readDmxStateBytes(latest.tempFilePath);
-    final synced = stateBytes > 0 &&
+    final stateBytes = await _readDmxStateBytes(
+      latest.tempFilePath,
+      threadCount: latest.threadCount,
+    );
+
+    // FIX(P1): Include audio bytes in the paused downloadedBytes total
+    int audioBytesOnDisk = 0;
+    if (latest.mergedAudioUrl != null && latest.mergedAudioUrl!.isNotEmpty) {
+      audioBytesOnDisk = await _readDmxStateBytes(
+        '${latest.tempFilePath}.audio',
+        threadCount: 2,
+      );
+    }
+    final totalBytes = stateBytes + audioBytesOnDisk;
+    final synced = totalBytes > 0 &&
             (latest.status == DownloadStatus.downloading ||
                 latest.status == DownloadStatus.paused)
-        ? latest.copyWith(downloadedBytes: stateBytes)
+        ? latest.copyWith(downloadedBytes: totalBytes)
         : latest;
+
+    // FIX-2: Sync audio progress from audio .dmxstate on pause
+    double syncedAudioProgress = synced.audioProgress;
+    if (synced.mergedAudioUrl != null && synced.audioSize > 0) {
+      if (audioBytesOnDisk > 0) {
+        syncedAudioProgress =
+            (audioBytesOnDisk / synced.audioSize).clamp(0.0, 1.0);
+        debugPrint(
+          '[DMX] FIX-2: Synced audio progress from disk: '
+          '$audioBytesOnDisk / ${synced.audioSize} = $syncedAudioProgress',
+        );
+      }
+    }
+
+    // FIX(P5): Carry per-file snapshot into the final state
+    final snapshotFiles = latest.torrentFiles ?? task?.torrentFiles;
 
     await _setTask(
       synced.copyWith(
@@ -1439,8 +1530,12 @@ class DownloadProvider extends ChangeNotifier
         clearStatusMessage: true,
         clearScheduledAt: true,
         pausedByUser: true,
+        audioProgress: syncedAudioProgress,
+        torrentFiles: snapshotFiles,
       ),
     );
+
+
 
 
     _downloadEngine.updateSpeedLimit(
@@ -1504,39 +1599,108 @@ class DownloadProvider extends ChangeNotifier
     _retryCounts.remove(id);
     _resumeRejectionRestarts.remove(id);
 
+    // ═══ FIX YT-5: Proactive YouTube URL refresh on resume ═══
+    if (task.youtubeQualityPreset != null &&
+        task.downloadPageUrl != null &&
+        task.downloadPageUrl!.isNotEmpty) {
+      try {
+        final fresh =
+            await YoutubeService.getFreshStreams(task.downloadPageUrl!);
+        if (fresh != null && fresh['url'] != null) {
+          final freshUrl = fresh['url']!;
+          final freshAudioUrl = fresh['audioUrl'];
+          if (freshUrl != task.url) {
 
-    // ── FIX: Re-read actual bytes from .dmxstate (same as retryTask) ──
-    int realBytesOnDisk = task.downloadedBytes; // fallback
-    try {
-      final videoBytes = await _readDmxStateBytes(task.tempFilePath);
-      var audioBytes = 0;
-      if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
-        audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+            debugPrint('[DMX] YT-5 FIX: Refreshed expired stream URL on resume');
+            final updatedTask = task.copyWith(
+              url: freshUrl,
+              mergedAudioUrl: freshAudioUrl ?? task.mergedAudioUrl,
+            );
+            final idx = _tasks.indexWhere((t) => t.id == id);
+            if (idx != -1) {
+              _tasks[idx] = updatedTask;
+              await _databaseService.saveTask(updatedTask);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint(
+            '[DMX] YT-5: Proactive refresh failed, will retry on error: $e');
       }
-      if (videoBytes > 0 || audioBytes > 0) {
-        realBytesOnDisk = videoBytes + audioBytes;
-      }
-    } catch (e) {
-      debugPrint('[DMX] resumeTask .dmxstate read failed: $e');
     }
+    // ═══ END FIX YT-5 ═══
+
+
+
+    int realBytesOnDisk = task.downloadedBytes; // fallback
+    // FIX(R1): For torrents, derive progress from torrentFiles, not disk
+    if (task.isTorrent && task.torrentFiles != null) {
+      realBytesOnDisk = task.torrentFiles!.fold<int>(0, (sum, f) {
+        if (f['selected'] == true) {
+          return sum + (((f['downloadedBytes'] as num?)?.toInt()) ?? 0);
+        }
+        return sum;
+      });
+    } else {
+      try {
+        // FIX(R-1): Pass threadCount so multi-thread guard works correctly
+        final videoBytes = await _readDmxStateBytes(
+          task.tempFilePath,
+          threadCount: task.threadCount,
+        );
+
+        var audioBytes = 0;
+        if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+          audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+        }
+        if (videoBytes > 0 || audioBytes > 0) {
+          realBytesOnDisk = videoBytes + audioBytes;
+        }
+      } catch (e) {
+        debugPrint('[DMX] resumeTask .dmxstate read failed: $e');
+      }
+    }
+
 
     final stateChunks = await _readDmxStateChunks(
         task.tempFilePath, task.threadCount);
     final chunks = stateChunks ??
         List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
 
-    final videoStateBytes = await _readDmxStateBytes(task.tempFilePath);
-    final audioProgressVal = task.audioSize > 0 &&
-            (realBytesOnDisk - videoStateBytes) > 0
-        ? ((realBytesOnDisk - videoStateBytes) / task.audioSize).clamp(0.0, 1.0)
-        : task.audioProgress;
+    // FIX-3: Re-validate audio progress from disk on resume
+    double validatedAudioProgress = task.audioProgress;
+    if (task.mergedAudioUrl != null && task.audioSize > 0) {
+      final audioStatePath = '${task.tempFilePath}.audio';
+      final audioStateFile = File('$audioStatePath.dmxstate');
+      if (await audioStateFile.exists()) {
+        final audioBytes = await _readDmxStateBytes(
+          audioStatePath,
+          threadCount: 2,
+        );
+        validatedAudioProgress =
+            (audioBytes / task.audioSize).clamp(0.0, 1.0);
+        debugPrint(
+          '[DMX] FIX-3: Re-validated audio progress from disk: '
+          '$audioBytes / ${task.audioSize} = $validatedAudioProgress',
+        );
+      } else {
+        final audioFile = File(audioStatePath);
+        if (await audioFile.exists()) {
+          final audioFileLen = await audioFile.length();
+          if (audioFileLen > 0 && task.audioSize > 0) {
+            validatedAudioProgress =
+                (audioFileLen / task.audioSize).clamp(0.0, 1.0);
+          }
+        }
+      }
+    }
 
     await _setTask(
       task.copyWith(
         status: DownloadStatus.queued,
         downloadedBytes: realBytesOnDisk,
         chunks: chunks,
-        audioProgress: audioProgressVal,
+        audioProgress: validatedAudioProgress,
         speed: 0,
         clearEta: true,
         clearError: true,
@@ -1545,6 +1709,7 @@ class DownloadProvider extends ChangeNotifier
         pausedByUser: false,
       ),
     );
+
 
     _downloadEngine.updateSpeedLimit(
       _effectiveSpeedLimit(),
@@ -1626,13 +1791,72 @@ class DownloadProvider extends ChangeNotifier
     _retryCounts.remove(id);
     _resumeRejectionRestarts.remove(id);
 
+    // ═══ FIX YT-7: Refresh YouTube URL on retry ═══
+    if (task.youtubeQualityPreset != null &&
+        task.downloadPageUrl != null &&
+        task.downloadPageUrl!.isNotEmpty) {
+      try {
+        final fresh =
+            await YoutubeService.getFreshStreams(task.downloadPageUrl!);
+        if (fresh != null && fresh['url'] != null) {
+          final freshUrl = fresh['url']!;
+          final freshAudioUrl = fresh['audioUrl'];
+          if (freshUrl != task.url) {
+
+            debugPrint('[DMX] YT-7 FIX: Refreshed expired stream URL on retry');
+            final idx = _tasks.indexWhere((t) => t.id == id);
+            if (idx != -1) {
+              _tasks[idx] = _tasks[idx].copyWith(
+                url: freshUrl,
+                mergedAudioUrl: freshAudioUrl ?? task.mergedAudioUrl,
+              );
+              await _databaseService.saveTask(_tasks[idx]);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[DMX] YT-7: URL refresh failed on retry: $e');
+      }
+    }
+    // ═══ END FIX YT-7 ═══
+
+    // ═══ FIX H-7: Validate state before retry ═══
+    final stateFile = File('${task.tempFilePath}.dmxstate');
+    if (await stateFile.exists()) {
+      try {
+        final content = await stateFile.readAsString();
+        jsonDecode(content);
+      } catch (e) {
+        debugPrint('[DMX] H-7 FIX: Corrupted state file detected, deleting');
+        try {
+          await stateFile.delete();
+        } catch (_) {}
+        final idx = _tasks.indexWhere((t) => t.id == id);
+        if (idx != -1) {
+          _tasks[idx] = _tasks[idx].copyWith(
+            downloadedBytes: 0,
+            chunks: List<double>.filled(
+                task.threadCount > 0 ? task.threadCount : 1, 0.0),
+          );
+          await _databaseService.saveTask(_tasks[idx]);
+        }
+      }
+    }
+    // ═══ END FIX H-7 ═══
+
+
 
     // ── Read ACTUAL progress from .dmxstate, never from pre-allocated file length ──
-    final videoBytes = await _readDmxStateBytes(task.tempFilePath);
+    final videoBytes = await _readDmxStateBytes(task.tempFilePath,
+        threadCount: task.threadCount);
     var audioBytes = 0;
     if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
-      audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
+      audioBytes = await _readDmxStateBytes(
+        '${task.tempFilePath}.audio',
+        threadCount: 2,
+      );
     }
+
 
     final realBytesOnDisk = videoBytes + audioBytes;
 
@@ -1668,71 +1892,76 @@ class DownloadProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  /// ── FIX-4: Robust .dmxstate reading with journal fallback ──
-  static Future<int> _readDmxStateBytes(String tempFilePath) async {
+  /// ── FIX-4 / FIX-1 / FIX-11: Robust .dmxstate reading with journal fallback ──
+  static Future<int> _readDmxStateBytes(
+    String tempFilePath, {
+    int threadCount = 1,
+  }) async {
     final stateFile = File('$tempFilePath.dmxstate');
-    if (!await stateFile.exists()) {
-      // Fallback: try journal before falling back to file length
-      final journalPath = '$tempFilePath.journal';
-      final journalFile = File(journalPath);
-      if (await journalFile.exists()) {
-        try {
-          final journalBytes = await DownloadJournal.recover(journalPath);
-          if (journalBytes != null && journalBytes.isNotEmpty) {
-            final total = journalBytes.fold<int>(0, (sum, b) => sum + b);
-            debugPrint(
-              '[DMX] .dmxstate missing, recovered $total bytes from journal',
-            );
-            return total;
-          }
-        } catch (e) {
-          debugPrint('[DMX] Journal recovery also failed: $e');
-        }
-      }
+    int stateTotal = 0;
+    bool hasStateFile = false;
+
+    if (await stateFile.exists()) {
       try {
-        final tempFile = File(tempFilePath);
-        if (await tempFile.exists()) {
-          return await tempFile.length();
+        final content = await stateFile.readAsString();
+        final decoded = jsonDecode(content);
+        if (decoded is Map) {
+          final progressList = decoded['progress'] as List?;
+          if (progressList != null) {
+            BigInt total = BigInt.zero;
+            for (final chunk in progressList) {
+              total += BigInt.from((chunk as num).toInt());
+            }
+            stateTotal = total.toInt();
+            hasStateFile = true;
+          }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[DMX] _readDmxStateBytes failed for $tempFilePath: $e');
+      }
+    }
+
+    // FIX-11: If journal exists, compare and use whichever has more bytes
+    final journalPath = '$tempFilePath.journal';
+    final journalFile = File(journalPath);
+    if (await journalFile.exists()) {
+      try {
+        final journalBytes = await DownloadJournal.recover(journalPath);
+        if (journalBytes != null && journalBytes.isNotEmpty) {
+          final journalTotal = journalBytes.fold<int>(0, (sum, b) => sum + b);
+          if (journalTotal > stateTotal) {
+            debugPrint(
+              '[DMX] FIX-11: Journal has more bytes ($journalTotal) '
+              'than state file ($stateTotal). Using journal.',
+            );
+            return journalTotal;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DMX] FIX-11: Journal read failed, using state: $e');
+      }
+    }
+
+    if (hasStateFile) {
+      return stateTotal;
+    }
+
+    // FIX-1: For multi-threaded downloads, tempFile.length() is pre-allocated size, NOT downloaded bytes.
+    if (threadCount > 1) {
+      debugPrint(
+        '[DMX] No state file for multi-threaded download. '
+        'Returning 0 instead of pre-allocated file size.',
+      );
       return 0;
     }
 
-    try {
-      final content = await stateFile.readAsString();
-      final decoded = jsonDecode(content);
-      if (decoded is Map) {
-        final progressList = decoded['progress'] as List?;
-        if (progressList != null) {
-          BigInt total = BigInt.zero;
-          for (final chunk in progressList) {
-            total += BigInt.from((chunk as num).toInt());
-          }
-          return total.toInt();
-        }
-      }
-    } catch (e) {
-      debugPrint('[DMX] .dmxstate corrupt, trying journal: $e');
-      final journalPath = '$tempFilePath.journal';
-      final journalFile = File(journalPath);
-      if (await journalFile.exists()) {
-        try {
-          final journalBytes = await DownloadJournal.recover(journalPath);
-          if (journalBytes != null && journalBytes.isNotEmpty) {
-            final total = journalBytes.fold<int>(0, (sum, b) => sum + b);
-            debugPrint(
-              '[DMX] Recovered $total bytes from journal after corrupt .dmxstate',
-            );
-            return total;
-          }
-        } catch (je) {
-          debugPrint('[DMX] Journal recovery failed too: $je');
-        }
-      }
+    // Single-threaded: file length is accurate
+    final tempFile = File(tempFilePath);
+    if (await tempFile.exists()) {
+      return await tempFile.length();
     }
     return 0;
   }
-
 
   /// Reads per-chunk progress percentages from a `.dmxstate` sidecar file.
   /// Returns null when the file is missing, corrupt, or empty.
@@ -1743,13 +1972,38 @@ class DownloadProvider extends ChangeNotifier
     try {
       final decoded = jsonDecode(await stateFile.readAsString());
       if (decoded is Map && decoded['progress'] is List) {
-        final progress = (decoded['progress'] as List)
-            .map((e) => (e as num).toInt())
-            .toList();
+        // FIX-C5: Wrap element parsing in per-element try-catch to prevent corrupt entries from crashing
+        final progress = <int>[];
+        for (final e in (decoded['progress'] as List)) {
+          try {
+            if (e is num) {
+              progress.add(e.toInt());
+            } else {
+              progress.add(0);
+            }
+          } catch (_) {
+            progress.add(0);
+          }
+        }
+
         final total = decoded['totalSize'] is num
             ? (decoded['totalSize'] as num).toInt()
             : 0;
         if (total <= 0 || progress.isEmpty) return null;
+
+        // FIX-5: Validate chunk sum doesn't exceed total
+        final chunkSum = progress.fold<int>(0, (sum, b) => sum + b);
+        if (chunkSum > total) {
+          debugPrint(
+            '[DMX] FIX-5: Chunk sum ($chunkSum) exceeds total ($total). '
+            'Clamping chunks.',
+          );
+          final scale = total / chunkSum;
+          for (var i = 0; i < progress.length; i++) {
+            progress[i] = (progress[i] * scale).toInt();
+          }
+        }
+
         final partSize = (total / progress.length).floor();
         return List.generate(progress.length, (i) {
           final end =
@@ -1760,6 +2014,7 @@ class DownloadProvider extends ChangeNotifier
     } catch (_) {}
     return null;
   }
+
 
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
@@ -2080,6 +2335,17 @@ class DownloadProvider extends ChangeNotifier
     // preserving progress fields (downloadedBytes, speed, eta, chunks,
     // audioProgress) to prevent state regression during active downloads.
     _tasks[index] = _mergeTaskUpdate(prev, updated);
+
+    // ═══ FIX H-6: Clamp downloadedBytes to fileSize ═══
+    final currentTask = _tasks[index];
+    if (currentTask.fileSize > 0 &&
+        currentTask.downloadedBytes > currentTask.fileSize) {
+      debugPrint('[DMX] H-6 FIX: Clamping downloadedBytes from '
+          '${currentTask.downloadedBytes} to ${currentTask.fileSize}');
+      _tasks[index] =
+          currentTask.copyWith(downloadedBytes: currentTask.fileSize);
+    }
+
 
     // Only invalidate the filter/sort cache when a "structural" field changes
     // (status, category, name, URL, or fileSize). Progress-only updates (speed,
@@ -2532,6 +2798,7 @@ class DownloadProvider extends ChangeNotifier
     int? newAudioSize,
     bool isRefresh = false,
     bool clearAudioUrl = false,
+    bool isSameResource = false,
   }) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
@@ -2540,6 +2807,7 @@ class DownloadProvider extends ChangeNotifier
 
     final cleanUrl = newUrl.trim();
     if (task.url == cleanUrl) return;
+
 
     if (!isValidTransmissionUrl(cleanUrl)) {
       throw Exception('Invalid URL/Magnet');
@@ -2690,7 +2958,49 @@ class DownloadProvider extends ChangeNotifier
         (task.downloadPageUrl!.contains('youtube.com/') ||
             task.downloadPageUrl!.contains('youtu.be/'));
 
+    // FIX-04: For YouTube tasks, resolve via stream API instead of HEAD probe
+    if (task.youtubeQualityPreset != null &&
+        (cleanUrl.contains('youtube.com') || cleanUrl.contains('youtu.be'))) {
+
+      try {
+        final videoId = YoutubeService.extractVideoId(cleanUrl);
+        if (videoId != null) {
+          final streamInfo = await YoutubeService.getStreamForVideo(
+            videoId,
+            task.youtubeQualityPreset,
+          );
+          if (streamInfo != null && streamInfo['src'] != null) {
+            final resolvedUrl = streamInfo['src'] as String;
+            final resolvedAudioUrl = streamInfo['audioSrc'] as String?;
+            final resolvedAudioSize = streamInfo['audioSize'] as int? ?? 0;
+            final resolvedFileSize = streamInfo['size'] as int? ?? 0;
+            final updatedTask = task.copyWith(
+              url: resolvedUrl,
+              mergedAudioUrl: resolvedAudioUrl,
+              audioSize: resolvedAudioSize > 0
+                  ? resolvedAudioSize
+                  : task.audioSize,
+              fileSize: resolvedFileSize > 0
+                  ? resolvedFileSize
+                  : task.fileSize,
+              clearError: true,
+            );
+            _tasks[index] = updatedTask;
+            await _databaseService.saveTask(updatedTask);
+            notifyListeners();
+            if (wasDownloading) {
+              await resumeTask(taskId);
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        // Fall through to normal resolveMetadata path
+      }
+    }
+
     if (newFileSize == null && !isRefresh) {
+
       try {
         metadata = await _downloadEngine.resolveMetadata(
           url: cleanUrl,
@@ -2714,7 +3024,9 @@ class DownloadProvider extends ChangeNotifier
     final resolvedSupportsResume =
         isRefresh ? true : (metadata?.supportsResume ?? task.supportsResume);
 
-    bool sizeChanged = false;
+    // FIX(H-1): When URL changes and isSameResource is false, treat as new resource
+    bool sizeChanged = !isSameResource && !isRefresh && (cleanUrl != task.url);
+
 
     final oldUri = Uri.tryParse(task.url);
     final newUri = Uri.tryParse(cleanUrl);
@@ -2725,9 +3037,29 @@ class DownloadProvider extends ChangeNotifier
     final itagChanged =
         oldItag != null && newItag != null && oldItag != newItag;
 
-    if (isYoutube && itagChanged) {
+    // FIX-B5: Check mime parameter for itag-less YouTube URLs
+    final oldMime = oldUri?.queryParameters['mime'];
+    final newMime = newUri?.queryParameters['mime'];
+    final mimeChanged =
+        oldMime != null && newMime != null && oldMime != newMime;
+
+    // FIX-B4: Detect token-only URL changes (covers null vs non-null)
+    final oldToken = oldUri?.queryParameters['token'] ??
+        oldUri?.queryParameters['signature'] ??
+        oldUri?.queryParameters['sig'];
+    final newToken = newUri?.queryParameters['token'] ??
+        newUri?.queryParameters['signature'] ??
+        newUri?.queryParameters['sig'];
+    final tokenOnlyChange = !itagChanged && !mimeChanged && (oldToken != newToken);
+    if (tokenOnlyChange) {
+      debugPrint('[DMX] FIX-B4: Token-only URL change detected. Keeping progress.');
+    }
+
+
+    if (isYoutube && (itagChanged || mimeChanged)) {
       sizeChanged = true;
     } else if (!isRefresh &&
+
         resolvedFileSize > 0 &&
         task.fileSize > 0 &&
         resolvedFileSize != task.fileSize) {
@@ -2746,10 +3078,14 @@ class DownloadProvider extends ChangeNotifier
           resolvedMetaSize = meta.fileSize;
         }
 
+        // FIX-18: Use percentage-based tolerance instead of fixed 1024 bytes
+        final tolerance =
+            (task.fileSize * 0.001).clamp(1024.0, 10.0 * 1024 * 1024);
         if (resolvedMetaSize > 0 &&
             task.fileSize > 0 &&
-            (resolvedMetaSize - task.fileSize).abs() > 1024) {
+            (resolvedMetaSize - task.fileSize).abs() > tolerance) {
           sizeChanged = true;
+
 
           debugPrint(
             '[DMX] URL update: size changed ${task.fileSize} → '
@@ -2763,20 +3099,26 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
+    // FIX(U-1): Also delete the temp file and audio temp file when size changes
     if (sizeChanged) {
       for (final path in [
+        task.tempFilePath,
         '${task.tempFilePath}.dmxstate',
-        '${task.tempFilePath}.audio.dmxstate',
         '${task.tempFilePath}.journal',
+        '${task.tempFilePath}.audio',
+        '${task.tempFilePath}.audio.dmxstate',
+        '${task.tempFilePath}.audio.journal',
       ]) {
         try {
           final f = File(path);
           if (await f.exists()) await f.delete();
         } catch (e) {
-          debugPrint('[DMX] Deleting stale state file $path failed: $e');
+          debugPrint('[DMX] Deleting stale file $path failed: $e');
         }
       }
     }
+
+
 
     final audioChanged = clearAudioUrl ||
         (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl);
@@ -2784,7 +3126,9 @@ class DownloadProvider extends ChangeNotifier
       for (final path in [
         '${task.tempFilePath}.audio',
         '${task.tempFilePath}.audio.dmxstate',
+        '${task.tempFilePath}.audio.journal',
       ]) {
+
         try {
           final f = File(path);
           if (await f.exists()) await f.delete();
@@ -2956,19 +3300,30 @@ class DownloadProvider extends ChangeNotifier
           if (await audioDmxStateFile.exists()) {
             await audioDmxStateFile.delete();
           }
+          final audioJournalFile = File('${task.tempFilePath}.audio.journal');
+          if (await audioJournalFile.exists()) {
+            await audioJournalFile.delete();
+          }
         }
+
       } catch (e) {
         debugPrint('Failed to delete temp files: $e');
       }
     }
 
-    final videoBytes = await _readDmxStateBytes(task.tempFilePath);
+    // FIX-C3: Force realBytesOnDisk to 0 when deleteTempFiles is true so task is reset clean
+    final videoBytes = deleteTempFiles
+        ? 0
+        : await _readDmxStateBytes(task.tempFilePath);
     var audioBytes = 0;
     final targetAudioUrl = newAudioUrl ?? task.mergedAudioUrl;
-    if (targetAudioUrl != null && targetAudioUrl.isNotEmpty) {
+    if (!deleteTempFiles &&
+        targetAudioUrl != null &&
+        targetAudioUrl.isNotEmpty) {
       audioBytes = await _readDmxStateBytes('${task.tempFilePath}.audio');
     }
-    final realBytesOnDisk = videoBytes + audioBytes;
+    final realBytesOnDisk = deleteTempFiles ? 0 : (videoBytes + audioBytes);
+
 
     await _setTask(
       task.copyWith(

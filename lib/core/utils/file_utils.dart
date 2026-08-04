@@ -203,7 +203,27 @@ int scanFolderBytesSync(String path) {
             if (storedDownloaded > 0) {
               downloaded = storedDownloaded;
             } else if (diskLen > 0 && diskLen < length) {
-              downloaded = diskLen;
+              // FIX(T-1): Probe tail when diskLen < length to avoid trusting pre-allocated sparse files
+              try {
+                final raf = file.openSync();
+                final headProbe = raf.readSync(diskLen < 4096 ? diskLen : 4096);
+                final hasHead = headProbe.any((b) => b != 0);
+                if (hasHead) {
+                  if (diskLen > 8192) {
+                    raf.setPositionSync(diskLen - 4096);
+                    final tailProbe = raf.readSync(4096);
+                    final hasTail = tailProbe.any((b) => b != 0);
+                    downloaded = hasTail ? diskLen : (diskLen ~/ 2);
+                  } else {
+                    downloaded = diskLen;
+                  }
+                } else {
+                  downloaded = 0;
+                }
+                raf.closeSync();
+              } catch (_) {
+                downloaded = diskLen;
+              }
             } else if (diskLen >= length) {
               try {
                 final raf = file.openSync();
@@ -224,7 +244,6 @@ int scanFolderBytesSync(String path) {
                 downloaded = 0;
               }
             }
-
           }
         }
       } catch (e) {
@@ -240,6 +259,7 @@ int scanFolderBytesSync(String path) {
   }).toList();
   return (total: total, files: files);
 }
+
 
 Future<void> deleteDownloadParts(String tempFilePath) async {
   try {

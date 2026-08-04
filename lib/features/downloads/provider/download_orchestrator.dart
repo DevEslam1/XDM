@@ -17,7 +17,9 @@ import '../../../core/services/checksum_service.dart';
 import '../../../core/services/database_service.dart';
 import '../../../core/services/diagnostic_service.dart';
 import '../../../core/services/download_engine.dart';
+import '../../../core/services/download_journal.dart';
 import '../../../core/services/download_metrics.dart';
+
 import '../../../core/services/error_taxonomy.dart';
 import '../../../core/services/ffmpeg_mux_service.dart' hide Semaphore;
 import 'package:ffmpeg_kit_flutter_new_min/ffprobe_kit.dart';
@@ -131,6 +133,8 @@ class DownloadOrchestrator {
   static final Semaphore _streamResolveSemaphore = Semaphore(4);
 
   Timer? _periodicResumeSaveTimer;
+  String _currentCookieString = '';
+
 
   void _startPeriodicResumeSave() {
     _periodicResumeSaveTimer?.cancel();
@@ -143,10 +147,15 @@ class DownloadOrchestrator {
             TorrentService.activeTorrentIds,
             TorrentService.progressFor,
           ));
+          // FIX-C4: Save fast resume data for all active torrents
+          for (final tid in TorrentService.activeTorrentIds) {
+            unawaited(TorrentService.saveResumeData(tid));
+          }
         }
       },
     );
   }
+
 
   static const _mediaChannel = MethodChannel('com.dmx.app/media');
 
@@ -235,23 +244,84 @@ class DownloadOrchestrator {
           } catch (_) {}
           task = updated;
         }
+
+        // ═══ FIX H-5: Validate chunk progress against actual file size ═══
+        if (validState && task.threadCount > 1) {
+          try {
+            final tempFile = File(task.tempFilePath);
+            if (await tempFile.exists()) {
+              final actualFileSize = await tempFile.length();
+              final stateChunks = await _readDmxStateChunks(
+                  task.tempFilePath, task.threadCount);
+
+              if (stateChunks != null) {
+                final totalFromChunks =
+                    stateChunks.fold<double>(0.0, (s, c) => s + c);
+                final expectedBytes =
+                    (totalFromChunks * task.fileSize).toInt();
+
+                if (expectedBytes > actualFileSize + 4096) {
+                  debugPrint(
+                      '[DMX] H-5 FIX: State claims $expectedBytes bytes but file has '
+                      '$actualFileSize. Correcting chunk progress.');
+
+                  final correctionFactor = actualFileSize / expectedBytes;
+                  final correctedChunks = stateChunks
+                      .map((c) => (c * correctionFactor).clamp(0.0, 1.0))
+                      .toList();
+                  final correctedBytes = (actualFileSize * 0.95).toInt();
+
+                  final updated = task.copyWith(
+                    downloadedBytes: correctedBytes,
+                    chunks: correctedChunks,
+                  );
+                  await _host.setTaskState(updated);
+                  task = updated;
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint(
+                '[DMX] H-5: Chunk validation failed, using state as-is: $e');
+          }
+        }
+        // ═══ END FIX H-5 ═══
       }
 
-      // FIX-H1: Validate audio .dmxstate sidecar for YouTube audio downloads.
-      // If the sidecar is missing, reset audioProgress so the audio stream is
-      // re-downloaded from the beginning rather than resuming from a stale value.
-      final audioStatePath = '${task.tempFilePath}.audio.dmxstate';
+
+      // FIX-N4: Validate audio state — check BOTH state file AND audio file
       if (task.mergedAudioUrl != null && task.audioSize > 0) {
-        if (!await File(audioStatePath).exists()) {
-          // fall back to actual audio bytes on disk
-          final audioBytes =
-              await _readDmxStateBytes('${task.tempFilePath}.audio');
-          final fraction = (audioBytes / task.audioSize).clamp(0.0, 1.0);
-          final updated = task.copyWith(audioProgress: fraction);
-          await _host.setTaskState(updated);
-          task = updated;
+        final audioPath = '${task.tempFilePath}.audio';
+        final audioStateFile = File('$audioPath.dmxstate');
+        final audioFile = File(audioPath);
+
+        if (!await audioStateFile.exists()) {
+          // State file missing — check if audio file has actual data
+          if (await audioFile.exists()) {
+            final audioLen = await audioFile.length();
+            if (audioLen > 0 && task.audioSize > 0) {
+              // Audio file has data — estimate progress from size
+              final fraction = (audioLen / task.audioSize).clamp(0.0, 1.0);
+              debugPrint(
+                '[DMX] FIX-N4: Audio state missing but file has $audioLen bytes. '
+                'Setting progress to $fraction',
+              );
+              final updated = task.copyWith(audioProgress: fraction);
+              await _host.setTaskState(updated);
+              task = updated;
+            } else {
+              final updated = task.copyWith(audioProgress: 0.0);
+              await _host.setTaskState(updated);
+              task = updated;
+            }
+          } else {
+            final updated = task.copyWith(audioProgress: 0.0);
+            await _host.setTaskState(updated);
+            task = updated;
+          }
         }
       }
+
 
     } catch (e) {
       debugPrint('[DMX] validateResumeState exception: $e');
@@ -279,7 +349,9 @@ class DownloadOrchestrator {
   /// Extract cookies and resolve YouTube stream URLs.
   /// Returns the cookie string needed for download, or null if the task
   /// was queued for retry / marked as failed (caller should return).
-  Future<String?> _resolveStreamUrl(DownloadTask task) async {
+  // FIX-C1: Return updated DownloadTask (or null on failure) so caller holds fresh reference
+  Future<DownloadTask?> _resolveStreamUrl(DownloadTask task) async {
+
     String cookieString = '';
     try {
       final cookieUrl = task.downloadPageUrl ?? task.url;
@@ -302,8 +374,12 @@ class DownloadOrchestrator {
         }
       }
     } catch (e) {
+
       debugPrint('[DMX] Cookie resolution error: $e');
     }
+
+    _currentCookieString = cookieString;
+
 
     final youtubeUrl = task.downloadPageUrl ?? task.url;
     if (task.youtubeQualityPreset != null &&
@@ -470,8 +546,9 @@ class DownloadOrchestrator {
         _streamResolveSemaphore.release();
       }
     }
-    return cookieString;
+    return task;
   }
+
 
   /// Merge audio and video streams via FFmpeg.
   /// Returns true on success, false if no merge was needed or already handled.
@@ -498,13 +575,28 @@ class DownloadOrchestrator {
         await File('${current.tempFilePath}.audio').exists()) {
       actualAudioPath = '${current.tempFilePath}.audio';
     }
+    // FIX(F4): Restore video-only file from a previous merge failure
+    final videoOnlyPath =
+        '${p.withoutExtension(current.localFilePath)}_video_only${p.extension(current.localFilePath).isNotEmpty ? p.extension(current.localFilePath) : '.mp4'}';
+    final videoOnlyFile = File(videoOnlyPath);
+    if (videoOnlyFile.existsSync() && !File(current.localFilePath).existsSync()) {
+      debugPrint('[DMX] F4: Restoring video-only file for merge retry');
+      await videoOnlyFile.rename(current.localFilePath);
+    }
+
     final videoExt = p.extension(actualVideoPath).isNotEmpty
         ? p.extension(actualVideoPath)
         : '.mp4';
+
     final mergedPath =
         '${p.withoutExtension(actualVideoPath)}$videoExt.merged$videoExt';
 
+    await _host.setTaskState(current.copyWith(
+      statusMessage: DownloadStatusMessages.merging,
+    ));
+
     debugPrint('[DMX] Phase 3 — Merge starting:');
+
     debugPrint('[DMX]   Video: $actualVideoPath');
     debugPrint('[DMX]   Audio: $actualAudioPath');
     debugPrint('[DMX]   Output: $mergedPath');
@@ -544,9 +636,22 @@ class DownloadOrchestrator {
       );
     }
 
+    // FIX-10: Validate video file size before merge
+    final expectedVideoSize = current.fileSize > 0
+        ? (current.fileSize - (current.audioSize > 0 ? current.audioSize : 0))
+        : 0;
+    if (expectedVideoSize > 0 &&
+        videoLen < (expectedVideoSize * 0.95).toInt()) {
+      throw Exception(
+        'Video file incomplete: $videoLen / $expectedVideoSize bytes. '
+        'File: $actualVideoPath',
+      );
+    }
+
     Duration? expectedDuration;
     try {
       final probe = await FFprobeKit.execute(
+
         '-v error -show_entries format=duration -of default=noprint_wrappers=1 "$actualVideoPath"',
       );
       final logs = await probe.getLogsAsString();
@@ -775,6 +880,27 @@ class DownloadOrchestrator {
       }
     }
 
+
+    // FIX-16: Post-download file size integrity check for HTTP downloads
+    if (!current.isTorrent && current.fileSize > 0) {
+      final file = File(current.localFilePath);
+      if (await file.exists()) {
+        final actualSize = await file.length();
+        if (actualSize < current.fileSize) {
+          await _host.setTaskState(
+            current.copyWith(
+              status: DownloadStatus.failed,
+              errorMessage:
+                  'Download incomplete: expected ${current.fileSize} bytes, '
+                  'got $actualSize bytes. File: ${current.localFilePath}',
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+
     // Record checksum metrics
     if (metrics != null && current.expectedSha256 != null) {
       metrics.checksumAlgorithm = 'SHA-256';
@@ -1000,7 +1126,13 @@ class DownloadOrchestrator {
           hasAudio ? (base.audioSize > 0 ? base.audioSize : 0) : 0;
       final effectiveVideoSize =
           videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
-      final totalSize = effectiveVideoSize + audioContribution;
+      // FIX-D1: Use fixed estimate when audioContribution is 0 to avoid denominator shifting
+      final audioEstimate = hasAudio && audioContribution == 0
+          ? (audioBytesSoFar > 0 ? audioBytesSoFar : 0)
+          : audioContribution;
+      final totalSize = effectiveVideoSize + audioEstimate;
+
+
       final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
           0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
       final instantSpeed = audioSpeedNow + videoSpeedNow;
@@ -1125,11 +1257,12 @@ class DownloadOrchestrator {
             // 1. audioProgress is at 1.0 (exact stream completion), OR
             // 2. audio exists on disk AND size is known AND downloaded bytes >= expected size.
             // The 0.99 heuristic is REMOVED because it can merge truncated audio.
+            // FIX-C2: Also consider audio complete when liveAudioSize <= 0 but audioLen > 0
             final isAudioComplete = liveAudioTask.audioProgress >= 1.0 ||
                 (audioExists &&
                     audioLen > 0 &&
-                    liveAudioSize > 0 &&
-                    audioLen >= liveAudioSize);
+                    (liveAudioSize > 0 ? audioLen >= liveAudioSize : true));
+
 
             if (isAudioComplete) {
               debugPrint(
@@ -1196,9 +1329,11 @@ class DownloadOrchestrator {
                 audioBytesSoFar = progress.downloadedBytes;
                 audioSpeedNow = progress.speed;
                 final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
+                // FIX-B2: Prevent audioProgress stuck at 0.0 when size is unknown
                 final fraction = size > 0
                     ? (progress.downloadedBytes / size).clamp(0.0, 1.0)
-                    : 0.0;
+                    : (progress.downloadedBytes > 0 ? 1.0 : 0.0);
+
                 final idx = _host.providerTasks.indexWhere(
                   (x) => x.id == task.id,
                 );
@@ -1708,8 +1843,12 @@ class DownloadOrchestrator {
     _host.providerStartWidgetTimer();
     _host.updateTelemetryWidget();
 
-    final cookieString = await _resolveStreamUrl(task);
-    if (cookieString == null) return;
+    final resolved = await _resolveStreamUrl(task);
+    if (resolved == null) return;
+    task = resolved;
+    final cookieString = _currentCookieString;
+
+
 
     final cancelToken = CancelToken();
     _host.cancelTokens[task.id] = cancelToken;
@@ -1781,6 +1920,12 @@ class DownloadOrchestrator {
             throw Exception('Torrent engine rejected the torrent.');
           }
           _host.providerTorrentIds[task.id] = torrentId;
+          // FIX-C4: Save resume data for magnet links so resume works across app restarts
+          if (task.url.startsWith('magnet:')) {
+            unawaited(TorrentService.saveResumeData(torrentId));
+          }
+
+
         }
       } catch (e) {
         _host.cancelTokens.remove(task.id);
@@ -1838,8 +1983,22 @@ class DownloadOrchestrator {
     // before the first progress callback fires.
     // For torrents: update the file metadata list, but do NOT use the disk
     // scan to set downloadedBytes — libtorrent pre-allocates files to their
-    // full size, so file.lengthSync() would falsely report 100% completion.
-    final List<Map<String, dynamic>>? verifiedTorrentFiles = task.torrentFiles;
+    // FIX-14: On resume, reset per-file downloadedBytes to 0 so the engine
+    // re-reports accurate values. The engine's first progress tick will
+    // overwrite with real data.
+    List<Map<String, dynamic>>? verifiedTorrentFiles;
+    if (task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+      verifiedTorrentFiles = task.torrentFiles!.map((f) {
+        final copy = Map<String, dynamic>.from(f);
+        if (copy['progressEstimated'] == true) {
+          copy['downloadedBytes'] = 0;
+        }
+        return copy;
+      }).toList();
+    } else {
+      verifiedTorrentFiles = task.torrentFiles;
+    }
+
     final int realTotalDownloaded = task.downloadedBytes;
     // FIX(3): Do NOT re-derive per-file bytes from disk on resume: libtorrent
     // pre-allocates files to full length, so File.lengthSync() reports the full
@@ -1993,6 +2152,54 @@ class DownloadOrchestrator {
 
     // Validate resume state before starting
     task = await validateResumeState(task);
+
+    // ═══ FIX YT-2/YT-6: Detect interrupted merge and resume merge-only ═══
+    if (!task.isTorrent &&
+        task.mergedAudioUrl != null &&
+        task.mergedAudioUrl!.isNotEmpty) {
+      final videoFile = File(task.tempFilePath);
+      final audioFile = File('${task.tempFilePath}.audio');
+
+      if (await videoFile.exists() && await audioFile.exists()) {
+        final videoLen = await videoFile.length();
+        final audioLen = await audioFile.length();
+
+        if (videoLen > 1024 && audioLen > 1024) {
+          // FIX(YT2): Don't treat unknown-size audio as complete
+          final audioComplete = task.audioProgress >= 1.0 ||
+              (audioLen > 0 && task.audioSize > 0 && audioLen >= task.audioSize);
+
+
+          final videoComplete = task.fileSize > 0 &&
+              (videoLen >=
+                  (task.fileSize - task.audioSize).clamp(0, task.fileSize));
+
+          if (audioComplete && videoComplete) {
+            debugPrint(
+                '[DMX] YT-6 FIX: Both streams complete, resuming merge-only');
+            await _host.setTaskState(task.copyWith(
+              status: DownloadStatus.downloading,
+              statusMessage: DownloadStatusMessages.merging,
+            ));
+
+            final merged = await _mergeAudioVideo(task.id, audioFile.path);
+            if (merged) {
+              await _finalizeDownload(
+                  task.id, _host.notifications.idFor(task.id));
+            } else {
+
+              await _host.setTaskState(task.copyWith(
+                status: DownloadStatus.failed,
+                errorMessage: 'Merge failed. Tap retry to attempt merge again.',
+              ));
+            }
+            return;
+          }
+        }
+      }
+    }
+    // ═══ END FIX YT-2/YT-6 ═══
+
 
     // YouTube streams use multi-threaded mode as configured.
 
@@ -2527,25 +2734,137 @@ class DownloadOrchestrator {
 
   /// Reads actual downloaded bytes from a .dmxstate sidecar file.
   /// Returns 0 if the file doesn't exist or is corrupted.
-  static Future<int> _readDmxStateBytes(String tempFilePath) async {
+  static Future<int> _readDmxStateBytes(
+    String tempFilePath, {
+    int threadCount = 1,
+  }) async {
     final stateFile = File('$tempFilePath.dmxstate');
-    if (!await stateFile.exists()) return 0;
-    try {
-      final content = await stateFile.readAsString();
-      final decoded = jsonDecode(content);
-      if (decoded is Map) {
-        final progressList = decoded['progress'] as List?;
-        if (progressList != null) {
-          BigInt total = BigInt.zero;
-          for (final chunk in progressList) {
-            total += BigInt.from((chunk as num).toInt());
+    int stateTotal = 0;
+    bool hasStateFile = false;
+
+    if (await stateFile.exists()) {
+      try {
+        final content = await stateFile.readAsString();
+        final decoded = jsonDecode(content);
+        if (decoded is Map) {
+          final progressList = decoded['progress'] as List?;
+          if (progressList != null) {
+            BigInt total = BigInt.zero;
+            for (final chunk in progressList) {
+              total += BigInt.from((chunk as num).toInt());
+            }
+            stateTotal = total.toInt();
+            hasStateFile = true;
           }
-          return total.toInt();
         }
+      } catch (e) {
+        debugPrint('[DMX] _readDmxStateBytes failed for $tempFilePath: $e');
       }
-    } catch (e) {
-      debugPrint('[DMX] _readDmxStateBytes failed for $tempFilePath: $e');
+    }
+
+    // FIX-11: If journal exists, compare and use whichever has more bytes
+    final journalPath = '$tempFilePath.journal';
+    final journalFile = File(journalPath);
+    if (await journalFile.exists()) {
+      try {
+        final journalBytes = await DownloadJournal.recover(journalPath);
+        if (journalBytes != null && journalBytes.isNotEmpty) {
+          final journalTotal = journalBytes.fold<int>(0, (sum, b) => sum + b);
+          if (journalTotal > stateTotal) {
+            debugPrint(
+              '[DMX] FIX-11: Journal has more bytes ($journalTotal) '
+              'than state file ($stateTotal). Using journal.',
+            );
+            return journalTotal;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DMX] FIX-11: Journal read failed, using state: $e');
+      }
+    }
+
+    if (hasStateFile) {
+      return stateTotal;
+    }
+
+    // FIX-1: For multi-threaded downloads, tempFile.length() is pre-allocated size, NOT downloaded bytes.
+    if (threadCount > 1) {
+      debugPrint(
+        '[DMX] No state file for multi-threaded download. '
+        'Returning 0 instead of pre-allocated file size.',
+      );
+      return 0;
+    }
+
+    // FIX-D3: Single-threaded journal check before file length fallback
+    if (threadCount <= 1) {
+      try {
+        final journalBytes =
+            await DownloadJournal.recover('$tempFilePath.journal');
+        if (journalBytes != null && journalBytes.isNotEmpty) {
+          return journalBytes.fold<int>(0, (s, b) => s + b);
+        }
+      } catch (_) {}
+      final tempFile = File(tempFilePath);
+      if (await tempFile.exists()) {
+        return await tempFile.length();
+      }
     }
     return 0;
+
+  }
+
+  /// Reads per-chunk progress percentages from a `.dmxstate` sidecar file.
+  /// Returns null when the file is missing, corrupt, or empty.
+  static Future<List<double>?> _readDmxStateChunks(
+      String tempFilePath, int threadCount) async {
+    final stateFile = File('$tempFilePath.dmxstate');
+    if (!await stateFile.exists()) return null;
+    try {
+      final decoded = jsonDecode(await stateFile.readAsString());
+      if (decoded is Map && decoded['progress'] is List) {
+        // FIX-C5: Wrap element parsing in per-element try-catch to prevent corrupt entries from crashing
+        final progress = <int>[];
+        for (final e in (decoded['progress'] as List)) {
+          try {
+            if (e is num) {
+              progress.add(e.toInt());
+            } else {
+              progress.add(0);
+            }
+          } catch (_) {
+            progress.add(0);
+          }
+        }
+
+        final total = decoded['totalSize'] is num
+            ? (decoded['totalSize'] as num).toInt()
+            : 0;
+        if (total <= 0 || progress.isEmpty) return null;
+
+        // FIX-5: Validate chunk sum doesn't exceed total
+        final chunkSum = progress.fold<int>(0, (sum, b) => sum + b);
+        if (chunkSum > total) {
+          debugPrint(
+            '[DMX] FIX-5: Chunk sum ($chunkSum) exceeds total ($total). '
+            'Clamping chunks.',
+          );
+          final scale = total / chunkSum;
+          for (var i = 0; i < progress.length; i++) {
+            progress[i] = (progress[i] * scale).toInt();
+          }
+        }
+
+        final partSize = (total / progress.length).floor();
+        return List.generate(progress.length, (i) {
+          final end =
+              i == progress.length - 1 ? total - i * partSize : partSize;
+          return end > 0 ? (progress[i] / end).clamp(0.0, 1.0) : 0.0;
+        });
+      }
+    } catch (_) {}
+    return null;
   }
 }
+
+
