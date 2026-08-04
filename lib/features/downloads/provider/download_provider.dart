@@ -227,8 +227,13 @@ class DownloadProvider extends ChangeNotifier
   final Map<String, ValueNotifier<double>> _progressNotifiers = {};
   final Map<String, ValueNotifier<double>> _speedNotifiers = {};
 
-  ValueNotifier<double> progressNotifier(String taskId) =>
-      _progressNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
+  ValueNotifier<double> progressNotifier(String taskId) {
+    return _progressNotifiers.putIfAbsent(taskId, () {
+      final idx = _tasks.indexWhere((t) => t.id == taskId);
+      final initialProgress = idx != -1 ? _tasks[idx].progress : 0.0;
+      return ValueNotifier(initialProgress);
+    });
+  }
 
   ValueNotifier<double> speedNotifier(String taskId) =>
       _speedNotifiers.putIfAbsent(taskId, () => ValueNotifier(0.0));
@@ -660,7 +665,19 @@ class DownloadProvider extends ChangeNotifier
       TorrentFilesConverter.lastConversionError.value = null;
     }
 
-    final loaded = dbTasks.map((task) {
+    final loaded = dbTasks.map((t) {
+      // FIX-AUDIT-4: Clamp downloadedBytes to fileSize and chunks to [0.0, 1.0] to prevent >100% display.
+      int clampedBytes = t.downloadedBytes;
+      if (t.fileSize > 0 && clampedBytes > t.fileSize) {
+        clampedBytes = t.fileSize;
+      }
+      final clampedChunks = t.chunks.map((c) => c.clamp(0.0, 1.0)).toList();
+      final task = t.copyWith(
+
+        downloadedBytes: clampedBytes,
+        chunks: clampedChunks,
+      );
+
       // Only mark in-flight downloads as paused on initial load.
       // If a CancelToken exists in the in-memory map, an active download
       // stream is still running and must not be flipped to paused.
@@ -1425,32 +1442,29 @@ class DownloadProvider extends ChangeNotifier
         await TorrentService.pauseTorrent(torrentId);
       }
 
+      // FIX-A1: Flush pending progress BEFORE canceling token and waiting for engine future
+      await _flushPendingProgress(id);
 
-
-      // Cancel the token only.
-      try {
-        _cancelTokens[id]?.cancel('paused');
-      } catch (e) {
-        // Ignore
-      }
-
-      // Wait for the engine future to finish (bounded) so its final
-      // .dmxstate is on disk before we snapshot.
-      final fut = _activeFutures[id];
-      if (fut != null) {
+      // FIX(H-2): cancel token first so the future can actually complete
+      if (_cancelTokens.containsKey(id)) {
         try {
-          await fut.timeout(const Duration(seconds: 5));
-        } catch (_) {}
+          _cancelTokens[id]?.cancel('paused');
+        } catch (e) {
+          // ignore
+        }
+        final fut = _activeFutures[id];
+        if (fut != null) {
+          try {
+            await fut.timeout(const Duration(seconds: 5));
+          } catch (_) {}
+        }
+        _cancelTokens.remove(id);
       }
 
-      _cancelTokens.remove(id);
     }
 
     // FIX(S1): Clear stale thread override on pause
     effectiveThreadOverrides.remove(id);
-
-    // Flush any pending throttled progress to disk.
-    await _flushPendingProgress(id);
 
     // Cancel any lingering progress notification (M2).
     _notifications.cancelForTask(id);
@@ -1468,9 +1482,17 @@ class DownloadProvider extends ChangeNotifier
     // FIX(D1): Skip disk-byte reconciliation for torrents — libtorrent pre-allocates files
     if (latest.isTorrent) {
       final snapshotFiles = latest.torrentFiles ?? task?.torrentFiles;
+      // FIX-06: Recalculate aggregate downloadedBytes for torrents on pause
+      int torrentTotalDownloaded = 0;
+      if (snapshotFiles != null) {
+        torrentTotalDownloaded = snapshotFiles
+            .where((f) => f['selected'] == true)
+            .fold<int>(0, (sum, f) => sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0));
+      }
       await _setTask(
         latest.copyWith(
           status: DownloadStatus.paused,
+          downloadedBytes: torrentTotalDownloaded > 0 ? torrentTotalDownloaded : latest.downloadedBytes,
           speed: 0,
           clearEta: true,
           clearError: true,
@@ -1482,6 +1504,7 @@ class DownloadProvider extends ChangeNotifier
       );
       return;
     }
+
 
 
     // Sync DB bytes with the authoritative state file
@@ -1505,7 +1528,7 @@ class DownloadProvider extends ChangeNotifier
         ? latest.copyWith(downloadedBytes: totalBytes)
         : latest;
 
-    // FIX-2: Sync audio progress from audio .dmxstate on pause
+    // FIX 3: Probe raw audio file length when audioBytesOnDisk is 0
     double syncedAudioProgress = synced.audioProgress;
     if (synced.mergedAudioUrl != null && synced.audioSize > 0) {
       if (audioBytesOnDisk > 0) {
@@ -1515,8 +1538,24 @@ class DownloadProvider extends ChangeNotifier
           '[DMX] FIX-2: Synced audio progress from disk: '
           '$audioBytesOnDisk / ${synced.audioSize} = $syncedAudioProgress',
         );
+      } else {
+        try {
+          final rawAudioFile = File('${latest.tempFilePath}.audio');
+          if (await rawAudioFile.exists()) {
+            final rawLen = await rawAudioFile.length();
+            if (rawLen > 0) {
+              syncedAudioProgress =
+                  (rawLen / synced.audioSize).clamp(0.0, 1.0);
+              debugPrint(
+                '[DMX] FIX 3: Synced audio progress from raw file: '
+                '$rawLen / ${synced.audioSize} = $syncedAudioProgress',
+              );
+            }
+          }
+        } catch (_) {}
       }
     }
+
 
     // FIX(P5): Carry per-file snapshot into the final state
     final snapshotFiles = latest.torrentFiles ?? task?.torrentFiles;
@@ -1662,13 +1701,24 @@ class DownloadProvider extends ChangeNotifier
     }
 
 
-    final stateChunks = await _readDmxStateChunks(
-        task.tempFilePath, task.threadCount);
-    final chunks = stateChunks ??
-        List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
+    // FIX-09: Redistribute chunks proportionally if thread count changed
+    final stateChunks = await _readDmxStateChunks(task.tempFilePath, task.threadCount);
+    List<double> chunks;
+    if (stateChunks != null && stateChunks.length == task.threadCount) {
+      chunks = stateChunks;
+    } else if (stateChunks != null && stateChunks.isNotEmpty) {
+      final overallProgress = stateChunks.fold<double>(0.0, (s, c) => s + c) / stateChunks.length;
+      chunks = List<double>.filled(
+        task.threadCount > 0 ? task.threadCount : 1,
+        overallProgress.clamp(0.0, 1.0),
+      );
+      debugPrint('[DMX-FIX-09] Thread count changed (${stateChunks.length} → ${task.threadCount}), redistributed progress');
+    } else {
+      chunks = List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0);
+    }
 
-    // FIX-3: Re-validate audio progress from disk on resume
-    double validatedAudioProgress = task.audioProgress;
+    // FIX-10: Re-validate audio progress starting at 0.0 unless audio data exists
+    double validatedAudioProgress = 0.0;
     if (task.mergedAudioUrl != null && task.audioSize > 0) {
       final audioStatePath = '${task.tempFilePath}.audio';
       final audioStateFile = File('$audioStatePath.dmxstate');
@@ -1680,7 +1730,7 @@ class DownloadProvider extends ChangeNotifier
         validatedAudioProgress =
             (audioBytes / task.audioSize).clamp(0.0, 1.0);
         debugPrint(
-          '[DMX] FIX-3: Re-validated audio progress from disk: '
+          '[DMX-FIX-10] Re-validated audio progress from disk: '
           '$audioBytes / ${task.audioSize} = $validatedAudioProgress',
         );
       } else {
@@ -1694,6 +1744,7 @@ class DownloadProvider extends ChangeNotifier
         }
       }
     }
+
 
     await _setTask(
       task.copyWith(
@@ -1786,10 +1837,40 @@ class DownloadProvider extends ChangeNotifier
     final task = _findTask(id);
     if (task == null || task.status == DownloadStatus.completed) return;
 
+    // FIX-AUDIT-1: clear sidecar state files on retry if task failed, preserving temp data files
+    if (task.status == DownloadStatus.failed) {
+      for (final path in [
+        '${task.tempFilePath}.dmxstate',
+        '${task.tempFilePath}.journal',
+        '${task.tempFilePath}.audio.dmxstate',
+        '${task.tempFilePath}.audio.journal',
+      ]) {
+        try { final f = File(path); if (await f.exists()) await f.delete(); }
+        catch (_) {}
+      }
+    }
+
+
+    // FIX 7: Disk space check on retry
+
+    final hasSpace = await _downloadEngine.hasEnoughDiskSpace(task.savePath, task.fileSize);
+
+    if (!hasSpace) {
+      await _setTask(
+        task.copyWith(
+          status: DownloadStatus.failed,
+          errorMessage: 'Insufficient disk space',
+        ),
+      );
+      notifyListeners();
+      return;
+    }
+
     _retryTimers[id]?.cancel();
     _retryTimers.remove(id);
     _retryCounts.remove(id);
     _resumeRejectionRestarts.remove(id);
+
 
     // ═══ FIX YT-7: Refresh YouTube URL on retry ═══
     if (task.youtubeQualityPreset != null &&
@@ -2019,9 +2100,13 @@ class DownloadProvider extends ChangeNotifier
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
     if (task == null) return;
+    // FIX(N-1): cancel progress notification immediately on deleteTask
+
+    _notifications.cancelForTask(id);
 
     // 1. Cancel the token IMMEDIATELY
     final token = _cancelTokens[id];
+
     if (token != null && !token.isCancelled) {
       try {
         token.cancel('deleted');
@@ -2069,14 +2154,17 @@ class DownloadProvider extends ChangeNotifier
     _dbRetryCounts.remove(id);
     _dbRetryTimers[id]?.cancel();
     _dbRetryTimers.remove(id);
+    _orchestrator.cleanupTaskState(id); // FIX-12 & FIX-17: Clean up orchestrator state maps
 
     notifyListeners();
 
     // 4. Remove notification IMMEDIATELY
+    _notifications.cancelForTask(id); // FIX-18: Ensure notification is cancelled early
     final savedNotificationId = _notifications.removeId(id);
     if (savedNotificationId != null) {
       _notifications.cancelNotification(savedNotificationId);
     }
+
 
     // 5. Delete from DB (fire and forget — don't block UI)
     unawaited(_databaseService.deleteTask(id).catchError((e) {
@@ -2346,6 +2434,17 @@ class DownloadProvider extends ChangeNotifier
           currentTask.copyWith(downloadedBytes: currentTask.fileSize);
     }
 
+    // FIX-A4: Immediate DB save when task status == DownloadStatus.failed
+
+    // FIX-F1: Immediate DB save when status transitions queued -> downloading
+    if (updated.status == DownloadStatus.failed ||
+        (prev.status == DownloadStatus.queued && updated.status == DownloadStatus.downloading)) {
+      unawaited(_databaseService.saveTask(_tasks[index]).catchError((e) {
+        debugPrint('[DMX] Immediate DB save failed on status transition: $e');
+      }));
+    }
+
+
 
     // Only invalidate the filter/sort cache when a "structural" field changes
     // (status, category, name, URL, or fileSize). Progress-only updates (speed,
@@ -2374,6 +2473,8 @@ class DownloadProvider extends ChangeNotifier
     if (!isStructuralChange) {
       _pendingProgressUpdates.add(updated.id);
       _notifyPending = true;
+      // FIX(D-1): ensure widget timer is running for progress flush
+      if (_widgetTimer == null) _startWidgetTimer();
 
       // Complete any previous queued save so the chain stays consistent.
       final previousSave = _dbSaveQueues[updated.id];
@@ -2381,10 +2482,12 @@ class DownloadProvider extends ChangeNotifier
         try {
           await previousSave;
         } catch (e, st) {
-          _log.warning('[download_provider] operation failed', e, st);
+          // FIX(D-2): log previous DB save failure at severe level
+          _log.severe('[download_provider] previous DB save failed', e, st);
         }
       }
       return;
+
     }
 
     // Structural change — persist immediately.
@@ -2845,10 +2948,12 @@ class DownloadProvider extends ChangeNotifier
       }
 
       bool sameTorrent(String a, String b) {
+        if (a == b) return true; // FIX-10: File path / URL exact comparison
         final ha = parseMagnetUrl(a)['infoHash']?.toString().toLowerCase();
         final hb = parseMagnetUrl(b)['infoHash']?.toString().toLowerCase();
         return ha != null && hb != null && ha == hb;
       }
+
 
       final preserve = sameTorrent(task.url, cleanUrl);
       await cleanupPartFiles(task, preserveParts: preserve);
@@ -3078,6 +3183,20 @@ class DownloadProvider extends ChangeNotifier
           resolvedMetaSize = meta.fileSize;
         }
 
+        final newFileName = metadata?.fileName;
+        if (newFileName != null &&
+            newFileName.isNotEmpty &&
+            newFileName != task.fileName &&
+            task.fileName.isNotEmpty &&
+            task.fileName != 'torrent_download.zip') {
+          // FIX(B-3): Reset progress when fileName differs regardless of byte size match
+          sizeChanged = true;
+          debugPrint(
+            '[DMX] URL update: fileName changed ${task.fileName} → '
+            '$newFileName, resetting progress',
+          );
+        }
+
         // FIX-18: Use percentage-based tolerance instead of fixed 1024 bytes
         final tolerance =
             (task.fileSize * 0.001).clamp(1024.0, 10.0 * 1024 * 1024);
@@ -3138,23 +3257,31 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
+    final resolvedNewFileSize = sizeChanged || task.fileSize <= 0
+        ? (resolvedFileSize > 0 ? resolvedFileSize : task.fileSize)
+        : task.fileSize;
+    // FIX(B-4): Clamp downloadedBytes when new file size is smaller
+    final clampedBytes = resolvedNewFileSize > 0
+        ? min(sizeChanged ? 0 : task.downloadedBytes, resolvedNewFileSize)
+        : (sizeChanged ? 0 : task.downloadedBytes);
+
     final updatedTask = task.copyWith(
       url: cleanUrl,
       mergedAudioUrl: clearAudioUrl ? null : (newAudioUrl ?? task.mergedAudioUrl),
       clearMergedAudioUrl: clearAudioUrl,
-      fileSize: sizeChanged || task.fileSize <= 0
-          ? (resolvedFileSize > 0 ? resolvedFileSize : task.fileSize)
-          : task.fileSize,
+      fileSize: resolvedNewFileSize,
       audioSize: sizeChanged || task.audioSize <= 0
           ? (newAudioSize ?? task.audioSize)
           : task.audioSize,
-      audioProgress: audioChanged ? 0.0 : task.audioProgress,
+      // FIX-03: Reset audioProgress when audioChanged OR sizeChanged
+      audioProgress: (audioChanged || sizeChanged) ? 0.0 : task.audioProgress,
+
       supportsResume: resolvedSupportsResume,
-      // Only reset progress when the file actually changed
-      downloadedBytes: sizeChanged ? 0 : task.downloadedBytes,
+      downloadedBytes: clampedBytes,
       chunks: sizeChanged
           ? List<double>.filled(task.threadCount, 0.0)
           : task.chunks,
+
       fileName:
           (task.fileName.isEmpty || task.fileName == 'torrent_download.zip')
               ? (metadata?.fileName ?? task.fileName)
@@ -3167,7 +3294,10 @@ class DownloadProvider extends ChangeNotifier
 
     await _databaseService.saveTask(updatedTask);
 
+    // FIX 8: Mark filter cache dirty after updateTaskUrl
+    filteredTasksDirty = true;
     notifyListeners();
+
 
     if (wasDownloading) {
       await resumeTask(taskId);
@@ -3213,9 +3343,26 @@ class DownloadProvider extends ChangeNotifier
     }
 
     if (itagChanged) {
-      await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
-    } else {
+      // FIX-AUDIT-3: Only restart if the MIME type actually changed.
+      // Same MIME = same codec/container = existing bytes are valid.
+      final oldMime = Uri.tryParse(task.url)?.queryParameters['mime'];
+      final newMime = Uri.tryParse(newUrl)?.queryParameters['mime'];
+      final mimeChanged = oldMime != null && newMime != null && oldMime != newMime;
 
+      if (mimeChanged) {
+        await startOverTask(id, newUrl, newAudioUrl: newAudioUrl);
+        return;
+      }
+      // Same MIME, different itag → just swap URL, keep progress
+      await updateTaskUrl(id, newUrl, newAudioUrl: newAudioUrl, isRefresh: true);
+      final updated = _findTask(id);
+      if (updated != null &&
+          (updated.status == DownloadStatus.paused ||
+              updated.status == DownloadStatus.failed)) {
+        await resumeTask(id);
+      }
+      return;
+    } else {
       // updateTaskUrl already handles resume internally for downloading tasks
       await updateTaskUrl(
         id,
@@ -3232,6 +3379,7 @@ class DownloadProvider extends ChangeNotifier
         await resumeTask(id);
       }
     }
+
   }
 
   @override
@@ -3266,7 +3414,9 @@ class DownloadProvider extends ChangeNotifier
     if (torrentId != null) {
       TorrentService.removeTorrent(torrentId, deleteFiles: false);
       _torrentIds.remove(id);
+      unawaited(TorrentResumeStore.delete(torrentId)); // FIX-9: Clear TorrentResumeStore
     }
+
 
     // Preserve any existing partial bytes and state so a restart can resume
     // from the current temp file instead of discarding it.
@@ -3335,9 +3485,13 @@ class DownloadProvider extends ChangeNotifier
         status: DownloadStatus.queued,
         downloadedBytes: realBytesOnDisk,
         speed: 0,
+        // FIX-A5: Reset audioProgress, clearStatusMessage, clearError on startOverTask
+        audioProgress: deleteTempFiles ? 0.0 : task.audioProgress,
         clearEta: true,
         clearError: true,
+        clearStatusMessage: true,
         clearCompletedAt: true,
+
         chunks: List<double>.filled(task.threadCount, 0.0),
       ),
     );

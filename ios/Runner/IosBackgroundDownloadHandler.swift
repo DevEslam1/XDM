@@ -125,12 +125,13 @@ import BackgroundTasks
         let request = BGProcessingTaskRequest(identifier: Self.downloadTaskIdentifier)
         request.requiresNetworkConnectivity = true
         request.requiresExternalPower = false
-        // FIX-C1a: Reduced from 15 min to 1 min so downloads resume faster after backgrounding.
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 1 * 60) // 1 min minimum
+        // FIX(A-5): Set earliestBeginDate to 15 minutes from now as required by iOS 13+
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
         
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("XDM BG: Background processing task scheduled (earliest in 1 min)")
+            print("XDM BG: Background processing task scheduled (earliest in 15 min)")
+
         } catch {
             print("XDM BG: Failed to schedule background task: \(error)")
         }

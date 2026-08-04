@@ -16,8 +16,10 @@ struct WidgetTaskSummaryItem: Identifiable, Codable, Hashable {
     let category: String
     let isTorrent: Bool
     let isAppUpdate: Bool
+    var isStaleData: Bool = false // FIX(A-3): Field for stale data indicator
 
     var isActive: Bool { status == "downloading" || status == "seeding" }
+
     var isFailed: Bool { status == "failed" }
     var isPaused: Bool { status == "paused" }
     var isQueued: Bool { status == "queued" }
@@ -140,17 +142,19 @@ struct XDMWidgetDataLoader {
                     WidgetTaskSummaryItem(
                         id: id,
                         fileName: fileName,
-                        status: isStale && status == "downloading" ? "paused" : status,
+                        status: status, // FIX(A-3): Keep original status, do not lie to user
                         progress: progress,
-                        speedBytesPerSec: isStale ? 0 : taskSpeed,
-                        etaSeconds: isStale ? nil : eta,
+                        speedBytesPerSec: isStale ? 0 : taskSpeed, // FIX(A-3): Set speed to 0 if stale
+                        etaSeconds: isStale ? nil : eta, // FIX(A-3): Set eta to nil if stale
                         fileSizeBytes: fileSize,
                         downloadedBytes: downloaded,
                         category: category,
                         isTorrent: isTorrent,
-                        isAppUpdate: isAppUpdate
+                        isAppUpdate: isAppUpdate,
+                        isStaleData: isStale // FIX(A-3): Pass isStaleData flag
                     )
                 )
+
             }
         }
 

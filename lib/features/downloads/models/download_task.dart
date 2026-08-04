@@ -1,6 +1,8 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/url_utils.dart';
+
 
 /// Public status message constants used throughout the download pipeline.
 /// Extracted here for i18n readiness — replace with localized strings when
@@ -117,15 +119,17 @@ class DownloadTask {
   /// then 0. Every size/percentage readout must go through this getter so
   /// torrents with a late-resolved size still render correct numbers.
   int get resolvedFileSize {
-    if (fileSize > 0) return fileSize;
-    if (torrentFiles != null && torrentFiles!.isNotEmpty) {
+    // FIX-10: For torrents, prefer the torrentFiles sum as it's computed from actual metadata
+    if (isTorrent && torrentFiles != null && torrentFiles!.isNotEmpty) {
       final sum = torrentFiles!
           .where((f) => f['selected'] != false)
           .fold<int>(0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
       if (sum > 0) return sum;
     }
+    if (fileSize > 0) return fileSize;
     return 0;
   }
+
 
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
@@ -506,6 +510,14 @@ class DownloadTask {
     );
   }
 
+  // FIX 5: Helper getter for merged audio status
+  bool get hasMergedAudio => mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty;
+
+  // FIX(H-4): Expose displayDownloadedBytes clamped to resolvedFileSize for UI rendering
+  int get displayDownloadedBytes =>
+      resolvedFileSize > 0 ? min(downloadedBytes, resolvedFileSize) : downloadedBytes;
+
+
   // Identity equality based on [id] (plus playlist grouping keys) so cards
   // animate correctly in lists.
   @override
@@ -515,3 +527,4 @@ class DownloadTask {
   @override
   int get hashCode => id.hashCode;
 }
+

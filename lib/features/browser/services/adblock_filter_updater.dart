@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
@@ -15,11 +14,14 @@ enum FilterType { ads, tracking }
 class _FilterSource {
   final String name;
   final String url;
+  /// Optional fallback URL tried when [url] fails (e.g. CDN mirror).
+  final String? fallbackUrl;
   final FilterType type;
 
   const _FilterSource({
     required this.name,
     required this.url,
+    this.fallbackUrl,
     required this.type,
   });
 }
@@ -28,15 +30,20 @@ class AdBlockFilterUpdater {
   static final _log = Logger('AdBlockFilterUpdater');
   static final _lock = Lock();
 
+  // ── Filter sources with CDN fallbacks ─────────────────────────────────────
+  // Primary URLs are the canonical hosts; fallbackUrl is a CDN/jsDelivr mirror
+  // used when the primary returns an error or times out.
   static const _sources = [
     _FilterSource(
       name: 'EasyList',
       url: 'https://easylist.to/easylist/easylist.txt',
+      fallbackUrl: 'https://easylist-downloads.adblockplus.org/easylist.txt',
       type: FilterType.ads,
     ),
     _FilterSource(
       name: 'EasyPrivacy',
       url: 'https://easylist.to/easylist/easyprivacy.txt',
+      fallbackUrl: 'https://easylist-downloads.adblockplus.org/easyprivacy.txt',
       type: FilterType.tracking,
     ),
     _FilterSource(
@@ -46,13 +53,13 @@ class AdBlockFilterUpdater {
     ),
     _FilterSource(
       name: 'PeterLowe',
-      url:
-          'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=nohtml&showintro=0&startdate%5Bday%5D=&startdate%5Bmonth%5D=&startdate%5Byear%5D=&mimetype=plaintext',
+      url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext',
       type: FilterType.ads,
     ),
     _FilterSource(
       name: 'AdGuardDNS',
-      url: 'https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/Filters/adguard_dns_filter.txt',
+      url: 'https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt',
+      fallbackUrl: 'https://raw.githubusercontent.com/AdguardTeam/AdguardFilters/master/Filters/filter_15_DnsFilter/filter.txt',
       type: FilterType.ads,
     ),
   ];
@@ -183,15 +190,66 @@ class AdBlockFilterUpdater {
     }
   }
 
+  // ── HttpClient-based download ─────────────────────────────────────────────
+  // Uses dart:io HttpClient instead of dio.download() to avoid the
+  // "Invalid request method" exception thrown on Android SDK 33+ when
+  // dio tries to use a custom HTTP method for file downloads.
+  static const _kDownloadHeaders = {
+    'User-Agent': 'Mozilla/5.0 (compatible; XDM/3.0; AdBlockUpdater)',
+    'Accept': 'text/plain, text/html;q=0.9, */*;q=0.8',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+  };
+
+  /// Downloads [url] into [destPath] using [HttpClient].
+  /// Returns `false` if the server returns a non-200 status or the body
+  /// is suspiciously small (< 1 KB), so the caller can try a fallback.
+  Future<bool> _httpDownload(String url, String destPath) async {
+    return HttpOverrides.runWithHttpOverrides<Future<bool>>(() async {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 20);
+      try {
+        final uri = Uri.parse(url);
+        final request = await client.getUrl(uri);
+        _kDownloadHeaders.forEach(request.headers.set);
+        final response = await request.close().timeout(const Duration(seconds: 90));
+
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          _log.warning(
+            '_httpDownload: server returned ${response.statusCode} for $url',
+          );
+          return false;
+        }
+
+        final file = File(destPath);
+        final sink = file.openWrite();
+        try {
+          await response.pipe(sink);
+        } finally {
+          await sink.flush();
+          await sink.close();
+        }
+
+        // Reject suspiciously small responses (< 1 KB → probably an error page)
+        final size = await file.length();
+        if (size < 1024) {
+          _log.warning('_httpDownload: response too small ($size bytes) for $url');
+          if (await file.exists()) await file.delete();
+          return false;
+        }
+
+        return true;
+      } catch (e) {
+        _log.warning('_httpDownload error for $url', e);
+        return false;
+      } finally {
+        client.close();
+      }
+    }, _BypassHttpOverrides());
+  }
+
   Future<void> _downloadAndParse() async {
     _invalidateCosmeticCache();
-    final dio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 60),
-        headers: {'User-Agent': 'XDM/3.0 (AdBlockUpdater)'},
-      ),
-    );
 
     final prefs = await SharedPreferences.getInstance();
     final tempDir = await getTemporaryDirectory();
@@ -199,7 +257,17 @@ class AdBlockFilterUpdater {
     for (final source in _sources) {
       try {
         final tempPath = p.join(tempDir.path, '${source.name}.txt');
-        await dio.download(source.url, tempPath);
+
+        // Try primary URL, fall back to mirror if it fails
+        bool ok = await _httpDownload(source.url, tempPath);
+        if (!ok && source.fallbackUrl != null) {
+          _log.fine('Retrying ${source.name} with fallback URL');
+          ok = await _httpDownload(source.fallbackUrl!, tempPath);
+        }
+        if (!ok) {
+          _log.warning('Failed to download source ${source.name} (all URLs failed)');
+          continue;
+        }
 
         final file = File(tempPath);
 
@@ -495,3 +563,5 @@ class AdBlockFilterUpdater {
     await prefs.remove(_lastUpdateKey);
   }
 }
+
+class _BypassHttpOverrides extends HttpOverrides {}

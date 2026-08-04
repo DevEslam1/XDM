@@ -77,19 +77,24 @@ Future<void> main(List<String> args) async {
     FrameWatchdog.start();
     int consecutiveJankWindows = 0;
     FrameWatchdog.onJankDetected = (jankRatio) {
-      if (!SettingsProvider.instance.jankAutoBatterySaver) {
-        consecutiveJankWindows = 0;
-        return;
-      }
-      if (jankRatio > 0.08) {
-        consecutiveJankWindows++;
-        if (consecutiveJankWindows >= 3) {
-          SettingsProvider.instance.setBatterySaverMode(true);
+      try {
+        if (!SettingsProvider.instance.jankAutoBatterySaver) {
+          consecutiveJankWindows = 0;
+          return;
         }
-      } else {
-        consecutiveJankWindows = 0;
+        if (jankRatio > 0.08) {
+          consecutiveJankWindows++;
+          if (consecutiveJankWindows >= 3) {
+            SettingsProvider.instance.setBatterySaverMode(true);
+          }
+        } else {
+          consecutiveJankWindows = 0;
+        }
+      } catch (_) {
+        // SettingsProvider.instance not loaded yet, ignore
       }
     };
+
 
     await PowerMonitor.init();
     await ProtocolCache.init();

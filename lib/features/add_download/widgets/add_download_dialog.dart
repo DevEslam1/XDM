@@ -4018,55 +4018,7 @@ class _AddDownloadDialogState extends State<AddDownloadDialog>
 
                                         ),
 
-                                        if (isBatterySaver) ...[
-
-                                          const SizedBox(width: 4),
-
-                                          Tooltip(
-
-                                            message: L10n.of(context, 'battery_saver_override_tooltip'),
-
-                                            child: Row(
-
-                                              mainAxisSize: MainAxisSize.min,
-
-                                              children: [
-
-                                                const Icon(
-
-                                                  Icons.battery_saver_rounded,
-
-                                                  size: 11,
-
-                                                  color: AppTheme.neonAmber,
-
-                                                ),
-
-                                                const SizedBox(width: 2),
-
-                                                Text(
-
-                                                  L10n.of(context, 'battery_saver_override'),
-
-                                                  style: const TextStyle(
-
-                                                    fontSize: 8,
-
-                                                    color: AppTheme.neonAmber,
-
-                                                    fontWeight: FontWeight.bold,
-
-                                                  ),
-
-                                                ),
-
-                                              ],
-
-                                            ),
-
-                                          ),
-
-                                        ],
+                                        const SizedBox.shrink(),
 
                                       ],
 

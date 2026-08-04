@@ -26,45 +26,50 @@ class DohResolver {
       return cached.ip;
     }
 
-    // 2. Execute DoH query
-    try {
-      // Use HttpOverrides.runWithHttpOverrides to bypass global overrides and avoid recursion
-      return await HttpOverrides.runWithHttpOverrides<Future<String?>>(() async {
-        final client = HttpClient();
-        client.connectionTimeout = const Duration(seconds: 3);
-        
-        try {
-          final query = _createDnsQuery(hostname);
-          final uri = Uri.parse('https://$provider/dns-query');
+    // 2. Execute DoH query with primary and fallback provider
+    final providers = [provider, if (provider != 'cloudflare-dns.com') 'cloudflare-dns.com'];
+    
+    for (final p in providers) {
+      try {
+        final ip = await HttpOverrides.runWithHttpOverrides<Future<String?>>(() async {
+          final client = HttpClient();
+          client.connectionTimeout = const Duration(seconds: 5);
           
-          final request = await client.postUrl(uri);
-          request.headers.set('Content-Type', 'application/dns-message');
-          request.headers.set('Accept', 'application/dns-message');
-          request.add(query);
-          
-          final response = await request.close();
-          if (response.statusCode == 200) {
-            final body = await response.fold<List<int>>([], (p, e) => p..addAll(e));
-            final result = _parseDnsResponse(Uint8List.fromList(body));
+          try {
+            final query = _createDnsQuery(hostname);
+            final providerHost = p.startsWith('http') ? p : 'https://$p/dns-query';
+            final uri = Uri.parse(providerHost);
             
-            if (result != null) {
-              // Cache result (fixed 5 min TTL for simplicity, or parse from response)
-              _cache[cacheKey] = _CacheEntry(
-                result.ip, 
-                now.add(Duration(seconds: result.ttl > 0 ? result.ttl : 300)),
-              );
-              return result.ip;
+            final request = await client.postUrl(uri).timeout(const Duration(seconds: 5));
+            request.headers.set('Content-Type', 'application/dns-message');
+            request.headers.set('Accept', 'application/dns-message');
+            request.add(query);
+            
+            final response = await request.close().timeout(const Duration(seconds: 5));
+            if (response.statusCode == 200) {
+              final body = await response.fold<List<int>>([], (prev, elem) => prev..addAll(elem));
+              final result = _parseDnsResponse(Uint8List.fromList(body));
+              
+              if (result != null) {
+                _cache[cacheKey] = _CacheEntry(
+                  result.ip, 
+                  now.add(Duration(seconds: result.ttl > 0 ? result.ttl : 300)),
+                );
+                return result.ip;
+              }
             }
+          } finally {
+            client.close();
           }
-        } finally {
-          client.close();
-        }
-        return null;
-      }, _InternalHttpOverrides());
-    } catch (e) {
-      _log.fine('[DohResolver] Resolution failed for $hostname: $e');
-      return null;
+          return null;
+        }, _InternalHttpOverrides());
+
+        if (ip != null) return ip;
+      } catch (e) {
+        _log.fine('[DohResolver] Resolution failed for $hostname via $p: $e');
+      }
     }
+    return null;
   }
 
   @visibleForTesting

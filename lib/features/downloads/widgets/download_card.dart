@@ -213,27 +213,29 @@ class _CardShell extends StatelessWidget {
               accentColor: accent,
               accentAlpha: 0.22,
             ),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // status accent rail
-                  Container(
-                    width: 4,
+            child: Stack(
+              children: [
+                child,
+                Positioned.directional(
+                  textDirection: Directionality.of(context),
+                  start: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 4,
+                  child: Container(
                     decoration: BoxDecoration(
                       color: accent,
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(22),
-                        bottomLeft: Radius.circular(22),
+                      borderRadius: const BorderRadiusDirectional.only(
+                        topStart: Radius.circular(22),
+                        bottomStart: Radius.circular(22),
                       ),
                       boxShadow: [
                         AppTheme.glow(accent, alpha: 0.30, blur: 6, spread: 0),
                       ],
                     ),
                   ),
-                  Expanded(child: child),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -259,6 +261,12 @@ class _StatusChip extends StatelessWidget {
 
   IconData get _icon {
     if (_isSeeding(task)) return Icons.cloud_upload;
+    // FIX-D4: Show wifi icon when waiting for WiFi
+    if (task.status == DownloadStatus.paused &&
+        task.errorMessage != null &&
+        task.errorMessage!.contains('WiFi')) {
+      return Icons.wifi_off_rounded;
+    }
     return switch (task.status) {
       DownloadStatus.queued => Icons.hourglass_empty,
       DownloadStatus.downloading => Icons.downloading,
@@ -270,13 +278,22 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _statusColor(task.status, isDark);
-    final label =
-        overrideLabel ?? L10n.translateStatusName(context, task.status);
+    // FIX-D4: Waiting WiFi badge styling
+    final isWifiWaiting = task.status == DownloadStatus.paused &&
+        task.errorMessage != null &&
+        task.errorMessage!.contains('WiFi');
+    final color = isWifiWaiting
+        ? (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
+        : _statusColor(task.status, isDark);
+    final label = overrideLabel ??
+        (isWifiWaiting
+            ? 'Waiting WiFi'
+            : L10n.translateStatusName(context, task.status));
 
     final isScheduled = task.status == DownloadStatus.paused &&
         task.scheduledAt != null &&
         task.scheduledAt!.isAfter(DateTime.now());
+
 
     final provider = context.watch<DownloadProvider>();
     final isQueued = task.status == DownloadStatus.queued;
@@ -487,7 +504,8 @@ class _ChunkedProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final chunks = task.chunks;
     final Widget bar;
-    if (chunks.length <= 1) {
+    if (chunks.length <= 1 || task.hasMergedAudio) {
+
       final provider = context.read<DownloadProvider>();
       bar = IsolatedProgressBar(
         progress: provider.progressNotifier(task.id),
@@ -1136,45 +1154,10 @@ class _MediaCard extends StatelessWidget with HapticHelper {
             _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
             const SizedBox(height: 8),
             _ProgressRow(task: task, isDark: isDark, color: statusColor),
-            // FIX(YT-3): Show secondary audio progress indicator when audio stream is present
-            if (task.mergedAudioUrl != null && task.audioSize > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.audiotrack_rounded,
-                      size: 11,
-                      color: mutedClr,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Audio: ${task.audioProgressPercentString}',
-                      style: AppTheme.microLabel(
-                        isDark: isDark,
-                        color: mutedClr,
-                        size: 8.5,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(1.5),
-                        child: LinearProgressIndicator(
-                          value: task.audioProgress.clamp(0.0, 1.0),
-                          minHeight: 3,
-                          backgroundColor: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.black.withValues(alpha: 0.06),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+
+
+
+
 
             if (task.statusMessage != null &&
                 task.statusMessage!.isNotEmpty &&
@@ -1456,12 +1439,19 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
         final selected = f['selected'] == true;
         final length = (f['length'] as num?)?.toInt() ?? 0;
         final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-        final effectiveDownloaded =
-            widget.task.status == DownloadStatus.completed && selected
+
+        // FIX(M-5): Guard per-file progress rendering during checking state to prevent flicker
+        final isChecking = widget.task.statusMessage?.contains('checking') == true ||
+            widget.task.statusMessage?.contains('Checking') == true;
+        final effectiveDownloaded = isChecking
+            ? 0
+            : (widget.task.status == DownloadStatus.completed && selected
                 ? length
-                : downloaded;
+                : downloaded);
+
         return {...f, 'downloadedBytes': effectiveDownloaded};
       }).toList();
+
 
       final visible = _showAllFiles
           ? displayFiles
@@ -1622,10 +1612,13 @@ class _TorrentFileRow extends StatelessWidget {
             : '${(p * 100).toStringAsFixed(0)}%');
 
 
-    return Padding(
+    // FIX(M-4): Render unselected torrent files with reduced opacity
+    return Opacity(
+      opacity: selected ? 1.0 : 0.45,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
+        child: Row(
 
-      padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
-      child: Row(
         children: [
           Icon(
             done
@@ -1736,9 +1729,11 @@ class _TorrentFileRow extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
+
 
 // ────────────────────────────────────────────────────────────────────────────
 // Playlist group card — groups playlist videos into one card
@@ -2292,11 +2287,12 @@ void _showTorrentProperties(
                 ),
                 _propRow(
                   isRtl ? 'تم تحميل' : 'Downloaded',
-                  formatBytes(task.downloadedBytes),
+                  formatBytes(task.displayDownloadedBytes),
                   textClr,
                   secClr,
                   isRtl,
                 ),
+
                 _propRow(
                   isRtl ? 'الفئة' : 'Category',
                   task.category.isNotEmpty ? task.category : '—',

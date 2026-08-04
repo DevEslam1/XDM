@@ -59,11 +59,13 @@ class ShareViewController: UIViewController {
     }
 
     private func openMainApp(with urlString: String) {
-        let encoded = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? urlString
-        guard let appURL = URL(string: "dmx://share?url=\(encoded)") else {
-            close()
-            return
-        }
+        // FIX(A-10): Use URLComponents to build the URL safely with proper query encoding
+        var components = URLComponents()
+        components.scheme = "dmx"
+        components.host   = "share"
+        components.queryItems = [URLQueryItem(name: "url", value: urlString)]
+        guard let appURL = components.url else { close(); return }
+
 
         var responder: UIResponder? = self
         while responder != nil {

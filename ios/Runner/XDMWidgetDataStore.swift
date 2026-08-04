@@ -63,7 +63,9 @@ public class XDMWidgetDataStore: NSObject {
     }
 
     public func getFreeDiskSpace() -> Int64 {
-        let fileURL = URL(fileURLWithPath: NSHomeDirectory())
+        // FIX(A-2): Query the App Group container volume first, fallback to NSHomeDirectory()
+        let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
+        let fileURL = containerURL ?? URL(fileURLWithPath: NSHomeDirectory())
         do {
             let values = try fileURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             if let capacity = values.volumeAvailableCapacityForImportantUsage {
@@ -75,3 +77,4 @@ public class XDMWidgetDataStore: NSObject {
         return -1
     }
 }
+

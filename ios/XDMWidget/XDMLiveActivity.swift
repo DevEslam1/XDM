@@ -11,6 +11,7 @@ struct XDMDownloadAttributes: ActivityAttributes {
         var etaSeconds: Int
     }
     var taskId: String
+    var fileName: String // FIX(A-1): Add fileName field to XDMDownloadAttributes
 }
 
 @available(iOS 16.1, *)
@@ -20,7 +21,7 @@ class XDMLiveActivityManager {
     func startActivity(taskId: String, fileName: String) {
         guard ActivityAuthorizationInfo().activitiesEnabled else { return }
 
-        let attributes = XDMDownloadAttributes(taskId: taskId)
+        let attributes = XDMDownloadAttributes(taskId: taskId, fileName: fileName) // FIX(A-1): Store real fileName
         let contentState = XDMDownloadAttributes.ContentState(
             fileName: fileName,
             progress: 0,
@@ -46,7 +47,7 @@ class XDMLiveActivityManager {
         }) else { return }
 
         let contentState = XDMDownloadAttributes.ContentState(
-            fileName: activity.attributes.taskId,
+            fileName: activity.attributes.fileName, // FIX(A-1): Use real fileName from attributes instead of taskId
             progress: progress,
             speedBytesPerSec: speed,
             etaSeconds: eta
@@ -63,10 +64,11 @@ class XDMLiveActivityManager {
         }) else { return }
 
         Task {
-            await activity.end(dismissalPolicy: .after(.now + 5))
+            await activity.end(dismissalPolicy: .after(.now + 30)) // FIX(A-9): Change dismissal policy to 30 seconds
         }
     }
 }
+
 
 // MARK: - Live Activity Widget View
 

@@ -153,6 +153,7 @@ class AppTheme {
       letterSpacing: 0.4,
       fontFeatures: const [FontFeature.tabularFigures()],
       color: color ?? (isDark ? textPrimary : lightTextPrimary),
+      decoration: TextDecoration.none,
     );
   }
 
@@ -167,6 +168,7 @@ class AppTheme {
       fontWeight: FontWeight.w700,
       letterSpacing: 1.4,
       color: color ?? (isDark ? textMuted : lightTextMuted),
+      decoration: TextDecoration.none,
     );
   }
 

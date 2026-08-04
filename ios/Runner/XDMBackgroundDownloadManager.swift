@@ -132,13 +132,19 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
     /// relaunch.
     public func resumeActiveDownloads(completion: @escaping () -> Void) {
         loadActiveTasksState()
+        let completedIds = Set(sharedDefaults?.stringArray(forKey: "xdm_completed_task_ids") ?? []) // FIX(A-4): Read completed task IDs
         let ids = Array(taskMetadata.keys)
         for taskId in ids {
-            guard activeTasks[taskId] == nil,
+            guard !completedIds.contains(taskId), // FIX(A-4): Skip completed tasks
+                  activeTasks[taskId] == nil,
                   let meta = taskMetadata[taskId],
                   let urlStr = meta["url"],
                   let destPath = meta["destinationPath"],
                   !urlStr.isEmpty, !destPath.isEmpty else { continue }
+
+            let status = meta["status"] ?? "downloading"
+            guard status == "paused" || status == "downloading" else { continue } // FIX(A-4): Only resume paused or downloading tasks
+
             startDownload(taskId: taskId, urlStr: urlStr, destinationPath: destPath)
         }
         completion()
@@ -150,13 +156,18 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
     /// from byte 0, wasting bandwidth and potentially corrupting partial files).
     public func resumeActiveDownloadsWithVerification(completion: @escaping () -> Void) {
         loadActiveTasksState()
+        let completedIds = Set(sharedDefaults?.stringArray(forKey: "xdm_completed_task_ids") ?? []) // FIX(A-4): Read completed task IDs
         let ids = Array(taskMetadata.keys)
         for taskId in ids {
-            guard activeTasks[taskId] == nil,
+            guard !completedIds.contains(taskId), // FIX(A-4): Skip completed tasks
+                  activeTasks[taskId] == nil,
                   let meta = taskMetadata[taskId],
                   let urlStr = meta["url"],
                   let destPath = meta["destinationPath"],
                   !urlStr.isEmpty, !destPath.isEmpty else { continue }
+
+            let status = meta["status"] ?? "downloading"
+            guard status == "paused" || status == "downloading" else { continue } // FIX(A-4): Only resume paused or downloading tasks
 
             // FIX-C1b: Check if resume data is available. If yes, resume.
             // If no resume data, skip this task — a fresh start should only
@@ -186,7 +197,9 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
         }
         defaults.set(Array(taskMetadata.keys), forKey: "xdm_active_task_ids")
         defaults.set(taskMetadata, forKey: "xdm_active_tasks_state")
+        defaults.set(activeTasks.count, forKey: "xdm_active_downloads_count") // FIX(A-7): Write xdm_active_downloads_count key
     }
+
 
     /// Loads persisted download state from the App Group shared container.
     /// Nil-safe: silently returns when the App Group is unavailable.
@@ -318,11 +331,5 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
                 print("XDM BG: Failed to post notification: \(error)")
             }
         }
-    }
-
-    // A1: findTaskId(for:) retained for any external callers, but internally
-    //     replaced by the O(1) taskIdMap lookup in all delegate callbacks.
-    private func findTaskId(for task: URLSessionDownloadTask) -> String? {
-        return taskIdMap[task.taskIdentifier]
     }
 }

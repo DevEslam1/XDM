@@ -29,18 +29,29 @@ class DohHttpOverrides extends HttpOverrides {
         return Socket.startConnect(proxyHost, proxyPort!);
       }
 
-      String host = uri.host;
       if (_dnsEnabled()) {
-        // Attempt DoH resolution
-        final resolved = await DohResolver.instance.resolve(host, _dnsProvider());
-        if (resolved != null) {
-          host = resolved;
-          debugPrint('[DMX DoH] ${uri.host} -> $host via ${_dnsProvider()}');
+        try {
+          // 1. Fast system DNS lookup (preserves CDN geo-routing & native ALPN)
+          final addresses = await InternetAddress.lookup(uri.host)
+              .timeout(const Duration(seconds: 2));
+          if (addresses.isNotEmpty) {
+            return Socket.startConnect(addresses.first, uri.port);
+          }
+        } catch (_) {
+          // 2. System DNS failed (e.g. ISP censorship / DNS blocking) -> Fallback to DoH
+          final resolved = await DohResolver.instance.resolve(uri.host, _dnsProvider());
+          if (resolved != null) {
+            debugPrint('[DMX DoH Fallback] ${uri.host} -> $resolved via ${_dnsProvider()}');
+            try {
+              final ipAddress = InternetAddress(resolved);
+              return Socket.startConnect(ipAddress, uri.port);
+            } catch (_) {}
+          }
         }
       }
       
-      // Connect to the host (IP if resolved, hostname if not - triggering system DNS fallback)
-      return Socket.startConnect(host, uri.port);
+      // Connect to the host using hostname (triggering system DNS fallback)
+      return Socket.startConnect(uri.host, uri.port);
     };
     
     return client;

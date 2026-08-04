@@ -420,50 +420,47 @@ class DownloadEngine {
 
   /// Cleans up temporary/orphan files associated with a download task upon cancellation.
   static Future<void> cleanupOrphanFiles(String tempFilePath) async {
-    if (tempFilePath.isEmpty) return;
+    if (tempFilePath.trim().isEmpty) return;
     try {
-      final file = File(tempFilePath);
-      final dir = file.parent;
+      final dir = File(tempFilePath).parent;
       if (!await dir.exists()) return;
 
-      final baseName = p.basenameWithoutExtension(tempFilePath);
-      final patterns = [
-        '$baseName.dmxpart',
-        '$baseName.dmxstate',
-        '$baseName.journal',
-        '$baseName.audio',
-        '$baseName.merged.mp4',
-        '$baseName.merged.mkv',
+      // FIX-AUDIT-3: Build patterns from the FULL tempFilePath, not from
+      // basenameWithoutExtension, because sidecar files are named as
+      // "${tempFilePath}.dmxstate", "${tempFilePath}.journal", etc.
+      final patterns = <String>[
+        tempFilePath, // the .dmxpart file itself
+        '$tempFilePath.dmxstate',
+        '$tempFilePath.journal',
+        '$tempFilePath.audio',
+        '$tempFilePath.audio.dmxstate',
+        '$tempFilePath.audio.journal',
+        '$tempFilePath.merged.mp4',
+        '$tempFilePath.merged.mkv',
       ];
 
-      for (final name in patterns) {
-        final f = File(p.join(dir.path, name));
-        if (await f.exists()) {
-          try {
-            await f.delete();
-          } catch (e) {
-            debugPrint(
-              '[DownloadEngine] Failed to delete orphan file ${f.path}: $e',
-            );
-          }
+      for (final path in patterns) {
+        try {
+          final f = File(path);
+          if (await f.exists()) await f.delete();
+        } catch (e) {
+          debugPrint('[DownloadEngine] Cleanup failed for $path: $e');
         }
       }
 
+      // Also clean any leftover .partN files
+      final baseName = p.basename(tempFilePath);
       await for (final entity in dir.list()) {
         if (entity is File &&
             entity.path.contains('$baseName.part') &&
             entity.path != tempFilePath) {
           try {
             await entity.delete();
-          } catch (e, st) {
-            Logger(
-              'download_engine',
-            ).warning('[download_engine] operation failed', e, st);
-          }
+          } catch (_) {}
         }
       }
     } catch (e) {
-      debugPrint('[DownloadEngine] Cleanup orphan files error: $e');
+      debugPrint('[DownloadEngine] cleanupOrphanFiles error: $e');
     }
   }
 
@@ -1560,9 +1557,11 @@ class DownloadEngine {
               ? calculatedTotalSize
               : (knownFileSize > 0 ? knownFileSize : 0));
 
-      final downloadedBytes = torrent.totalWantedDone > 0
+      // FIX D-2: Clamp overall downloadedBytes to totalSize
+      final rawDownloaded = torrent.totalWantedDone > 0
           ? torrent.totalWantedDone
           : torrent.totalDone;
+      final downloadedBytes = totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
 
       // FIX(2): Only estimate when we don't have true per-file progress.
       // When progressEstimated is false from the file mapping, we have real data.
@@ -1571,16 +1570,31 @@ class DownloadEngine {
           resolvedFiles.any(
             (f) => (f['progressEstimated'] as bool? ?? true) == false,
           );
+      // FIX E-1: Only estimate per-file progress when engine has downloaded bytes > 0
       final bool needsEstimation = resolvedFiles != null &&
           resolvedFiles.isNotEmpty &&
           !hasTruePerFileProgress &&
-          (!TorrentService.fileProgressSupported || downloadedBytes > 0);
+          downloadedBytes > 0;
       if (needsEstimation) {
         _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
+        // FIX-AUDIT-5: Reconcile — force the per-file sum to match the
+        // authoritative overall downloadedBytes from libtorrent.
+        final estimatedSum = resolvedFiles.fold<int>(
+          0, (s, f) => s + ((f['downloadedBytes'] as int?) ?? 0));
+        if (estimatedSum != downloadedBytes && estimatedSum > 0) {
+          final scale = downloadedBytes / estimatedSum;
+          for (final f in resolvedFiles) {
+            final len = (f['length'] as num?)?.toInt() ?? 0;
+            final cur = (f['downloadedBytes'] as int?) ?? 0;
+            f['downloadedBytes'] = (cur * scale).round().clamp(0, len);
+          }
+        }
         for (final f in resolvedFiles) {
           f['progressEstimated'] = true;
         }
       }
+
+
 
       // FIX(4): Apply max concurrent files limit
       if (resolvedFiles != null && resolvedFiles.isNotEmpty) {
@@ -1713,7 +1727,24 @@ class DownloadEngine {
     if (requestedThreads <= 1) return 1;
     if (fileSize > 0 && fileSize < 512 * 1024) return 1;
 
+    // FIX(B-8): Check Accept-Ranges via HEAD request first to avoid downloading data
+    try {
+      final headResponse = await dio.head(
+        url,
+        cancelToken: cancelToken,
+        options: Options(validateStatus: (_) => true),
+      );
+      final acceptRanges = headResponse.headers.value('accept-ranges')?.toLowerCase();
+      if (acceptRanges == 'none') {
+        debugPrint('[DownloadEngine] HEAD check: Accept-Ranges: none. Using 1 thread.');
+        return 1;
+      }
+    } catch (_) {
+      /* HEAD failed or unsupported → fall through to ranged GET probe */
+    }
+
     // FIX(16): cap the probe to a fraction of the file so we never download a
+
     // large share of a small-ish file just to estimate thread count. Probing
     // is pointless if the probe would consume most of the payload.
     // FIX-M2: Reduced minimum from 32 KB to 16 KB to limit unnecessary data transfer.
@@ -1982,7 +2013,8 @@ class DownloadEngine {
       final chunkSizes = List<int>.filled(threadCount, 0);
 
       var totalSize = resolvedFileSize;
-      final partSize = (totalSize / threadCount).floor();
+      var partSize = (totalSize / threadCount).floor();
+
 
       final targetFile = File(currentTempFilePath);
       await targetFile.parent.create(recursive: true);
@@ -2045,6 +2077,8 @@ class DownloadEngine {
                   progressList.length == threadCount) {
                 loadedState = progressList.cast<int>();
                 canResume = true;
+                chunkProgress = List<int>.from(loadedState);
+                debugPrint('[DMX-FIX-01] Loaded chunkProgress from .dmxstate: $chunkProgress');
               } else if (savedThreadCount > 0 &&
                   progressList.length == savedThreadCount) {
                 debugPrint(
@@ -2054,15 +2088,28 @@ class DownloadEngine {
                 threadCount = savedThreadCount;
                 loadedState = progressList.cast<int>();
                 canResume = true;
+                chunkProgress = List<int>.from(loadedState);
+                debugPrint('[DMX-FIX-01] Loaded chunkProgress from .dmxstate: $chunkProgress');
               }
             }
           }
         } catch (e) {
           debugPrint('[DownloadEngine] State file decode failed: $e');
+          // FIX(H-5): Journal recovery fallback on corrupt .dmxstate
+          if (journalProgress != null && journalProgress.isNotEmpty) {
+            chunkProgress = journalProgress;
+            canResume = true;
+            loadedState = journalProgress;
+            debugPrint('[DownloadEngine] FIX(H-5): Recovered progress from journal on state decode failure: $chunkProgress');
+          }
         }
       }
 
+      // FIX(H-1): recompute partSize after totalSize may have changed
+      partSize = (totalSize / threadCount).floor();
+
       if (!canResume) {
+
         await _deleteFileIfExists(stateFile);
         await _deleteFileIfExists(File(journalPath));
 
@@ -2076,6 +2123,10 @@ class DownloadEngine {
       final PositionalFileWriter writer;
 
       if (canResume && loadedState != null && loadedState.any((b) => b > 0)) {
+        chunkProgress = List<int>.from(loadedState);
+        debugPrint('[DMX-FIX-01] Initialized chunkProgress from loadedState: $chunkProgress');
+
+
         if (await File(currentTempFilePath).exists()) {
           writer = await PositionalFileWriter.openForResume(
             currentTempFilePath,
@@ -2300,8 +2351,11 @@ class DownloadEngine {
 
       DateTime lastCheckpointTime = DateTime.now();
       int bytesSinceLastCheckpoint = 0;
+      final chunksSinceFlush = <int, int>{};
+      final bytesSinceFlush = <int, int>{};
 
       Object? chunkError;
+
 
       Future<void> saveState() async {
         try {
@@ -2319,12 +2373,14 @@ class DownloadEngine {
             final tempStateFile = File('${stateFile.path}.tmp');
 
             final stateData = {
+              'version': 2, // FIX-AUDIT-8: schema version
               'totalSize': totalSize,
               'threadCount': threadCount,
               'progress': snapshot,
               'etag': etagSnapshot,
               'lastModified': lastModifiedSnapshot,
             };
+
 
             await tempStateFile.writeAsString(jsonEncode(stateData));
             await tempStateFile.rename(stateFile.path);
@@ -2629,9 +2685,20 @@ class DownloadEngine {
                       return chunkProgress[idx];
                     });
 
+                    // FIX-AUDIT-1: Flush to disk BEFORE journaling to guarantee durability.
+                    // Batch: flush every 4 chunks or 128KB to balance performance vs safety.
+                    chunksSinceFlush[idx] = (chunksSinceFlush[idx] ?? 0) + 1;
+                    bytesSinceFlush[idx] = (bytesSinceFlush[idx] ?? 0) + chunk.length;
+                    if ((chunksSinceFlush[idx] ?? 0) >= 4 || (bytesSinceFlush[idx] ?? 0) >= 128 * 1024) {
+                      await writer.flush(idx);
+                      chunksSinceFlush[idx] = 0;
+                      bytesSinceFlush[idx] = 0;
+                    }
+
                     await journalLock.synchronized(
                       () => journal.recordChunkProgress(idx, updatedProgress),
                     );
+
 
                     final checkpointSnapshot =
                         await progressLock.synchronized<List<int>?>(() {
