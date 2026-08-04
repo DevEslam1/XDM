@@ -306,9 +306,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentIndex = navState.activeTabIndex;
     return AnimatedSlide(
-      offset: (navState.isNavbarVisible && currentIndex != 1)
-          ? Offset.zero
-          : const Offset(0, 1.0),
+      offset: currentIndex != 1 ? Offset.zero : const Offset(0, 1.0),
       duration: AppTheme.motionBase,
       curve: AppTheme.motionCurve,
       child: ClipRRect(
@@ -400,9 +398,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentIndex = navState.activeTabIndex;
     return AnimatedSlide(
-      offset: (navState.isNavbarVisible && currentIndex != 1)
-          ? Offset.zero
-          : const Offset(0, 1.8),
+      offset: currentIndex != 1 ? Offset.zero : const Offset(0, 1.8),
       duration: AppTheme.motionSlow,
       curve: AppTheme.motionCurve,
       child: SafeArea(

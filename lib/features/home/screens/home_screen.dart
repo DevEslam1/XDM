@@ -127,9 +127,11 @@ class _HomeScreenState extends State<HomeScreen>
                         alignment: Alignment.topCenter,
                         child: _showAnalytics
                             ? Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                  vertical: 4.0,
+                                padding: const EdgeInsets.only(
+                                  left: 16.0,
+                                  right: 16.0,
+                                  top: 4.0,
+                                  bottom: 14.0,
                                 ),
                                 child: Selector<DownloadProvider,
                                     Map<String, double>>(
@@ -164,9 +166,11 @@ class _HomeScreenState extends State<HomeScreen>
                         curve: Curves.easeOutCubic,
                         child: _selectedTab == 0
                             ? const Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                  vertical: 8.0,
+                                padding: EdgeInsets.only(
+                                  left: 16.0,
+                                  right: 16.0,
+                                  top: 4.0,
+                                  bottom: 14.0,
                                 ),
                                 child: DownloadStatsPanel(),
                               )

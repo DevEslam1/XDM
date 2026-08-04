@@ -4,6 +4,7 @@ import 'package:dmx/core/services/bandwidth_governor.dart';
 import 'package:dmx/core/services/torrent_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('Cross-Feature Integration Tests', () {
     test('Journal recovery retains progress state after crash simulation',
         () async {
@@ -35,5 +36,60 @@ void main() {
       expect(TorrentService.getTrackers(1), isEmpty);
       expect(await TorrentService.loadIpFilter('dummy.dat'), isFalse);
     });
+
+    test('TorrentService.ready resolves cleanly', () async {
+      await expectLater(TorrentService.ready, completes);
+    });
+
+    test('TorrentService.hasResumeData returns false when no resume data exists', () async {
+      final exists = await TorrentService.hasResumeData('non_existent_source');
+      expect(exists, isFalse);
+    });
+
+    test('TorrentService.shouldStopSeeding correctly calculates ratio and time limits', () {
+      // Under ratio limit and under max time -> false
+      expect(
+        TorrentService.shouldStopSeeding(
+          progress: 1.0,
+          uploadedBytes: 500,
+          downloadedBytes: 1000,
+          shareRatioLimit: 2.0,
+          maxSeedingMinutes: 60,
+          completedAt: DateTime.now().subtract(const Duration(minutes: 30)),
+        ),
+        isFalse,
+      );
+
+      // Exceeds ratio limit (1500 / 1000 = 1.5 >= 1.0) -> true
+      expect(
+        TorrentService.shouldStopSeeding(
+          progress: 1.0,
+          uploadedBytes: 1500,
+          downloadedBytes: 1000,
+          shareRatioLimit: 1.0,
+          maxSeedingMinutes: 0,
+        ),
+        isTrue,
+      );
+
+      // Exceeds max seeding minutes -> true
+      expect(
+        TorrentService.shouldStopSeeding(
+          progress: 1.0,
+          uploadedBytes: 0,
+          downloadedBytes: 1000,
+          shareRatioLimit: 0,
+          maxSeedingMinutes: 30,
+          completedAt: DateTime.now().subtract(const Duration(minutes: 35)),
+        ),
+        isTrue,
+      );
+    });
+
+    test('TorrentService.addTracker ignores invalid schemes silently', () {
+      expect(() => TorrentService.addTracker(1, 'ftp://tracker.example.com'), returnsNormally);
+      expect(() => TorrentService.addTracker(1, 'http://tracker.example.com'), returnsNormally);
+    });
   });
 }
+

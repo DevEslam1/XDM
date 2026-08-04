@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -86,8 +87,13 @@ class AdBlockFilterUpdater {
 
   void _invalidateCosmeticCache() => _cosmeticCache.clear();
 
+  Set<String> _allowListedDomains = {};
+  Completer<bool>? _inFlightUpdate;
+  double regressionThreshold = 0.50;
+
   Set<String> get allBlockedDomains => _downloadedDomains;
   Set<String> get allTrackingDomains => _downloadedTrackingDomains;
+  Set<String> get allowListedDomains => _allowListedDomains;
   int get downloadedDomainCount => _downloadedDomains.length;
   int get downloadedTrackingCount => _downloadedTrackingDomains.length;
   Set<String> get cosmeticRules => _cosmeticRules;
@@ -101,12 +107,14 @@ class AdBlockFilterUpdater {
     final prefs = await SharedPreferences.getInstance();
     final cachedAds = prefs.getStringList('${_domainsKey}_ads') ?? [];
     final cachedTracking = prefs.getStringList('${_domainsKey}_tracking') ?? [];
+    final cachedExcepted = prefs.getStringList('${_domainsKey}_excepted') ?? [];
     final cachedPatterns = prefs.getStringList(_patternsKey) ?? [];
     final cachedCosmetics = prefs.getStringList(_cosmeticKey) ?? [];
     final cachedScriptlets = prefs.getStringList(_scriptletsKey) ?? [];
 
     _downloadedDomains = cachedAds.toSet();
     _downloadedTrackingDomains = cachedTracking.toSet();
+    _allowListedDomains = cachedExcepted.toSet();
     _urlPatterns.addAll(cachedPatterns);
     _cosmeticRules.addAll(cachedCosmetics);
     _scriptletRules.addAll(cachedScriptlets);
@@ -125,32 +133,54 @@ class AdBlockFilterUpdater {
     }
   }
 
+  Future<bool> isStale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastUpdate = prefs.getInt(_lastUpdateKey) ?? 0;
+    if (lastUpdate == 0) return true;
+    final daysSince =
+        (DateTime.now().millisecondsSinceEpoch - lastUpdate) ~/
+            (1000 * 60 * 60 * 24);
+    return daysSince >= _updateIntervalDays;
+  }
+
   Future<bool> updateIfNeeded({bool force = false}) async {
-    return _lock.synchronized(() async {
-      final prefs = await SharedPreferences.getInstance();
-      final enabled = prefs.getBool(_enabledKey) ?? true;
-      if (!enabled && !force) return false;
+    if (_inFlightUpdate != null) {
+      return _inFlightUpdate!.future;
+    }
+    final completer = Completer<bool>();
+    _inFlightUpdate = completer;
 
-      if (!force) {
-        final lastUpdate = prefs.getInt(_lastUpdateKey) ?? 0;
-        final daysSince =
-            (DateTime.now().millisecondsSinceEpoch - lastUpdate) ~/
-                (1000 * 60 * 60 * 24);
-        if (daysSince < _updateIntervalDays) return false;
-      }
+    try {
+      final res = await _lock.synchronized(() async {
+        final prefs = await SharedPreferences.getInstance();
+        final enabled = prefs.getBool(_enabledKey) ?? true;
+        if (!enabled && !force) return false;
 
-      try {
-        await _downloadAndParse();
-        await prefs.setInt(
-          _lastUpdateKey,
-          DateTime.now().millisecondsSinceEpoch,
-        );
-        return true;
-      } catch (e) {
-        _log.warning('Ad-block filter update failed', e);
-        return false;
-      }
-    });
+        if (!force) {
+          final stale = await isStale();
+          if (!stale) return false;
+        }
+
+        try {
+          await _downloadAndParse();
+          await prefs.setInt(
+            _lastUpdateKey,
+            DateTime.now().millisecondsSinceEpoch,
+          );
+          return true;
+        } catch (e) {
+          _log.warning('Ad-block filter update failed', e);
+          return false;
+        }
+      });
+      completer.complete(res);
+      return res;
+    } catch (e) {
+      completer.completeError(e);
+      rethrow;
+    } finally {
+      _inFlightUpdate = null;
+    }
   }
 
   Future<void> _downloadAndParse() async {
@@ -245,6 +275,7 @@ class AdBlockFilterUpdater {
 
     _downloadedDomains = combinedAds.difference(combinedAdsExceptions);
     _downloadedTrackingDomains = combinedTracking.difference(combinedTrackingExceptions);
+    _allowListedDomains = combinedAdsExceptions.union(combinedTrackingExceptions);
 
     // Save final merged sets
     await prefs.setStringList(
@@ -254,6 +285,10 @@ class AdBlockFilterUpdater {
     await prefs.setStringList(
       '${_domainsKey}_tracking',
       _downloadedTrackingDomains.take(_maxDomains).toList(),
+    );
+    await prefs.setStringList(
+      '${_domainsKey}_excepted',
+      _allowListedDomains.take(_maxDomains).toList(),
     );
     await prefs.setStringList(
       _patternsKey,

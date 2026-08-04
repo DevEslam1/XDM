@@ -436,10 +436,14 @@ class _BrowserScreenState extends State<BrowserScreen>
     // already set by _configureController, so the reload is delegated correctly
     // without needing to re-create the controller or call any non-existent
     // setOnRefreshCallback API.
-    tab.pullToRefreshController = PullToRefreshController(
-      settings: PullToRefreshSettings(color: AppTheme.neonBlue),
-      onRefresh: () => tab.controller?.reload(),
-    );
+    try {
+      tab.pullToRefreshController = PullToRefreshController(
+        settings: PullToRefreshSettings(color: AppTheme.neonBlue),
+        onRefresh: () => tab.controller?.reload(),
+      );
+    } catch (e) {
+      _log.fine('PullToRefreshController not supported or uninitialized in current environment: $e');
+    }
 
     return tab;
   }
@@ -1041,6 +1045,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       context,
       listen: false,
     );
+    if (downloadProvider.activeTabIndex != 1) return;
     if (y <= 0) {
       if (!_showBarsNotifier.value) {
         _showBarsNotifier.value = true;
@@ -4304,7 +4309,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 initialSettings:
                                                                     InAppWebViewSettings(
                                                                   useHybridComposition:
-                                                                      true,
+                                                                      false,
                                                                   useShouldInterceptRequest:
                                                                       true,
                                                                   transparentBackground:
@@ -4411,11 +4416,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   .shouldBlock(
                                                                       url)) {
                                                                 // E10: Blocked Ads Count Indicator
-                                                                if (mounted) {
-                                                                  setState(() {
-                                                                    _blockedAdsCount++;
-                                                                  });
-                                                                }
+                                                                _blockedAdsCount++;
                                                                 return WebResourceResponse(
                                                                   contentType:
                                                                       'text/plain',

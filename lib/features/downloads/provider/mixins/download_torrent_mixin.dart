@@ -438,31 +438,22 @@ mixin DownloadTorrentMixin {
       final stats = providerLatestTorrentStats[torrentId];
       if (stats == null) continue;
 
-      // Check ratio limit
-      if (settings.shareRatioLimit > 0) {
-        final totalDown = stats.totalPayloadDownload > 0
+      final stop = TorrentService.shouldStopSeeding(
+        progress: stats.progress,
+        uploadedBytes: stats.totalPayloadUpload,
+        downloadedBytes: stats.totalPayloadDownload > 0
             ? stats.totalPayloadDownload
-            : (task.fileSize > 0 ? task.fileSize : 0);
-        if (totalDown <= 0) continue;
-        final ratio = stats.totalPayloadUpload / totalDown;
-        if (ratio >= settings.shareRatioLimit) {
-          debugPrint(
-            '[DownloadTorrentMixin] Task ${task.id} reached ratio limit $ratio (max ${settings.shareRatioLimit})',
-          );
-          updateTaskSeeding(task.id, enabled: false);
-          continue;
-        }
-      }
+            : (task.fileSize > 0 ? task.fileSize : 0),
+        shareRatioLimit: settings.shareRatioLimit,
+        maxSeedingMinutes: settings.maxSeedingTimeMinutes,
+        completedAt: task.completedAt,
+      );
 
-      // Check max seeding duration
-      if (settings.maxSeedingTimeMinutes > 0 && task.completedAt != null) {
-        final duration = DateTime.now().difference(task.completedAt!);
-        if (duration.inMinutes >= settings.maxSeedingTimeMinutes) {
-          debugPrint(
-            '[DownloadTorrentMixin] Task ${task.id} reached max seeding duration',
-          );
-          updateTaskSeeding(task.id, enabled: false);
-        }
+      if (stop) {
+        debugPrint(
+          '[DownloadTorrentMixin] Task ${task.id} stopping seeding based on policy limits',
+        );
+        updateTaskSeeding(task.id, enabled: false);
       }
     }
   }

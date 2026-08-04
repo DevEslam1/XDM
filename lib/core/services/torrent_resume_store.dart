@@ -31,8 +31,12 @@ class TorrentResumeStore {
   static String? _basePath;
 
   static Future<void> init() async {
-    final appDir = await getApplicationSupportDirectory();
-    _basePath = p.join(appDir.path, _dirName);
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      _basePath = p.join(appDir.path, _dirName);
+    } catch (_) {
+      _basePath = p.join(Directory.systemTemp.path, _dirName);
+    }
     final dir = Directory(_basePath!);
     if (!await dir.exists()) {
       await dir.create(recursive: true);

@@ -91,8 +91,40 @@ class AdBlockerService {
   final AdBlockFilterUpdater _updater = AdBlockFilterUpdater();
 
   Set<String> _compiledDomainCache = {};
+  int _blockedCount = 0;
+  final Set<String> _blockedDomainsSession = {};
+
+  /// Running blocked-request counter and notifier for UI observation.
+  final ValueNotifier<int> blockedCountNotifier = ValueNotifier<int>(0);
+
+  int get blockedCount => _blockedCount;
+  Set<String> get blockedDomains => Set.unmodifiable(_blockedDomainsSession);
 
   bool get isEnabled => _enabled;
+
+  /// Exposes filter list staleness.
+  Future<bool> isStale() => _updater.isStale();
+
+  void recordBlockedRequest(String url) {
+    _blockedCount++;
+    blockedCountNotifier.value = _blockedCount;
+    try {
+      final normalized = url.toLowerCase().startsWith('http://') ||
+              url.toLowerCase().startsWith('https://')
+          ? url
+          : 'https://$url';
+      final host = Uri.tryParse(normalized)?.host;
+      if (host != null && host.isNotEmpty) {
+        _blockedDomainsSession.add(host.toLowerCase());
+      }
+    } catch (_) {}
+  }
+
+  void resetStats() {
+    _blockedCount = 0;
+    _blockedDomainsSession.clear();
+    blockedCountNotifier.value = 0;
+  }
 
   String get dynamicDomainsJson {
     final subset = _compiledDomainCache.take(2000).toList();
@@ -103,6 +135,7 @@ class AdBlockerService {
   List<String> get customRules => List.unmodifiable(_customRules);
 
   Future<void> init() async {
+    resetStats();
     try {
       final prefs = await SharedPreferences.getInstance();
       _enabled = prefs.getBool(_prefKey) ?? true;
@@ -130,9 +163,6 @@ class AdBlockerService {
       set.addAll(_updater.allBlockedDomains);
       set.addAll(_updater.allTrackingDomains);
     }
-    // We don't strictly NEED to add custom hosts to the cache if we check them
-    // separately in shouldBlockUrl, but adding them here makes the subdomain
-    // walk in shouldBlockUrl find them too.
     set.addAll(CustomAdBlockStore.instance.hosts);
     _compiledDomainCache = set;
   }
@@ -197,6 +227,19 @@ class AdBlockerService {
   // 1. DOMAIN BLOCKLIST
   // ─────────────────────────────────────────────────────────────────────
 
+  /// Checks if [host] is allow-listed via an exception rule (`@@`).
+  bool isAllowListed(String host) {
+    if (host.isEmpty) return false;
+    var checkHost = host.toLowerCase();
+    while (checkHost.isNotEmpty) {
+      if (_updater.allowListedDomains.contains(checkHost)) return true;
+      final dotIdx = checkHost.indexOf('.');
+      if (dotIdx == -1 || dotIdx == checkHost.length - 1) break;
+      checkHost = checkHost.substring(dotIdx + 1);
+    }
+    return false;
+  }
+
   /// Returns `true` if [url] should be blocked (ad/tracking domain).
   bool shouldBlockUrl(String url) {
     if (!_enabled) return false;
@@ -221,22 +264,47 @@ class AdBlockerService {
             : 'https://$lower';
     final uri = Uri.tryParse(normalized);
     final host = uri?.host ?? '';
+
+    // Check exception allow-list (@@ rules) before blocking
+    if (host.isNotEmpty && isAllowListed(host)) {
+      return false;
+    }
+
+    if (CustomAdBlockStore.instance.useCustomOnly) {
+      final blocked = host.isNotEmpty
+          ? CustomAdBlockStore.instance.contains(host)
+          : CustomAdBlockStore.instance.contains(lower);
+      if (blocked) recordBlockedRequest(url);
+      return blocked;
+    }
+
     if (host.isEmpty) {
-      // Fallback to substring match if URL can't be parsed
-      if (CustomAdBlockStore.instance.contains(lower)) return true;
+      if (CustomAdBlockStore.instance.contains(lower)) {
+        recordBlockedRequest(url);
+        return true;
+      }
       for (final domain in _compiledDomainCache) {
-        if (lower.contains(domain)) return true;
+        if (lower.contains(domain)) {
+          recordBlockedRequest(url);
+          return true;
+        }
       }
       return false;
     }
 
     // Check custom store first
-    if (CustomAdBlockStore.instance.contains(host)) return true;
+    if (CustomAdBlockStore.instance.contains(host)) {
+      recordBlockedRequest(url);
+      return true;
+    }
 
     // Fast-path subdomain walk check against compiled domain set
     var checkHost = host;
     while (checkHost.isNotEmpty) {
-      if (_compiledDomainCache.contains(checkHost)) return true;
+      if (_compiledDomainCache.contains(checkHost)) {
+        recordBlockedRequest(url);
+        return true;
+      }
       final dotIdx = checkHost.indexOf('.');
       if (dotIdx == -1 || dotIdx == checkHost.length - 1) break;
       checkHost = checkHost.substring(dotIdx + 1);
@@ -246,7 +314,10 @@ class AdBlockerService {
     final path = Uri.tryParse(url)?.path ?? '';
     if (path.isNotEmpty && !CustomAdBlockStore.instance.useCustomOnly) {
       for (final pattern in _updater.urlPatterns) {
-        if (path.contains(pattern)) return true;
+        if (path.contains(pattern)) {
+          recordBlockedRequest(url);
+          return true;
+        }
       }
     }
 

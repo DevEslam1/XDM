@@ -20,5 +20,15 @@ void main() {
       expect(js, contains('window.XdmPickerChannel'));
       expect(js, contains('display:none;'));
     });
+
+    test('sanitizeSelector strips breakout characters cleanly', () {
+      final clean = ElementPickerService.sanitizeSelector('div{color:red}\n#ad');
+      expect(clean, equals('divcolor:red#ad'));
+    });
+
+    test('siteScopedRule produces AdBlock format rule with host', () {
+      final rule = ElementPickerService.siteScopedRule('example.com', '.ad-banner');
+      expect(rule, equals('example.com##.ad-banner { display: none !important; }'));
+    });
   });
 }

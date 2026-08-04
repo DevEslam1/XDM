@@ -44,5 +44,26 @@ void main() {
       service.refresh();
       expect(service.shouldBlockUrl('doubleclick.net'), isTrue);
     });
+
+    test('isAllowListed domain overrides block rules', () async {
+      // Allow-listed domain should return false for shouldBlockUrl
+      expect(service.isAllowListed('recaptcha'), isFalse);
+      expect(service.shouldBlockUrl('https://doubleclick.net/ad.js'), isTrue);
+    });
+
+    test('running blockedCount and blockedCountNotifier update on block', () async {
+      service.resetStats();
+      expect(service.blockedCount, 0);
+
+      var notifiedValue = -1;
+      service.blockedCountNotifier.addListener(() {
+        notifiedValue = service.blockedCountNotifier.value;
+      });
+
+      service.shouldBlockUrl('https://doubleclick.net/ad.js');
+      expect(service.blockedCount, equals(1));
+      expect(notifiedValue, equals(1));
+      expect(service.blockedDomains, contains('doubleclick.net'));
+    });
   });
 }

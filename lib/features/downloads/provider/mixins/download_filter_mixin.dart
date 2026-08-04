@@ -277,9 +277,12 @@ mixin DownloadFilterMixin {
   }
 
   void setMixinActiveTabIndex(int index, {void Function()? onBrowserTab}) {
-    if (_activeTabIndex == index) return;
-    _activeTabIndex = index;
     _isNavbarVisible = true;
+    if (_activeTabIndex == index) {
+      notifyListeners();
+      return;
+    }
+    _activeTabIndex = index;
     notifyListeners();
     if (index == 1) {
       onBrowserTab?.call();

@@ -67,5 +67,20 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getBool('adblock_auto_update_enabled'), isFalse);
     });
+
+    test('isStale returns true when never updated', () async {
+      final updater = AdBlockFilterUpdater();
+      await updater.init();
+      expect(await updater.isStale(), isTrue);
+    });
+
+    test('updateIfNeeded single-flight collapses concurrent calls', () async {
+      final updater = AdBlockFilterUpdater();
+      await updater.init();
+      final f1 = updater.updateIfNeeded(force: false);
+      final f2 = updater.updateIfNeeded(force: false);
+      final results = await Future.wait([f1, f2]);
+      expect(results[0], equals(results[1]));
+    });
   });
 }

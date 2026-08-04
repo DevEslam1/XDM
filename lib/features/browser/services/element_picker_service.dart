@@ -50,9 +50,22 @@ class ElementPickerService {
 })();
 ''';
 
-  /// Generates a site-scoped CSS rule hiding the targeted selector.
+  /// Sanitizes CSS selector to prevent CSS escape breakouts.
+  static String sanitizeSelector(String selector) {
+    return selector.trim().replaceAll(RegExp(r'[\r\n{}<>]'), '');
+  }
+
+  /// Generates a CSS rule hiding the targeted selector.
   static String blockRule(String selector) {
-    final clean = selector.trim();
+    final clean = sanitizeSelector(selector);
     return '$clean { display: none !important; }';
+  }
+
+  /// Generates a site-scoped AdBlock cosmetic rule string (e.g. `example.com##selector`).
+  static String siteScopedRule(String host, String selector) {
+    final cleanHost = host.trim().toLowerCase();
+    final cleanSelector = sanitizeSelector(selector);
+    if (cleanHost.isEmpty) return blockRule(cleanSelector);
+    return '$cleanHost##$cleanSelector { display: none !important; }';
   }
 }

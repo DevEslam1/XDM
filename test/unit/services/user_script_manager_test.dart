@@ -134,4 +134,37 @@ void main() {
     expect(restored.isCss, script.isCss);
     expect(restored.enabled, script.enabled);
   });
+
+  test('sandbox string neutralizes DOM write when domWrite permission is absent', () async {
+    const script = UserScript(
+      id: 'no_dom',
+      name: 'No DOM Write',
+      urlPattern: '*',
+      code: 'document.write("evil");',
+      permissions: {ScriptPermission.domRead},
+    );
+    final manager = UserScriptManager.instance;
+    await manager.load();
+    await manager.add(script);
+    final outputJs = await manager.getJsForUrl('https://example.com');
+    expect(outputJs, contains('document.write'));
+    expect(outputJs, contains("'fetch'"));
+    expect(outputJs, contains("'XMLHttpRequest'"));
+    await manager.clear();
+  });
+
+  test('script id marker is safely escaped in sandbox key', () async {
+    const script = UserScript(
+      id: 'bad;id"with-special@chars',
+      name: 'Special ID',
+      urlPattern: '*',
+      code: 'console.log(1);',
+    );
+    final manager = UserScriptManager.instance;
+    await manager.load();
+    await manager.add(script);
+    final js = await manager.getJsForUrl('https://example.com');
+    expect(js, contains('xdm_user_script_bad_id_with_special_chars'));
+    await manager.clear();
+  });
 }
