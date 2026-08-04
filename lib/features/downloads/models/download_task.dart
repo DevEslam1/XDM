@@ -119,6 +119,7 @@ class DownloadTask {
   /// then 0. Every size/percentage readout must go through this getter so
   /// torrents with a late-resolved size still render correct numbers.
   int get resolvedFileSize {
+    if (fileSize < 0) return 0; // FIX-C1: Handle negative fileSize
     // FIX-10: For torrents, prefer the torrentFiles sum as it's computed from actual metadata
     if (isTorrent && torrentFiles != null && torrentFiles!.isNotEmpty) {
       final sum = torrentFiles!
@@ -130,19 +131,21 @@ class DownloadTask {
     return 0;
   }
 
-
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
     final total = resolvedFileSize;
-    if (total <= 0) return 0.0;
-    return (downloadedBytes / total).clamp(0.0, 1.0);
+    if (total <= 0) return 0.0; // FIX-C2: Prevent division by zero
+    final downloaded = downloadedBytes.clamp(0, total); // FIX-C2: Clamp to [0, total]
+    return (downloaded / total).clamp(0.0, 1.0);
   }
 
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
-    if (resolvedFileSize <= 0) return '0.0%';
+    final total = resolvedFileSize;
+    if (total <= 0) return '0.0%'; // FIX-C3: Handle zero fileSize
     return '${(progress * 100).toStringAsFixed(1)}%';
   }
+
 
   String get speedFormatted {
     if (status != DownloadStatus.downloading &&

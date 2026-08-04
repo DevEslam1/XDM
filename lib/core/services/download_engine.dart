@@ -435,9 +435,11 @@ class DownloadEngine {
         '$tempFilePath.audio',
         '$tempFilePath.audio.dmxstate',
         '$tempFilePath.audio.journal',
+        '$tempFilePath.merged',
         '$tempFilePath.merged.mp4',
         '$tempFilePath.merged.mkv',
       ];
+
 
       for (final path in patterns) {
         try {

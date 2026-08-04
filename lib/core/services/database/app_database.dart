@@ -23,7 +23,20 @@ class DoubleListConverter extends TypeConverter<List<double>, String> {
     try {
       final decoded = jsonDecode(fromDb);
       if (decoded is List) {
-        return decoded.map((e) => (e as num).toDouble()).toList();
+        // FIX-C5: Wrap element parsing in per-element try-catch
+        final result = <double>[];
+        for (final e in decoded) {
+          try {
+            if (e is num) {
+              result.add(e.toDouble());
+            } else {
+              result.add(0.0);
+            }
+          } catch (_) {
+            result.add(0.0);
+          }
+        }
+        return result;
       }
       final msg =
           'DoubleListConverter: unexpected type ${decoded.runtimeType} for input';
@@ -54,8 +67,18 @@ class TorrentFilesConverter
     try {
       final decoded = jsonDecode(fromDb);
       if (decoded is List) {
-        return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        // FIX-C5: Wrap element parsing in per-element try-catch
+        final result = <Map<String, dynamic>>[];
+        for (final e in decoded) {
+          try {
+            if (e is Map) {
+              result.add(Map<String, dynamic>.from(e));
+            }
+          } catch (_) {}
+        }
+        return result;
       }
+
       final msg =
           'TorrentFilesConverter: unexpected type ${decoded.runtimeType} for input';
       _dbLog.warning(msg);

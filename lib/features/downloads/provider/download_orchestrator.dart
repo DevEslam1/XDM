@@ -685,11 +685,26 @@ class DownloadOrchestrator {
     final audioFile = File(actualAudioPath);
 
     if (!await videoFile.exists()) {
-      throw Exception('Video file missing after download: $actualVideoPath');
+      debugPrint('[DMX] FIX-B4: _mergeAudioVideo: video file missing: $actualVideoPath');
+      await _host.setTaskState(
+        current.copyWith(
+          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          errorMessage: 'Video file missing. Please retry the download.',
+        ),
+      );
+      return false;
     }
     if (!await audioFile.exists()) {
-      throw Exception('Audio file missing after download: $actualAudioPath');
+      debugPrint('[DMX] FIX-B4: _mergeAudioVideo: audio file missing: $actualAudioPath');
+      await _host.setTaskState(
+        current.copyWith(
+          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
+          errorMessage: 'Audio file missing. Please retry the download.',
+        ),
+      );
+      return false;
     }
+
 
     final videoLen = await videoFile.length();
     final audioLen = await audioFile.length();
@@ -1015,8 +1030,11 @@ class DownloadOrchestrator {
         clearStatusMessage: true,
         status: DownloadStatus.completed,
         fileSize: finalFileSize,
-        // FIX(F-1): snap to 100 % on completion
-        downloadedBytes: finalFileSize > 0 ? finalFileSize : current.downloadedBytes,
+        // FIX F-1: Clamp to fileSize to prevent >100% display
+        downloadedBytes: finalFileSize > 0
+            ? finalFileSize.clamp(0, finalFileSize)
+            : current.downloadedBytes.clamp(0, finalFileSize > 0 ? finalFileSize : current.downloadedBytes),
+
 
         speed: 0,
         eta: 0,
@@ -1162,11 +1180,28 @@ class DownloadOrchestrator {
       await _host.setTaskState(task);
     }
 
-    final maxRetries = _host.providerSettingsProvider.autoRetryEnabled
+    // FIX H-7: Validate state file integrity before retry loop (A-2)
+    final stateFile = File('${task.tempFilePath}.dmxstate');
+    if (await stateFile.exists()) {
+      try {
+        final content = await stateFile.readAsString();
+        jsonDecode(content); // throws on corrupt JSON
+      } catch (e) {
+        debugPrint('[DMX] H-7 FIX: Corrupt .dmxstate detected, deleting.');
+        try { await stateFile.delete(); } catch (_) {}
+        task = task.copyWith(
+          downloadedBytes: 0,
+          chunks: List<double>.filled(task.threadCount > 0 ? task.threadCount : 1, 0.0),
+        );
+        await _host.setTaskState(task);
+      }
+    }
 
+    final maxRetries = _host.providerSettingsProvider.autoRetryEnabled
         ? _host.providerSettingsProvider.maxRetries
         : 0;
     int attempt = 0;
+
 
     // Track effective thread count and TTFB in metrics
     _host.downloadMetrics[task.id]?.effectiveThreads = runtimeThreadCount;
