@@ -71,6 +71,52 @@ class AppTheme {
   static const Color focusFill = Color(0x33008FE0);
   static const Color lightFocusFill = Color(0x33008FE0);
 
+  // ── Semantic Color Pairings ──
+  /// Error state pairing on light backgrounds (high-contrast deep red on light red tint).
+  static const Color errorOnLight = Color(0xFF991B1B);
+  static const Color errorBgOnLight = Color(0xFFFEE2E2);
+
+  /// Error state pairing on dark backgrounds.
+  static const Color errorOnDark = Color(0xFFFCA5A5);
+  static const Color errorBgOnDark = Color(0x33EF4444);
+
+  /// Success state pairing on dark backgrounds.
+  static const Color successOnDark = Color(0xFF34D399);
+  static const Color successBgOnDark = Color(0x3310B981);
+
+  /// Success state pairing on light backgrounds.
+  static const Color successOnLight = Color(0xFF047857);
+  static const Color successBgOnLight = Color(0xFFD1FAE5);
+
+  /// Disabled states across surfaces.
+  static const Color disabledSurfaceDark = Color(0xFF1F2937);
+  static const Color disabledTextDark = Color(0xFF6B7280);
+  static const Color disabledIconDark = Color(0xFF4B5563);
+
+  static const Color disabledSurfaceLight = Color(0xFFE5E7EB);
+  static const Color disabledTextLight = Color(0xFF9CA3AF);
+  static const Color disabledIconLight = Color(0xFFD1D5DB);
+
+  // ── High Contrast Mode Tokens ──
+  static const Color hcBackgroundDark = Color(0xFF000000);
+  static const Color hcSurfaceDark = Color(0xFF121212);
+  static const Color hcTextDark = Color(0xFFFFFFFF);
+  static const Color hcBorderDark = Color(0xFFFFFFFF);
+
+  static const Color hcBackgroundLight = Color(0xFFFFFFFF);
+  static const Color hcSurfaceLight = Color(0xFFFFFFFF);
+  static const Color hcTextLight = Color(0xFF000000);
+  static const Color hcBorderLight = Color(0xFF000000);
+
+  static Color disabledSurface(bool isDark) =>
+      isDark ? disabledSurfaceDark : disabledSurfaceLight;
+  static Color disabledText(bool isDark) =>
+      isDark ? disabledTextDark : disabledTextLight;
+  static Color disabledIcon(bool isDark) =>
+      isDark ? disabledIconDark : disabledIconLight;
+  static Color focusRingColor(bool isDark) =>
+      isDark ? focusRing : lightFocusRing;
+
   static const String fontDisplay = 'Space Grotesk';
   static const String fontBody = 'Inter';
 
@@ -93,6 +139,7 @@ class AppTheme {
   /// Primary channel accent for the current mode.
   static Color accent(bool isDark) => isDark ? neonBlue : lightNeonBlue;
 
+  /// WCAG AA enforced min size 11sp for text styles
   static TextStyle dataStyle({
     required bool isDark,
     double size = 12,
@@ -101,7 +148,7 @@ class AppTheme {
   }) {
     return TextStyle(
       fontFamily: fontDisplay,
-      fontSize: size,
+      fontSize: size < 11.0 ? 11.0 : size,
       fontWeight: weight,
       letterSpacing: 0.4,
       fontFeatures: const [FontFeature.tabularFigures()],
@@ -112,11 +159,11 @@ class AppTheme {
   static TextStyle microLabel({
     required bool isDark,
     Color? color,
-    double size = 10,
+    double size = 11,
   }) {
     return TextStyle(
       fontFamily: fontDisplay,
-      fontSize: size,
+      fontSize: size < 11.0 ? 11.0 : size,
       fontWeight: FontWeight.w700,
       letterSpacing: 1.4,
       color: color ?? (isDark ? textMuted : lightTextMuted),
@@ -210,14 +257,14 @@ class AppTheme {
     fontFamily: fontDisplay,
     color: textSecondary,
     fontWeight: FontWeight.w600,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.8,
   );
   static const TextStyle _dLabelSmall = TextStyle(
     fontFamily: fontDisplay,
     color: textMuted,
     fontWeight: FontWeight.w600,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.6,
   );
 
@@ -307,14 +354,14 @@ class AppTheme {
     fontFamily: fontDisplay,
     color: lightTextSecondary,
     fontWeight: FontWeight.w600,
-    fontSize: 10,
+    fontSize: 11,
     letterSpacing: 0.8,
   );
   static const TextStyle _lLabelSmall = TextStyle(
     fontFamily: fontDisplay,
     color: lightTextMuted,
     fontWeight: FontWeight.w600,
-    fontSize: 9,
+    fontSize: 11,
     letterSpacing: 0.6,
   );
 
@@ -509,6 +556,9 @@ class AppTheme {
       brightness: isDark ? Brightness.dark : Brightness.light,
       scaffoldBackgroundColor: bg,
       primaryColor: primary,
+      focusColor: isDark ? focusRing : lightFocusRing,
+      highlightColor: (isDark ? focusRing : lightFocusRing).withValues(alpha: 0.12),
+      disabledColor: isDark ? disabledTextDark : disabledTextLight,
       colorScheme: ColorScheme(
         brightness: isDark ? Brightness.dark : Brightness.light,
         primary: primary,
@@ -517,7 +567,7 @@ class AppTheme {
         onSecondary: inkOn(secondary),
         surface: surf,
         onSurface: isDark ? textPrimary : lightTextPrimary,
-        error: error,
+        error: isDark ? errorOnDark : errorOnLight,
         onError: Colors.white,
         outline: bdr,
       ),

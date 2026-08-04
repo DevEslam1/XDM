@@ -56,6 +56,21 @@ class MediaSniffer {
   /// tabId -> pending debounce timer for a scheduled scan.
   final Map<String, Timer> mediaScanTimers = {};
 
+  int get totalDetectedCount =>
+      detectedDownloadUrls.length +
+      detectedMediaSources.values.fold<int>(0, (sum, list) => sum + list.length) +
+      detectedPlaylistUrls.length;
+
+  void clearAll() {
+    _update(() {
+      cancelAllScanTimers();
+      detectedDownloadUrls.clear();
+      detectedMediaSources.clear();
+      detectedPlaylistUrls.clear();
+      mediaScanFailed.clear();
+    });
+  }
+
   static bool isYoutubeHost(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return false;

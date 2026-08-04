@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/app_theme.dart';
@@ -1475,12 +1476,14 @@ class _DownloadTaskList extends StatelessWidget {
               provider.searchQuery.isEmpty &&
               provider.categoryFilters.isEmpty;
 
+          final Widget contentWidget;
           if (isReorderable) {
-            return RefreshIndicator(
+            contentWidget = RefreshIndicator(
               color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
               backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
               strokeWidth: 2.5,
               onRefresh: () async {
+                HapticFeedback.lightImpact();
                 await context.read<DownloadProvider>().load(
                       pauseOrphanDownloads: false,
                     );
@@ -1527,57 +1530,65 @@ class _DownloadTaskList extends StatelessWidget {
                 },
               ),
             );
-          }
-
-          return RefreshIndicator(
-            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-            backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-            strokeWidth: 2.5,
-            onRefresh: () async {
-              await context.read<DownloadProvider>().load(
-                    pauseOrphanDownloads: false,
-                  );
-              if (context.mounted) {
-                ThemedSnackbar.show(
-                  context,
-                  message: isRtl
-                      ? 'تم إعادة تحميل السجلات'
-                      : 'Transmission logs reloaded',
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  icon: Icons.sync_rounded,
-                  isDarkMode: isDark,
-                );
-              }
-            },
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(
-                horizontal: screenPadding(context).left,
-              ),
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
-              ),
-              itemCount: renderItems.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final item = renderItems[index];
-                final Widget card;
-                if (item.isPlaylist) {
-                  card = PlaylistGroupCard(
-                    key: ValueKey('playlist_${item.playlistId}'),
-                    playlistId: item.playlistId!,
-                    title: item.title!,
-                    items: item.items!,
-                  );
-                } else {
-                  card = DownloadCard(
-                    key: ValueKey(item.task!.id),
-                    task: item.task!,
-                    compact: true,
+          } else {
+            contentWidget = RefreshIndicator(
+              color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+              backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+              strokeWidth: 2.5,
+              onRefresh: () async {
+                HapticFeedback.lightImpact();
+                await context.read<DownloadProvider>().load(
+                      pauseOrphanDownloads: false,
+                    );
+                if (context.mounted) {
+                  ThemedSnackbar.show(
+                    context,
+                    message: isRtl
+                        ? 'تم إعادة تحميل السجلات'
+                        : 'Transmission logs reloaded',
+                    color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                    icon: Icons.sync_rounded,
+                    isDarkMode: isDark,
                   );
                 }
-                return RepaintBoundary(child: card);
               },
-            ),
+              child: ListView.separated(
+                padding: EdgeInsets.symmetric(
+                  horizontal: screenPadding(context).left,
+                ),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                itemCount: renderItems.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = renderItems[index];
+                  final Widget card;
+                  if (item.isPlaylist) {
+                    card = PlaylistGroupCard(
+                      key: ValueKey('playlist_${item.playlistId}'),
+                      playlistId: item.playlistId!,
+                      title: item.title!,
+                      items: item.items!,
+                    );
+                  } else {
+                    card = DownloadCard(
+                      key: ValueKey(item.task!.id),
+                      task: item.task!,
+                      compact: true,
+                      showDragHandle: false,
+                      index: index,
+                    );
+                  }
+                  return RepaintBoundary(child: card);
+                },
+              ),
+            );
+          }
+
+          return Directionality(
+            textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+            child: contentWidget,
           );
       },
     );

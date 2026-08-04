@@ -58,6 +58,26 @@ class DownloadInterceptor {
   /// URLs the user chose to keep browsing instead of downloading.
   final LinkedHashSet<String> _bypassedSniffUrls = LinkedHashSet<String>();
 
+  final List<Map<String, String>> _interceptedList = [];
+  List<Map<String, String>> get interceptedList =>
+      List.unmodifiable(_interceptedList);
+  int get interceptedCount => _interceptedList.length;
+
+  void recordIntercepted(String url, String fileName) {
+    _interceptedList.add({
+      'url': url,
+      'fileName': fileName,
+      'time': DateTime.now().toIso8601String(),
+    });
+    if (_interceptedList.length > 100) {
+      _interceptedList.removeAt(0);
+    }
+  }
+
+  void clearIntercepted() {
+    _interceptedList.clear();
+  }
+
   /// Marks [url] so its next navigation is allowed through untouched.
   void addBypass(String url) {
     _bypassedSniffUrls.add(url);
@@ -71,6 +91,7 @@ class DownloadInterceptor {
 
   void dispose() {
     _bypassedSniffUrls.clear();
+    _interceptedList.clear();
   }
 
   /// Whether a navigation from a page at [tabUrl] to [requestUrl] should be

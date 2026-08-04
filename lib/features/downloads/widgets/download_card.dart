@@ -542,35 +542,47 @@ class _ControlButtonState extends State<_ControlButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: widget.tooltip,
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTapCancel: () => setState(() => _pressed = false),
-        onTap: widget.onPressed,
-        child: AnimatedScale(
-          scale: _pressed ? 0.85 : 1.0,
-          duration: AppTheme.motionFast,
-          curve: AppTheme.motionSpring,
-          child: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: widget.filled
-                  ? widget.color
-                  : widget.color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: widget.color.withValues(alpha: widget.filled ? 0 : 0.25),
-                width: 0.8,
+    return Semantics(
+      button: true,
+      label: widget.tooltip,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        child: Center(
+          child: Tooltip(
+            message: widget.tooltip,
+            child: GestureDetector(
+              onTapDown: (_) => setState(() => _pressed = true),
+              onTapUp: (_) => setState(() => _pressed = false),
+              onTapCancel: () => setState(() => _pressed = false),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                widget.onPressed?.call();
+              },
+              child: AnimatedScale(
+                scale: _pressed ? 0.85 : 1.0,
+                duration: AppTheme.motionFast,
+                curve: AppTheme.motionSpring,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: widget.filled
+                        ? widget.color
+                        : widget.color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: widget.color.withValues(alpha: widget.filled ? 0 : 0.25),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Icon(
+                    widget.icon,
+                    size: 18,
+                    color:
+                        widget.filled ? AppTheme.inkOn(widget.color) : widget.color,
+                  ),
+                ),
               ),
-            ),
-            child: Icon(
-              widget.icon,
-              size: 18,
-              color:
-                  widget.filled ? AppTheme.inkOn(widget.color) : widget.color,
             ),
           ),
         ),
@@ -802,7 +814,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
                           size: compact ? 13 : 14,
                           weight: FontWeight.w700,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 5),
@@ -973,7 +985,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                           size: compact ? 13 : 14,
                           weight: FontWeight.w700,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 5),
@@ -1148,7 +1160,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                               size: widget.compact ? 13 : 14,
                               weight: FontWeight.w700,
                             ),
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 5),

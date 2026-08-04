@@ -2182,61 +2182,70 @@ class _SwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: accentColor.withValues(alpha: 0.16),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: accentColor.withValues(alpha: 0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+    final isRtl = L10n.isRtl(context);
+    return Directionality(
+      textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: accentColor.withValues(alpha: 0.16),
+              width: 1,
             ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: SwitchListTile(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: accentColor,
-            activeTrackColor: accentColor.withValues(alpha: 0.3),
-            inactiveThumbColor:
-                isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-            inactiveTrackColor:
-                isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 6,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-            title: Text(
-              title,
-              style: TextStyle(
-                color:
-                    isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                fontFamily: 'Space Grotesk',
-                fontSize: 14.0,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
+            boxShadow: [
+              BoxShadow(
+                color: accentColor.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            ),
-            subtitle: Text(
-              subtitle,
-              style: TextStyle(
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                fontFamily: 'Inter',
-                fontSize: 12.0,
-                height: 1.35,
-                fontWeight: FontWeight.w400,
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: SwitchListTile(
+              value: value,
+              onChanged: onChanged == null
+                  ? null
+                  : (val) {
+                      HapticFeedback.lightImpact();
+                      onChanged!(val);
+                    },
+              activeThumbColor: accentColor,
+              activeTrackColor: accentColor.withValues(alpha: 0.3),
+              inactiveThumbColor:
+                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+              inactiveTrackColor:
+                  isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 6,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              title: Text(
+                title,
+                style: TextStyle(
+                  color:
+                      isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                  fontFamily: 'Space Grotesk',
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              subtitle: Text(
+                subtitle,
+                style: TextStyle(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  fontFamily: 'Inter',
+                  fontSize: 12.0,
+                  height: 1.35,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
           ),
@@ -2535,7 +2544,12 @@ class _DropdownTile<T> extends StatelessWidget {
                       ),
                     );
                   }).toList(),
-                  onChanged: onChanged,
+                  onChanged: onChanged == null
+                      ? null
+                      : (val) {
+                          HapticFeedback.lightImpact();
+                          onChanged!(val);
+                        },
                 ),
               ),
             ),
