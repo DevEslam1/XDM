@@ -1,5 +1,4 @@
 const Map<String, String> arTranslations = {
-  // TODO: Refine Arabic plural rules for dual/few/many
   'app_title': 'XDM',
   'title_transmissions': 'التنزيلات',
   'title_categories': 'التصنيفات',
@@ -11,9 +10,11 @@ const Map<String, String> arTranslations = {
   'settings_auto_resume': 'الاستئناف التلقائي للتنزيلات',
   'settings_auto_resume_sub': 'استئناف التنزيلات المتبقية عند فتح التطبيق',
   'settings_adaptive_threads': 'العدد التكيفي للخيوط',
-  'settings_adaptive_threads_sub': 'تعديل عدد الخيوط تلقائياً بناءً على سرعة التنزيل',
+  'settings_adaptive_threads_sub':
+      'تعديل عدد الخيوط تلقائياً بناءً على سرعة التنزيل',
   'settings_auto_verify_checksum': 'التحقق التلقائي من سلامة الملف',
-  'settings_auto_verify_checksum_sub': 'حساب التجزئة SHA-256 بعد اكتمال كل تنزيل',
+  'settings_auto_verify_checksum_sub':
+      'حساب التجزئة SHA-256 بعد اكتمال كل تنزيل',
   'settings_max_channels': 'أقصى عدد للتنزيلات المتزامنة',
   'settings_max_channels_sub': 'تحديد عدد الملفات التي يتم تنزيلها في وقت واحد',
   'settings_bandwidth': 'إعدادات الشبكة والسرعة',
@@ -71,7 +72,8 @@ const Map<String, String> arTranslations = {
   'clipboard_ignore': 'تجاهل',
   'clipboard_establish': 'تنزيل',
   'onboarding_title_0': 'خصص تجربتك',
-  'onboarding_sub_0': 'اختر اللغة والمظهر ونمط الواجهة. يمكنك تغيير ذلك في أي وقت من الإعدادات.',
+  'onboarding_sub_0':
+      'اختر اللغة والمظهر ونمط الواجهة. يمكنك تغيير ذلك في أي وقت من الإعدادات.',
   'onboarding_setup_language': 'اللغة',
   'onboarding_setup_theme': 'المظهر',
   'onboarding_setup_mode': 'الواجهة',
@@ -83,11 +85,13 @@ const Map<String, String> arTranslations = {
   'onboarding_title_1': 'محرك السرعة',
   'onboarding_sub_1': 'تنزيل متعدد الخيوط مع استئناف ذكي لأقصى سرعة.',
   'onboarding_title_2': 'أي موقع',
-  'onboarding_sub_2': 'تنزيل من يوتيوب، فيسبوك، تويتر، تيك توك، إنستغرام، ومئات المواقع الأخرى.',
+  'onboarding_sub_2':
+      'تنزيل من يوتيوب، فيسبوك، تويتر، تيك توك، إنستغرام، ومئات المواقع الأخرى.',
   'onboarding_title_3': 'تورنت',
   'onboarding_sub_3': 'دعم كامل للتورنت مع DHT، تشفير، اختيار الملفات، والبذر.',
   'onboarding_title_4': 'تحكم ذكي',
-  'onboarding_sub_4': 'تصنيف تلقائي، جدولة، حماية الواي فاي، وثيمات مظلمة/فاتحة.',
+  'onboarding_sub_4':
+      'تصنيف تلقائي، جدولة، حماية الواي فاي، وثيمات مظلمة/فاتحة.',
   'onboarding_start': 'بدء الاستخدام',
   'onboarding_next': 'التالي',
   'onboarding_skip': 'تخطي',
@@ -103,7 +107,8 @@ const Map<String, String> arTranslations = {
   'permission_continue': 'متابعة',
   'permission_allow': 'السماح',
   'permission_open_settings': 'فتح الإعدادات',
-  'permission_permanently_denied': 'تم رفض الإذن بشكل دائم. يرجى تفعيله من إعدادات النظام.',
+  'permission_permanently_denied':
+      'تم رفض الإذن بشكل دائم. يرجى تفعيله من إعدادات النظام.',
   'permission_download_location_title': 'مكان التحميل',
   'permission_download_location_desc': 'اختر مكان حفظ ملفاتك',
   'permission_download_location_button': 'اختر مجلد',
@@ -125,7 +130,8 @@ const Map<String, String> arTranslations = {
   'details_established': 'تاريخ الإضافة',
   'details_inactive_eta': 'الوقت المقدر: غير نشط',
   'details_threads_warning_title': 'إعادة تعيين خيوط الاتصال؟',
-  'details_threads_warning_desc': 'تغيير خيوط الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى إعادة تعيين تقدمك. هل تريد الاستمرار؟',
+  'details_threads_warning_desc':
+      'تغيير خيوط الاتصال على تنزيل نشط أو مؤقت سيؤدي إلى إعادة تعيين تقدمك. هل تريد الاستمرار؟',
   'sort_date': 'التاريخ',
   'sort_status': 'الحالة',
   'sort_tooltip': 'ترتيب',
@@ -161,7 +167,8 @@ const Map<String, String> arTranslations = {
   'settings_bypass_ssl': 'الوثوق بجميع شهادات SSL',
   'settings_bypass_ssl_sub': 'تجاوز التحقق من الشهادات (تحذير: عرضة للاختراق)',
   'bypass_ssl_dialog_title': 'تعطيل التحقق من SSL؟',
-  'bypass_ssl_dialog_body': 'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). ',
+  'bypass_ssl_dialog_body':
+      'سيؤدي هذا إلى تعريض جميع التنزيلات لهجمات الوسيط (MITM). ',
   'bypass_ssl_dialog_confirm': 'أتفهم المخاطر',
   'settings_https_only': 'وضع HTTPS فقط',
   'settings_https_only_sub': 'ترقية كل روابط http:// إلى https:// عند الإمكان',
@@ -264,7 +271,8 @@ const Map<String, String> arTranslations = {
   'video_label': 'فيديو',
   'audio_label': 'صوت',
   'quality_label': 'الجودة',
-  'yt_legal_warning': 'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
+  'yt_legal_warning':
+      'تنبيه: قم بتحميل المحتوى فقط إذا كنت تملكه أو لديك إذن صريح من صاحب حقوق النشر.',
   'browser_new_tab': 'تبويب جديد',
   'browser_dashboard': 'لوحة التحكم',
   'browser_bookmark_saved': 'تم حفظ الإشارة المرجعية',
@@ -353,7 +361,8 @@ const Map<String, String> arTranslations = {
   'browser_fab_youtube_retry': 'يوتيوب (إعادة المحاولة)',
   'browser_fab_downloads': 'التنزيلات',
   'browser_js_css_injector': 'محقن JS / CSS',
-  'browser_js_css_warning': 'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
+  'browser_js_css_warning':
+      'تنبيه: هذا الكود يُنفذ على صفحات الويب. لا تُدخل بيانات حساسة.',
   'browser_javascript': 'JavaScript',
   'browser_css_style': 'نمط CSS',
   'browser_cancel_uppercase': 'إلغاء',
@@ -374,7 +383,8 @@ const Map<String, String> arTranslations = {
   'browser_no_downloads_desc': 'ستظهر الملفات التي تنزلها من المتصفح هنا.',
   'browser_clear_history_title': 'مسح السجل؟',
   'browser_clear_history_desc': 'هل أنت متأكد من أنك تريد مسح السجل بأكمله؟',
-  'browser_clear_history_content': 'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
+  'browser_clear_history_content':
+      'هل أنت متأكد من أنك تريد مسح سجل التصفح بالكامل؟',
   'browser_export_failed': 'فشل التصدير',
   'browser_copied_url_for': 'تم نسخ الرابط لـ:',
   'browser_status_done': 'مكتمل',
@@ -411,7 +421,8 @@ const Map<String, String> arTranslations = {
   'settings_adblock_rules': 'قواعد وقوائم التصفية المحملة',
   'settings_update_adblock_hosts': 'تحديث قائمة المضيفين (UPDATE HOSTS)',
   'settings_updating_adblock_hosts': 'جاري التحديث...',
-  'settings_adblock_updating_msg': 'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
+  'settings_adblock_updating_msg':
+      'جاري تنزيل وتحديث قائمة مضيفي حظر الإعلانات (EasyList)...',
   'settings_adblock_success_msg': 'تم تحديث قائمة المضيفين بنجاح!',
   'settings_adblock_failed_msg': 'فشل تحديث قائمة المضيفين. تحقق من الاتصال.',
   'settings_accessibility_title': 'خيارات سهولة الوصول (إمكانية الوصول)',

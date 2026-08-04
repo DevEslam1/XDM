@@ -411,7 +411,13 @@ class DownloadTask {
 
     final rawChunks =
         (map['chunks'] is List ? (map['chunks'] as List) : const [0.0])
-            .map((value) => (value as num?)?.toDouble().clamp(0.0, 1.0) ?? 0.0)
+            .map((value) {
+              // FIX-M16: Guard against NaN / Infinity values that survive JSON
+              // round-trips (e.g. from `double.infinity` or `0/0` calculations).
+              final raw = (value as num?)?.toDouble() ?? 0.0;
+              if (raw.isNaN || raw.isInfinite) return 0.0;
+              return raw.clamp(0.0, 1.0);
+            })
             .toList();
 
     final threadCount =

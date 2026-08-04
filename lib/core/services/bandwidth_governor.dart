@@ -60,7 +60,10 @@ class BandwidthGovernor {
 
   int get perConsumerBytesPerSecond {
     if (_globalBytesPerSecond <= 0 || _activeConsumers <= 0) return 0;
-    final baseShare = _globalBytesPerSecond ~/ _activeConsumers;
+    // FIX-M6: Clamp to at least 1 to avoid division by zero from a race
+    // where _activeConsumers is decremented to 0 between isUnlimited and here.
+    final consumers = _activeConsumers.clamp(1, _activeConsumers);
+    final baseShare = _globalBytesPerSecond ~/ consumers;
     return (baseShare * PowerMonitor.throttleFactor).round();
   }
 

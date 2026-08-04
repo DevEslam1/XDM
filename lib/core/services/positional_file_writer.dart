@@ -77,13 +77,35 @@ class PositionalFileWriter {
   ///
   /// **Do NOT change this to [FileMode.writeOnly] or [FileMode.write]** —
   /// both truncate the file and would destroy all downloaded data.
+  ///
+  /// FIX-M12: If the file does not exist or is empty, falls back to [open]
+  /// (i.e. starts fresh) to avoid resuming from an empty file, which would
+  /// skip pre-allocation and leave the file in an inconsistent state.
   static Future<PositionalFileWriter> openForResume(
     String path, {
     required int threadCount,
     int bufferSize = defaultBufferSize,
+    int totalSize = 0,
   }) async {
     final file = File(path);
     await file.parent.create(recursive: true);
+
+    // FIX-M12: If the file doesn't exist or is empty, treat as a fresh start
+    // rather than resuming, to avoid write corruption on empty partial files.
+    final existingLength = await file.exists() ? await file.length() : 0;
+    if (existingLength == 0) {
+      debugPrint(
+        '[PositionalFileWriter] openForResume: file empty or missing, '
+        'treating as fresh open for path: $path',
+      );
+      return open(
+        path,
+        totalSize: totalSize,
+        threadCount: threadCount,
+        bufferSize: bufferSize,
+      );
+    }
+
     // writeOnlyAppend preserves existing bytes (no truncation).
     // We immediately call setPosition to neutralise O_APPEND so that
     // positional writes work correctly.

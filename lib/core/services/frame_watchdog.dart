@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/scheduler.dart';
 import 'package:logging/logging.dart';
+import 'power_monitor.dart';
 
 /// Target performance budget constants for UI rendering.
 class PerformanceBudget {
@@ -69,13 +70,19 @@ class FrameWatchdog {
     final elapsed = DateTime.now().difference(_windowStart);
     if (elapsed >= _window) {
       if (_total > 0) {
-        final rate = _dropped / _total;
-        if (rate > _alertThreshold) {
-          _log.warning(
-            '[Jank] ${(rate * 100).toStringAsFixed(1)}% frames dropped '
-            '($_dropped/$_total) in ${elapsed.inSeconds}s',
-          );
-          onJankDetected?.call(rate);
+        // FIX-L3: Skip jank reporting when aggressive battery saver is active.
+        // Under battery saver the frame budget is intentionally relaxed, so
+        // jank alerts would be false positives.
+        final throttled = PowerMonitor.throttleFactor < 0.5;
+        if (!throttled) {
+          final rate = _dropped / _total;
+          if (rate > _alertThreshold) {
+            _log.warning(
+              '[Jank] ${(rate * 100).toStringAsFixed(1)}% frames dropped '
+              '($_dropped/$_total) in ${elapsed.inSeconds}s',
+            );
+            onJankDetected?.call(rate);
+          }
         }
       }
       _dropped = 0;

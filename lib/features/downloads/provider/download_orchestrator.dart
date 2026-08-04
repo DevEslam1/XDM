@@ -189,15 +189,19 @@ class DownloadOrchestrator {
           final decoded = jsonDecode(content);
           if (decoded is Map) {
             final savedSize = (decoded['totalSize'] as num?)?.toInt() ?? -1;
-            if (savedSize > 0 && task.fileSize > 0 &&
+            if (savedSize > 0 &&
+                task.fileSize > 0 &&
                 (savedSize - task.fileSize).abs() > 2048) {
-              debugPrint('[DMX] Size mismatch in resume state, resetting progress');
+              debugPrint(
+                  '[DMX] Size mismatch in resume state, resetting progress');
               final updated = task.copyWith(
                 downloadedBytes: 0,
                 chunks: List<double>.filled(task.threadCount, 0.0),
               );
               await _host.setTaskState(updated);
-              try { await stateFile.delete(); } catch (_) {}
+              try {
+                await stateFile.delete();
+              } catch (_) {}
               return updated;
             }
           }
@@ -208,13 +212,31 @@ class DownloadOrchestrator {
             chunks: List<double>.filled(task.threadCount, 0.0),
           );
           await _host.setTaskState(updated);
-          try { await stateFile.delete(); } catch (_) {}
+          try {
+            await stateFile.delete();
+          } catch (_) {}
           return updated;
         }
       }
     }
+
+    // FIX-H1: Validate audio .dmxstate sidecar for YouTube audio downloads.
+    // If the sidecar is missing, reset audioProgress so the audio stream is
+    // re-downloaded from the beginning rather than resuming from a stale value.
+    if (task.mergedAudioUrl != null && task.audioSize > 0) {
+      final audioTempPath = '${task.tempFilePath}.audio';
+      final audioStateFile = File('$audioTempPath.dmxstate');
+      if (!await audioStateFile.exists() && task.audioProgress > 0) {
+        debugPrint('[DMX] Audio .dmxstate missing, resetting audioProgress');
+        final updated = task.copyWith(audioProgress: 0.0);
+        await _host.setTaskState(updated);
+        return updated;
+      }
+    }
+
     return task;
   }
+
   final Map<String, int> _ytRefreshAttempts = {};
 
   int get pendingStartCount => _startingTaskIds.length;
@@ -246,7 +268,8 @@ class DownloadOrchestrator {
             now.difference(cached.timestamp) < const Duration(minutes: 5)) {
           cookieString = cached.cookie;
         } else {
-          final cookies = await CookieManager.instance().getCookies(url: WebUri(origin));
+          final cookies =
+              await CookieManager.instance().getCookies(url: WebUri(origin));
           cookieString = cookies.map((c) => '${c.name}=${c.value}').join('; ');
           _cookieCache[origin] = (cookie: cookieString, timestamp: now);
           if (_cookieCache.length >= _cookieCacheMaxSize) {
@@ -676,14 +699,15 @@ class DownloadOrchestrator {
     } else if (_host.providerSettingsProvider.autoVerifyChecksum) {
       try {
         final file = File(current.localFilePath);
-        if (!Directory(current.localFilePath).existsSync() && await file.exists()) {
+        if (!Directory(current.localFilePath).existsSync() &&
+            await file.exists()) {
           final digest = await Isolate.run(
             () => ChecksumService.sha256File(current.localFilePath),
           );
           updatedTask = current.copyWith(expectedSha256: digest);
           await _host.setTaskState(updatedTask);
           current = updatedTask;
-          
+
           if (metrics != null) {
             metrics.checksumAlgorithm = 'SHA-256';
             metrics.checksumVerified = true;
@@ -1069,6 +1093,33 @@ class DownloadOrchestrator {
               return;
             }
 
+            // FIX-C3: Validate audio file integrity before resume.
+            // If the audio file on disk is shorter than what the recorded audioProgress
+            // implies, the file is corrupted or truncated — reset progress and delete it.
+            if (audioExists &&
+                liveAudioTask.audioProgress > 0 &&
+                liveAudioSize > 0) {
+              final expectedBytes =
+                  (liveAudioTask.audioProgress * liveAudioSize).toInt();
+              if (audioLen < expectedBytes) {
+                debugPrint(
+                  '[DMX] Audio file shorter than recorded progress '
+                  '($audioLen < $expectedBytes bytes), resetting audio progress',
+                );
+                final idx =
+                    _host.providerTasks.indexWhere((x) => x.id == task.id);
+                if (idx != -1) {
+                  _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                    audioProgress: 0.0,
+                  );
+                }
+                // Delete the corrupted audio file so it's re-downloaded cleanly.
+                try {
+                  await audioFile.delete();
+                } catch (_) {}
+              }
+            }
+
             debugPrint('[DMX] Parallel download: starting audio stream.');
             await _host.downloadEngine.download(
               taskId: task.id,
@@ -1403,7 +1454,8 @@ class DownloadOrchestrator {
                     cancelToken: videoCancelToken,
                     cookies: cookieString,
                     oauthToken: YoutubeService.oauthToken,
-                    adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
+                    adaptiveThreads:
+                        _host.providerSettingsProvider.adaptiveThreads,
                     speedLimitKbps: task.speedLimitKbps,
                     onProgress: (progress) {
                       final current = _host.findTaskById(task.id);
@@ -1641,6 +1693,16 @@ class DownloadOrchestrator {
         }
         if (torrentId == null) {
           final saveDir = task.savePath;
+          // FIX-H3: Ensure save directory exists before passing it to the
+          // native engine. Some platforms fail silently when the dir is missing.
+          try {
+            final dir = Directory(saveDir);
+            if (!await dir.exists()) {
+              await dir.create(recursive: true);
+            }
+          } catch (e) {
+            debugPrint('[DMX] Failed to create torrent save directory: $e');
+          }
           if (task.url.startsWith('magnet:')) {
             torrentId = TorrentService.addMagnet(task.url, saveDir);
           } else {
@@ -1878,12 +1940,15 @@ class DownloadOrchestrator {
       final realError = error;
 
       final errStr = error.toString();
-      final isResumeRejection = errStr.contains('Server rejected resume: expected HTTP 206.');
+      final isResumeRejection =
+          errStr.contains('Server rejected resume: expected HTTP 206.');
       if (isResumeRejection) {
-        final alreadyRestarted = _host.resumeRejectionRestarts[task.id] ?? false;
+        final alreadyRestarted =
+            _host.resumeRejectionRestarts[task.id] ?? false;
         if (!alreadyRestarted) {
           _host.resumeRejectionRestarts[task.id] = true;
-          debugPrint('[DMX] Server rejected HTTP 206 resume. Performing a full restart from byte 0 for task: ${task.id}');
+          debugPrint(
+              '[DMX] Server rejected HTTP 206 resume. Performing a full restart from byte 0 for task: ${task.id}');
           _host.notifications.cancelNotification(notificationId);
           await _host.startOverTask(
             task.id,
@@ -1970,7 +2035,8 @@ class DownloadOrchestrator {
         return;
       }
 
-      final wasExhausted = isRetryable && currentRetry >= maxRetries && maxRetries > 0;
+      final wasExhausted =
+          isRetryable && currentRetry >= maxRetries && maxRetries > 0;
       _host.retryCounts.remove(task.id);
       _recordDownloadFailure(task.id, realError);
       try {
@@ -1996,7 +2062,8 @@ class DownloadOrchestrator {
         _host.notifications.showFailed(
           notificationId: notificationId,
           title: task.fileName,
-          error: 'Download failed after $maxRetries retries. Please check your network and try again.',
+          error:
+              'Download failed after $maxRetries retries. Please check your network and try again.',
         );
         DiagnosticService.instance.record(
           'download_engine',

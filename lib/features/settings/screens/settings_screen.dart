@@ -87,6 +87,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   void initState() {
     super.initState();
     final settings = Provider.of<SettingsProvider>(context, listen: false);
+    AdBlockerService.instance.addListener(_onAdBlockerChanged);
+    unawaited(AdBlockerService.instance.init());
     _uaController = TextEditingController(text: settings.customUserAgent);
     _proxyHostController = TextEditingController(text: settings.proxyHost);
     _proxyPortController = TextEditingController(
@@ -111,6 +113,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     });
     _reveal = AnimationController(vsync: this, duration: AppTheme.motionReveal)
       ..forward();
+  }
+
+  void _onAdBlockerChanged() {
+    if (mounted) setState(() {});
   }
 
   Timer? _backendUrlDebounce;
@@ -151,6 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   void dispose() {
+    AdBlockerService.instance.removeListener(_onAdBlockerChanged);
     _backendUrlDebounce?.cancel();
     _uaController.dispose();
     _proxyHostController.dispose();

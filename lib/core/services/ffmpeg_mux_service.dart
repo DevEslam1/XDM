@@ -181,10 +181,19 @@ class FFmpegMuxService {
     if (size < 1024) return false;
 
     try {
+      // FIX-H4: Check duration AND presence of both video+audio streams.
+      // A stream-copy that silently drops a track passes duration checks
+      // but produces an unwatchable file; we catch that here.
       final session = await FFprobeKit.execute(
-        '-v error -show_entries format=duration -of default=noprint_wrappers=1 "$path"',
+        '-v error '
+        '-show_entries format=duration '
+        '-show_entries stream=codec_type '
+        '-of default=noprint_wrappers=1 '
+        '"$path"',
       );
       final logs = await session.getLogsAsString();
+
+      // Validate duration
       final match = RegExp(r'duration=([\d.]+)').firstMatch(logs);
       final dur = double.tryParse(match?.group(1) ?? '');
       if (dur == null || dur <= 0) {
@@ -192,6 +201,18 @@ class FFmpegMuxService {
             '[Merge] Output validation failed: duration=$dur for $path');
         return false;
       }
+
+      // FIX-H4: Validate stream presence
+      final hasVideo = logs.contains('codec_type=video');
+      final hasAudio = logs.contains('codec_type=audio');
+      if (!hasVideo || !hasAudio) {
+        _log.severe(
+          '[Merge] Output validation failed: missing streams '
+          '(video=$hasVideo, audio=$hasAudio) for $path',
+        );
+        return false;
+      }
+
       return true;
     } catch (e) {
       _log.warning('[Merge] FFprobe validation exception: $e');

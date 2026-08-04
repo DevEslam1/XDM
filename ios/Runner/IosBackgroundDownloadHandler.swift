@@ -125,11 +125,12 @@ import BackgroundTasks
         let request = BGProcessingTaskRequest(identifier: Self.downloadTaskIdentifier)
         request.requiresNetworkConnectivity = true
         request.requiresExternalPower = false
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60) // 15 min minimum
+        // FIX-C1a: Reduced from 15 min to 1 min so downloads resume faster after backgrounding.
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 1 * 60) // 1 min minimum
         
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("XDM BG: Background processing task scheduled")
+            print("XDM BG: Background processing task scheduled (earliest in 1 min)")
         } catch {
             print("XDM BG: Failed to schedule background task: \(error)")
         }
@@ -140,14 +141,21 @@ import BackgroundTasks
     /// reschedules the next background window. No silent failures — all
     /// paths are logged and the task is always completed.
     public func handleDownloadTask(task: BGProcessingTask) {
+        // FIX-L13: Add detailed logging for debugging background task issues.
+        let activeCount = XDMBackgroundDownloadManager.shared.activeTaskCount
+        print("XDM BG: Processing task with \(activeCount) active download(s)")
+        
         task.expirationHandler = {
-            print("XDM BG: Task expired, saving state")
+            print("XDM BG: Task expired, saving state. Active count: \(XDMBackgroundDownloadManager.shared.activeTaskCount)")
             XDMBackgroundDownloadManager.shared.saveActiveTasksState()
             task.setTaskCompleted(success: false)
         }
         
-        // Resume active downloads from persisted App Group state
-        XDMBackgroundDownloadManager.shared.resumeActiveDownloads {
+        // FIX-C1b: Verify resume data exists for each task before resuming.
+        // Skip tasks with no resume data to avoid starting fresh downloads
+        // when the expectation is to resume from where we left off.
+        XDMBackgroundDownloadManager.shared.resumeActiveDownloadsWithVerification {
+            print("XDM BG: Resume-with-verification complete")
             task.setTaskCompleted(success: true)
         }
         

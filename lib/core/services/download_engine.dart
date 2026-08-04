@@ -1709,11 +1709,12 @@ class DownloadEngine {
     // FIX(16): cap the probe to a fraction of the file so we never download a
     // large share of a small-ish file just to estimate thread count. Probing
     // is pointless if the probe would consume most of the payload.
+    // FIX-M2: Reduced minimum from 32 KB to 16 KB to limit unnecessary data transfer.
     var probeSize = 256 * 1024;
     if (fileSize > 0) {
       probeSize = fileSize ~/ 4;
       if (probeSize > 256 * 1024) probeSize = 256 * 1024;
-      if (probeSize < 32 * 1024) probeSize = 32 * 1024;
+      if (probeSize < 16 * 1024) probeSize = 16 * 1024; // FIX-M2: was 32 KB
     }
 
     try {
@@ -2072,6 +2073,7 @@ class DownloadEngine {
           writer = await PositionalFileWriter.openForResume(
             currentTempFilePath,
             threadCount: threadCount,
+            totalSize: totalSize, // FIX-M12: needed for fresh-open fallback
           );
         } else {
           writer = await PositionalFileWriter.open(

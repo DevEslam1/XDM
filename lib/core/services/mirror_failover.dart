@@ -72,11 +72,18 @@ class MirrorFailover {
   /// `attempt` must throw on failure and return normally on success. When
   /// [onSwitch] is provided it is invoked whenever a non-primary mirror is
   /// used successfully.
+  ///
+  /// FIX-M7: [maxAttempts] caps how many mirrors will be tried. When omitted
+  /// (or set to 0) all mirrors are tried. This prevents extremely long wait
+  /// times when many mirrors are registered but most are unhealthy.
   Future<String?> run(
     Future<void> Function(String mirrorUrl) attempt, {
     void Function(int index, String mirrorUrl)? onSwitch,
+    int maxAttempts = 0, // FIX-M7: 0 = unlimited (try all mirrors)
   }) async {
-    for (var i = 0; i < mirrorUrls.length; i++) {
+    final limit = maxAttempts > 0 ? maxAttempts : mirrorUrls.length;
+    int attempted = 0;
+    for (var i = 0; i < mirrorUrls.length && attempted < limit; i++) {
       final mirrorUrl = mirrorUrls[i];
 
       if (MirrorHealthStore.isBlacklisted(mirrorUrl)) {
@@ -85,6 +92,7 @@ class MirrorFailover {
       }
 
       _lastAttempted = mirrorUrl;
+      attempted++;
       try {
         await attempt(mirrorUrl);
         await MirrorHealthStore.recordSuccess(

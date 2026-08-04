@@ -22,7 +22,7 @@ class DownloadJournal {
 
   final Lock _lock = Lock();
 
-  DownloadJournal(this.path, {this.compactionThresholdBytes = 2 * 1024 * 1024});
+  DownloadJournal(this.path, {this.compactionThresholdBytes = 512 * 1024}); // FIX-M5: 512 KB threshold (was 2 MB)
 
   Future<void> open() async {
     await _lock.synchronized(() async {

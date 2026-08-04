@@ -117,6 +117,16 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
         saveActiveTasksState()
     }
 
+    /// Whether any downloads are active or persisted but not yet complete.
+    public func hasActiveDownloads() -> Bool {
+        return !activeTasks.isEmpty || !taskMetadata.isEmpty
+    }
+
+    /// Count of currently active task downloads (for logging).
+    public var activeTaskCount: Int {
+        return activeTasks.count
+    }
+
     /// Re-creates download tasks for any still-active metadata. Used by the
     /// BGProcessingTask handler to keep downloads moving after a background
     /// relaunch.
@@ -134,9 +144,37 @@ public class XDMBackgroundDownloadManager: NSObject, URLSessionDownloadDelegate 
         completion()
     }
 
-    /// Whether any downloads are active or persisted but not yet complete.
-    public func hasActiveDownloads() -> Bool {
-        return !activeTasks.isEmpty || !taskMetadata.isEmpty
+    /// FIX-C1b: Like resumeActiveDownloads but verifies resume data integrity
+    /// before attempting to resume. Tasks with no persisted resume data are
+    /// skipped instead of starting a fresh download (which would re-download
+    /// from byte 0, wasting bandwidth and potentially corrupting partial files).
+    public func resumeActiveDownloadsWithVerification(completion: @escaping () -> Void) {
+        loadActiveTasksState()
+        let ids = Array(taskMetadata.keys)
+        for taskId in ids {
+            guard activeTasks[taskId] == nil,
+                  let meta = taskMetadata[taskId],
+                  let urlStr = meta["url"],
+                  let destPath = meta["destinationPath"],
+                  !urlStr.isEmpty, !destPath.isEmpty else { continue }
+
+            // FIX-C1b: Check if resume data is available. If yes, resume.
+            // If no resume data, skip this task — a fresh start should only
+            // be initiated from within the app, not from a background wakeup.
+            if let resumeData = sharedDefaults?.data(forKey: "xdm_resume_\(taskId)"),
+               !resumeData.isEmpty {
+                print("XDM BG: Resuming task \(taskId) with \(resumeData.count) bytes of resume data")
+                let task = session.downloadTask(withResumeData: resumeData)
+                activeTasks[taskId] = task
+                taskIdMap[task.taskIdentifier] = taskId
+                sharedDefaults?.removeObject(forKey: "xdm_resume_\(taskId)")
+                saveActiveTasksState()
+                task.resume()
+            } else {
+                print("XDM BG: Skipping task \(taskId) — no resume data available (not starting fresh from background)")
+            }
+        }
+        completion()
     }
 
     /// Persists active download state to the App Group shared container so the

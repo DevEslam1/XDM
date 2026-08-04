@@ -326,6 +326,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     _loadSnifferPref();
     _loadCustomJsCss();
     UserScriptManager.instance.load();
+
+    _dashboardScrollController.addListener(_onDashboardScroll);
+    unawaited(_adBlocker.init());
+    _redirectGuard.init();
   }
 
   Future<void> _updateAdBlockSettings() async {
@@ -349,9 +353,6 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
       }
     }
-    _dashboardScrollController.addListener(_onDashboardScroll);
-    _adBlocker.init();
-    _redirectGuard.init();
     _resetInactivityTimer();
   }
 
