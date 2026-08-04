@@ -6,12 +6,13 @@ import BackgroundTasks
 @available(iOS 13.0, *)
 @objc public class IosBackgroundDownloadHandler: NSObject, FlutterPlugin, FlutterStreamHandler {
     public static let downloadTaskIdentifier = "com.dmx.app.download"
+    public static let shared = IosBackgroundDownloadHandler()
     private var methodChannel: FlutterMethodChannel?
     private var eventChannel: FlutterEventChannel?
     private var eventSink: FlutterEventSink?
     
     public static func register(with registrar: FlutterPluginRegistrar) {
-        let instance = IosBackgroundDownloadHandler()
+        let instance = IosBackgroundDownloadHandler.shared
         
         let methodChan = FlutterMethodChannel(
             name: "com.dmx.app/background_download",
@@ -53,18 +54,16 @@ import BackgroundTasks
             ])
         }
         
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: downloadTaskIdentifier,
-            using: nil
-        ) { task in
-            instance.handleAppRefreshTask(task: task as! BGAppRefreshTask)
-        }
+        // NOTE: The BGTaskScheduler handler for com.dmx.app.download is
+        // registered in AppDelegate.application(_:didFinishLaunchingWithOptions:)
+        // BEFORE the Flutter engine is set up. Registering the same identifier
+        // here too would crash with a duplicate-registration assertion.
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any] else {
             if call.method == "scheduleDownload" {
-                scheduleBackgroundFetch()
+                scheduleBackgroundProcessing()
                 result(true)
                 return
             } else if call.method == "cancelDownload" {
@@ -83,18 +82,20 @@ import BackgroundTasks
         switch call.method {
         case "startNativeDownload":
             XDMBackgroundDownloadManager.shared.startDownload(taskId: taskId, urlStr: url, destinationPath: destinationPath)
+            scheduleBackgroundProcessing()
             result(true)
         case "pauseNativeDownload":
             XDMBackgroundDownloadManager.shared.pauseDownload(taskId: taskId)
             result(true)
         case "resumeNativeDownload":
             XDMBackgroundDownloadManager.shared.resumeDownload(taskId: taskId, urlStr: url, destinationPath: destinationPath)
+            scheduleBackgroundProcessing()
             result(true)
         case "cancelNativeDownload":
             XDMBackgroundDownloadManager.shared.cancelDownload(taskId: taskId)
             result(true)
         case "scheduleDownload":
-            scheduleBackgroundFetch()
+            scheduleBackgroundProcessing()
             result(true)
         case "cancelDownload":
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.downloadTaskIdentifier)
@@ -116,27 +117,41 @@ import BackgroundTasks
         return nil
     }
     
-    private func scheduleBackgroundFetch() {
-        let request = BGAppRefreshTaskRequest(identifier: Self.downloadTaskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+    // MARK: - Background Processing Task
+    
+    /// Schedules a BGProcessingTask that wakes the app to keep active
+    /// downloads moving while it is in the background.
+    public func scheduleBackgroundProcessing() {
+        let request = BGProcessingTaskRequest(identifier: Self.downloadTaskIdentifier)
+        request.requiresNetworkConnectivity = true
+        request.requiresExternalPower = false
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60) // 15 min minimum
         
         do {
             try BGTaskScheduler.shared.submit(request)
+            print("XDM BG: Background processing task scheduled")
         } catch {
-            print("XDM: Could not schedule iOS background refresh task: \(error)")
+            print("XDM BG: Failed to schedule background task: \(error)")
         }
     }
     
-    private func handleAppRefreshTask(task: BGAppRefreshTask) {
-        scheduleBackgroundFetch()
-        
-        let queue = OperationQueue()
-        queue.maxConcurrentOperationCount = 1
-        
+    /// Handles the background processing task for active downloads.
+    /// Saves state on expiration, resumes any persisted downloads, and
+    /// reschedules the next background window. No silent failures — all
+    /// paths are logged and the task is always completed.
+    public func handleDownloadTask(task: BGProcessingTask) {
         task.expirationHandler = {
-            queue.cancelAllOperations()
+            print("XDM BG: Task expired, saving state")
+            XDMBackgroundDownloadManager.shared.saveActiveTasksState()
+            task.setTaskCompleted(success: false)
         }
         
-        task.setTaskCompleted(success: true)
+        // Resume active downloads from persisted App Group state
+        XDMBackgroundDownloadManager.shared.resumeActiveDownloads {
+            task.setTaskCompleted(success: true)
+        }
+        
+        // Reschedule for the next background window
+        scheduleBackgroundProcessing()
     }
 }

@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'xdm_backend_client.dart';
@@ -12,6 +14,12 @@ class YoutubeService {
   static String? _oauthToken;
   static const _secureStorage = FlutterSecureStorage();
   static const _cookiesStorageKey = 'youtube_cookies_persisted';
+
+  /// Platform channel for the on-device extractor (Android NewPipe
+  /// Extractor). Used as a local fallback when the remote backend is
+  /// unreachable. Unavailable on other platforms — falls back gracefully.
+  static const MethodChannel _platformChannel =
+      MethodChannel('com.example.dmx/youtube_extractor');
 
   static Future<void> init() async {
     try {
@@ -510,13 +518,12 @@ class YoutubeService {
     }
 
     try {
-      final backendRes = await XdmBackendClient().getStreams(
+      final results = await _resolveWithRetry(
         targetUrl,
         cookies: settings.sendBrowserCookiesToBackend ? currentCookies : null,
       );
 
-      final results = _parseStreams(backendRes);
-      if (results.isNotEmpty) {
+      if (results != null && results.isNotEmpty) {
         if (kDebugMode) {
           final combinedCount =
               results.where((s) => s['type'] == 'combined').length;
@@ -555,15 +562,14 @@ class YoutubeService {
       if (!settings.useRemoteBackend) {
         return null;
       }
-      final backendRes = await XdmBackendClient().getStreams(
+      final results = await _resolveWithRetry(
         targetUrl,
         cookies: isYouTubeHost && settings.sendBrowserCookiesToBackend
             ? currentCookies
             : null,
       );
 
-      final results = _parseStreams(backendRes);
-      if (results.isNotEmpty) return results;
+      if (results != null && results.isNotEmpty) return results;
     } on BackendBadRequestException {
       return null;
     } on BackendNotFoundException {
@@ -574,6 +580,119 @@ class YoutubeService {
       throw Exception(_parseErrorMessage(e));
     }
 
+    return null;
+  }
+
+  /// Resolves streams for [url], preferring the remote backend and falling
+  /// back to the on-device platform extractor when the backend times out or
+  /// is unreachable. Returns `null` when no streams could be resolved.
+  static Future<List<Map<String, dynamic>>?> _resolveStreamsWithFallback(
+    String url, {
+    String? cookies,
+  }) async {
+    try {
+      final backendRes = await XdmBackendClient().getStreams(
+        url,
+        cookies: cookies,
+      );
+      final results = _parseStreams(backendRes);
+      return results.isNotEmpty ? results : null;
+    } on XdmBackendTimeoutException catch (e) {
+      debugPrint('[YoutubeService] Backend timeout, trying local fallback: $e');
+      final fallback = await _tryLocalFallback(url);
+      if (fallback != null) return fallback;
+      rethrow;
+    } on BackendNetworkException catch (e) {
+      debugPrint(
+        '[YoutubeService] Backend unreachable, trying local fallback: $e',
+      );
+      final fallback = await _tryLocalFallback(url);
+      if (fallback != null) return fallback;
+      rethrow;
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        debugPrint(
+          '[YoutubeService] Backend connection error, trying local fallback: $e',
+        );
+        final fallback = await _tryLocalFallback(url);
+        if (fallback != null) return fallback;
+      }
+      rethrow;
+    }
+  }
+
+  /// Local fallback: invokes the on-device extractor (Android NewPipe
+  /// Extractor) through the platform channel, or returns null if unavailable
+  /// or disabled in settings.
+  static Future<List<Map<String, dynamic>>?> _tryLocalFallback(
+    String url,
+  ) async {
+    if (!SettingsProvider.instance.useLocalYtFallback) {
+      debugPrint(
+        '[YoutubeService] Local fallback disabled in settings; skipping.',
+      );
+      return null;
+    }
+    try {
+      final result =
+          await _platformChannel.invokeListMethod<dynamic>('getStreams', {
+        'url': url,
+      });
+      if (result == null || result.isEmpty) return null;
+      final streams = result
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      if (streams.isEmpty) return null;
+      final title = streams.first['title']?.toString() ?? 'Untitled';
+      return _parseStreams({'title': title, 'streams': streams});
+    } on PlatformException catch (e) {
+      debugPrint('[YoutubeService] Local fallback failed: $e');
+      return null;
+    } on MissingPluginException catch (e) {
+      debugPrint('[YoutubeService] Local fallback unavailable: $e');
+      return null;
+    } catch (e) {
+      debugPrint('[YoutubeService] Local fallback error: $e');
+      return null;
+    }
+  }
+
+  /// Resolves streams with retry + exponential backoff (2s, 4s) before
+  /// surfacing the final failure. Only transient backend failures (timeouts,
+  /// network errors) are retried; 4xx/user errors fail fast.
+  static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
+    String url, {
+    String? cookies,
+    int maxRetries = 2,
+  }) async {
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        final result = await _resolveStreamsWithFallback(
+          url,
+          cookies: cookies,
+        );
+        if (result != null && result.isNotEmpty) return result;
+      } catch (e) {
+        final transient = e is XdmBackendTimeoutException ||
+            e is BackendNetworkException ||
+            (e is DioException &&
+                (e.type == DioExceptionType.connectionTimeout ||
+                    e.type == DioExceptionType.receiveTimeout ||
+                    e.type == DioExceptionType.sendTimeout ||
+                    e.type == DioExceptionType.connectionError));
+        if (attempt == maxRetries || !transient) rethrow;
+        final delay = Duration(seconds: 2 << attempt); // 2s, 4s
+        debugPrint(
+          '[YoutubeService] Backend attempt ${attempt + 1} failed, '
+          'retrying in ${delay.inSeconds}s: $e',
+        );
+        await Future.delayed(delay);
+      }
+    }
     return null;
   }
 

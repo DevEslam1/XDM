@@ -131,12 +131,29 @@ class XdmBackendClient {
   /// Get the current backend URL for UI display
   static String get currentBackendUrl => SettingsProvider.instance.backendUrl;
 
+  /// Wraps a backend HTTP future with a hard 30s timeout so a hung backend
+  /// can never block the caller forever. Throws [XdmBackendTimeoutException].
+  Future<T> _withTimeout<T>(
+    Future<T> future, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    try {
+      return await future.timeout(timeout);
+    } on TimeoutException {
+      throw XdmBackendTimeoutException(
+        'Request timed out after ${timeout.inSeconds}s',
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> health() async {
     final authHeader = _buildHeaders();
     try {
-      final response = await _dio.get<Map<String, dynamic>>(
-        '/health',
-        options: Options(headers: authHeader),
+      final response = await _withTimeout(
+        _dio.get<Map<String, dynamic>>(
+          '/health',
+          options: Options(headers: authHeader),
+        ),
       );
       return response.data ?? {};
     } catch (e) {
@@ -176,10 +193,12 @@ class XdmBackendClient {
       });
 
       try {
-        final response = await _dio.get<Map<String, dynamic>>(
-          '/api/streams',
-          queryParameters: {'url': url},
-          options: Options(headers: headers),
+        final response = await _withTimeout(
+          _dio.get<Map<String, dynamic>>(
+            '/api/streams',
+            queryParameters: {'url': url},
+            options: Options(headers: headers),
+          ),
         );
         final data = response.data ?? {};
 
@@ -218,15 +237,17 @@ class XdmBackendClient {
       });
 
       try {
-        final response = await _dio.get<Map<String, dynamic>>(
-          '/api/playlist',
-          queryParameters: {
-            'url': url,
-            if (pageToken != null) 'pageToken': pageToken.toString(),
-            // ignore: use_null_aware_elements — key is non-null; if-guard is correct here
-            if (pageSize != null) 'pageSize': pageSize,
-          },
-          options: Options(headers: headers),
+        final response = await _withTimeout(
+          _dio.get<Map<String, dynamic>>(
+            '/api/playlist',
+            queryParameters: {
+              'url': url,
+              if (pageToken != null) 'pageToken': pageToken.toString(),
+              // ignore: use_null_aware_elements — key is non-null; if-guard is correct here
+              if (pageSize != null) 'pageSize': pageSize,
+            },
+            options: Options(headers: headers),
+          ),
         );
         return response.data ?? {};
       } catch (e) {
@@ -238,10 +259,12 @@ class XdmBackendClient {
   Future<List<Map<String, dynamic>>> search(String q) async {
     return _rateLimiter.call('search', () async {
       try {
-        final response = await _dio.get<Map<String, dynamic>>(
-          '/api/search',
-          queryParameters: {'q': q},
-          options: Options(headers: _buildHeaders()),
+        final response = await _withTimeout(
+          _dio.get<Map<String, dynamic>>(
+            '/api/search',
+            queryParameters: {'q': q},
+            options: Options(headers: _buildHeaders()),
+          ),
         );
         final data = response.data ?? {};
         final results = data['results'] as List?;
@@ -255,6 +278,9 @@ class XdmBackendClient {
 
   BackendException _handleDioError(Object error) {
     if (error is BackendException) return error;
+    if (error is TimeoutException) {
+      return const XdmBackendTimeoutException('Request timed out.');
+    }
 
     if (error is DioException) {
       final statusCode = error.response?.statusCode;

@@ -111,6 +111,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _backendTokenKey = 'backend_token';
   static const _sendBrowserCookiesToBackendKey =
       'send_browser_cookies_to_backend';
+  static const _useLocalYtFallbackKey = 'use_local_yt_fallback';
 
   // Not `final`: [load] may run more than once on the singleton (e.g. in
   // tests where each case re-loads settings with fresh mock values).
@@ -198,6 +199,11 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   String backendUrl = '';
   String backendToken = '';
   bool sendBrowserCookiesToBackend = true;
+
+  /// When the remote backend is unreachable (timeout / connection error),
+  /// fall back to the on-device platform extractor (Android NewPipe
+  /// Extractor via the `com.example.dmx/youtube_extractor` channel).
+  bool useLocalYtFallback = false;
 
   bool dnsEnabled = true;
   String dnsProvider = 'dns.adguard.com';
@@ -373,6 +379,8 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     sendBrowserCookiesToBackend =
         _prefs.getBool(_sendBrowserCookiesToBackendKey) ??
             sendBrowserCookiesToBackend;
+    useLocalYtFallback =
+        _prefs.getBool(_useLocalYtFallbackKey) ?? useLocalYtFallback;
 
     globalTorrentSeeding =
         _prefs.getBool(_globalTorrentSeedingKey) ?? globalTorrentSeeding;
@@ -921,6 +929,12 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  Future<void> setUseLocalYtFallback(bool value) async {
+    useLocalYtFallback = value;
+    await _prefs.setBool(_useLocalYtFallbackKey, value);
+    notifyListeners();
+  }
+
   Future<void> setBatteryOptimizationPrompted(bool value) async {
     batteryOptimizationPrompted = value;
     await _prefs.setBool(_batteryOptimizationPromptedKey, value);
@@ -1045,6 +1059,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _backendTokenKey,
       _sendBrowserCookiesToBackendKey,
       _useRemoteBackendKey,
+      _useLocalYtFallbackKey,
       _dnsEnabledKey,
       _dnsProviderKey,
     ];
@@ -1118,6 +1133,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     backendToken = '';
     sendBrowserCookiesToBackend = true;
     useRemoteBackend = true;
+    useLocalYtFallback = false;
     dnsEnabled = true;
     dnsProvider = 'dns.adguard.com';
 

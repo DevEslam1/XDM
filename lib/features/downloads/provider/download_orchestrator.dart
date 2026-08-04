@@ -1605,6 +1605,43 @@ class DownloadOrchestrator {
       }
     }
 
+    // Disk space pre-check for torrents: when the total size is known (from
+    // the task or the torrent file list), fail fast with a clear message
+    // instead of starting a download that will error mid-way.
+    if (task.isTorrent) {
+      int totalTorrentSize = task.fileSize;
+      if (totalTorrentSize <= 0 && (task.torrentFiles?.isNotEmpty ?? false)) {
+        totalTorrentSize = task.torrentFiles!.fold<int>(0, (sum, f) {
+          final size = (f['size'] as num?)?.toInt() ?? 0;
+          return sum + size;
+        });
+      }
+      if (totalTorrentSize > 0) {
+        final hasSpace = await _host.downloadEngine.hasEnoughDiskSpace(
+          task.savePath,
+          totalTorrentSize,
+        );
+        if (!hasSpace) {
+          _host.cancelTokens.remove(task.id);
+          _host.activeFutures.remove(task.id);
+          await _host.setTaskState(
+            task.copyWith(
+              status: DownloadStatus.failed,
+              errorMessage: 'Not enough storage space for torrent files.',
+            ),
+          );
+          _host.notifications.showFailed(
+            notificationId: _host.notifications.idFor(task.id),
+            title: task.fileName,
+            error: 'Not enough storage space for torrent files.',
+          );
+          _host.pumpQueue();
+          _host.updateTelemetryWidget();
+          return;
+        }
+      }
+    }
+
     // Fire-and-await so the queued→downloading transition is committed
     // before the first progress callback fires.
     // For torrents: update the file metadata list, but do NOT use the disk
@@ -1991,6 +2028,9 @@ class DownloadOrchestrator {
   /// Returns a user-friendly error message for the given [error].
   @visibleForTesting
   String errorMessage(Object error) {
+    if (error is InsufficientStorageException) {
+      return error.message;
+    }
     if (error is DownloadIntegrityException) {
       return 'Download integrity check failed: ${error.message}';
     }
@@ -2026,6 +2066,9 @@ class DownloadOrchestrator {
   @visibleForTesting
   bool isRetryableError(Object error) {
     final msg = error.toString().toLowerCase();
+    if (error is InsufficientStorageException) {
+      return false; // Retrying won't free up disk space.
+    }
     if (error is DownloadIntegrityException ||
         msg.contains('file changed on server') ||
         msg.contains('filechangedonserver')) {

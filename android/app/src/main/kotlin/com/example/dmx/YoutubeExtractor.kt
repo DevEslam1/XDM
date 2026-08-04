@@ -1,5 +1,6 @@
 package com.example.dmx
 
+import android.util.Log
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.downloader.Downloader
@@ -19,6 +20,19 @@ object YoutubeExtractor {
     private var initialized = false
 
     fun getStreams(url: String): List<Map<String, Any>> {
+        // VALIDATION: Only accept http/https URLs
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            Log.w("DMX", "YoutubeExtractor rejected non-HTTP URL")
+            return emptyList()
+        }
+
+        // VALIDATION: Reject URLs with javascript: or data: embedded
+        val lowerUrl = url.lowercase()
+        if (lowerUrl.contains("javascript:") || lowerUrl.contains("data:")) {
+            Log.w("DMX", "YoutubeExtractor rejected suspicious URL")
+            return emptyList()
+        }
+
         ensureInitialized()
         val extractor = ServiceList.YouTube.getStreamExtractor(url)
         extractor.fetchPage()

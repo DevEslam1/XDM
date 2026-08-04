@@ -1223,6 +1223,23 @@ class _SettingsScreenState extends State<SettingsScreen>
                             },
                           ),
                         ),
+                        _Divider(isDark: isDark),
+                        _SwitchTile(
+                          accentColor: isDark
+                              ? AppTheme.neonRed
+                              : AppTheme.lightNeonRed,
+                          title: L10n.isRtl(context)
+                              ? 'مستخرج محلي احتياطي'
+                              : 'Local extractor fallback',
+                          subtitle: L10n.isRtl(context)
+                              ? 'استخدم المستخرج المحلي للجهاز عندما يكون الخادم الخلفي غير قابل للوصول (أندرويد)'
+                              : 'Use the on-device extractor when the backend is unreachable (Android)',
+                          value: settings.useLocalYtFallback,
+                          onChanged: (val) {
+                            settings.setUseLocalYtFallback(val);
+                            triggerHaptic(settings);
+                          },
+                        ),
                       ],
                     ),
                   ),

@@ -88,7 +88,7 @@ public class XDMTorrentBackgroundManager: NSObject {
     }
 
     /// Handle the background processing task.
-    private func handleTorrentRefreshTask(task: BGProcessingTask) {
+    public func handleTorrentRefreshTask(task: BGProcessingTask) {
         task.expirationHandler = {
             task.setTaskCompleted(success: false)
         }

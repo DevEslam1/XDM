@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import UserNotifications
+import BackgroundTasks
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -12,6 +13,25 @@ import UserNotifications
       UNUserNotificationCenter.current().delegate = self
       registerNotificationCategories()
     }
+
+    // Register background task handlers BEFORE the Flutter engine is set up
+    // so a background launch always has its handlers in place.
+    if #available(iOS 13.0, *) {
+      BGTaskScheduler.shared.register(
+        forTaskWithIdentifier: "com.dmx.app.download",
+        using: nil
+      ) { task in
+        IosBackgroundDownloadHandler.shared.handleDownloadTask(task: task as! BGProcessingTask)
+      }
+
+      BGTaskScheduler.shared.register(
+        forTaskWithIdentifier: "com.dmx.app.torrent.refresh",
+        using: nil
+      ) { task in
+        XDMTorrentBackgroundManager.shared.handleTorrentRefreshTask(task: task as! BGProcessingTask)
+      }
+    }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -19,7 +39,6 @@ import UserNotifications
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if #available(iOS 13.0, *) {
       IosBackgroundDownloadHandler.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "IosBackgroundDownloadHandler")!)
-      XDMTorrentBackgroundManager.shared.registerBackgroundTask()
 
       if let messenger = engineBridge.pluginRegistry.registrar(forPlugin: "XDMWidgetBridge")?.messenger() {
         let widgetBridgeChannel = FlutterMethodChannel(
@@ -109,6 +128,11 @@ import UserNotifications
 
   override func applicationDidEnterBackground(_ application: UIApplication) {
     if #available(iOS 13.0, *) {
+      // Keep active downloads moving: schedule the download processing task
+      // so iOS wakes us when network conditions allow.
+      if XDMBackgroundDownloadManager.shared.hasActiveDownloads() {
+        IosBackgroundDownloadHandler.shared.scheduleBackgroundProcessing()
+      }
       let activeIds = XDMTorrentBackgroundManager.shared.getActiveTorrentIds()
       XDMTorrentBackgroundManager.shared.appDidEnterBackground(activeTorrentIds: activeIds)
     }

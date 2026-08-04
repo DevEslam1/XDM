@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import com.example.dmx.MainActivity
 
 /**
@@ -44,12 +45,12 @@ class WidgetActionReceiver : BroadcastReceiver() {
             ACTION_RESUME_ALL -> "dmx://resume_all"
             ACTION_TOGGLE_TASK -> {
                 val taskId = intent.getStringExtra(EXTRA_TASK_ID)
-                if (taskId.isNullOrEmpty()) return
+                if (!isValidTaskId(taskId)) return
                 "dmx://toggle/$taskId"
             }
             ACTION_OPEN_TASK -> {
                 val taskId = intent.getStringExtra(EXTRA_TASK_ID)
-                if (taskId.isNullOrEmpty()) return
+                if (!isValidTaskId(taskId)) return
                 "dmx://open/$taskId"
             }
             else -> return
@@ -71,5 +72,22 @@ class WidgetActionReceiver : BroadcastReceiver() {
 
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_TAB = "tab"
+    }
+
+    /**
+     * VALIDATION: task IDs must be non-blank and alphanumeric + hyphens only.
+     * Rejects null/empty/malformed values that could be injected via a
+     * spoofed broadcast.
+     */
+    private fun isValidTaskId(taskId: String?): Boolean {
+        if (taskId.isNullOrBlank()) {
+            Log.w("DMX", "Widget action rejected: null or empty task_id")
+            return false
+        }
+        if (!taskId.matches(Regex("^[a-zA-Z0-9\\-_]+$"))) {
+            Log.w("DMX", "Widget action rejected: invalid task_id format")
+            return false
+        }
+        return true
     }
 }

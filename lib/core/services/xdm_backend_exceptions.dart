@@ -65,3 +65,8 @@ class BackendUnknownException extends BackendException {
   @override
   String toUserMessage() => message;
 }
+
+class XdmBackendTimeoutException extends BackendException {
+  const XdmBackendTimeoutException(
+      [super.message = 'The backend request timed out.']);
+}

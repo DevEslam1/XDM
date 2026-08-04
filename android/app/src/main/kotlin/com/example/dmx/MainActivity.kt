@@ -109,8 +109,27 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleDeepLink(intent: Intent?) {
-        val url = intent?.data?.toString() ?: return
-        if (!url.startsWith("dmx://")) return
+        val uri = intent?.data ?: return
+        val url = uri.toString()
+
+        // VALIDATION: Only accept dmx:// scheme
+        if (!url.startsWith("dmx://")) {
+            Log.w("DMX", "Rejected deep link with invalid scheme: ${uri.scheme}")
+            return
+        }
+
+        // VALIDATION: Reject excessively long URLs (>2048 chars)
+        if (url.length > 2048) {
+            Log.w("DMX", "Rejected deep link: URL too long (${url.length} chars)")
+            return
+        }
+
+        // VALIDATION: Reject URLs with null bytes
+        if (url.contains('\u0000')) {
+            Log.w("DMX", "Rejected deep link: contains null bytes")
+            return
+        }
+
         if (widgetBridgeChannel != null && pendingDeepLink == null) {
             forwardDeepLink(url)
         } else {
@@ -180,6 +199,11 @@ class MainActivity : FlutterActivity() {
                 val sourcePath = call.argument<String>("sourcePath")
                 if (fileName.isNullOrBlank() || mimeType.isNullOrBlank() || sourcePath.isNullOrBlank()) {
                     result.error("INVALID_ARGS", "fileName, mimeType, and sourcePath are required", null)
+                    return@setMethodCallHandler
+                }
+                // Validate fileName doesn't contain path separators or traversal
+                if (fileName.contains("/") || fileName.contains("\\") || fileName.contains("..")) {
+                    result.error("INVALID_ARGS", "fileName contains invalid characters", null)
                     return@setMethodCallHandler
                 }
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {

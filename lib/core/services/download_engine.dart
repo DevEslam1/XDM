@@ -57,6 +57,21 @@ class IsolateSpawnTimeoutException implements Exception {
   String toString() => 'IsolateSpawnTimeoutException: $message';
 }
 
+/// Thrown when there is not enough free disk space for a download. Marked as
+/// non-retryable by the orchestrator so the task fails fast with a clear
+/// user-facing message instead of a confusing mid-download error.
+class InsufficientStorageException implements Exception {
+  final String message;
+
+  const InsufficientStorageException([
+    this.message =
+        'Not enough storage space to download this file. Please free up space and try again.',
+  ]);
+
+  @override
+  String toString() => 'InsufficientStorageException: $message';
+}
+
 class DownloadProgress {
   final int downloadedBytes;
   final int fileSize;
@@ -757,6 +772,68 @@ class DownloadEngine {
     _pool?.updateSpeedLimit(bytesPerSecond, activeCount);
   }
 
+  /// Low-storage warning threshold (500 MB free).
+  static const int _lowSpaceThresholdBytes = 500 * 1024 * 1024;
+
+  /// Checks if there is enough free disk space for a download of
+  /// [requiredBytes]. A 10% safety margin is applied. Returns true when the
+  /// space is sufficient OR when the check cannot determine the free space
+  /// (graceful fallback — never blocks a download on a failed probe).
+  Future<bool> hasEnoughDiskSpace(String savePath, int requiredBytes) async {
+    try {
+      // Add 10% margin for safety
+      final requiredWithMargin = (requiredBytes * 1.1).toInt();
+
+      final dir = Directory(savePath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+
+      final stat = await _getDiskSpace(savePath);
+      if (stat == null) return true; // Can't determine, allow
+      return stat.freeBytes >= requiredWithMargin;
+    } catch (e) {
+      debugPrint('[DownloadEngine] Disk space check failed: $e');
+      return true; // Don't block download if check fails
+    }
+  }
+
+  /// Proactively logs a warning when free space on the target volume drops
+  /// below the 500 MB threshold. Never throws.
+  Future<void> checkLowStorageWarning(String savePath) async {
+    try {
+      final spaceInfo = await _getDiskSpace(savePath);
+      if (spaceInfo != null &&
+          spaceInfo.freeBytes < _lowSpaceThresholdBytes) {
+        debugPrint(
+          '[DownloadEngine] WARNING: Low disk space: '
+          '${(spaceInfo.freeBytes / 1024 / 1024).toStringAsFixed(0)} MB remaining',
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<_DiskSpaceInfo?> _getDiskSpace(String path) async {
+    try {
+      if (Platform.isAndroid || Platform.isLinux || Platform.isMacOS) {
+        final result = await Process.run('df', ['-B1', path]);
+        if (result.exitCode != 0) return null;
+        final lines = (result.stdout as String).trim().split('\n');
+        if (lines.length < 2) return null;
+        final parts = lines[1].trim().split(RegExp(r'\s+'));
+        if (parts.length < 4) return null;
+        final available = int.tryParse(parts[3]) ?? 0;
+        return _DiskSpaceInfo(freeBytes: available);
+      }
+      // iOS / Windows / unknown: no reliable CLI probe available. Return null
+      // so callers fall back to allowing the download.
+      return null;
+    } catch (e) {
+      debugPrint('[DownloadEngine] _getDiskSpace failed for $path: $e');
+      return null;
+    }
+  }
+
   Future<void> download({
     required String taskId,
     required String url,
@@ -840,6 +917,20 @@ class DownloadEngine {
           ),
         );
       }
+    }
+
+    // Disk space pre-check: fail fast with a clear message before any bytes
+    // are written, instead of surfacing a confusing mid-download error.
+    // Runs for both HTTP and torrent paths whenever the size is known.
+    if (resolvedFileSize > 0) {
+      final saveDir = Directory(currentLocalFilePath).parent.path;
+      final hasSpace = await hasEnoughDiskSpace(saveDir, resolvedFileSize);
+      if (!hasSpace) {
+        _activeCancelTokens.remove(cancelToken);
+        throw const InsufficientStorageException();
+      }
+      // Non-blocking proactive low-storage warning.
+      await checkLowStorageWarning(saveDir);
     }
 
     if (isTorrent) {
@@ -3484,4 +3575,9 @@ String? _firstNonEmpty(String? a, String? b) {
   if (a != null && a.trim().isNotEmpty) return a;
   if (b != null && b.trim().isNotEmpty) return b;
   return null;
+}
+
+class _DiskSpaceInfo {
+  final int freeBytes;
+  const _DiskSpaceInfo({required this.freeBytes});
 }

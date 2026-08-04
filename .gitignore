@@ -11,7 +11,8 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-
+test/goldens/failures
+test/goldens/goldens
 # IntelliJ related
 *.iml
 *.ipr

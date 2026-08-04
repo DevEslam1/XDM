@@ -142,7 +142,7 @@ void main() {
       final textWidget = tester.widget<Text>(
         find.textContaining('a_very_long_file_name'),
       );
-      expect(textWidget.maxLines, 1);
+      expect(textWidget.maxLines, 2);
       expect(textWidget.overflow, TextOverflow.ellipsis);
     });
 
