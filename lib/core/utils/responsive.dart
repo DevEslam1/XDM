@@ -44,7 +44,7 @@ double contentMaxWidth(BuildContext context) {
 
 EdgeInsets screenPadding(BuildContext context) {
   final type = getScreenType(context);
-  final h = type == ScreenType.phone ? 16.0 : 32.0;
+  final h = type == ScreenType.phone ? 20.0 : 32.0;
   final v = type == ScreenType.phone ? 8.0 : 16.0;
   return EdgeInsets.symmetric(horizontal: h, vertical: v);
 }

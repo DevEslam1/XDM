@@ -5,6 +5,7 @@ import '../../settings/provider/settings_provider.dart';
 import '../provider/download_provider.dart';
 import '../../../../core/utils/haptic_helper.dart';
 import '../../../../core/utils/localization.dart';
+import '../../../../shared/design/dmx_design.dart';
 
 class DownloadStatsPanel extends StatelessWidget with HapticHelper {
   const DownloadStatsPanel({super.key});
@@ -16,7 +17,6 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
           (isDark: settings.isDarkMode, classicUi: settings.classicUi),
       builder: (context, settingsState, _) {
         final isDark = settingsState.isDark;
-        final classicUi = settingsState.classicUi;
 
         final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
         final violetClr =
@@ -29,19 +29,13 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
         final dividerClr =
             isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
 
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: classicUi
-              ? BoxDecoration(
-                  color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                  border: Border.all(
-                      color: isDark ? AppTheme.border : AppTheme.lightBorder,
-                      width: 1.0),
-                  borderRadius: BorderRadius.circular(20),
-                )
-              : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
-          child: Column(
+        return DmxCardShell(
+          accent: blueClr,
+          showRail: false,
+          radius: 20,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Selector<DownloadProvider, _StatsData>(
@@ -181,7 +175,7 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
               ),
             ],
           ),
-        );
+        ),);
       },
     );
   }
@@ -189,9 +183,9 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
   Widget _buildDivider(bool isDark) {
     return Container(
       width: 1,
-      height: 30,
+      height: 24,
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
+        color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
         borderRadius: BorderRadius.circular(1),
       ),
     );
@@ -204,27 +198,49 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
     required Color color,
     required bool isDark,
   }) {
+    final isZero = value == '0';
+    final primaryClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final labelClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
     return Column(
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: isDark
-                    ? AppTheme.textSecondary
-                    : AppTheme.lightTextSecondary,
-                fontSize: 8,
-                letterSpacing: 0.5,
-              ),
+          style: TextStyle(
+            color: labelClr,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+            fontFamily: 'Space Grotesk',
+          ),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                fontSize: 16,
-                color: color,
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isZero ? mutedClr.withValues(alpha: 0.4) : color,
               ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Space Grotesk',
+                color: isZero ? mutedClr : primaryClr,
+              ),
+            ),
+          ],
         ),
       ],
     );

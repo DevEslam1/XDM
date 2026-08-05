@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:dmx/shared/mixins/pausable_loop_animation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,7 @@ import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/file_opener.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../../../shared/accessibility/xdm_semantics.dart';
 import '../../../core/services/protocol_cache.dart';
 import '../../settings/provider/settings_provider.dart';
@@ -110,8 +112,8 @@ class DownloadCard extends StatelessWidget with HapticHelper {
                 } else if (task.status == DownloadStatus.failed) {
                   provider.retryTask(task.id);
                 } else if (task.status == DownloadStatus.completed) {
-                  openFile(
-                      context, task.localFilePath, context.read<SettingsProvider>());
+                  openFile(context, task.localFilePath,
+                      context.read<SettingsProvider>());
                 }
                 return false;
               } else {
@@ -151,9 +153,9 @@ Color _statusColor(DownloadStatus status, bool isDark) {
     DownloadStatus.queued =>
       isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
     DownloadStatus.downloading =>
-      isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+      isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
     DownloadStatus.paused =>
-      isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+      isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
     DownloadStatus.completed =>
       isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
     DownloadStatus.failed => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
@@ -200,45 +202,13 @@ class _CardShell extends StatelessWidget {
     return Semantics(
       container: true,
       hint: 'Double tap to view details',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          borderRadius: BorderRadius.circular(22),
-          child: Container(
-            decoration: AppTheme.panel(
-              isDark: isDark,
-              radius: 22,
-              accentColor: accent,
-              accentAlpha: 0.22,
-            ),
-            child: Stack(
-              children: [
-                child,
-                Positioned.directional(
-                  textDirection: Directionality.of(context),
-                  start: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: 4,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: const BorderRadiusDirectional.only(
-                        topStart: Radius.circular(22),
-                        bottomStart: Radius.circular(22),
-                      ),
-                      boxShadow: [
-                        AppTheme.glow(accent, alpha: 0.30, blur: 6, spread: 0),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: DmxCardShell(
+        accent: accent,
+        radius: 16,
+        showRail: true,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: child,
       ),
     );
   }
@@ -248,7 +218,7 @@ class _CardShell extends StatelessWidget {
 // Status chip — pulses while downloading / seeding
 // ────────────────────────────────────────────────────────────────────────────
 
-class _StatusChip extends StatelessWidget {
+class _StatusChip extends StatefulWidget {
   final DownloadTask task;
   final bool isDark;
   final String? overrideLabel;
@@ -259,9 +229,79 @@ class _StatusChip extends StatelessWidget {
     this.overrideLabel,
   });
 
+  @override
+  State<_StatusChip> createState() => _StatusChipState();
+}
+
+class _StatusChipState extends State<_StatusChip>
+    with TickerProviderStateMixin {
+  AnimationController? _controller;
+  Animation<double>? _pulseAnimation;
+
+  bool _shouldPulse(DownloadTask task) {
+    return task.status == DownloadStatus.downloading ||
+        (task.status == DownloadStatus.completed &&
+            task.isTorrent &&
+            task.seedingEnabled);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(_StatusChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncPulse();
+  }
+
+  void _syncPulse() {
+    if (_shouldPulse(widget.task) && modernAnimationsAllowed(context)) {
+      _startPulse();
+    } else {
+      _stopPulse();
+    }
+  }
+
+  void _startPulse() {
+    if (_controller == null) {
+      _controller = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1500),
+      );
+      _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _controller!,
+          curve: Curves.easeInOut,
+        ),
+      );
+      _controller!.repeat(reverse: true);
+    }
+  }
+
+  void _stopPulse() {
+    _controller?.dispose();
+    _controller = null;
+    _pulseAnimation = null;
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    _controller = null;
+    super.dispose();
+  }
+
   IconData get _icon {
+    final task = widget.task;
     if (_isSeeding(task)) return Icons.cloud_upload;
-    // FIX-D4: Show wifi icon when waiting for WiFi
     if (task.status == DownloadStatus.paused &&
         task.errorMessage != null &&
         task.errorMessage!.contains('WiFi')) {
@@ -278,7 +318,10 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX-D4: Waiting WiFi badge styling
+    final task = widget.task;
+    final isDark = widget.isDark;
+    final overrideLabel = widget.overrideLabel;
+
     final isWifiWaiting = task.status == DownloadStatus.paused &&
         task.errorMessage != null &&
         task.errorMessage!.contains('WiFi');
@@ -294,11 +337,82 @@ class _StatusChip extends StatelessWidget {
         task.scheduledAt != null &&
         task.scheduledAt!.isAfter(DateTime.now());
 
-
     final provider = context.watch<DownloadProvider>();
     final isQueued = task.status == DownloadStatus.queued;
     final activeCount = provider.downloadingTasksCount;
     final maxCount = context.watch<SettingsProvider>().maxDownloads;
+
+    final isPulseActive = _shouldPulse(task) && _pulseAnimation != null;
+
+    final Widget chipContent = isPulseActive
+        ? AnimatedBuilder(
+            animation: _pulseAnimation!,
+            builder: (context, child) {
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color:
+                        color.withValues(alpha: 0.45 * _pulseAnimation!.value),
+                    width: 0.8,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(
+                          alpha: 0.08 * _pulseAnimation!.value),
+                      blurRadius: 6.0,
+                      spreadRadius: 0.5,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(_icon, size: 14, color: color),
+                    const SizedBox(width: 4),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: responsiveFontSize(context, 12),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          )
+        : Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: AppTheme.chipDecoration(
+              color: color,
+              isDark: isDark,
+              radius: 12,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(_icon, size: 14, color: color),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: responsiveFontSize(context, 12),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,37 +421,14 @@ class _StatusChip extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: AppTheme.chipDecoration(
-                color: color,
-                isDark: isDark,
-                radius: 12,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(_icon, size: 14, color: color),
-                  const SizedBox(width: 4),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: responsiveFontSize(context, 12),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            chipContent,
             if (isScheduled) ...[
               const SizedBox(width: 6),
               Tooltip(
                 message: formatLocalizedDateTime(context, task.scheduledAt!),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: AppTheme.chipDecoration(
                     color: AppTheme.neonAmber,
                     isDark: isDark,
@@ -346,7 +437,8 @@ class _StatusChip extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.schedule_rounded, size: 12, color: AppTheme.neonAmber),
+                      const Icon(Icons.schedule_rounded,
+                          size: 12, color: AppTheme.neonAmber),
                       const SizedBox(width: 4),
                       Text(
                         'Scheduled for ${formatLocalizedTime(context, task.scheduledAt!)}',
@@ -427,7 +519,8 @@ class _TelemetryStrip extends StatelessWidget {
                 builder: (context) {
                   final provider = context.watch<DownloadProvider>();
                   final history = provider.getSpeedHistory(task.id);
-                  if (task.status == DownloadStatus.downloading && history.length >= 2) {
+                  if (task.status == DownloadStatus.downloading &&
+                      history.length >= 2) {
                     return _CardSparklineGraph(history: history, color: accent);
                   }
                   return const SizedBox.shrink();
@@ -505,7 +598,6 @@ class _ChunkedProgressBar extends StatelessWidget {
     final chunks = task.chunks;
     final Widget bar;
     if (chunks.length <= 1 || task.hasMergedAudio) {
-
       final provider = context.read<DownloadProvider>();
       bar = IsolatedProgressBar(
         progress: provider.progressNotifier(task.id),
@@ -677,15 +769,17 @@ class _ControlButtonState extends State<_ControlButton> {
                         : widget.color.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: widget.color.withValues(alpha: widget.filled ? 0 : 0.25),
+                      color: widget.color
+                          .withValues(alpha: widget.filled ? 0 : 0.25),
                       width: 0.8,
                     ),
                   ),
                   child: Icon(
                     widget.icon,
                     size: 18,
-                    color:
-                        widget.filled ? AppTheme.inkOn(widget.color) : widget.color,
+                    color: widget.filled
+                        ? AppTheme.inkOn(widget.color)
+                        : widget.color,
                   ),
                 ),
               ),
@@ -885,110 +979,110 @@ class _FileCard extends StatelessWidget with HapticHelper {
       onLongPress: () => _showAdvancedControls(context, task, settings),
       child: ClipRect(
         child: Padding(
-        padding: EdgeInsets.all(compact ? 12 : 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: compact ? 38 : 44,
-                  height: compact ? 38 : 44,
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: statusColor.withValues(alpha: 0.15),
-                      width: 0.8,
+          padding: EdgeInsets.all(compact ? 12 : 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: compact ? 38 : 44,
+                    height: compact ? 38 : 44,
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.15),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Icon(
+                      _categoryIcon(task.category),
+                      color: statusColor,
+                      size: compact ? 18 : 21,
                     ),
                   ),
-                  child: Icon(
-                    _categoryIcon(task.category),
-                    color: statusColor,
-                    size: compact ? 18 : 21,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        task.fileName,
-                        style: AppTheme.dataStyle(
-                          isDark: isDark,
-                          size: compact ? 13 : 14,
-                          weight: FontWeight.w700,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          _StatusChip(task: task, isDark: isDark),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              L10n.translateCategory(
-                                context,
-                                task.category,
-                              ).toUpperCase(),
-                              style: AppTheme.microLabel(
-                                isDark: isDark,
-                                size: 8.5,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.fileName,
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: compact ? 13 : 14,
+                            weight: FontWeight.w700,
                           ),
-                        ],
-                      ),
-                    ],
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            _StatusChip(task: task, isDark: isDark),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                L10n.translateCategory(
+                                  context,
+                                  task.category,
+                                ).toUpperCase(),
+                                style: AppTheme.microLabel(
+                                  isDark: isDark,
+                                  size: 8.5,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
+                  _ControlCluster(task: task),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
+              const SizedBox(height: 8),
+              _ProgressRow(task: task, isDark: isDark, color: statusColor),
+              if (task.statusMessage != null &&
+                  task.statusMessage!.isNotEmpty &&
+                  task.status != DownloadStatus.completed)
+                _NoticeRow(
+                  text: task.statusMessage!,
+                  color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                  icon: Icons.merge_type_rounded,
+                  isDark: isDark,
                 ),
-                _ControlCluster(task: task),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
-            const SizedBox(height: 8),
-            _ProgressRow(task: task, isDark: isDark, color: statusColor),
-            if (task.statusMessage != null &&
-                task.statusMessage!.isNotEmpty &&
-                task.status != DownloadStatus.completed)
-              _NoticeRow(
-                text: task.statusMessage!,
-                color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-                icon: Icons.merge_type_rounded,
-                isDark: isDark,
-              ),
-            if (task.status == DownloadStatus.failed &&
-                task.errorMessage != null)
-              _NoticeRow(
-                text: task.errorMessage!,
-                color: statusColor,
-                icon: Icons.error_outline,
-                isDark: isDark,
-              ),
-            if (task.status == DownloadStatus.downloading)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Text(
-                    '${task.threadCount} CH • ${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
-                    style: AppTheme.microLabel(
-                      isDark: isDark,
-                      color: mutedClr,
-                      size: 8.5,
+              if (task.status == DownloadStatus.failed &&
+                  task.errorMessage != null)
+                _NoticeRow(
+                  text: task.errorMessage!,
+                  color: statusColor,
+                  icon: Icons.error_outline,
+                  isDark: isDark,
+                ),
+              if (task.status == DownloadStatus.downloading)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Text(
+                      '${task.threadCount} CH • ${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                      style: AppTheme.microLabel(
+                        isDark: isDark,
+                        color: mutedClr,
+                        size: 8.5,
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -1041,143 +1135,138 @@ class _MediaCard extends StatelessWidget with HapticHelper {
       onLongPress: () => _showAdvancedControls(context, task, settings),
       child: ClipRect(
         child: Padding(
-        padding: EdgeInsets.all(compact ? 12 : 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: compact ? 46 : 56,
-                  height: compact ? 34 : 40,
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: statusColor.withValues(alpha: 0.15),
-                      width: 0.8,
+          padding: EdgeInsets.all(compact ? 12 : 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: compact ? 46 : 56,
+                    height: compact ? 34 : 40,
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.15),
+                        width: 0.8,
+                      ),
+                      image: task.thumbnailUrl != null &&
+                              task.thumbnailUrl!.isNotEmpty
+                          ? DecorationImage(
+                              image: CachedNetworkImageProvider(
+                                task.thumbnailUrl!.startsWith('//')
+                                    ? 'https:${task.thumbnailUrl}'
+                                    : task.thumbnailUrl!,
+                              ),
+                              fit: BoxFit.cover,
+                              onError: (context, error) {
+                                // Fallback to icon if image fails to load
+                              },
+                            )
+                          : null,
                     ),
-                    image: task.thumbnailUrl != null &&
+                    child: task.thumbnailUrl != null &&
                             task.thumbnailUrl!.isNotEmpty
-                        ? DecorationImage(
-                            image: CachedNetworkImageProvider(
-                              task.thumbnailUrl!.startsWith('//')
-                                  ? 'https:${task.thumbnailUrl}'
-                                  : task.thumbnailUrl!,
-                            ),
-                            fit: BoxFit.cover,
-                            onError: (context, error) {
-                              // Fallback to icon if image fails to load
-                            },
-                          )
-                        : null,
-                  ),
-                  child:
-                      task.thumbnailUrl != null && task.thumbnailUrl!.isNotEmpty
-                          ? null
-                          : Icon(
-                              _isAudioOnly
-                                  ? Icons.audiotrack_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: statusColor,
-                              size: compact ? 18 : 22,
-                            ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        task.fileName,
-                        style: AppTheme.dataStyle(
-                          isDark: isDark,
-                          size: compact ? 13 : 14,
-                          weight: FontWeight.w700,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          _StatusChip(task: task, isDark: isDark),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: qualityColor.withValues(alpha: 0.10),
-                              borderRadius: BorderRadius.circular(7),
-                              border: Border.all(
-                                color: qualityColor.withValues(alpha: 0.3),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              _qualityLabel,
-                              style: AppTheme.microLabel(
-                                isDark: isDark,
-                                color: qualityColor,
-                                size: 8,
-                              ),
-                            ),
+                        ? null
+                        : Icon(
+                            _isAudioOnly
+                                ? Icons.audiotrack_rounded
+                                : Icons.play_arrow_rounded,
+                            color: statusColor,
+                            size: compact ? 18 : 22,
                           ),
-                          if (_hasAudioTrack && !_isAudioOnly) ...[
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.fileName,
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: compact ? 13 : 14,
+                            weight: FontWeight.w700,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            _StatusChip(task: task, isDark: isDark),
                             const SizedBox(width: 6),
-                            Icon(
-                              Icons.audio_file_rounded,
-                              size: 12,
-                              color: mutedClr,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              'A/V',
-                              style: AppTheme.microLabel(
-                                isDark: isDark,
-                                size: 8,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: qualityColor.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(7),
+                                border: Border.all(
+                                  color: qualityColor.withValues(alpha: 0.3),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                _qualityLabel,
+                                style: AppTheme.microLabel(
+                                  isDark: isDark,
+                                  color: qualityColor,
+                                  size: 8,
+                                ),
                               ),
                             ),
+                            if (_hasAudioTrack && !_isAudioOnly) ...[
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.audio_file_rounded,
+                                size: 12,
+                                color: mutedClr,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'A/V',
+                                style: AppTheme.microLabel(
+                                  isDark: isDark,
+                                  size: 8,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
+                  _ControlCluster(task: task),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
+              const SizedBox(height: 8),
+              _ProgressRow(task: task, isDark: isDark, color: statusColor),
+              if (task.statusMessage != null &&
+                  task.statusMessage!.isNotEmpty &&
+                  task.status != DownloadStatus.completed)
+                _NoticeRow(
+                  text: task.statusMessage!,
+                  color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+                  icon: Icons.merge_type_rounded,
+                  isDark: isDark,
                 ),
-                _ControlCluster(task: task),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
-            const SizedBox(height: 8),
-            _ProgressRow(task: task, isDark: isDark, color: statusColor),
-
-
-
-
-
-            if (task.statusMessage != null &&
-                task.statusMessage!.isNotEmpty &&
-                task.status != DownloadStatus.completed)
-              _NoticeRow(
-                text: task.statusMessage!,
-                color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-                icon: Icons.merge_type_rounded,
-                isDark: isDark,
-              ),
-            if (task.status == DownloadStatus.failed &&
-                task.errorMessage != null)
-              _NoticeRow(
-                text: task.errorMessage!,
-                color: statusColor,
-                icon: Icons.error_outline,
-                isDark: isDark,
-              ),
-          ],
-        ),
+              if (task.status == DownloadStatus.failed &&
+                  task.errorMessage != null)
+                _NoticeRow(
+                  text: task.errorMessage!,
+                  color: statusColor,
+                  icon: Icons.error_outline,
+                  isDark: isDark,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1241,166 +1330,171 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
               _showAdvancedControls(context, widget.task, settings),
           child: ClipRect(
             child: Padding(
-            padding: EdgeInsets.all(widget.compact ? 12 : 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: widget.compact ? 38 : 44,
-                      height: widget.compact ? 38 : 44,
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.15),
-                          width: 0.8,
+              padding: EdgeInsets.all(widget.compact ? 12 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: widget.compact ? 38 : 44,
+                        height: widget.compact ? 38 : 44,
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: statusColor.withValues(alpha: 0.15),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Icon(
+                          isMagnet
+                              ? Icons.link_rounded
+                              : Icons.cloud_download_rounded,
+                          color: statusColor,
+                          size: widget.compact ? 18 : 21,
                         ),
                       ),
-                      child: Icon(
-                        isMagnet
-                            ? Icons.link_rounded
-                            : Icons.cloud_download_rounded,
-                        color: statusColor,
-                        size: widget.compact ? 18 : 21,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.task.fileName,
-                            style: AppTheme.dataStyle(
-                              isDark: isDark,
-                              size: widget.compact ? 13 : 14,
-                              weight: FontWeight.w700,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.task.fileName,
+                              style: AppTheme.dataStyle(
+                                isDark: isDark,
+                                size: widget.compact ? 13 : 14,
+                                weight: FontWeight.w700,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 5),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: [
-                              // FIX(T-4): Show "Fetching metadata…" when magnet fileSize == 0 and downloading
-                              _StatusChip(
-                                task: widget.task,
-                                isDark: isDark,
-                                overrideLabel: (widget.task.isTorrent &&
-                                        widget.task.resolvedFileSize == 0 &&
-                                        widget.task.status == DownloadStatus.downloading)
-                                    ? (isRtl ? 'جاري جلب البيانات…' : 'Fetching metadata…')
-                                    : (seeding ? (isRtl ? 'مشاركة' : 'SEEDING') : null),
-                              ),
+                            const SizedBox(height: 5),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                // FIX(T-4): Show "Fetching metadata…" when magnet fileSize == 0 and downloading
+                                _StatusChip(
+                                  task: widget.task,
+                                  isDark: isDark,
+                                  overrideLabel: (widget.task.isTorrent &&
+                                          widget.task.resolvedFileSize == 0 &&
+                                          widget.task.status ==
+                                              DownloadStatus.downloading)
+                                      ? (isRtl
+                                          ? 'جاري جلب البيانات…'
+                                          : 'Fetching metadata…')
+                                      : (seeding
+                                          ? (isRtl ? 'مشاركة' : 'SEEDING')
+                                          : null),
+                                ),
 
-                              _PeerChip(
-                                icon: Icons.arrow_upward_rounded,
-                                label: '${stats.seeds}',
-                                color: greenClr,
-                                isDark: isDark,
-                              ),
-                              _PeerChip(
-                                icon: Icons.arrow_downward_rounded,
-                                label: '${stats.peers}',
-                                color: violetClr,
-                                isDark: isDark,
-                              ),
-                              if (fileCount > 0)
                                 _PeerChip(
-                                  icon: Icons.folder_outlined,
-                                  label: '$selectedCount/$fileCount',
-                                  color: mutedClr,
+                                  icon: Icons.arrow_upward_rounded,
+                                  label: '${stats.seeds}',
+                                  color: greenClr,
                                   isDark: isDark,
                                 ),
-                            ],
-                          ),
-                        ],
+                                _PeerChip(
+                                  icon: Icons.arrow_downward_rounded,
+                                  label: '${stats.peers}',
+                                  color: violetClr,
+                                  isDark: isDark,
+                                ),
+                                if (fileCount > 0)
+                                  _PeerChip(
+                                    icon: Icons.folder_outlined,
+                                    label: '$selectedCount/$fileCount',
+                                    color: mutedClr,
+                                    isDark: isDark,
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Column(children: [_ControlCluster(task: widget.task)]),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Telemetry: downloaded / total / elapsed / remain / speed
-                _TelemetryStrip(
-                  task: widget.task,
-                  isDark: isDark,
-                  accent: statusColor,
-                  seedingUploadSpeed: stats.uploadSpeed,
-                ),
-                const SizedBox(height: 8),
-                // Total progress + total percentage
-                _ProgressRow(
-                  task: widget.task,
-                  isDark: isDark,
-                  color: statusColor,
-                ),
-                // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
-                if (fileCount > 0) ...[
-                  const SizedBox(height: 12),
-                  _TorrentFileListSection(
+                      Column(children: [_ControlCluster(task: widget.task)]),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Telemetry: downloaded / total / elapsed / remain / speed
+                  _TelemetryStrip(
                     task: widget.task,
                     isDark: isDark,
                     accent: statusColor,
+                    seedingUploadSpeed: stats.uploadSpeed,
                   ),
-                ],
-                // Seeding toggle once completed
-                if (widget.task.status == DownloadStatus.completed) ...[
-                  const SizedBox(height: 10),
-                  Divider(
-                    color: isDark
-                        ? AppTheme.borderSubtle
-                        : AppTheme.lightBorderSubtle,
-                    height: 1,
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.cloud_upload_outlined,
-                        size: 14,
-                        color: violetClr,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        isRtl ? 'مشاركة التورنت' : 'Seed this torrent',
-                        style: AppTheme.dataStyle(
-                          isDark: isDark,
-                          size: 11,
-                          weight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      Switch(
-                        value: widget.task.seedingEnabled,
-                        onChanged: (val) {
-                          triggerHaptic(settings);
-                          context.read<DownloadProvider>().updateTaskSeeding(
-                                widget.task.id,
-                                enabled: val,
-                              );
-                        },
-                        activeThumbColor: violetClr,
-                      ),
-                    ],
-                  ),
-                ],
-                if (widget.task.status == DownloadStatus.failed &&
-                    widget.task.errorMessage != null)
-                  _NoticeRow(
-                    text: widget.task.errorMessage!,
-                    color: statusColor,
-                    icon: Icons.error_outline,
+                  const SizedBox(height: 8),
+                  // Total progress + total percentage
+                  _ProgressRow(
+                    task: widget.task,
                     isDark: isDark,
+                    color: statusColor,
                   ),
-              ],
-            ),
+                  // Per-file percentages (isolated rebuild via dedicated StatefulWidget)
+                  if (fileCount > 0) ...[
+                    const SizedBox(height: 12),
+                    _TorrentFileListSection(
+                      task: widget.task,
+                      isDark: isDark,
+                      accent: statusColor,
+                    ),
+                  ],
+                  // Seeding toggle once completed
+                  if (widget.task.status == DownloadStatus.completed) ...[
+                    const SizedBox(height: 10),
+                    Divider(
+                      color: isDark
+                          ? AppTheme.borderSubtle
+                          : AppTheme.lightBorderSubtle,
+                      height: 1,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.cloud_upload_outlined,
+                          size: 14,
+                          color: violetClr,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isRtl ? 'مشاركة التورنت' : 'Seed this torrent',
+                          style: AppTheme.dataStyle(
+                            isDark: isDark,
+                            size: 11,
+                            weight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        Switch(
+                          value: widget.task.seedingEnabled,
+                          onChanged: (val) {
+                            triggerHaptic(settings);
+                            context.read<DownloadProvider>().updateTaskSeeding(
+                                  widget.task.id,
+                                  enabled: val,
+                                );
+                          },
+                          activeThumbColor: violetClr,
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (widget.task.status == DownloadStatus.failed &&
+                      widget.task.errorMessage != null)
+                    _NoticeRow(
+                      text: widget.task.errorMessage!,
+                      color: statusColor,
+                      icon: Icons.error_outline,
+                      isDark: isDark,
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -1441,18 +1535,17 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
         final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
 
         // FIX(M-5): Guard per-file progress rendering during checking state to prevent flicker
-        final isChecking = widget.task.statusMessage?.contains('checking') == true ||
-            widget.task.statusMessage?.contains('Checking') == true;
+        final isChecking =
+            widget.task.statusMessage?.contains('checking') == true ||
+                widget.task.statusMessage?.contains('Checking') == true;
         final effectiveDownloaded = isChecking
             ? downloaded // FIX-B7: keep last known value to avoid flicker
             : (widget.task.status == DownloadStatus.completed && selected
                 ? length
                 : downloaded);
 
-
         return {...f, 'downloadedBytes': effectiveDownloaded};
       }).toList();
-
 
       final visible = _showAllFiles
           ? displayFiles
@@ -1605,13 +1698,13 @@ class _TorrentFileRow extends StatelessWidget {
     final isEstimated = file['progressEstimated'] == true;
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     // FIX(T-2): Show indeterminate indicator when downloadedBytes == 0 and selected
-    final showIndeterminate = downloaded == 0 && !isEstimated && selected && !done;
+    final showIndeterminate =
+        downloaded == 0 && !isEstimated && selected && !done;
     final progressText = showIndeterminate
         ? '…'
         : (isEstimated
             ? '~${(p * 100).toStringAsFixed(0)}%'
             : '${(p * 100).toStringAsFixed(0)}%');
-
 
     // FIX(M-4): Render unselected torrent files with reduced opacity
     return Opacity(
@@ -1619,122 +1712,118 @@ class _TorrentFileRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsetsDirectional.only(start: 12, bottom: 8),
         child: Row(
-
-        children: [
-          Icon(
-            done
-                ? Icons.check_circle_rounded
-                : selected
-                    ? Icons.insert_drive_file_rounded
-                    : Icons.block_rounded,
-            size: 13,
-            color: done ? greenClr : (selected ? accent : mutedClr),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: AppTheme.dataStyle(
-                    isDark: isDark,
-                    size: 10.5,
-                    weight: selected ? FontWeight.w600 : FontWeight.w400,
+          children: [
+            Icon(
+              done
+                  ? Icons.check_circle_rounded
+                  : selected
+                      ? Icons.insert_drive_file_rounded
+                      : Icons.block_rounded,
+              size: 13,
+              color: done ? greenClr : (selected ? accent : mutedClr),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 10.5,
+                      weight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(1),
-                  child: Stack(
-                    children: [
-                      Container(
-                        height: 2,
-                        decoration: AppTheme.progressTrack(
-                          isDark: isDark,
-                          radius: 1,
-                        ),
-                      ),
-                      FractionallySizedBox(
-                        widthFactor: p,
-                        child: Container(
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(1),
+                    child: Stack(
+                      children: [
+                        Container(
                           height: 2,
-                          decoration: BoxDecoration(
-                            color: done ? greenClr : accent,
-                            borderRadius: BorderRadius.circular(1),
+                          decoration: AppTheme.progressTrack(
+                            isDark: isDark,
+                            radius: 1,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          // ── FIX-9: Show estimated indicator ──
-          // Per-file percentage
-          SizedBox(
-
-            width: 44,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (isEstimated)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 2),
-                    child: Tooltip(
-                      message: isEstimated
-                          ? 'Estimated — waiting for engine data'
-                          : 'Confirmed by engine',
-                      child: Icon(
-                        Icons.help_outline,
-                        size: 9,
-                        color: mutedClr,
-                      ),
+                        FractionallySizedBox(
+                          widthFactor: p,
+                          child: Container(
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: done ? greenClr : accent,
+                              borderRadius: BorderRadius.circular(1),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-
-                Text(
-                  progressText,
-                  textAlign: TextAlign.end,
-                  style: AppTheme.dataStyle(
-                    isDark: isDark,
-                    size: 10,
-                    weight: FontWeight.w800,
-                    color: done
-                        ? greenClr
-                        : isEstimated
-                            ? textClr.withValues(alpha: 0.6)
-                            : accent,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 8),
-          SizedBox(
-            child: Text(
-              '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}',
-              textAlign: TextAlign.end,
-              style: AppTheme.dataStyle(
-                isDark: isDark,
-                size: 9,
-                weight: FontWeight.w500,
-                color: mutedClr,
+                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            // ── FIX-9: Show estimated indicator ──
+            // Per-file percentage
+            SizedBox(
+              width: 44,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (isEstimated)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 2),
+                      child: Tooltip(
+                        message: isEstimated
+                            ? 'Estimated — waiting for engine data'
+                            : 'Confirmed by engine',
+                        child: Icon(
+                          Icons.help_outline,
+                          size: 9,
+                          color: mutedClr,
+                        ),
+                      ),
+                    ),
+                  Text(
+                    progressText,
+                    textAlign: TextAlign.end,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 10,
+                      weight: FontWeight.w800,
+                      color: done
+                          ? greenClr
+                          : isEstimated
+                              ? textClr.withValues(alpha: 0.6)
+                              : accent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 8),
+            SizedBox(
+              child: Text(
+                '${formatBytes(downloaded.toDouble())} / ${formatBytes(length.toDouble())}',
+                textAlign: TextAlign.end,
+                style: AppTheme.dataStyle(
+                  isDark: isDark,
+                  size: 9,
+                  weight: FontWeight.w500,
+                  color: mutedClr,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }
-
 
 // ────────────────────────────────────────────────────────────────────────────
 // Playlist group card — groups playlist videos into one card
@@ -1766,9 +1855,12 @@ class _PlaylistGroupCardState extends State<PlaylistGroupCard>
   double get _overallProgress {
     final total = widget.items.fold<int>(0, (s, t) => s + t.resolvedFileSize);
     if (total <= 0) return 0.0;
-    final done = widget.items.fold<int>(0, (s, t) => s + t.displayDownloadedBytes); // FIX-01: Clamp downloadedBytes in playlist sum
+    final done = widget.items.fold<int>(
+        0,
+        (s, t) =>
+            s +
+            t.displayDownloadedBytes); // FIX-01: Clamp downloadedBytes in playlist sum
     return (done / total).clamp(0.0, 1.0);
-
   }
 
   bool get _anyDownloading =>
@@ -2092,7 +2184,8 @@ void _showAdvancedControls(
                   Icons.folder_open_rounded,
                   color: AppTheme.neonGreen,
                 ),
-                title: Text(L10n.of(context, 'open_file_btn'), style: TextStyle(color: textClr)),
+                title: Text(L10n.of(context, 'open_file_btn'),
+                    style: TextStyle(color: textClr)),
                 onTap: () async {
                   Navigator.pop(context);
                   if (task.localFilePath.isNotEmpty &&
@@ -2111,7 +2204,8 @@ void _showAdvancedControls(
                   Icons.delete_outline,
                   color: AppTheme.neonRed,
                 ),
-                title: Text(L10n.of(context, 'delete_btn'), style: TextStyle(color: textClr)),
+                title: Text(L10n.of(context, 'delete_btn'),
+                    style: TextStyle(color: textClr)),
                 onTap: () {
                   Navigator.pop(context);
                   _confirmDelete(context, task, provider);
@@ -2123,7 +2217,8 @@ void _showAdvancedControls(
                     Icons.info_outline_rounded,
                     color: AppTheme.neonAmber,
                   ),
-                  title: Text(L10n.of(context, 'properties'), style: TextStyle(color: textClr)),
+                  title: Text(L10n.of(context, 'properties'),
+                      style: TextStyle(color: textClr)),
                   onTap: () {
                     Navigator.pop(context);
                     _showTorrentProperties(context, task, settings);
@@ -2151,7 +2246,8 @@ void _showUpdateLinkDialog(
       title: Text(L10n.of(context, 'update_link')),
       content: TextField(
         controller: urlController,
-        decoration: InputDecoration(hintText: L10n.of(context, 'enter_new_url')),
+        decoration:
+            InputDecoration(hintText: L10n.of(context, 'enter_new_url')),
       ),
       actions: [
         TextButton(
@@ -2615,17 +2711,21 @@ class _TelemetryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+
     return Expanded(
       child: Row(
         children: [
-          Icon(icon, size: 14, color: isDark ? Colors.white54 : Colors.black54),
+          Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: isDark ? Colors.white54 : Colors.black54,
-                  ),
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 11,
+                color: color,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),

@@ -45,23 +45,20 @@ class XdmBackendClient {
         return;
       }
 
-      _apiKey = null;
-      _log.info('P0-1: No API key configured');
+      _apiKey = kDefaultApiKey;
+      _log.info('P0-1: Using default API key');
     } catch (e) {
       _log.severe('P0-1: Failed to load API key', e);
-      _apiKey = null;
+      _apiKey = kDefaultApiKey;
     }
   }
 
-  /// Returns the effective API key, throwing [BackendUnauthorizedException]
-  /// when no key has been configured.
+  /// Returns the effective API key.
   String get _effectiveApiKey {
     final key = _apiKey;
 
     if (key == null || key.isEmpty) {
-      throw const BackendUnauthorizedException(
-        'Backend API key is not configured.',
-      );
+      return kDefaultApiKey;
     }
 
     return key;
@@ -188,8 +185,10 @@ class XdmBackendClient {
 
     return _rateLimiter.call('streams', () async {
       final headers = _buildHeaders({
-        if (cookies != null && cookies.isNotEmpty)
+        if (cookies != null && cookies.isNotEmpty) ...{
+          'X-Cookies': base64Encode(utf8.encode(cookies)),
           'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
+        },
       });
 
       try {
@@ -232,8 +231,10 @@ class XdmBackendClient {
   }) async {
     return _rateLimiter.call('playlist', () async {
       final headers = _buildHeaders({
-        if (cookies != null && cookies.isNotEmpty)
+        if (cookies != null && cookies.isNotEmpty) ...{
+          'X-Cookies': base64Encode(utf8.encode(cookies)),
           'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
+        },
       });
 
       try {
@@ -318,11 +319,17 @@ class XdmBackendClient {
           error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.connectionError ||
           (statusCode != null && statusCode >= 500)) {
-        return BackendNetworkException(
-          backendMsg ??
-              error.message ??
-              'Cannot reach download backend. Check your connection.',
-        );
+        final rawMsg = error.message ?? '';
+        final isRawSocketError = rawMsg.contains('Connection closed') ||
+            rawMsg.contains('Connection errored') ||
+            rawMsg.contains('SocketException') ||
+            rawMsg.contains('full header');
+        final cleanMsg = (backendMsg != null && backendMsg.isNotEmpty)
+            ? backendMsg
+            : (isRawSocketError || rawMsg.isEmpty
+                ? 'Cannot reach download backend. Check your connection.'
+                : rawMsg);
+        return BackendNetworkException(cleanMsg);
       }
       return BackendUnknownException(
         backendMsg ?? error.message ?? 'Unexpected backend error.',

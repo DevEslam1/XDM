@@ -1058,6 +1058,14 @@ class YoutubeService {
 
   static String _parseErrorMessage(Object error) {
     final msg = error.toString();
+    if (msg.contains('Sign in to confirm') ||
+        msg.contains('not a bot') ||
+        msg.contains('Sign in') ||
+        msg.contains('bot') ||
+        msg.contains('Connection closed before full header') ||
+        msg.contains('full header')) {
+      return 'YouTube requires sign-in or bot verification. Please sign in to YouTube via the browser and try again.';
+    }
     if (msg.contains('VideoUnplayableException') ||
         msg.contains('VideoRequiresPurchaseException') ||
         msg.contains('VideoUnavailableException') ||

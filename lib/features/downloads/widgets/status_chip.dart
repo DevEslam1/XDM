@@ -4,6 +4,7 @@ import '../../../../core/app_theme.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 import '../../../../core/utils/localization.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 
 class StatusChip extends StatefulWidget {
   final DownloadTask task;
@@ -28,15 +29,24 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    if (_shouldPulse(widget.task)) {
-      _startPulse();
-    }
+    // Do not use context in initState directly if respectSystemMotion is true,
+    // but here we can check it in build or post-frame. We'll start pulse in didChangeDependencies or build.
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPulse();
   }
 
   @override
   void didUpdateWidget(StatusChip oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_shouldPulse(widget.task) && !SettingsProvider.instance.batterySaverMode) {
+    _syncPulse();
+  }
+
+  void _syncPulse() {
+    if (_shouldPulse(widget.task) && modernAnimationsAllowed(context)) {
       _startPulse();
     } else {
       _stopPulse();
@@ -44,7 +54,6 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
   }
 
   void _startPulse() {
-    if (SettingsProvider.instance.batterySaverMode) return;
     if (_controller == null) {
       _controller = AnimationController(
         vsync: this,
@@ -95,11 +104,11 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
           label = L10n.of(context, 'stats_queued_short');
           break;
         case DownloadStatus.downloading:
-          color = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+          color = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
           label = L10n.of(context, 'stats_downloading').toUpperCase();
           break;
         case DownloadStatus.paused:
-          color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+          color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
           if (task.scheduledAt != null &&
               task.scheduledAt!.isAfter(DateTime.now())) {
             label = L10n.of(context, 'add_download_schedule').toUpperCase();

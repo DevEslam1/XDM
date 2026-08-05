@@ -20,6 +20,7 @@ import '../../add_download/widgets/add_download_dialog.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/skeleton_loader.dart';
+import '../../../shared/mixins/pausable_loop_animation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,10 +36,43 @@ class _HomeScreenState extends State<HomeScreen>
   bool _showAnalytics = false;
   int _selectedTab = 0;
   int selectedSegment = 0;
+  late final AnimationController _reveal;
 
   @override
   void initState() {
     super.initState();
+    _reveal = AnimationController(
+      vsync: this,
+      duration: AppTheme.motionReveal,
+    )..forward();
+  }
+
+  Widget _stagger(double start, Widget child) {
+    if (!modernAnimationsAllowed(context)) return child;
+    return FadeTransition(
+      opacity: CurvedAnimation(
+        parent: _reveal,
+        curve: Interval(
+          start,
+          (start + 0.5).clamp(0.0, 1.0),
+          curve: AppTheme.motionCurve,
+        ),
+      ),
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+            .animate(
+          CurvedAnimation(
+            parent: _reveal,
+            curve: Interval(
+              start,
+              (start + 0.5).clamp(0.0, 1.0),
+              curve: AppTheme.motionCurve,
+            ),
+          ),
+        ),
+        child: child,
+      ),
+    );
   }
 
   bool _isActiveTask(DownloadTask t) {
@@ -52,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     _searchController.dispose();
+    _reveal.dispose();
     super.dispose();
   }
 
@@ -116,22 +151,22 @@ class _HomeScreenState extends State<HomeScreen>
                       const SizedBox(height: 12),
                       // FIX(14): iOS has no persistent background downloads
                       ..._buildIosBackgroundBanner(isDark, isRtl),
-                      _buildAnimatedSegmentedControl(
+                       _stagger(0.0, _buildAnimatedSegmentedControl(
                         context,
                         isDark: isDark,
                         isRtl: isRtl,
-                      ),
+                      )),
                       const SizedBox(height: 12),
                       // Analytics Panel
-                      AnimatedSize(
+                      _stagger(0.08, AnimatedSize(
                         duration: const Duration(milliseconds: 350),
                         curve: Curves.easeOutCubic,
                         alignment: Alignment.topCenter,
                         child: _showAnalytics
                             ? Padding(
-                                padding: const EdgeInsets.only(
-                                  left: 16.0,
-                                  right: 16.0,
+                                padding: EdgeInsets.only(
+                                  left: screenPadding(context).left,
+                                  right: screenPadding(context).left,
                                   top: 4.0,
                                   bottom: 20.0,
                                 ),
@@ -161,37 +196,37 @@ class _HomeScreenState extends State<HomeScreen>
                                 ),
                               )
                             : const SizedBox.shrink(),
-                      ),
+                      )),
                       // Stats Panel (Active tab only)
-                      AnimatedSize(
+                      _stagger(0.12, AnimatedSize(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeOutCubic,
                         child: _selectedTab == 0
-                            ? const Padding(
+                            ? Padding(
                                 padding: EdgeInsets.only(
-                                  left: 16.0,
-                                  right: 16.0,
+                                  left: screenPadding(context).left,
+                                  right: screenPadding(context).left,
                                   top: 4.0,
                                   bottom: 20.0,
                                 ),
-                                child: DownloadStatsPanel(),
+                                child: const DownloadStatsPanel(),
                               )
                             : const SizedBox.shrink(),
-                      ),
+                      )),
 
                       // Filter Chips
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      _stagger(0.16, Padding(
+                        padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
                         child: FilterChipsBar(isHistory: _selectedTab == 1),
-                      ),
-                      const SizedBox(height: 12),
+                      )),
+                      const SizedBox(height: 20),
                       // Section Header + Controls
-                      _buildSectionHeader(
+                      _stagger(0.20, _buildSectionHeader(
                         context,
                         isDark: isDark,
                         isRtl: isRtl,
-                      ),
-                      const SizedBox(height: 8),
+                      )),
+                      const SizedBox(height: 12),
                       // Task List
                       Expanded(
                         child: _DownloadTaskList(
@@ -331,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen>
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return [
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
         child: Container(
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: 12),
@@ -511,13 +546,16 @@ class _HomeScreenState extends State<HomeScreen>
               !isSeeding;
         }).length;
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
           child: Container(
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.black.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(20),
+              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                width: 1.0,
+              ),
             ),
             child: Row(
               children: [
@@ -528,6 +566,7 @@ class _HomeScreenState extends State<HomeScreen>
                   activeCount,
                   isDark,
                 ),
+                const SizedBox(width: 4),
                 _buildSegment(
                   context,
                   1,
@@ -551,20 +590,22 @@ class _HomeScreenState extends State<HomeScreen>
     bool isDark,
   ) {
     final selected = selectedSegment == index;
+    final color = index == 0
+        ? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+        : (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen);
+
     return Expanded(
       child: GestureDetector(
         onTap: () => _switchTab(index),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutQuart,
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? (index == 1
-                    ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-                    : Theme.of(context).colorScheme.primary)
+                ? color
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -574,9 +615,10 @@ class _HomeScreenState extends State<HomeScreen>
                 style: TextStyle(
                   color: selected
                       ? Colors.white
-                      : (isDark ? Colors.white70 : Colors.black87),
-                  fontSize: responsiveFontSize(context, 13),
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      : (isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary),
+                  fontFamily: 'Space Grotesk',
+                  fontSize: responsiveFontSize(context, 12),
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
                 ),
               ),
               if (count > 0) ...[
@@ -589,19 +631,21 @@ class _HomeScreenState extends State<HomeScreen>
                   decoration: BoxDecoration(
                     color: selected
                         ? Colors.white.withValues(alpha: 0.25)
-                        : (isDark
-                            ? Colors.white.withValues(alpha: 0.10)
-                            : Colors.black.withValues(alpha: 0.08)),
-                    borderRadius: BorderRadius.circular(10),
+                        : color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: selected
+                        ? null
+                        : Border.all(color: color.withValues(alpha: 0.2), width: 0.8),
                   ),
                   child: Text(
                     count > 99 ? '99+' : formatLocalizedNumber(context, count),
                     style: TextStyle(
                       color: selected
                           ? Colors.white
-                          : (isDark ? Colors.white70 : Colors.black54),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                          : color,
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -624,7 +668,7 @@ class _HomeScreenState extends State<HomeScreen>
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      padding: EdgeInsets.symmetric(horizontal: screenPadding(context).left),
       child: Row(
         children: [
           Expanded(
@@ -850,7 +894,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildFAB(BuildContext context, bool isDark, bool classicUi) {
-    final accentClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final screenType = getScreenType(context);
     final downloadProvider = context.watch<DownloadProvider>();
     final isNavbarVisible = downloadProvider.isNavbarVisible;
@@ -1440,6 +1484,15 @@ class _DownloadTaskList extends StatelessWidget {
     this.onClearSearch,
   });
 
+  Widget _staggeredItem(BuildContext context, int index, Widget child) {
+    final state = context.findAncestorStateOfType<_HomeScreenState>();
+    if (state != null) {
+      final delay = (0.24 + index * 0.04).clamp(0.0, 1.0);
+      return state._stagger(delay, child);
+    }
+    return child;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLoading = context.watch<DownloadProvider>().isLoadingTasks;
@@ -1616,7 +1669,9 @@ class _DownloadTaskList extends StatelessWidget {
                       ? 'playlist_${item.playlistId}'
                       : item.task!.id),
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: RepaintBoundary(child: card),
+                  child: RepaintBoundary(
+                    child: _staggeredItem(context, index, card),
+                  ),
                 );
               },
             );
@@ -1685,7 +1740,9 @@ class _DownloadTaskList extends StatelessWidget {
                   );
                 }
 
-                return RepaintBoundary(child: card);
+                return RepaintBoundary(
+                  child: _staggeredItem(context, index, card),
+                );
               },
             );
           }

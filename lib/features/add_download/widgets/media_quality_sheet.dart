@@ -74,6 +74,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
   Future<void> _fetchStreams() async {
     debugPrint('[MediaQualitySheet] Fetching streams for: ${widget.videoUrl}');
     try {
+      await YoutubeService.fetchCookiesFromWebView();
       final streams = await YoutubeService.getStreamsForAnyUrl(widget.videoUrl);
       debugPrint(
         '[MediaQualitySheet] Received ${streams?.length ?? 0} streams',

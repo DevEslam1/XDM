@@ -33,9 +33,9 @@ class DohHttpOverrides extends HttpOverrides {
         try {
           // 1. Fast system DNS lookup (preserves CDN geo-routing & native ALPN)
           final addresses = await InternetAddress.lookup(uri.host)
-              .timeout(const Duration(seconds: 2));
+              .timeout(const Duration(seconds: 5));
           if (addresses.isNotEmpty) {
-            return Socket.startConnect(addresses.first, uri.port);
+            return Socket.startConnect(uri.host, uri.port);
           }
         } catch (_) {
           // 2. System DNS failed (e.g. ISP censorship / DNS blocking) -> Fallback to DoH

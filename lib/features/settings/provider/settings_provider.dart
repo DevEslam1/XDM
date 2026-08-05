@@ -214,7 +214,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// When the remote backend is unreachable (timeout / connection error),
   /// fall back to the on-device platform extractor (Android NewPipe
   /// Extractor via the `com.example.dmx/youtube_extractor` channel).
-  bool useLocalYtFallback = false;
+  bool useLocalYtFallback = true;
 
   bool dnsEnabled = true;
   String dnsProvider = 'dns.adguard.com';
