@@ -674,6 +674,12 @@ class DownloadOrchestrator {
     final current = _host.findTaskById(taskId);
     if (current == null) return false;
 
+    // FIX-MERGE-1: Add status guard to _mergeAudioVideo
+    if (current.status != DownloadStatus.downloading) {
+      debugPrint('[DMX] _mergeAudioVideo skipped: task $taskId status is ${current.status}');
+      return false;
+    }
+
     final hasAudio = !current.isTorrent &&
         current.mergedAudioUrl != null &&
         current.mergedAudioUrl!.isNotEmpty;
@@ -799,7 +805,7 @@ class DownloadOrchestrator {
 
     final preMergeCheck = _host.findTaskById(taskId);
     if (preMergeCheck == null || preMergeCheck.status != DownloadStatus.downloading) {
-      debugPrint('[DMX] FIX-2: Merge cancelled: task no longer downloading');
+      debugPrint('[DMX] _mergeAudioVideo aborted: task paused/cancelled during merge');
       return false;
     }
 
@@ -1328,6 +1334,9 @@ class DownloadOrchestrator {
         final index = _host.providerTasks.indexWhere((t) => t.id == task.id);
         if (index == -1) return;
         final base = _host.providerTasks[index];
+
+        // FIX-MERGE-5: Guard pushCombinedProgress against cancelled tasks
+        if (base.status != DownloadStatus.downloading) return;
         if (base.status != DownloadStatus.downloading) return;
 
 
@@ -1677,6 +1686,14 @@ class DownloadOrchestrator {
             audioBytesSoFar =
                 task.audioSize > 0 ? task.audioSize : downloadedAudioLen;
             audioSpeedNow = 0.0;
+
+            // FIX-MERGE-4: Guard the final audioProgress: 1.0 write in runAudio()
+            final liveTask = _host.findTaskById(task.id);
+            if (liveTask == null || liveTask.status != DownloadStatus.downloading) {
+              debugPrint('[DMX] runAudio: task no longer downloading, skipping audioProgress=1.0');
+              return;
+            }
+
             final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
             if (idx != -1) {
               _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
@@ -2007,6 +2024,13 @@ class DownloadOrchestrator {
           }
 
           await Future.wait([runVideo(), runAudio()]);
+
+          // FIX-MERGE-3: Add cancellation check between Future.wait and merge in _executeDownload
+          if (cancelToken.isCancelled) {
+            debugPrint('[DMX] _executeDownload: cancelled after Future.wait, skipping merge');
+            return;
+          }
+
           if (hasAudio) {
             // H-3 FIX: Check status before starting merge
             final preMergeCheck = _host.findTaskById(task.id);
@@ -2027,6 +2051,13 @@ class DownloadOrchestrator {
                 ));
               }
               return; // Do NOT call _finalizeDownload
+            }
+
+            // FIX-MERGE-6: Add a status re-check after _mergeAudioVideo succeeds but before calling _finalizeDownload
+            final postMergeTask = _host.findTaskById(task.id);
+            if (postMergeTask == null || postMergeTask.status != DownloadStatus.downloading) {
+              debugPrint('[DMX] Skipping finalize: task state changed during merge');
+              return;
             }
           }
 
@@ -2667,10 +2698,8 @@ class DownloadOrchestrator {
       torrentId,
       cancelToken,
     ).then((_) async {
-      if (hasAudio) {
-        await _mergeAudioVideo(task.id, audioTempPath!);
-      }
-      await _finalizeDownload(task.id, notificationId);
+      // FIX-MERGE-2: Remove the duplicate merge/finalize from the .then() callback
+      debugPrint('[DMX] _executeDownload completed for ${task.id}');
     }).catchError((Object error, StackTrace stackTrace) async {
       final realError = error;
 
