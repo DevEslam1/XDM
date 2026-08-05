@@ -969,12 +969,22 @@ class DownloadEngine {
     // Runs for both HTTP and torrent paths whenever the size is known.
     if (resolvedFileSize > 0) {
       final saveDir = Directory(currentLocalFilePath).parent.path;
-      final hasSpace = await hasEnoughDiskSpace(saveDir, resolvedFileSize);
+      // FIX(A1): Check only REMAINING bytes, not full file size.
+      // A 99%-done file should only need ~1% free space.
+      int alreadyOnDisk = 0;
+      try {
+        final tempFile = File(currentTempFilePath);
+        if (await tempFile.exists()) {
+          alreadyOnDisk = await tempFile.length();
+        }
+      } catch (_) {}
+      final remainingNeeded =
+          (resolvedFileSize - alreadyOnDisk).clamp(0, resolvedFileSize);
+      final hasSpace = await hasEnoughDiskSpace(saveDir, remainingNeeded);
       if (!hasSpace) {
         _activeCancelTokens.remove(cancelToken);
         throw const InsufficientStorageException();
       }
-      // Non-blocking proactive low-storage warning.
       await checkLowStorageWarning(saveDir);
     }
 
@@ -1309,9 +1319,16 @@ class DownloadEngine {
       final currentTorrentFiles = getTorrentFiles?.call();
       _applyFilePriorities(id, currentTorrentFiles);
 
+      // FIX(C3): Only use source-key lookup. Numeric IDs are process-local
+      // and never survive app restarts.
       final resumeData =
-          await TorrentResumeStore.loadResumeDataForSource(url) ??
-              await TorrentResumeStore.loadResumeData(id);
+          await TorrentResumeStore.loadResumeDataForSource(url);
+      if (resumeData != null) {
+        debugPrint(
+          '[DMX] FIX(C3): Loaded fast-resume via source key for: '
+          '${url.substring(0, url.length.clamp(0, 60))}...',
+        );
+      }
       final nativeResumeLoaded =
           resumeData != null && TorrentService.loadResumeData(id, resumeData);
       if (!nativeResumeLoaded) {
@@ -2912,18 +2929,45 @@ class DownloadEngine {
           rethrow;
         }
 
-        debugPrint(
-          'Multi-threaded range request failed (Range Rejection): $e. '
-          'Falling back to single-threaded safe restart.',
-        );
+        if (isRangeRejection) {
+          // FIX(A3): 416 may mean file is already complete. Check before wiping.
+          final tempFile = File(currentTempFilePath);
+          if (await tempFile.exists()) {
+            final currentLen = await tempFile.length();
+            if (totalSize > 0 && currentLen >= totalSize) {
+              debugPrint(
+                '[DMX] FIX(A3): 416 received but file is already complete '
+                '($currentLen >= $totalSize). Completing without re-download.',
+              );
+              // Skip to rename/finalize (fall through to completion path)
+              if (currentTempFilePath != currentLocalFilePath) {
+                final finalFile = File(currentLocalFilePath);
+                await finalFile.parent.create(recursive: true);
+                if (await finalFile.exists()) await finalFile.delete();
+                try {
+                  await tempFile.rename(currentLocalFilePath);
+                } catch (_) {
+                  await tempFile.copy(currentLocalFilePath);
+                  await tempFile.delete();
+                }
+              }
+              await _deleteFileIfExists(stateFile);
+              return; // Done
+            }
+          }
 
-        await closeWriter();
-        await closeJournal();
-        unregisterGovernor();
+          debugPrint(
+            'Multi-threaded range request failed (Range Rejection): $e. '
+            'Falling back to single-threaded safe restart.',
+          );
 
-        await _deleteFileIfExists(File(currentTempFilePath));
-        await _deleteFileIfExists(stateFile);
-        await _deleteFileIfExists(File(journalPath));
+          await closeWriter();
+          await closeJournal();
+          unregisterGovernor();
+
+          await _deleteFileIfExists(File(currentTempFilePath));
+          await _deleteFileIfExists(stateFile);
+          await _deleteFileIfExists(File(journalPath));
 
         await _downloadSingleThreaded(
           url: url,
@@ -2939,6 +2983,7 @@ class DownloadEngine {
           isolatedDio: isolatedDio,
           resolvedFileName: resolvedFileName,
         );
+      }
       } finally {
         governor.removeTaskLimit(taskId);
         _httpEngine.stopAdaptiveThreadMonitor();

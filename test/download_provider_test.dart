@@ -909,6 +909,111 @@ void main() {
     expect(provider.filteredTasks.length, 1);
     expect(provider.filteredTasks.first.id, 'load-cache-test-1');
   });
+
+  group('Download Lifecycle Audit Fixes', () {
+    test('cancelTask sets pausedByUser true and _autoResumeIncomplete skips it', () async {
+      final (database, settings) = await _setupServices();
+      final task = DownloadTask(
+        id: 'cancel-audit-1',
+        fileName: 'cancel.zip',
+        url: 'https://example.com/cancel.zip',
+        fileSize: 1000,
+        downloadedBytes: 200,
+        threadCount: 1,
+        chunks: const [0.2],
+        category: 'Archive',
+        status: DownloadStatus.downloading,
+        savePath: 'build',
+        localFilePath: 'build/cancel.zip',
+        tempFilePath: 'build/cancel.dmxpart',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+      await database.saveTask(task);
+
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      await provider.load();
+
+      await provider.cancelTask('cancel-audit-1');
+
+      final cancelledTask = provider.tasks.firstWhere((t) => t.id == 'cancel-audit-1');
+      expect(cancelledTask.status, DownloadStatus.failed);
+      expect(cancelledTask.errorMessage, 'Transfer cancelled.');
+      expect(cancelledTask.pausedByUser, isTrue);
+    });
+
+    test('resumeTask on completed seeding torrent re-enables seeding', () async {
+      final (database, settings) = await _setupServices();
+      final task = DownloadTask(
+        id: 'seeding-resume-1',
+        fileName: 'torrent.iso',
+        url: 'magnet:?xt=urn:btih:1234567890abcdef1234567890abcdef12345678',
+        fileSize: 1000,
+        downloadedBytes: 1000,
+        threadCount: 1,
+        chunks: const [1.0],
+        category: 'Archive',
+        status: DownloadStatus.completed,
+        savePath: 'build',
+        localFilePath: 'build/torrent.iso',
+        tempFilePath: 'build/torrent.dmxpart',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        seedingEnabled: false,
+      );
+      await database.saveTask(task);
+
+      final provider = DownloadProvider(
+        databaseService: database,
+        settingsProvider: settings,
+        downloadEngine: FakeDownloadEngine(),
+        permissionService: FakePermissionService(),
+      );
+      await provider.load();
+
+      await provider.resumeTask('seeding-resume-1');
+
+      final resumed = provider.tasks.firstWhere((t) => t.id == 'seeding-resume-1');
+      expect(resumed.seedingEnabled, isTrue);
+    });
+
+    test('torrentBytesFromFiles handles null/unset selected flag consistently', () {
+      final files = [
+        {'name': 'a.txt', 'downloadedBytes': 100, 'length': 200, 'selected': true},
+        {'name': 'b.txt', 'downloadedBytes': 300, 'length': 400},
+        {'name': 'c.txt', 'downloadedBytes': 500, 'length': 600, 'selected': false},
+      ];
+
+      final downloaded = DownloadProvider.torrentBytesFromFiles(files);
+      final total = DownloadProvider.torrentSelectedFilesTotalSize(files);
+
+      expect(downloaded, 400);
+      expect(total, 600);
+    });
+
+    test('reconcileChunks handles thread count redistribution & scaling', () {
+      final rescaled = DownloadProvider.reconcileChunks(
+        stateChunks: [0.2, 0.2],
+        actualBytesOnDisk: 500,
+        fileSize: 1000,
+        threadCount: 2,
+      );
+      expect(rescaled, [0.5, 0.5]);
+
+      final redistributed = DownloadProvider.reconcileChunks(
+        stateChunks: [0.5, 0.5, 0.5, 0.5],
+        actualBytesOnDisk: 500,
+        fileSize: 1000,
+        threadCount: 2,
+      );
+      expect(redistributed, [0.5, 0.5]);
+    });
+  });
 }
 
 class FakeDownloadEngine403 extends DownloadEngine {

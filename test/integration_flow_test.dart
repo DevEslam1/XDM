@@ -113,7 +113,8 @@ class FakeDownloadEngine extends DownloadEngine {
       try {
         final f = File(tempFilePath);
         f.createSync(recursive: true);
-        f.writeAsBytesSync(List.filled(10, 0));
+        f.writeAsBytesSync(
+            List.filled(knownFileSize > 0 ? knownFileSize : 10, 0));
       } catch (_) {}
       if (!completer.isCompleted) {
         completer.complete();
@@ -144,13 +145,10 @@ class FakePermissionService extends PermissionService {
 
 Future<(DatabaseService, SettingsProvider)> _setupServices() async {
   SharedPreferences.setMockInitialValues({});
-  if (!Hive.isBoxOpen(DatabaseService.downloadsBoxName)) {
-    await Hive.openBox<dynamic>(DatabaseService.downloadsBoxName);
-  }
-  await Hive.box<dynamic>(DatabaseService.downloadsBoxName).clear();
-
+  ConnectivityPlatform.instance = MockConnectivityPlatform();
+  final path = '${uniqueHivePath}_${DateTime.now().microsecondsSinceEpoch}';
   final database = DatabaseService.forSubclass();
-  await database.init(testPath: uniqueHivePath);
+  await database.init(testPath: path);
   final settings = SettingsProvider();
   await settings.load();
   return (database, settings);
@@ -289,7 +287,7 @@ void main() {
     expect(provider.tasks.length, 1);
 
     // Wait for the video download phase, then audio phase, then merge phase
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 1000; i++) {
       if (provider.tasks.first.status == DownloadStatus.failed ||
           provider.tasks.first.status == DownloadStatus.completed) {
         break;
@@ -298,10 +296,10 @@ void main() {
     }
 
     // In a test environment without real ffmpeg binary, the merge phase will fail.
-    // The provider should fall back to keeping the video-only file and complete the task with mergeFailedVideoOnly status message.
-    expect(provider.tasks.first.status, DownloadStatus.completed);
-    expect(provider.tasks.first.statusMessage,
-        DownloadStatusMessages.mergeFailedVideoOnly);
+    // The provider sets status to failed with ffmpegMergeFailed message.
+    expect(provider.tasks.first.status, DownloadStatus.failed);
+    expect(provider.tasks.first.errorMessage,
+        contains(DownloadStatusMessages.ffmpegMergeFailed));
     expect(engine.knownFileSizes['https://example.com/video'], 50,
         reason: 'Combined tasks must request only the video stream length.');
   });

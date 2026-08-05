@@ -33,6 +33,7 @@ import '../../../core/utils/url_utils.dart';
 import '../../../shared/accessibility/xdm_announcer.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
+import 'download_provider.dart';
 import 'network_monitor.dart';
 import 'notification_coordinator.dart';
 
@@ -318,18 +319,39 @@ class DownloadOrchestrator {
         }
 
         if (!validState) {
-          final updated = task.copyWith(
-            downloadedBytes: 0,
-            chunks: List<double>.filled(
-                task.threadCount > 0 ? task.threadCount : 1, 0.0),
-          );
-          await _host.setTaskState(updated);
+          // FIX(E1): Check journal before resetting progress.
+          int journalBytes = 0;
           try {
-            if (await stateFile.exists()) {
-              await stateFile.delete();
+            final journalPath = '${task.tempFilePath}.journal';
+            final recovered = await DownloadJournal.recover(journalPath);
+            if (recovered != null && recovered.isNotEmpty) {
+              journalBytes = recovered.fold<int>(0, (s, b) => s + b);
             }
           } catch (_) {}
-          task = updated;
+
+          if (journalBytes > 0) {
+            debugPrint(
+              '[DMX] FIX(E1): No .dmxstate but journal has $journalBytes bytes. '
+              'Preserving progress.',
+            );
+            final updated = task.copyWith(downloadedBytes: journalBytes);
+            await _host.setTaskState(updated);
+            task = updated;
+          } else {
+            // Truly no progress — reset
+            final updated = task.copyWith(
+              downloadedBytes: 0,
+              chunks: List<double>.filled(
+                  task.threadCount > 0 ? task.threadCount : 1, 0.0),
+            );
+            await _host.setTaskState(updated);
+            try {
+              if (await stateFile.exists()) {
+                await stateFile.delete();
+              }
+            } catch (_) {}
+            task = updated;
+          }
         }
 
         // ═══ FIX H-5: Validate chunk progress against actual file size ═══
@@ -341,37 +363,19 @@ class DownloadOrchestrator {
               final stateChunks = await _readDmxStateChunks(
                   task.tempFilePath, task.threadCount);
 
-              if (stateChunks != null && stateChunks.isNotEmpty) {
-                final totalFromChunks =
-                    stateChunks.fold<double>(0.0, (s, c) => s + c);
-                // FIX-1: Divide by chunk count to get overall fraction
-                final overallFraction =
-                    (totalFromChunks / stateChunks.length).clamp(0.0, 1.0);
-                final expectedBytes =
-                    (overallFraction * task.fileSize).toInt();
+              final correctedChunks = DownloadProvider.reconcileChunks(
+                stateChunks: stateChunks,
+                actualBytesOnDisk: actualFileSize,
+                fileSize: task.fileSize,
+                threadCount: task.threadCount,
+              );
 
-                if (expectedBytes > actualFileSize + 4096) {
-                  debugPrint(
-                      '[DMX] H-5 FIX: State claims $expectedBytes bytes but file has '
-                      '$actualFileSize. Correcting chunk progress.');
-
-                  final correctionFactor =
-                      (actualFileSize / (overallFraction * task.fileSize)).clamp(0.0, 1.0);
-                  final correctedChunks = task.threadCount > 1
-                      ? stateChunks
-                          .map((c) => (c * correctionFactor).clamp(0.0, 1.0))
-                          .toList()
-                      : [task.fileSize > 0 ? (actualFileSize / task.fileSize).clamp(0.0, 1.0) : 0.0];
-                  final correctedBytes = actualFileSize;
-
-                  final updated = task.copyWith(
-                    downloadedBytes: correctedBytes,
-                    chunks: correctedChunks,
-                  );
-                  await _host.setTaskState(updated);
-                  task = updated;
-                }
-              }
+              final updated = task.copyWith(
+                downloadedBytes: min(task.downloadedBytes, actualFileSize),
+                chunks: correctedChunks,
+              );
+              await _host.setTaskState(updated);
+              task = updated;
             }
           } catch (e) {
             debugPrint(
@@ -383,74 +387,11 @@ class DownloadOrchestrator {
 
 
       // FIX-AUDIT-6: Validate audio state even when audioSize is unknown (0).
-      if (task.mergedAudioUrl != null) {
-        final audioPath = '${task.tempFilePath}.audio';
-        final audioStateFile = File('$audioPath.dmxstate');
-        final audioFile = File(audioPath);
-
-        // FIX(16): Reset audioProgress if audio file is missing
-        if (!await audioFile.exists()) {
-          task = task.copyWith(audioProgress: 0.0);
-          if (await audioStateFile.exists()) {
-            try { await audioStateFile.delete(); } catch (_) {}
-          }
-        }
-
-        if (task.audioSize > 0) {
-          if (await audioStateFile.exists()) {
-            if (await audioFile.exists()) {
-              final audioLen = await audioFile.length();
-              final expectedBytes = (task.audioProgress * task.audioSize).toInt();
-              if (audioLen < expectedBytes) {
-                debugPrint('[DMX] FIX A-2: Audio file shorter than progress '
-                    '($audioLen < $expectedBytes). Resetting audio progress.');
-                task = task.copyWith(audioProgress: 0.0);
-                try { await audioFile.delete(); } catch (_) {}
-                try { await audioStateFile.delete(); } catch (_) {}
-              }
-            }
-          } else {
-            if (await audioFile.exists()) {
-              final audioLen = await audioFile.length();
-              if (audioLen > 0) {
-                final fraction = (audioLen / task.audioSize).clamp(0.0, 1.0);
-                final updated = task.copyWith(audioProgress: fraction);
-                await _host.setTaskState(updated);
-                task = updated;
-              } else {
-                final updated = task.copyWith(audioProgress: 0.0);
-                await _host.setTaskState(updated);
-                task = updated;
-              }
-            } else {
-              final updated = task.copyWith(audioProgress: 0.0);
-              await _host.setTaskState(updated);
-              task = updated;
-            }
-          }
-        } else {
-          // FIX-Y2: audioSize unknown — validate by file existence
-          try {
-            if (!await audioStateFile.exists()) {
-              if (await audioFile.exists()) {
-                final audioLen = await audioFile.length();
-                if (audioLen == 0) {
-                  // Empty audio file with no state = corrupted, reset
-                  final updated = task.copyWith(audioProgress: 0.0);
-                  await _host.setTaskState(updated);
-                  task = updated;
-                }
-              } else {
-                if (task.audioProgress > 0) {
-                  final updated = task.copyWith(audioProgress: 0.0);
-                  await _host.setTaskState(updated);
-                  task = updated;
-                }
-              }
-            }
-          } catch (e) {
-            debugPrint('[FIX-Y2] Audio unknown size validation error: $e');
-          }
+      if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+        final validated = await DownloadProvider.validateAudioProgress(task);
+        if (validated.audioProgress != task.audioProgress) {
+          await _host.setTaskState(validated);
+          task = validated;
         }
       }
 
@@ -1348,9 +1289,25 @@ class DownloadOrchestrator {
       final effectiveVideoSize =
           videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
       final calculatedTotal = effectiveVideoSize + audioContribution;
+      // FIX(B5): Allow denominator correction within tolerance.
+      // Prevents permanent freeze from a single inflated report.
       final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
-      final totalSize = max(cachedMax, calculatedTotal);
-      if (totalSize > cachedMax) {
+      final int totalSize;
+      if (calculatedTotal > cachedMax) {
+        // Growing: accept but cap growth at 2x to prevent runaway
+        totalSize = calculatedTotal.clamp(
+            0, cachedMax > 0 ? cachedMax * 2 : calculatedTotal);
+      } else if (cachedMax > 0 && calculatedTotal < cachedMax) {
+        // Shrinking: allow if within 5% tolerance (server correction),
+        // otherwise keep the larger value.
+        final tolerance = (cachedMax * 0.05).round();
+        totalSize = (cachedMax - calculatedTotal <= tolerance)
+            ? calculatedTotal
+            : cachedMax;
+      } else {
+        totalSize = calculatedTotal;
+      }
+      if (totalSize > 0) {
         _sessionCachedTotalSize[task.id] = totalSize;
       }
 
