@@ -32,6 +32,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with HapticHelper, TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   bool _isSearching = false;
   bool _showAnalytics = false;
   int _selectedTab = 0;
@@ -41,6 +42,9 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
+    _searchFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
     _reveal = AnimationController(
       vsync: this,
       duration: AppTheme.motionReveal,
@@ -86,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _reveal.dispose();
     super.dispose();
   }
@@ -117,11 +122,11 @@ class _HomeScreenState extends State<HomeScreen>
         final classicUi = settingsState.classicUi;
         final textClr =
             isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
-        final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        final downloadProvider = context.watch<DownloadProvider>();
+        final accentClr = getActiveFilterColor(downloadProvider, isDark);
         final isRtl = L10n.isRtl(context);
 
-        final isInSelectionMode =
-            context.watch<DownloadProvider>().isSelectionMode;
+        final isInSelectionMode = downloadProvider.isSelectionMode;
 
         return GeometricGridBackground(
           child: Scaffold(
@@ -372,7 +377,7 @@ class _HomeScreenState extends State<HomeScreen>
   /// FIX(14): persistent iOS-only banner.
   List<Widget> _buildIosBackgroundBanner(bool isDark, bool isRtl) {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return const [];
-    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final accent = getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return [
       Padding(
@@ -435,7 +440,7 @@ class _HomeScreenState extends State<HomeScreen>
           : null,
       titleSpacing: 16,
       title: _isSearching
-          ? _buildSearchField(context, textClr, isDark)
+          ? _buildSearchField(context, textClr, accentClr, isDark)
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -465,7 +470,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         _AppBarIconButton(
           icon: _isSearching ? Icons.close_rounded : Icons.search_rounded,
-          color: textClr,
+          color: _isSearching ? accentClr : textClr,
           onPressed: () {
             triggerHaptic(context.read<SettingsProvider>());
             setState(() {
@@ -484,63 +489,81 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildSearchField(BuildContext context, Color textClr, bool isDark) {
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? AppTheme.border : AppTheme.lightBorder,
-          width: 0.8,
+  Widget _buildSearchField(
+      BuildContext context, Color textClr, Color accentClr, bool isDark) {
+    final isFocused = _searchFocusNode.hasFocus;
+    return Theme(
+      data: Theme.of(context).copyWith(
+        primaryColor: accentClr,
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: accentClr,
+            ),
+        textSelectionTheme: TextSelectionThemeData(
+          cursorColor: accentClr,
+          selectionColor: accentClr.withValues(alpha: 0.3),
+          selectionHandleColor: accentClr,
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Row(
-        children: [
-          Icon(
-            Icons.search_rounded,
-            size: 18,
-            color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 44,
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isFocused ? accentClr : accentClr.withValues(alpha: 0.35),
+            width: isFocused ? 1.8 : 1.0,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              style: TextStyle(color: textClr, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: L10n.of(context, 'search_placeholder'),
-                hintStyle: TextStyle(
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                  fontSize: responsiveFontSize(context, 13),
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-                isDense: true,
-              ),
-              onChanged: (val) {
-                setState(() {});
-                context.read<DownloadProvider>().setSearchQuery(val);
-              },
-            ),
+          boxShadow: isFocused
+              ? [
+                  BoxShadow(
+                    color: accentClr.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
+        ),
+        child: TextField(
+          focusNode: _searchFocusNode,
+          controller: _searchController,
+          autofocus: true,
+          cursorColor: accentClr,
+          style: TextStyle(
+            color: textClr,
+            fontSize: 13,
+            fontFamily: 'Inter',
           ),
-          if (_searchController.text.isNotEmpty)
-            GestureDetector(
-              onTap: () {
-                _searchController.clear();
-                context.read<DownloadProvider>().setSearchQuery('');
-                setState(() {});
-              },
-              child: Icon(
-                Icons.clear_rounded,
-                size: 16,
-                color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-              ),
+          onChanged: (val) {
+            setState(() {});
+            context.read<DownloadProvider>().setSearchQuery(val);
+          },
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: accentClr,
             ),
-        ],
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: Icon(Icons.clear_rounded, size: 16, color: accentClr),
+                    onPressed: () {
+                      _searchController.clear();
+                      context.read<DownloadProvider>().setSearchQuery('');
+                      setState(() {});
+                    },
+                  )
+                : null,
+            hintText: L10n.of(context, 'search_placeholder'),
+            hintStyle: TextStyle(
+              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+              fontSize: 12,
+            ),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
       ),
     );
   }
@@ -881,7 +904,7 @@ class _HomeScreenState extends State<HomeScreen>
     bool isDark,
   ) {
     final isSelected = sortState.option == option;
-    final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final activeColor = getActiveFilterColor(context.read<DownloadProvider>(), isDark);
     final textColor = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     return PopupMenuItem<SortOption>(
       value: option,
@@ -911,9 +934,9 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildFAB(BuildContext context, bool isDark, bool classicUi) {
-    final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-    final screenType = getScreenType(context);
     final downloadProvider = context.watch<DownloadProvider>();
+    final accentClr = getActiveFilterColor(downloadProvider, isDark);
+    final screenType = getScreenType(context);
     final isNavbarVisible = downloadProvider.isNavbarVisible;
     final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
     final double bottomPadding;
@@ -1167,8 +1190,9 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
             );
           }).toList();
 
+    final activeFilterClr = getActiveFilterColor(context.watch<DownloadProvider>(), isDark);
     return DmxCardShell(
-      accent: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+      accent: activeFilterClr,
       radius: 20,
       showRail: true,
       child: Padding(
@@ -1181,7 +1205,7 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
               Icon(
                 Icons.storage_rounded,
                 size: 14,
-                color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                color: activeFilterClr,
               ),
               const SizedBox(width: 8),
               Text(
@@ -1709,8 +1733,9 @@ class _DownloadTaskList extends StatelessWidget {
     );
 
     if (selectedTab == 0) {
+      final provider = context.watch<DownloadProvider>();
       return RefreshIndicator(
-        color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+        color: getActiveFilterColor(provider, isDark),
         backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
         strokeWidth: 2.5,
         onRefresh: () async {
@@ -1746,7 +1771,7 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<DownloadProvider>();
     final query = provider.searchQuery;
-    final accentClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final accentClr = getActiveFilterColor(provider, isDark);
     if (query.isNotEmpty) {
       return Center(
         child: Padding(

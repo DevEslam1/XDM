@@ -9,6 +9,33 @@ import '../../settings/provider/settings_provider.dart';
 import '../models/download_task.dart';
 import '../provider/download_provider.dart';
 
+Color getActiveFilterColor(DownloadProvider provider, bool isDark) {
+  final catFilters = provider.categoryFilters;
+  if (catFilters.isNotEmpty) {
+    final cat = catFilters.first.toLowerCase();
+    return switch (cat) {
+      'video' => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+      'audio' => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+      'document' => isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+      'archive' => isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange,
+      'apk' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+      _ => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+    };
+  }
+
+  final status = provider.statusFilter;
+  return switch (status) {
+    'All' => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+    'Downloading' => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+    'Completed' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+    'Failed' => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+    'Paused' => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+    'Scheduled' => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+    'Torrents' => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+    _ => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+  };
+}
+
 class FilterChipsBar extends StatelessWidget {
   final bool isHistory;
   const FilterChipsBar({super.key, this.isHistory = false});

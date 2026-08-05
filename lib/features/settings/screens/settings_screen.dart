@@ -17,6 +17,19 @@ import 'power_settings_page.dart';
 import 'advanced_settings_page.dart';
 import '../widgets/settings_tiles.dart';
 
+Color getSettingsTabColor(int tabIndex, bool isDark) {
+  return switch (tabIndex) {
+    0 => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+    1 => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+    2 => isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan,
+    3 => isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+    4 => isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+    5 => isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange,
+    6 => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+    _ => isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+  };
+}
+
 class _SettingSearchEntry {
   final String categoryTitle;
   final int categoryIndex;
@@ -58,6 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     with HapticHelper, SingleTickerProviderStateMixin {
   late int _selectedCategoryIndex;
   late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
   String _searchQuery = '';
   late final PageController _pageController;
 
@@ -66,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     super.initState();
     _selectedCategoryIndex = _mapSectionToIndex(widget.initialSection);
     _searchController = TextEditingController();
+    _searchFocusNode = FocusNode();
     _pageController = PageController(initialPage: _selectedCategoryIndex);
 
     _searchController.addListener(() {
@@ -73,6 +88,18 @@ class _SettingsScreenState extends State<SettingsScreen>
         setState(() {
           _searchQuery = _searchController.text.trim().toLowerCase();
         });
+      }
+    });
+
+    _searchFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context
+            .read<SettingsProvider>()
+            .setActiveSettingsTabIndex(_selectedCategoryIndex);
       }
     });
   }
@@ -97,12 +124,14 @@ class _SettingsScreenState extends State<SettingsScreen>
       _pageController.jumpToPage(index);
     }
     final settings = Provider.of<SettingsProvider>(context, listen: false);
+    settings.setActiveSettingsTabIndex(index);
     triggerHaptic(settings);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -389,6 +418,9 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     ];
 
+    final activeTabColor = categories[_selectedCategoryIndex].color;
+    final filterAccentClr = activeTabColor;
+
     return GeometricGridBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -436,47 +468,81 @@ class _SettingsScreenState extends State<SettingsScreen>
                 // Global Search Bar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
-                        width: 1,
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      primaryColor: filterAccentClr,
+                      colorScheme: Theme.of(context).colorScheme.copyWith(
+                            primary: filterAccentClr,
+                          ),
+                      textSelectionTheme: TextSelectionThemeData(
+                        cursorColor: filterAccentClr,
+                        selectionColor:
+                            filterAccentClr.withValues(alpha: 0.3),
+                        selectionHandleColor: filterAccentClr,
                       ),
                     ),
-                    child: TextField(
-                      controller: _searchController,
-                      style: TextStyle(
-                        color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
-                        fontSize: 13,
-                        fontFamily: 'Inter',
-                      ),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        prefixIcon: Icon(
-                          Icons.search_rounded,
-                          size: 18,
-                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _searchFocusNode.hasFocus
+                              ? filterAccentClr
+                              : filterAccentClr.withValues(alpha: 0.35),
+                          width: _searchFocusNode.hasFocus ? 1.8 : 1.0,
                         ),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear_rounded, size: 16),
-                                onPressed: () {
-                                  _searchController.clear();
-                                },
-                              )
+                        boxShadow: _searchFocusNode.hasFocus
+                            ? [
+                                BoxShadow(
+                                  color: filterAccentClr.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ]
                             : null,
-                        hintText: isRtl
-                            ? 'ابحث في الإعدادات (مثلاً: proxy, dht, speed)...'
-                            : 'Search all settings (e.g. proxy, dht, speed)...',
-                        hintStyle: TextStyle(
-                          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                          fontSize: 12,
+                      ),
+                      child: TextField(
+                        focusNode: _searchFocusNode,
+                        controller: _searchController,
+                        cursorColor: filterAccentClr,
+                        style: TextStyle(
+                          color: isDark
+                              ? AppTheme.textPrimary
+                              : AppTheme.lightTextPrimary,
+                          fontSize: 13,
+                          fontFamily: 'Inter',
                         ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: filterAccentClr,
+                          ),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(Icons.clear_rounded,
+                                      size: 16, color: filterAccentClr),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                  },
+                                )
+                              : null,
+                          hintText: isRtl
+                              ? 'ابحث في الإعدادات (مثلاً: proxy, dht, speed)...'
+                              : 'Search all settings (e.g. proxy, dht, speed)...',
+                          hintStyle: TextStyle(
+                            color: isDark
+                                ? AppTheme.textMuted
+                                : AppTheme.lightTextMuted,
+                            fontSize: 12,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
                     ),
                   ),
@@ -593,6 +659,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                                   physics: const BouncingScrollPhysics(),
                                   onPageChanged: (idx) {
                                     setState(() => _selectedCategoryIndex = idx);
+                                    context
+                                        .read<SettingsProvider>()
+                                        .setActiveSettingsTabIndex(idx);
                                   },
                                   children: const [
                                     AppearanceSettingsPage(),

@@ -1546,6 +1546,21 @@ class DownloadProvider extends ChangeNotifier
 
 
 
+    // FIX(H-1): Flush pending progress to ensure state file is up-to-date
+    await _flushPendingProgress(id);
+
+    // FIX(H-7): Validate state file integrity before reading progress
+    final stateFile = File('${latest.tempFilePath}.dmxstate');
+    if (await stateFile.exists()) {
+      try {
+        final content = await stateFile.readAsString();
+        jsonDecode(content); // throws on corrupt JSON
+      } catch (e) {
+        debugPrint('[DMX] H-7 FIX: Corrupt .dmxstate detected in pauseTask, deleting.');
+        try { await stateFile.delete(); } catch (_) {}
+      }
+    }
+
     // Sync DB bytes with the authoritative state file
     final stateBytes = await _readDmxStateBytes(
       latest.tempFilePath,
@@ -1948,19 +1963,20 @@ class DownloadProvider extends ChangeNotifier
     }
 
 
-    // FIX 7: Disk space check on retry
-
-    final hasSpace = await _downloadEngine.hasEnoughDiskSpace(task.savePath, task.fileSize);
-
-    if (!hasSpace) {
-      await _setTask(
-        task.copyWith(
+    // FIX(H-4): Check disk space before retrying
+    try {
+      final hasSpace = await _downloadEngine.hasEnoughDiskSpace(
+          task.savePath, task.fileSize);
+      if (!hasSpace) {
+        await _setTask(task.copyWith(
           status: DownloadStatus.failed,
-          errorMessage: 'Insufficient disk space',
-        ),
-      );
-      notifyListeners();
-      return;
+          errorMessage: 'Insufficient disk space to retry download.',
+        ));
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('[DMX] H-4: Disk space check failed, proceeding with retry: $e');
     }
 
     _retryTimers[id]?.cancel();

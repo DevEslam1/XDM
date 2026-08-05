@@ -7,6 +7,8 @@ import '../../../../core/utils/haptic_helper.dart';
 import '../../../../core/utils/localization.dart';
 import '../../../../shared/design/dmx_design.dart';
 
+import 'filter_chips_bar.dart';
+
 class DownloadStatsPanel extends StatelessWidget with HapticHelper {
   const DownloadStatsPanel({super.key});
 
@@ -17,8 +19,8 @@ class DownloadStatsPanel extends StatelessWidget with HapticHelper {
           (isDark: settings.isDarkMode, classicUi: settings.classicUi),
       builder: (context, settingsState, _) {
         final isDark = settingsState.isDark;
-
-        final blueClr = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+        final provider = context.watch<DownloadProvider>();
+        final blueClr = getActiveFilterColor(provider, isDark);
         final violetClr =
             isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
         final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;

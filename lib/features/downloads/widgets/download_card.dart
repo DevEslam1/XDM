@@ -22,6 +22,7 @@ import '../../downloads/models/download_task.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../details/screens/details_screen.dart';
 import 'channel_progress_painter.dart';
+import 'filter_chips_bar.dart';
 
 import '../../../core/services/undo_service.dart';
 
@@ -160,6 +161,21 @@ Color _statusColor(DownloadStatus status, bool isDark) {
       isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
     DownloadStatus.failed => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
   };
+}
+
+Color getEffectiveCardAccent(
+  DownloadTask task,
+  DownloadProvider provider,
+  bool isDark, {
+  Color? filterColor,
+}) {
+  if (filterColor != null) return filterColor;
+  final hasCategoryFilter = provider.categoryFilters.isNotEmpty;
+  final hasStatusFilter = provider.statusFilter != 'All';
+  if (hasCategoryFilter || hasStatusFilter) {
+    return getActiveFilterColor(provider, isDark);
+  }
+  return _statusColor(task.status, isDark);
 }
 
 IconData _categoryIcon(String category) {
@@ -321,13 +337,14 @@ class _StatusChipState extends State<_StatusChip>
     final task = widget.task;
     final isDark = widget.isDark;
     final overrideLabel = widget.overrideLabel;
+    final provider = context.watch<DownloadProvider>();
 
     final isWifiWaiting = task.status == DownloadStatus.paused &&
         task.errorMessage != null &&
         task.errorMessage!.contains('WiFi');
     final color = isWifiWaiting
         ? (isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber)
-        : _statusColor(task.status, isDark);
+        : getEffectiveCardAccent(task, provider, isDark);
     final label = overrideLabel ??
         (isWifiWaiting
             ? 'Waiting WiFi'
@@ -965,9 +982,10 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.read<DownloadProvider>();
+    final provider = context.watch<DownloadProvider>();
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
+    final accent = getEffectiveCardAccent(task, provider, isDark);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -985,7 +1003,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
             task.status == DownloadStatus.queued)
           _ControlButton(
             icon: Icons.play_arrow_rounded,
-            color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+            color: accent,
             filled: true,
             tooltip: task.status == DownloadStatus.queued
                 ? L10n.of(context, 'start_btn')
@@ -998,7 +1016,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         else if (task.status == DownloadStatus.failed)
           _ControlButton(
             icon: Icons.refresh_rounded,
-            color: isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet,
+            color: accent,
             filled: true,
             tooltip: L10n.of(context, 'retry_label'),
             onPressed: () {
@@ -1009,7 +1027,7 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
         else if (task.status == DownloadStatus.completed)
           _ControlButton(
             icon: Icons.folder_open_rounded,
-            color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+            color: accent,
             filled: true,
             tooltip: L10n.of(context, 'open_file_btn'),
             onPressed: () async {
@@ -1130,7 +1148,8 @@ class _FileCard extends StatelessWidget with HapticHelper {
   Widget build(BuildContext context) {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final statusColor = _statusColor(task.status, isDark);
+    final provider = context.watch<DownloadProvider>();
+    final statusColor = getEffectiveCardAccent(task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
     return _CardShell(
@@ -1290,7 +1309,8 @@ class _MediaCard extends StatelessWidget with HapticHelper {
   Widget build(BuildContext context) {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
-    final statusColor = _statusColor(task.status, isDark);
+    final provider = context.watch<DownloadProvider>();
+    final statusColor = getEffectiveCardAccent(task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final qualityColor = _isAudioOnly
         ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
@@ -1491,7 +1511,8 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
     final settings = context.read<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-    final statusColor = _statusColor(widget.task.status, isDark);
+    final provider = context.watch<DownloadProvider>();
+    final statusColor = getEffectiveCardAccent(widget.task, provider, isDark);
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final greenClr = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
     final violetClr = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;

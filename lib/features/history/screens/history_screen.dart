@@ -10,6 +10,8 @@ import '../../downloads/widgets/download_card.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
 
+import '../../downloads/widgets/filter_chips_bar.dart';
+
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -19,12 +21,22 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
   Timer? _debounceTimer;
 
   @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     _debounceTimer?.cancel();
     super.dispose();
   }
@@ -46,6 +58,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
         final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
         final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
+        final downloadProvider = context.watch<DownloadProvider>();
+        final accentClr = getActiveFilterColor(downloadProvider, isDark);
 
         return Selector<DownloadProvider, List<DownloadTask>>(
           selector: (_, provider) => provider.tasks.where((task) {
@@ -138,63 +152,95 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             horizontal: 16.0,
                             vertical: 8.0,
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: DmxBackdropFilter(
-                              sigmaX: 8,
-                              sigmaY: 8,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF0F0F16)
-                                      : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: isDark
-                                        ? const Color(0x15FFFFFF)
-                                        : const Color(0x0D000000),
-                                    width: 0.8,
+                          child: Theme(
+                            data: Theme.of(context).copyWith(
+                              primaryColor: accentClr,
+                              colorScheme: Theme.of(context).colorScheme.copyWith(
+                                    primary: accentClr,
+                                  ),
+                              textSelectionTheme: TextSelectionThemeData(
+                                cursorColor: accentClr,
+                                selectionColor:
+                                    accentClr.withValues(alpha: 0.3),
+                                selectionHandleColor: accentClr,
+                              ),
+                            ),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppTheme.surface
+                                    : AppTheme.lightSurface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _searchFocusNode.hasFocus
+                                      ? accentClr
+                                      : accentClr.withValues(alpha: 0.35),
+                                  width: _searchFocusNode.hasFocus ? 1.8 : 1.0,
+                                ),
+                                boxShadow: _searchFocusNode.hasFocus
+                                    ? [
+                                        BoxShadow(
+                                          color: accentClr.withValues(alpha: 0.3),
+                                          blurRadius: 10,
+                                          spreadRadius: 1,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: TextField(
+                                focusNode: _searchFocusNode,
+                                controller: _searchController,
+                                cursorColor: accentClr,
+                                style: TextStyle(
+                                  color: textClr,
+                                  fontSize: 13,
+                                  fontFamily: 'Inter',
+                                ),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  hintText: L10n.of(
+                                      context, 'search_settings_hint'),
+                                  hintStyle: TextStyle(
+                                    color: mutedClr,
+                                    fontSize: 12,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.search_rounded,
+                                    color: accentClr,
+                                    size: 18,
+                                  ),
+                                  suffixIcon: _searchQuery.isNotEmpty
+                                      ? IconButton(
+                                          icon: Icon(Icons.clear_rounded,
+                                              size: 16, color: accentClr),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() {
+                                              _searchQuery = '';
+                                            });
+                                          },
+                                        )
+                                      : null,
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 12,
                                   ),
                                 ),
-                                child: TextField(
-                                  controller: _searchController,
-                                  style: TextStyle(
-                                    color: textClr,
-                                    fontSize: 14,
-                                  ),
-                                  decoration: InputDecoration(
-                                    hintText: L10n.of(
-                                        context, 'search_settings_hint'),
-                                    hintStyle: TextStyle(
-                                      color: mutedClr,
-                                      fontSize: 12,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.search,
-                                      color: secClr,
-                                      size: 18,
-                                    ),
-                                    border: InputBorder.none,
-                                    enabledBorder: InputBorder.none,
-                                    focusedBorder: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                    ),
-                                  ),
-                                  onChanged: (value) {
-                                    if (_debounceTimer?.isActive ?? false) {
-                                      _debounceTimer!.cancel();
+                                onChanged: (value) {
+                                  if (_debounceTimer?.isActive ?? false) {
+                                    _debounceTimer!.cancel();
+                                  }
+                                  _debounceTimer = Timer(
+                                      const Duration(milliseconds: 300), () {
+                                    if (mounted) {
+                                      setState(() {
+                                        _searchQuery = value;
+                                      });
                                     }
-                                    _debounceTimer = Timer(
-                                        const Duration(milliseconds: 300), () {
-                                      if (mounted) {
-                                        setState(() {
-                                          _searchQuery = value;
-                                        });
-                                      }
-                                    });
-                                  },
-                                ),
+                                  });
+                                },
                               ),
                             ),
                           ),

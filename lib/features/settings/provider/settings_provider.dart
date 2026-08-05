@@ -181,6 +181,16 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get classicUi => batterySaverMode ? true : _classicUi;
   bool batterySaverMode = false;
 
+  int _activeSettingsTabIndex = 0;
+  int get activeSettingsTabIndex => _activeSettingsTabIndex;
+
+  void setActiveSettingsTabIndex(int index) {
+    if (_activeSettingsTabIndex != index) {
+      _activeSettingsTabIndex = index;
+      notifyListeners();
+    }
+  }
+
   bool enableProxy = false;
   String proxyAddress = '';
   bool bypassSSL = false;

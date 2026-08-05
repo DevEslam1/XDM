@@ -22,6 +22,7 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/settings/widgets/update_dialogs.dart';
 import '../../features/settings/widgets/app_lock_screen.dart';
 import '../../core/services/app_lock_service.dart';
+import '../../features/downloads/widgets/filter_chips_bar.dart';
 import 'themed_snackbar.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
@@ -552,8 +553,9 @@ class _NavigationRailWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final downloadProvider = context.read<DownloadProvider>();
-    final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final downloadProvider = context.watch<DownloadProvider>();
+    final settingsProvider = context.watch<SettingsProvider>();
+    final activeColor = getActiveFilterColor(downloadProvider, isDark);
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final navBg = isDark
@@ -635,7 +637,8 @@ class _NavigationRailWidget extends StatelessWidget {
                 selectedIcon: Icons.settings_rounded,
                 label: L10n.of(context, 'title_config'),
                 isSelected: currentIndex == 2,
-                activeColor: activeColor,
+                activeColor: getSettingsTabColor(
+                    settingsProvider.activeSettingsTabIndex, isDark),
                 inactiveColor: inactiveColor,
                 onTap: () {
                   if (settingsTuple.vibration) HapticFeedback.lightImpact();
@@ -747,7 +750,14 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
-    final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final downloadProvider = context.watch<DownloadProvider>();
+    final settingsProvider = context.watch<SettingsProvider>();
+    final activeColor = (index == 0)
+        ? getActiveFilterColor(downloadProvider, isDark)
+        : (index == 2)
+            ? getSettingsTabColor(
+                settingsProvider.activeSettingsTabIndex, isDark)
+            : (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
     final color = isSelected ? activeColor : inactiveColor;

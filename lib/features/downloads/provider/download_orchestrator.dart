@@ -1462,7 +1462,9 @@ class DownloadOrchestrator {
       if (await videoFile.exists() && await audioFile.exists()) {
         final videoLen = await videoFile.length();
         final audioLen = await audioFile.length();
-        final expectedVideo = videoTransferSize > 0 ? videoTransferSize : 1;
+        // FIX(YT-2): When videoTransferSize is unknown (0), use a minimum threshold
+        // to avoid merging incomplete video. Require at least 1KB for video.
+        final expectedVideo = videoTransferSize > 0 ? videoTransferSize : 1024;
         final expectedAudio = task.audioSize > 0 ? task.audioSize : 1;
         if (videoLen >= expectedVideo && audioLen >= expectedAudio) {
           debugPrint('[DMX] FIX A-3: Both streams complete. Merge-only path.');
@@ -1503,19 +1505,16 @@ class DownloadOrchestrator {
             final audioExists = await audioFile.exists();
             final audioLen = audioExists ? await audioFile.length() : 0;
 
-            // Audio is considered complete ONLY when:
-            // 1. audioProgress is at 1.0 (exact stream completion), OR
-            // 2. audio exists on disk AND size is known AND downloaded bytes >= expected size.
-            // The 0.99 heuristic is REMOVED because it can merge truncated audio.
-            // FIX-C2: Also consider audio complete when liveAudioSize <= 0 but audioLen > 0
-            // FIX-05: Only treat audio as complete when size is known AND downloaded bytes >= liveAudioSize
-            // FIX-B9: If size unknown but file exists and has data, treat as complete
+            // FIX(YT-4): Only treat audio as complete when:
+            // 1. Progress hit 1.0 (exact stream completion), OR
+            // 2. Audio exists on disk AND size is known AND bytes >= expected size.
+            // When size is unknown (0), we CANNOT declare complete from file alone —
+            // rely on audioProgress only. This prevents merging truncated audio.
             final isAudioComplete = liveAudioTask.audioProgress >= 1.0 ||
                 (audioExists &&
                     audioLen > 0 &&
                     liveAudioSize > 0 &&
-                    audioLen >= liveAudioSize) ||
-                (audioExists && audioLen > 0 && liveAudioSize <= 0 && audioLen > 0);
+                    audioLen >= liveAudioSize);
             if (isAudioComplete) {
               debugPrint('[DMX-FIX-05] Audio stream complete ($audioLen / $liveAudioSize bytes)');
             }
@@ -1604,14 +1603,17 @@ class DownloadOrchestrator {
                 if (t == null || t.status != DownloadStatus.downloading) return;
                 audioBytesSoFar = progress.downloadedBytes;
                 audioSpeedNow = progress.speed;
-                // FIX-Y1: Track audio bytes without jumping fraction to 1.0 when size is unknown
+                // FIX(YT-1): Use progress.fileSize from engine when task.audioSize is unknown.
+                // This allows the progress bar to move even when the initial metadata
+                // didn't provide audioSize.
                 final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
                 final double fraction;
                 if (size > 0) {
                   fraction = (progress.downloadedBytes / size).clamp(0.0, 1.0);
                 } else {
-                  fraction = 0.0;
-                  debugPrint('[FIX-Y1] Audio size unknown, tracking ${progress.downloadedBytes} bytes without fraction');
+                  // Size truly unknown — use a small indeterminate fraction based on bytes
+                  // so the UI shows *some* activity instead of a dead bar.
+                  fraction = progress.downloadedBytes > 0 ? 0.01 : 0.0;
                 }
 
                 final idx = _host.providerTasks.indexWhere(
