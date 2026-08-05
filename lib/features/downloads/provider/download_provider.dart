@@ -203,6 +203,8 @@ class DownloadProvider extends ChangeNotifier
             (id, _) => !torrents.containsKey(id),
           );
         }
+        checkTorrentRatioLimits();
+        enforceTorrentQueue();
       },
     );
   }
@@ -2642,6 +2644,8 @@ class DownloadProvider extends ChangeNotifier
     updateActualTorrentUploadLimit();
 
     TorrentService.configureSession(_settingsProvider);
+    checkTorrentRatioLimits();
+    enforceTorrentQueue();
 
     if (_lastCleanupDays == null) {
       _lastCleanupDays = _settingsProvider.cleanupDays;
@@ -3555,52 +3559,9 @@ class DownloadProvider extends ChangeNotifier
   // Bandwidth scheduling
   // ---------------------------------------------------------------------------
 
-  int _effectiveSpeedLimit() {
-    final settings = _settingsProvider;
+  int _effectiveSpeedLimit() =>
+      _settingsProvider.effectiveSpeedLimitBytesPerSecond;
 
-    if (settings.bandwidthScheduleEnabled) {
-      final now = TimeOfDay.now();
-
-      final start = _parseTimeOfDay(settings.scheduleStartTime);
-      final end = _parseTimeOfDay(settings.scheduleEndTime);
-
-      if (_isWithinWindow(now, start, end)) {
-        final scheduleLimit =
-            (settings.scheduleSpeedLimitMb * 1024 * 1024).round();
-
-        final globalLimit = settings.speedLimitBytesPerSecond;
-
-        if (scheduleLimit > 0 &&
-            (globalLimit == 0 || scheduleLimit < globalLimit)) {
-          return scheduleLimit;
-        }
-      }
-    }
-
-    return settings.speedLimitBytesPerSecond;
-  }
-
-  TimeOfDay _parseTimeOfDay(String value) {
-    final parts = value.split(':');
-
-    final hour = parts.isNotEmpty ? (int.tryParse(parts[0]) ?? 0) : 0;
-    final minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
-
-    return TimeOfDay(hour: hour.clamp(0, 23), minute: minute.clamp(0, 59));
-  }
-
-  bool _isWithinWindow(TimeOfDay now, TimeOfDay start, TimeOfDay end) {
-    final nowMinutes = now.hour * 60 + now.minute;
-    final startMinutes = start.hour * 60 + start.minute;
-    final endMinutes = end.hour * 60 + end.minute;
-
-    if (startMinutes <= endMinutes) {
-      return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-    }
-
-    // Overnight window (e.g., 23:00 - 07:00)
-    return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
-  }
 
   // ---------------------------------------------------------------------------
   // Dispose

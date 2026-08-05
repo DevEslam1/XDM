@@ -535,6 +535,48 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   int get speedLimitBytesPerSecond => (speedLimitMb * 1024 * 1024).round();
 
+  /// Returns the effective download speed limit considering bandwidth schedule
+  /// windows (including overnight wrap).
+  int get effectiveSpeedLimitBytesPerSecond {
+    if (bandwidthScheduleEnabled &&
+        QuietHours.isInQuietHours(
+          start: scheduleStartTime,
+          end: scheduleEndTime,
+        )) {
+      final scheduleLimit = (scheduleSpeedLimitMb * 1024 * 1024).round();
+      if (scheduleLimit > 0 &&
+          (speedLimitBytesPerSecond == 0 ||
+              scheduleLimit < speedLimitBytesPerSecond)) {
+        return scheduleLimit;
+      }
+    }
+    return speedLimitBytesPerSecond;
+  }
+
+  Future<void> setBandwidthScheduleEnabled(bool value) async {
+    bandwidthScheduleEnabled = value;
+    await _prefs.setBool(_bandwidthScheduleEnabledKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setScheduleStartTime(String value) async {
+    scheduleStartTime = value;
+    await _prefs.setString(_scheduleStartTimeKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setScheduleEndTime(String value) async {
+    scheduleEndTime = value;
+    await _prefs.setString(_scheduleEndTimeKey, value);
+    notifyListeners();
+  }
+
+  Future<void> setScheduleSpeedLimitMb(double value) async {
+    scheduleSpeedLimitMb = value;
+    await _prefs.setDouble(_scheduleSpeedLimitMbKey, value);
+    notifyListeners();
+  }
+
 
   Future<void> setAutoStart(bool value) async {
     autoStart = value;

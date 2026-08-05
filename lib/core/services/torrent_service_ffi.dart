@@ -22,6 +22,7 @@ class _CapabilityGate {
   bool trackersSupported = true;
   bool createTorrentSupported = true;
   bool ipFilterSupported = true;
+  bool sequentialDownloadSupported = true;
 
   /// Probes capabilities ONCE during initialization.
   void probeCapabilities() {
@@ -32,6 +33,7 @@ class _CapabilityGate {
     trackersSupported = true;
     createTorrentSupported = true;
     ipFilterSupported = true;
+    sequentialDownloadSupported = true;
 
     final target = LibtorrentFlutter.instance;
 
@@ -88,11 +90,19 @@ class _CapabilityGate {
       ipFilterSupported = false;
     } catch (_) {}
 
+    try {
+      // ignore: avoid_dynamic_calls
+      (target as dynamic).setSequentialDownload(-1, false);
+    } on NoSuchMethodError {
+      sequentialDownloadSupported = false;
+    } catch (_) {}
+
     _log.fine(
       'Capability probe complete: fileProgress=$fileProgressSupported, '
       'filePriorities=$filePrioritiesSupported, resumeData=$resumeDataSupported, '
       'forceRecheck=$forceRecheckSupported, trackers=$trackersSupported, '
-      'createTorrent=$createTorrentSupported, ipFilter=$ipFilterSupported',
+      'createTorrent=$createTorrentSupported, ipFilter=$ipFilterSupported, '
+      'sequentialDownload=$sequentialDownloadSupported',
     );
   }
 
@@ -250,6 +260,16 @@ class _CapabilityGate {
       return false;
     }
   }
+
+  void setSequentialDownload(int id, bool enabled) {
+    if (!sequentialDownloadSupported) return;
+    try {
+      // ignore: avoid_dynamic_calls
+      (LibtorrentFlutter.instance as dynamic).setSequentialDownload(id, enabled);
+    } catch (e) {
+      _log.warning('setSequentialDownload failed for id $id: $e');
+    }
+  }
 }
 
 enum TorrentSessionState {
@@ -365,28 +385,34 @@ class TorrentService {
   static double get shareRatioLimit => _shareRatioLimit;
   static int get maxSeedingTimeMinutes => _maxSeedingTimeMinutes;
 
-  static void _configureSessionFromSettings() {
+  static void configureSession([SettingsProvider? settings]) {
     try {
-      final settings = SettingsProvider.instance;
+      final s = settings ?? SettingsProvider.instance;
       final config = LibtorrentFlutter.instance.getDefaultConfig().copyWith(
-            disableDht: !settings.enableDht,
-            disableUpnp: !settings.enableUpnp,
-            forceEncrypt: settings.forceEncrypt,
-            connectionsLimit: settings.torrentConnectionsLimit,
-            downloadRateLimit: settings.speedLimitBytesPerSecond ~/ 1024,
-            uploadRateLimit: settings.globalTorrentSeedingLimited
-                ? settings.globalTorrentSeedingLimitKbps
+            disableDht: !s.enableDht,
+            disableUpnp: !s.enableUpnp,
+            forceEncrypt: s.forceEncrypt,
+            connectionsLimit: s.torrentConnectionsLimit,
+            downloadRateLimit: s.effectiveSpeedLimitBytesPerSecond ~/ 1024,
+            uploadRateLimit: s.globalTorrentSeedingLimited
+                ? s.globalTorrentSeedingLimitKbps
                 : 0,
           );
       LibtorrentFlutter.instance.configureSession(config);
 
-      _sequentialDownload = settings.sequentialDownload;
-      _shareRatioLimit = settings.shareRatioLimit;
-      _maxSeedingTimeMinutes = settings.maxSeedingTimeMinutes;
+      _sequentialDownload = s.sequentialDownload;
+      _shareRatioLimit = s.shareRatioLimit;
+      _maxSeedingTimeMinutes = s.maxSeedingTimeMinutes;
+
+      for (final id in _activeTorrentIds) {
+        _CapabilityGate.instance.setSequentialDownload(id, _sequentialDownload);
+      }
     } catch (e) {
       _log.warning('Session configuration failed: $e');
     }
   }
+
+  static void _configureSessionFromSettings() => configureSession();
 
   static Completer<void>? _trackingCompleter;
 
@@ -907,10 +933,6 @@ class TorrentService {
       },
     );
     return bridging.stream;
-  }
-
-  static void configureSession(SettingsProvider settings) {
-    _configureSessionFromSettings();
   }
 
   // ---------------------------------------------------------------------------
