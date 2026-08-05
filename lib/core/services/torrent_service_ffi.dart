@@ -623,7 +623,7 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = magnetUri;
-        unawaited(_tryLoadFastResumeForSource(id, magnetUri));
+        unawaited(_tryLoadFastResumeForSource(id, magnetUri)); // FIX-02: kept async
       }
       return id;
     } catch (e) {
@@ -691,7 +691,7 @@ class TorrentService {
       if (id >= 0) {
         _activeTorrentIds.add(id);
         _torrentSources[id] = source;
-        unawaited(_tryLoadFastResumeForSource(id, source));
+        unawaited(_tryLoadFastResumeForSource(id, source)); // FIX-02: kept async
       }
       return id;
     } catch (e) {

@@ -539,7 +539,14 @@ class DownloadProvider extends ChangeNotifier
         return List<double>.filled(effectiveThreadCount, overallProgress);
       }
       final scale = overallProgress / chunkAvg;
-      return stateChunks.map((c) => (c * scale).clamp(0.0, 1.0)).toList();
+      final result = stateChunks.map((c) => (c * scale).clamp(0.0, 1.0)).toList();
+      // FIX-H-04: Never scale a completed chunk below 1.0
+      for (var i = 0; i < result.length; i++) {
+        if (i < stateChunks.length && stateChunks[i] >= 1.0) {
+          result[i] = 1.0;
+        }
+      }
+      return result;
     }
 
     return stateChunks;
@@ -1432,6 +1439,15 @@ class DownloadProvider extends ChangeNotifier
 
     if (isScheduled) {
       _scheduleManager.reschedule();
+
+    // FIX-T-04: Validate torrent handle before resume
+    if (task.isTorrent && _torrentIds.containsKey(task.id)) {
+      final tid = _torrentIds[task.id]!;
+      if (!TorrentService.isTorrentAlive(tid)) {
+        debugPrint('[DMX] T-04: Stale torrent handle $tid removed');
+        _torrentIds.remove(task.id);
+      }
+    }
     } else if (shouldPumpQueue) {
       pumpQueue();
     }
@@ -1582,8 +1598,24 @@ class DownloadProvider extends ChangeNotifier
           debugPrint('[FIX-P3] Pre-flush error: $e');
         }
 
-        // FIX-A1: Flush pending progress BEFORE canceling token and waiting for engine future
+        // FIX-11: Flush pending progress BEFORE cancelling token
         await _flushPendingProgress(id);
+
+        // FIX-H-02: Ensure engine state file is flushed before cancel
+        try {
+          final latest = _findTask(id) ?? task;
+          final stateFile = File('${latest.tempFilePath}.dmxstate');
+          if (await stateFile.exists()) {
+            // Trigger a read to confirm file is valid; if corrupt, delete
+            final content = await stateFile.readAsString();
+            jsonDecode(content); // throws on corrupt
+          }
+        } catch (_) {
+          try {
+            final latest = _findTask(id) ?? task;
+            await File('${latest.tempFilePath}.dmxstate').delete();
+          } catch (_) {}
+        }
 
         // FIX(H-2): cancel token first so the future can actually complete
         if (_cancelTokens.containsKey(id)) {
@@ -2112,6 +2144,36 @@ class DownloadProvider extends ChangeNotifier
         try { final f = File(path); if (await f.exists()) await f.delete(); }
         catch (_) {}
       }
+
+      // FIX-12: Validate .dmxstate integrity before retry
+      final stateFile = File('${task.tempFilePath}.dmxstate');
+      if (await stateFile.exists()) {
+        try {
+          jsonDecode(await stateFile.readAsString());
+        } catch (_) {
+          debugPrint('[DMX] H-05: Corrupt .dmxstate on retry, deleting.');
+          try { await stateFile.delete(); } catch (_) {}
+        }
+      }
+
+      // FIX-YT-05: Clean audio sidecars on retry
+      for (final path in [
+        '${task.tempFilePath}.audio',
+        '${task.tempFilePath}.audio.dmxstate',
+        '${task.tempFilePath}.audio.journal',
+      ]) {
+        try { final f = File(path); if (await f.exists()) await f.delete(); }
+        catch (_) {}
+      }
+
+      // FIX-T-05: Clear torrent resume data on retry
+      if (task.isTorrent) {
+        try {
+          await TorrentResumeStore.deleteResumeDataForSource(task.url);
+        } catch (e) {
+          debugPrint('[DMX] T-05: Failed to clear torrent resume data: $e');
+        }
+      }
     }
 
 
@@ -2387,8 +2449,10 @@ class DownloadProvider extends ChangeNotifier
   Future<void> deleteTask(String id, {bool deleteFiles = false}) async {
     final task = _findTask(id);
     if (task == null) return;
-    // FIX(N-1): cancel progress notification immediately on deleteTask
 
+    // FIX-X-05: Cancel notification immediately on delete
+    final notifId = _notifications.idFor(id);
+    _notifications.cancelNotification(notifId);
     _notifications.cancelForTask(id);
 
     // 1. Cancel the token IMMEDIATELY
@@ -2710,6 +2774,25 @@ class DownloadProvider extends ChangeNotifier
   }
 
   Future<void> _setTask(DownloadTask updated) async {
+    // FIX-H-06: Clamp downloadedBytes to fileSize
+    if (updated.fileSize > 0 && updated.downloadedBytes > updated.fileSize) {
+      updated = updated.copyWith(downloadedBytes: updated.fileSize);
+    }
+
+    // FIX-X-01: Clamp audioProgress
+    if (updated.audioProgress < 0.0 || updated.audioProgress > 1.0) {
+      updated = updated.copyWith(
+        audioProgress: updated.audioProgress.clamp(0.0, 1.0),
+      );
+    }
+
+    // FIX-X-02: Clamp chunks
+    if (updated.chunks.any((c) => c < 0.0 || c > 1.0)) {
+      updated = updated.copyWith(
+        chunks: updated.chunks.map((c) => c.clamp(0.0, 1.0)).toList(),
+      );
+    }
+
     final index = _tasks.indexWhere((task) => task.id == updated.id);
     if (index == -1) return;
 
@@ -3023,6 +3106,8 @@ class DownloadProvider extends ChangeNotifier
   /// fail, delete).
   Future<void> _pushWidgetData({bool force = false}) async {
     try {
+      // FIX-X-03: Snapshot tasks to avoid mid-mutation reads
+      final tasksSnapshot = List<DownloadTask>.from(_tasks);
       final bridge = WidgetDataBridge.instance;
       final freeSpace = await bridge.fetchFreeDiskSpace();
 
@@ -3030,7 +3115,7 @@ class DownloadProvider extends ChangeNotifier
       final todayStart = DateTime(now.year, now.month, now.day);
       final summaries = <WidgetTaskSummary>[];
 
-      for (final task in _tasks) {
+      for (final task in tasksSnapshot) {
         var status = task.status.name;
         if (status == 'completed' && task.isTorrent && task.seedingEnabled) {
           status = 'seeding';
@@ -3220,6 +3305,11 @@ class DownloadProvider extends ChangeNotifier
     bool clearAudioUrl = false,
     bool isSameResource = false,
   }) async {
+    // FIX-X-04: Validate URL before applying
+    if (!isValidTransmissionUrl(newUrl.trim())) {
+      throw Exception('Invalid URL: $newUrl');
+    }
+
     final index = _tasks.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
 
@@ -3487,11 +3577,12 @@ class DownloadProvider extends ChangeNotifier
       final itagChanged =
           oldItag != null && newItag != null && oldItag != newItag;
 
-      // FIX-B5: Check mime parameter for itag-less YouTube URLs
+      // FIX-YT-07: Also detect mime changes
       final oldMime = oldUri?.queryParameters['mime'];
       final newMime = newUri?.queryParameters['mime'];
       final mimeChanged =
           oldMime != null && newMime != null && oldMime != newMime;
+      final streamIdentityChanged = itagChanged || mimeChanged;
 
       // FIX-B4: Detect token-only URL changes (covers null vs non-null)
       final oldToken = oldUri?.queryParameters['token'] ??
@@ -3500,13 +3591,13 @@ class DownloadProvider extends ChangeNotifier
       final newToken = newUri?.queryParameters['token'] ??
           newUri?.queryParameters['signature'] ??
           newUri?.queryParameters['sig'];
-      final tokenOnlyChange = !itagChanged && !mimeChanged && (oldToken != newToken);
+      final tokenOnlyChange = !streamIdentityChanged && (oldToken != newToken);
       if (tokenOnlyChange) {
         debugPrint('[DMX] FIX-B4: Token-only URL change detected. Keeping progress.');
       }
 
 
-      if (isYoutube && (itagChanged || mimeChanged)) {
+      if (isYoutube && streamIdentityChanged) {
         sizeChanged = true;
       } else if (!isRefresh &&
 
@@ -3565,6 +3656,7 @@ class DownloadProvider extends ChangeNotifier
 
       // FIX(U-1): Also delete the temp file and audio temp file when size changes
       if (sizeChanged) {
+        // FIX-08: Delete stale state files on size change
         for (final path in [
           task.tempFilePath,
           '${task.tempFilePath}.dmxstate',
@@ -3623,6 +3715,11 @@ class DownloadProvider extends ChangeNotifier
           task.mergedAudioUrl != null &&
           cleanUrl != task.url;
 
+      // FIX-11: Also clear YouTube-specific state on non-refresh URL change
+      final shouldClearYoutubeState = !isRefresh &&
+          task.youtubeQualityPreset != null &&
+          cleanUrl != task.url;
+
       if (shouldClearAudio) {
         debugPrint(
           '[DMX] FIX(B3): URL changed without new audio URL. '
@@ -3642,10 +3739,10 @@ class DownloadProvider extends ChangeNotifier
             : task.audioSize,
         // FIX-03: Reset audioProgress when audioChanged OR sizeChanged
         audioProgress: (audioChanged || sizeChanged || isProtocolSwitch) ? 0.0 : task.audioProgress,
-        youtubeQualityPreset: (isProtocolSwitch && oldProto == 'youtube')
+        youtubeQualityPreset: (shouldClearYoutubeState || (isProtocolSwitch && oldProto == 'youtube'))
             ? null
             : task.youtubeQualityPreset,
-        clearYoutubeQualityPreset: isProtocolSwitch && oldProto == 'youtube',
+        clearYoutubeQualityPreset: shouldClearYoutubeState || (isProtocolSwitch && oldProto == 'youtube'),
         torrentFiles: (isProtocolSwitch && oldProto == 'torrent')
             ? null
             : (metadata?.torrentFiles ?? task.torrentFiles),

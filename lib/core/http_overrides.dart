@@ -29,7 +29,11 @@ class DohHttpOverrides extends HttpOverrides {
         return Socket.startConnect(proxyHost, proxyPort!);
       }
 
-      if (_dnsEnabled()) {
+      final isBackend = uri.host.contains('xdm-backend') ||
+          (SettingsProvider.instance.backendUrl.isNotEmpty &&
+              Uri.tryParse(SettingsProvider.instance.backendUrl)?.host == uri.host);
+
+      if (_dnsEnabled() && !isBackend) {
         try {
           // 1. Fast system DNS lookup (preserves CDN geo-routing & native ALPN)
           final addresses = await InternetAddress.lookup(uri.host)

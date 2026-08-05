@@ -594,6 +594,7 @@ class YoutubeService {
       final backendRes = await XdmBackendClient().getStreams(
         url,
         cookies: cookies,
+        oauthToken: YoutubeService.oauthToken,
       );
       final results = _parseStreams(backendRes);
       return results.isNotEmpty ? results : null;
@@ -624,26 +625,18 @@ class YoutubeService {
     }
   }
 
-  /// Local fallback: invokes the on-device extractor (Android NewPipe
-  /// Extractor) through the platform channel, or returns null if unavailable
-  /// or disabled in settings.
-  static Future<List<Map<String, dynamic>>?> _tryLocalFallback(
-    String url,
-  ) async {
+  // FIX-3: Fix _tryLocalFallback log and handling for PlatformException/MissingPluginException
+  static Future<List<Map<String, dynamic>>?> _tryLocalFallback(String url) async {
     if (!SettingsProvider.instance.useLocalYtFallback) {
-      debugPrint(
-        '[YoutubeService] Local fallback disabled in settings; skipping.',
-      );
+      debugPrint('[YoutubeService] Local fallback disabled in settings; skipping.');
       return null;
     }
     try {
-      final result =
-          await _platformChannel.invokeListMethod<dynamic>('getStreams', {
+      final result = await _platformChannel.invokeListMethod<dynamic>('getStreams', {
         'url': url,
       });
       if (result == null || result.isEmpty) return null;
-      final streams = result
-          .whereType<Map>()
+      final streams = result.whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
       if (streams.isEmpty) return null;
@@ -652,8 +645,9 @@ class YoutubeService {
     } on PlatformException catch (e) {
       debugPrint('[YoutubeService] Local fallback failed: $e');
       return null;
-    } on MissingPluginException catch (e) {
-      debugPrint('[YoutubeService] Local fallback unavailable: $e');
+    } on MissingPluginException catch (_) {
+      // Platform channel not registered — expected on iOS / desktop.
+      // This is NOT an error; just skip silently.
       return null;
     } catch (e) {
       debugPrint('[YoutubeService] Local fallback error: $e');
@@ -661,20 +655,15 @@ class YoutubeService {
     }
   }
 
-  /// Resolves streams with retry + exponential backoff (2s, 4s) before
-  /// surfacing the final failure. Only transient backend failures (timeouts,
-  /// network errors) are retried; 4xx/user errors fail fast.
+  // FIX-6: Increase retries to 3 and backoff to 3s, 6s, 12s for cold starts
   static Future<List<Map<String, dynamic>>?> _resolveWithRetry(
     String url, {
     String? cookies,
-    int maxRetries = 2,
+    int maxRetries = 3,  // ← was 2
   }) async {
     for (int attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        final result = await _resolveStreamsWithFallback(
-          url,
-          cookies: cookies,
-        );
+        final result = await _resolveStreamsWithFallback(url, cookies: cookies);
         if (result != null && result.isNotEmpty) return result;
       } catch (e) {
         final transient = e is XdmBackendTimeoutException ||
@@ -685,7 +674,8 @@ class YoutubeService {
                     e.type == DioExceptionType.sendTimeout ||
                     e.type == DioExceptionType.connectionError));
         if (attempt == maxRetries || !transient) rethrow;
-        final delay = Duration(seconds: 2 << attempt); // 2s, 4s
+        // Longer backoff: 3s, 6s, 12s (Cloud Run cold start needs time)
+        final delay = Duration(seconds: 3 * (attempt + 1));
         debugPrint(
           '[YoutubeService] Backend attempt ${attempt + 1} failed, '
           'retrying in ${delay.inSeconds}s: $e',

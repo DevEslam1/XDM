@@ -160,11 +160,10 @@ class DownloadTask {
 
   /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
   int get combinedTotalSize {
+    // FIX-YT-09: When video size unknown but audio known, use audio as partial total
     if (hasMergedAudio && audioSize > 0) {
       final vSize = fileSize > 0 ? fileSize : 0;
-      // FIX-D1: When video size is unknown, return 0 so the UI shows
-      // indeterminate progress instead of a misleading percentage.
-      if (vSize == 0) return 0;
+      if (vSize == 0) return audioSize; // Partial: at least audio is known
       return vSize + audioSize;
     }
     return resolvedFileSize;

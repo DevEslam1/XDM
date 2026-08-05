@@ -405,11 +405,53 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
-  Future<void> _refreshTabForPull(BrowserTab tab) async {
+  Future<void> _safeReloadTab(BrowserTab tab) async {
+    if (!mounted) return;
+
+    if (tab.hasCrashed) {
+      setState(() {
+        tab.hasCrashed = false;
+        tab.isTimedOut = false;
+        tab.isLoading = true;
+        tab.controller = null;
+      });
+      return;
+    }
+
+    setState(() {
+      tab.isTimedOut = false;
+      tab.isLoading = true;
+    });
+
     final controller = tab.controller;
     if (controller != null) {
-      unawaited(controller.reload().catchError((_) {}));
+      try {
+        await controller.reload();
+        return;
+      } catch (e) {
+        _log.warning('[Browser] controller.reload() failed: $e');
+        try {
+          if (tab.url.isNotEmpty && tab.url != 'about:blank') {
+            await controller.loadUrl(
+              urlRequest: URLRequest(url: WebUri(tab.url)),
+            );
+            return;
+          }
+        } catch (e2) {
+          _log.warning('[Browser] controller.loadUrl() failed: $e2');
+        }
+      }
     }
+
+    if (mounted) {
+      setState(() {
+        tab.controller = null;
+      });
+    }
+  }
+
+  Future<void> _refreshTabForPull(BrowserTab tab) async {
+    await _safeReloadTab(tab);
 
     // Keep the native indicator visible for a bounded three seconds.
     await Future<void>.delayed(const Duration(seconds: 3));
@@ -771,9 +813,7 @@ class _BrowserScreenState extends State<BrowserScreen>
       }
     });
 
-    try {
-      tab.controller?.reload();
-    } catch (_) {}
+    _safeReloadTab(tab);
   }
 
   Future<void> _injectAllScripts(BrowserTab tab, String url) async {
@@ -978,7 +1018,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                   isDarkMode: settings.isDarkMode,
                 );
                 if (!tab.isHome) {
-                  await tab.controller?.reload();
+                  await _safeReloadTab(tab);
                 }
               }
             },
@@ -1391,7 +1431,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         break;
       case 'reload':
         if (!activeTab.isHome) {
-          await activeTab.controller?.reload();
+          await _safeReloadTab(activeTab);
         }
         break;
       case 'bookmark':
@@ -1481,12 +1521,7 @@ class _BrowserScreenState extends State<BrowserScreen>
           );
           for (final t in _tabs) {
             if (!t.isHome) {
-              try {
-                await t.controller?.reload();
-              } catch (e) {
-                _log.warning(
-                    '[DMX Browser] Reload failed after mode switch: $e');
-              }
+              await _safeReloadTab(t);
             }
           }
         }
@@ -1523,7 +1558,7 @@ class _BrowserScreenState extends State<BrowserScreen>
             isDarkMode: settings.isDarkMode,
           );
           if (!activeTab.isHome) {
-            await activeTab.controller?.reload();
+            await _safeReloadTab(activeTab);
           }
         }
         break;
@@ -3756,8 +3791,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                       _urlController.clear();
                                                     } else {
                                                       if (!activeTab.isHome) {
-                                                        activeTab.controller
-                                                            ?.reload();
+                                                        _safeReloadTab(activeTab);
                                                       }
                                                     }
                                                   },
@@ -4253,13 +4287,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                               .white),
                                                                   onPressed:
                                                                       () {
-                                                                    setState(
-                                                                        () {
-                                                                      tab.hasCrashed =
-                                                                          false;
-                                                                    });
-                                                                    tab.controller
-                                                                        ?.reload();
+                                                                    _safeReloadTab(tab);
                                                                   },
                                                                   icon: const Icon(
                                                                       Icons
@@ -4434,8 +4462,22 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 setState(() {
                                                                   tab.isLoading =
                                                                       false;
+                                                                });
+                                                              }
+                                                            },
+                                                            onRenderProcessGone:
+                                                                (controller,
+                                                                    detail) async {
+                                                              _log.warning(
+                                                                  '[Browser] Render process gone on tab ${tab.id}: didCrash=${detail.didCrash}');
+                                                              if (mounted) {
+                                                                setState(() {
+                                                                  tab.isLoading =
+                                                                      false;
                                                                   tab.hasCrashed =
                                                                       true;
+                                                                  tab.controller =
+                                                                      null;
                                                                 });
                                                               }
                                                             },
@@ -4791,13 +4833,10 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       GestureDetector(
                                                                         onTap:
                                                                             () {
-                                                                          setState(
-                                                                              () {
-                                                                            tab.isTimedOut =
+                                                                          _safeReloadTab(tab);
+                                                                          tab.isTimedOut =
                                                                                 false;
-                                                                          });
-                                                                          tab.controller
-                                                                              ?.reload();
+                                                                          
                                                                         },
                                                                         child: Padding(
                                                                             padding:

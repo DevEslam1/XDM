@@ -7,6 +7,7 @@ import '../../../shared/design/dmx_design.dart';
 import '../../../core/services/doh_resolver.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
+import '../../../core/services/xdm_backend_client.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
@@ -25,7 +26,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
   late final TextEditingController _proxyUsernameController;
   late final TextEditingController _proxyPasswordController;
   late final TextEditingController _dohController;
+  late final TextEditingController _backendUrlController;
   bool _testingProxy = false;
+  // FIX-5: State variable for testing backend health
+  bool _testingBackend = false;
 
   @override
   void initState() {
@@ -36,6 +40,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     _proxyUsernameController = TextEditingController(text: settings.proxyUsername);
     _proxyPasswordController = TextEditingController(text: settings.proxyPassword);
     _dohController = TextEditingController(text: settings.dnsProvider);
+    _backendUrlController = TextEditingController(text: settings.backendUrl);
   }
 
   @override
@@ -45,6 +50,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     _proxyUsernameController.dispose();
     _proxyPasswordController.dispose();
     _dohController.dispose();
+    _backendUrlController.dispose();
     super.dispose();
   }
 
@@ -79,6 +85,63 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // FIX-5: Extraction Backend Server Section & Test Button
+          SettingsSectionHeader(
+            title: isRtl ? 'خادم الاستخراج الخادمي (Backend)' : 'Extraction Backend Server',
+            accentColor: accent,
+            isDark: isDark,
+          ),
+          SettingsSectionGroup(
+            accentColor: accent,
+            children: [
+              TextFieldTile(
+                accentColor: accent,
+                title: isRtl ? 'عنوان الخادم الخلفي' : 'Backend URL',
+                subtitle: 'e.g. https://xdm-backend-fallback.europe-west1.run.app',
+                controller: _backendUrlController,
+                onChanged: (val) => settings.setBackendUrl(val),
+                onSubmitted: (val) => settings.setBackendUrl(val),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: NeonGlowButton(
+                        isFilled: false,
+                        color: accent,
+                        text: _testingBackend
+                            ? (isRtl ? 'جاري الاختبار...' : 'TESTING...')
+                            : (isRtl ? 'اختبار اتصال الخادم' : 'TEST BACKEND'),
+                        onPressed: _testingBackend ? null : () async {
+                          setState(() => _testingBackend = true);
+                          bool healthy = false;
+                          try {
+                            final res = await XdmBackendClient().health();
+                            healthy = res.isNotEmpty;
+                          } catch (_) {
+                            healthy = false;
+                          }
+                          if (!mounted || !context.mounted) return;
+                          setState(() => _testingBackend = false);
+                          ThemedSnackbar.show(
+                            context,
+                            message: healthy
+                                ? (isRtl ? 'الخادم يعمل بنجاح!' : 'Backend is reachable!')
+                                : (isRtl ? 'فشل الاتصال بالخادم' : 'Backend unreachable'),
+                            color: healthy ? AppTheme.neonGreen : AppTheme.neonRed,
+                            icon: healthy ? Icons.check_circle_outline : Icons.error_outline,
+                            isDarkMode: isDark,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           SettingsSectionHeader(
             title: isRtl ? 'قيود الشبكة' : 'Connectivity Restrictions',
             accentColor: accent,

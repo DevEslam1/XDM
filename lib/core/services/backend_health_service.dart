@@ -20,6 +20,7 @@ class BackendHealthService {
   BackendHealthService._internal();
   static final BackendHealthService instance = BackendHealthService._internal();
 
+  // FIX-7: Register fallback backend URL in BackendHealthService
   final List<BackendConfig> _backends = [
     const BackendConfig(
       baseUrl: kDefaultBackendBaseUrl,
@@ -71,13 +72,14 @@ class BackendHealthService {
     _lastHealthyBaseUrl = baseUrl;
   }
 
+  // FIX-7: Ensure activeBaseUrl returns first healthy backend or fallback URL
   String get activeBaseUrl {
     final active = activeBackends;
     if (_lastHealthyBaseUrl != null &&
         active.any((b) => b.baseUrl == _lastHealthyBaseUrl)) {
       return _lastHealthyBaseUrl!;
     }
-    return active.first.baseUrl;
+    return active.isNotEmpty ? active.first.baseUrl : kDefaultBackendBaseUrl;
   }
 
   void resetCooldowns() {

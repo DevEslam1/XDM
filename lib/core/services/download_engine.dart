@@ -1352,6 +1352,12 @@ class DownloadEngine {
 
       try {
         if (!cancelToken.isCancelled) {
+          // FIX-02: Ensure fast-resume is loaded before resuming
+          final resumeData =
+              await TorrentResumeStore.loadResumeDataForSource(url);
+          if (resumeData != null && resumeData.isNotEmpty) {
+            TorrentService.loadResumeData(id, resumeData);
+          }
           TorrentService.resumeTorrent(id);
         }
 
@@ -1584,11 +1590,28 @@ class DownloadEngine {
               ? calculatedTotalSize
               : (knownFileSize > 0 ? knownFileSize : 0));
 
-      // FIX D-2: Clamp overall downloadedBytes to totalSize
+      // FIX-T-01: Show indeterminate state during metadata fetch
+      final isWaitingMetadata = !torrent.hasMetadata && totalSize <= 0;
+      if (isWaitingMetadata) {
+        onProgress(DownloadProgress(
+          downloadedBytes: 0,
+          fileSize: 0,
+          speed: 0,
+          eta: null,
+          statusMessage: 'Fetching metadata…',
+          fileName: resolvedName,
+        ));
+        return; // Skip normal progress path
+      }
+
+      // FIX-T-06: Clamp overall downloadedBytes to totalSize
       final rawDownloaded = torrent.totalWantedDone > 0
           ? torrent.totalWantedDone
           : torrent.totalDone;
-      final downloadedBytes = totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
+      final clampedDownloaded = totalSize > 0
+          ? min(rawDownloaded, totalSize)
+          : rawDownloaded;
+      final downloadedBytes = clampedDownloaded;
 
       // FIX(2): Only estimate when we don't have true per-file progress.
       // When progressEstimated is false from the file mapping, we have real data.
@@ -1604,6 +1627,14 @@ class DownloadEngine {
           downloadedBytes > 0;
       if (needsEstimation) {
         _distributeDownloadedBytesByPriority(resolvedFiles, downloadedBytes);
+        // FIX-T-03: Cap estimated per-file bytes to file length
+        for (final f in resolvedFiles) {
+          final len = (f['length'] as num?)?.toInt() ?? 0;
+          final cur = (f['downloadedBytes'] as int?) ?? 0;
+          if (cur > len && len > 0) {
+            f['downloadedBytes'] = len;
+          }
+        }
         // FIX-AUDIT-5: Reconcile — force the per-file sum to match the
         // authoritative overall downloadedBytes from libtorrent.
         final estimatedSum = resolvedFiles.fold<int>(
@@ -2091,8 +2122,8 @@ class DownloadEngine {
             savedEtag = decoded['etag'] as String?;
             savedLastModified = decoded['lastModified'] as String?;
 
-            const sizeTolerance =
-                2048; // 2 KB tolerance for CDN Content-Length jitter
+            // FIX-H-07: Percentage-based tolerance (0.1%, min 2KB, max 10MB)
+            final sizeTolerance = (totalSize * 0.001).clamp(2048, 10 * 1024 * 1024);
             final isSizeWithinTolerance =
                 (savedTotalSize - totalSize).abs() <= sizeTolerance;
 
@@ -2112,6 +2143,11 @@ class DownloadEngine {
                 debugPrint('[DMX-FIX-01] Loaded chunkProgress from .dmxstate: $chunkProgress');
               } else if (savedThreadCount > 0 &&
                   progressList.length == savedThreadCount) {
+                // FIX-H-03: Log thread count override for visibility
+                debugPrint(
+                  '[DMX] H-03: Resuming with stored threadCount=$savedThreadCount '
+                  '(user requested $threadCount). Chunks preserved.',
+                );
                 debugPrint(
                   '[DownloadEngine] Resuming state with saved thread count '
                   '$savedThreadCount (requested thread count was $threadCount)',
@@ -2536,7 +2572,9 @@ class DownloadEngine {
         }
       }
 
-      cancelToken.whenCancel.then((_) {
+      cancelToken.whenCancel.then((_) async {
+        // FIX-H-01: Immediate state flush on pause
+        try { if (!writerClosed) await saveState(); } catch (_) {}
         for (final ct in chunkCancelTokens) {
           if (!ct.isCancelled) ct.cancel();
         }
@@ -3775,6 +3813,18 @@ class DownloadEngine {
             remaining = 0;
           }
         }
+      }
+    }
+
+    // FIX-T-07: Reconcile per-file sum to match overall downloadedBytes
+    final estimatedSum = files.fold<int>(
+        0, (s, f) => s + ((f['downloadedBytes'] as int?) ?? 0));
+    if (estimatedSum > totalDownloaded && estimatedSum > 0) {
+      final scale = totalDownloaded / estimatedSum;
+      for (final f in files) {
+        final len = (f['length'] as num?)?.toInt() ?? 0;
+        final cur = (f['downloadedBytes'] as int?) ?? 0;
+        f['downloadedBytes'] = (cur * scale).round().clamp(0, len);
       }
     }
   }

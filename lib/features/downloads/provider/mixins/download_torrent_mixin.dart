@@ -45,9 +45,24 @@ mixin DownloadTorrentMixin {
     if (providerTorrentIds.containsKey(task.id)) {
       final existingId = providerTorrentIds[task.id]!;
       if (TorrentService.isTorrentAlive(existingId)) {
-        // Live handle found — reuse it.
-        TorrentService.resumeTorrent(existingId);
-        return;
+        // FIX-02: check for error state before resuming
+        final latestStats = providerLatestTorrentStats[existingId];
+        if (latestStats != null &&
+            latestStats.stateLabel.toLowerCase().contains('error')) {
+          debugPrint(
+            '[DMX] Torrent $existingId is in error state. '
+            'Removing and re-adding for clean retry.',
+          );
+          try {
+            TorrentService.pauseTorrent(existingId);
+            TorrentService.removeTorrent(existingId, deleteFiles: false);
+          } catch (_) {}
+          providerTorrentIds.remove(task.id);
+          // Fall through to the add-new-handle path below
+        } else {
+          TorrentService.resumeTorrent(existingId);
+          return;
+        }
       }
       // Stale map entry: the native session no longer knows this ID.
       // Remove it so the add below creates a fresh handle cleanly.

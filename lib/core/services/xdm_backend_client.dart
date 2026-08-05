@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../utils/constants.dart';
 import '../../features/settings/provider/settings_provider.dart';
+import 'backend_health_service.dart';
 import 'logging_service.dart';
 import 'xdm_backend_exceptions.dart';
 
@@ -83,34 +84,25 @@ class XdmBackendClient {
   }
 
   /// Updates the backend configuration from SettingsProvider
+  // FIX-1: Wire BackendHealthService activeBaseUrl & timeouts in _updateDioFromSettings
   void _updateDioFromSettings() {
     String baseUrl;
     try {
       final settings = SettingsProvider.instance;
       baseUrl = settings.backendUrl.isNotEmpty
           ? settings.backendUrl
-          : kDefaultBackendBaseUrl;
+          : BackendHealthService.instance.activeBaseUrl;
     } catch (e) {
-      baseUrl = kDefaultBackendBaseUrl;
-      _log.fine('Settings not available yet, using default base URL: $e');
+      baseUrl = BackendHealthService.instance.activeBaseUrl;
+      _log.fine('Settings not available, using health-service URL: $e');
     }
-    // Do NOT force-close the old _dio instance — that would cancel any
-    // in-flight API requests. Simply replace the reference and let the old
-    // instance be garbage-collected after its current requests finish.
-
-    // Build headers without the key; the key is injected per-request via
-    // [_buildHeaders] so that a [BackendUnauthorizedException] is thrown at
-    // the call site rather than silently at construction time.
-    _dio = Dio(
-      BaseOptions(
-        baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        // Backend extraction can take up to 45 s; give a comfortable margin.
-        receiveTimeout: const Duration(seconds: 60),
-        headers: const {'Accept': 'application/json'},
-      ),
-    );
-
+    // Do NOT force-close old _dio
+    _dio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 25),
+      receiveTimeout: const Duration(seconds: 60),
+      headers: const {'Accept': 'application/json'},
+    ));
     _log.fine('Configured with backend URL: $baseUrl');
   }
 
@@ -128,11 +120,10 @@ class XdmBackendClient {
   /// Get the current backend URL for UI display
   static String get currentBackendUrl => SettingsProvider.instance.backendUrl;
 
-  /// Wraps a backend HTTP future with a hard 30s timeout so a hung backend
-  /// can never block the caller forever. Throws [XdmBackendTimeoutException].
+  // FIX-2: Increase timeout from 30s to 45s for Cloud Run cold starts
   Future<T> _withTimeout<T>(
     Future<T> future, {
-    Duration timeout = const Duration(seconds: 30),
+    Duration timeout = const Duration(seconds: 45),
   }) async {
     try {
       return await future.timeout(timeout);
@@ -152,7 +143,9 @@ class XdmBackendClient {
           options: Options(headers: authHeader),
         ),
       );
-      return response.data ?? {};
+      final data = response.data ?? {};
+      BackendHealthService.instance.markHealthy(_dio.options.baseUrl);
+      return data;
     } catch (e) {
       throw _handleDioError(e);
     }
@@ -173,7 +166,11 @@ class XdmBackendClient {
   /// [cookies] — Netscape-format or key=value cookie string forwarded as
   ///   `X-YouTube-Cookies`. The backend may also pick from its own cookie pool
   ///   if none are supplied.
-  Future<Map<String, dynamic>> getStreams(String url, {String? cookies}) async {
+  Future<Map<String, dynamic>> getStreams(
+    String url, {
+    String? cookies,
+    String? oauthToken,
+  }) async {
     final cached = _streamsCache[url];
     if (cached != null) {
       if (!cached.isExpired) {
@@ -189,34 +186,68 @@ class XdmBackendClient {
           'X-Cookies': base64Encode(utf8.encode(cookies)),
           'X-YouTube-Cookies': base64Encode(utf8.encode(cookies)),
         },
+        // FIX-08: Forward OAuth token if available
+        if (oauthToken != null && oauthToken.isNotEmpty)
+          'X-YouTube-OAuth': oauthToken,
       });
 
-      try {
-        final response = await _withTimeout(
-          _dio.get<Map<String, dynamic>>(
-            '/api/streams',
-            queryParameters: {'url': url},
-            options: Options(headers: headers),
-          ),
-        );
-        final data = response.data ?? {};
+      // FIX-1: Try each healthy backend in priority order
+      final backends = BackendHealthService.instance.activeBackends;
+      Object? firstError;
+      Object? lastError;
 
-        _streamsCache.removeWhere((key, val) => val.isExpired);
-        if (_streamsCache.length >= 50) {
-          final oldestKey = _streamsCache.entries
-              .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
-              .key;
-          _streamsCache.remove(oldestKey);
+      for (final backend in backends) {
+        try {
+          final dio = Dio(BaseOptions(
+            baseUrl: backend.baseUrl,
+            connectTimeout: const Duration(seconds: 25),
+            receiveTimeout: const Duration(seconds: 60),
+            headers: const {'Accept': 'application/json'},
+          ));
+          final response = await _withTimeout(
+            dio.get<Map<String, dynamic>>(
+              '/api/streams',
+              queryParameters: {'url': url},
+              options: Options(headers: headers),
+            ),
+          );
+          final data = response.data ?? {};
+          BackendHealthService.instance.markHealthy(backend.baseUrl);
+
+          _streamsCache.removeWhere((key, val) => val.isExpired);
+          if (_streamsCache.length >= 50) {
+            final oldestKey = _streamsCache.entries
+                .reduce((a, b) => a.value.expiry.isBefore(b.value.expiry) ? a : b)
+                .key;
+            _streamsCache.remove(oldestKey);
+          }
+
+          _streamsCache[url] = _StreamsCacheEntry(
+            data: data,
+            expiry: DateTime.now().add(const Duration(minutes: 10)),
+          );
+          return data;
+        } catch (e) {
+          firstError ??= e;
+          lastError = e;
+          if (e is DioException && e.response?.statusCode != null) {
+            final statusCode = e.response!.statusCode!;
+            if (statusCode >= 400 && statusCode < 500) {
+              BackendHealthService.instance.markHealthy(backend.baseUrl);
+              if (statusCode == 400 || statusCode == 401 || statusCode == 404 || statusCode == 451) {
+                throw _handleDioError(e);
+              }
+            } else {
+              BackendHealthService.instance.markUnhealthy(backend.baseUrl);
+            }
+          } else {
+            BackendHealthService.instance.markUnhealthy(backend.baseUrl);
+          }
+          _log.warning('Backend ${backend.baseUrl} failed: $e');
+          continue;
         }
-
-        _streamsCache[url] = _StreamsCacheEntry(
-          data: data,
-          expiry: DateTime.now().add(const Duration(minutes: 10)),
-        );
-        return data;
-      } catch (e) {
-        throw _handleDioError(e);
       }
+      throw _handleDioError(firstError ?? lastError ?? Exception('All backends failed'));
     });
   }
 
@@ -237,49 +268,116 @@ class XdmBackendClient {
         },
       });
 
-      try {
-        final response = await _withTimeout(
-          _dio.get<Map<String, dynamic>>(
-            '/api/playlist',
-            queryParameters: {
-              'url': url,
-              if (pageToken != null) 'pageToken': pageToken.toString(),
-              // ignore: use_null_aware_elements — key is non-null; if-guard is correct here
-              if (pageSize != null) 'pageSize': pageSize,
-            },
-            options: Options(headers: headers),
-          ),
-        );
-        return response.data ?? {};
-      } catch (e) {
-        throw _handleDioError(e);
+      // FIX-1: Try each healthy backend in priority order
+      final backends = BackendHealthService.instance.activeBackends;
+      Object? firstError;
+      Object? lastError;
+
+      for (final backend in backends) {
+        try {
+          final dio = Dio(BaseOptions(
+            baseUrl: backend.baseUrl,
+            connectTimeout: const Duration(seconds: 25),
+            receiveTimeout: const Duration(seconds: 60),
+            headers: const {'Accept': 'application/json'},
+          ));
+          final response = await _withTimeout(
+            dio.get<Map<String, dynamic>>(
+              '/api/playlist',
+              queryParameters: {
+                'url': url,
+                if (pageToken != null) 'pageToken': pageToken.toString(),
+                // ignore: use_null_aware_elements — key is non-null; if-guard is correct here
+                if (pageSize != null) 'pageSize': pageSize,
+              },
+              options: Options(headers: headers),
+            ),
+          );
+          final data = response.data ?? {};
+          BackendHealthService.instance.markHealthy(backend.baseUrl);
+          return data;
+        } catch (e) {
+          firstError ??= e;
+          lastError = e;
+          if (e is DioException && e.response?.statusCode != null) {
+            final statusCode = e.response!.statusCode!;
+            if (statusCode >= 400 && statusCode < 500) {
+              BackendHealthService.instance.markHealthy(backend.baseUrl);
+              if (statusCode == 400 || statusCode == 401 || statusCode == 404 || statusCode == 451) {
+                throw _handleDioError(e);
+              }
+            } else {
+              BackendHealthService.instance.markUnhealthy(backend.baseUrl);
+            }
+          } else {
+            BackendHealthService.instance.markUnhealthy(backend.baseUrl);
+          }
+          _log.warning('Backend ${backend.baseUrl} failed: $e');
+          continue;
+        }
       }
+      throw _handleDioError(firstError ?? lastError ?? Exception('All backends failed'));
     });
   }
 
   Future<List<Map<String, dynamic>>> search(String q) async {
     return _rateLimiter.call('search', () async {
-      try {
-        final response = await _withTimeout(
-          _dio.get<Map<String, dynamic>>(
-            '/api/search',
-            queryParameters: {'q': q},
-            options: Options(headers: _buildHeaders()),
-          ),
-        );
-        final data = response.data ?? {};
-        final results = data['results'] as List?;
-        if (results == null) return [];
-        return results.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      } catch (e) {
-        throw _handleDioError(e);
+      final headers = _buildHeaders();
+      // FIX-1: Try each healthy backend in priority order
+      final backends = BackendHealthService.instance.activeBackends;
+      Object? firstError;
+      Object? lastError;
+
+      for (final backend in backends) {
+        try {
+          final dio = Dio(BaseOptions(
+            baseUrl: backend.baseUrl,
+            connectTimeout: const Duration(seconds: 25),
+            receiveTimeout: const Duration(seconds: 60),
+            headers: const {'Accept': 'application/json'},
+          ));
+          final response = await _withTimeout(
+            dio.get<Map<String, dynamic>>(
+              '/api/search',
+              queryParameters: {'q': q},
+              options: Options(headers: headers),
+            ),
+          );
+          final data = response.data ?? {};
+          BackendHealthService.instance.markHealthy(backend.baseUrl);
+          final results = data['results'] as List?;
+          if (results == null) return [];
+          return results.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        } catch (e) {
+          firstError ??= e;
+          lastError = e;
+          if (e is DioException && e.response?.statusCode != null) {
+            final statusCode = e.response!.statusCode!;
+            if (statusCode >= 400 && statusCode < 500) {
+              BackendHealthService.instance.markHealthy(backend.baseUrl);
+              if (statusCode == 400 || statusCode == 401 || statusCode == 404 || statusCode == 451) {
+                throw _handleDioError(e);
+              }
+            } else {
+              BackendHealthService.instance.markUnhealthy(backend.baseUrl);
+            }
+          } else {
+            BackendHealthService.instance.markUnhealthy(backend.baseUrl);
+          }
+          _log.warning('Backend ${backend.baseUrl} failed: $e');
+          continue;
+        }
       }
+      throw _handleDioError(firstError ?? lastError ?? Exception('All backends failed'));
     });
   }
 
   BackendException _handleDioError(Object error) {
     if (error is BackendException) return error;
     if (error is TimeoutException) {
+      final currentUrl = _dio.options.baseUrl;
+      BackendHealthService.instance.markUnhealthy(currentUrl);
+      _updateDioFromSettings();
       return const XdmBackendTimeoutException('Request timed out.');
     }
 
@@ -319,6 +417,10 @@ class XdmBackendClient {
           error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.connectionError ||
           (statusCode != null && statusCode >= 500)) {
+        final currentUrl = _dio.options.baseUrl;
+        BackendHealthService.instance.markUnhealthy(currentUrl);
+        _updateDioFromSettings();
+
         final rawMsg = error.message ?? '';
         final isRawSocketError = rawMsg.contains('Connection closed') ||
             rawMsg.contains('Connection errored') ||

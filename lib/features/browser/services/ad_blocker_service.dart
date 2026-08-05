@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'adblock_filter_updater.dart';
 import 'custom_adblock_store.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../../settings/provider/settings_provider.dart';
 
 /// Centralised ad-blocking engine for the XDM browser.
 ///
@@ -228,6 +229,12 @@ class AdBlockerService {
   bool shouldBlockUrl(String url) {
     if (!_enabled) return false;
     final lower = url.toLowerCase();
+
+    // Never block backend requests
+    final isBackend = lower.contains('xdm-backend') ||
+        (SettingsProvider.instance.backendUrl.isNotEmpty &&
+            lower.contains(Uri.tryParse(SettingsProvider.instance.backendUrl)?.host ?? ''));
+    if (isBackend) return false;
 
     // Never block reCAPTCHA, Google authentication, gstatic, or core JS frameworks
     if (lower.contains('recaptcha') ||
