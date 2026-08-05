@@ -76,6 +76,7 @@ const Map<String, String> deTranslations = {
   'onboarding_setup_mode': 'OBERFLÄCHE',
   'onboarding_theme_light': 'Hell',
   'onboarding_theme_dark': 'Dunkel',
+  'onboarding_theme_amoled': 'AMOLED',
   'onboarding_theme_system': 'System',
   'onboarding_mode_modern': 'Modern',
   'onboarding_mode_classic': 'Klassisch',

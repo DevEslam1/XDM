@@ -76,6 +76,7 @@ const Map<String, String> frTranslations = {
   'onboarding_setup_mode': 'INTERFACE',
   'onboarding_theme_light': 'Clair',
   'onboarding_theme_dark': 'Sombre',
+  'onboarding_theme_amoled': 'AMOLED',
   'onboarding_theme_system': 'Système',
   'onboarding_mode_modern': 'Moderne',
   'onboarding_mode_classic': 'Classique',

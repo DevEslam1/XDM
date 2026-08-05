@@ -227,7 +227,11 @@ class DownloadJournal {
       return null;
     }
 
-    // FIX(13): Rescale journal if thread count does not match expectedThreadCount
+    // FIX(13) + FIX-D3: When the journal was written with a different thread
+    // count than the current download, exact per-chunk boundaries no longer
+    // align. Even redistribution is the safest fallback — the download engine
+    // will re-validate each chunk via spot-check on resume. No data is lost;
+    // only the per-chunk granularity is approximate.
     if (lastCheckpoint != null &&
         expectedThreadCount != null &&
         expectedThreadCount > 0 &&

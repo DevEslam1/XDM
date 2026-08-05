@@ -399,7 +399,8 @@ class DmxApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             navigatorKey: DmxApp.navigatorKey,
             theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
+            darkTheme:
+                settings.isAmoledMode ? AppTheme.amoledTheme : AppTheme.darkTheme,
             themeMode: settings.currentThemeMode,
             locale: Locale(settings.languageCode),
             home: settings.showOnboarding
@@ -416,16 +417,9 @@ class DmxApp extends StatelessWidget {
             builder: (context, child) {
               return XdmTextScaler(
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: SystemUiOverlayStyle(
-                    statusBarColor: Colors.transparent,
-                    statusBarIconBrightness:
-                        isDark ? Brightness.light : Brightness.dark,
-                    statusBarBrightness:
-                        isDark ? Brightness.dark : Brightness.light,
-                    systemNavigationBarColor:
-                        isDark ? AppTheme.background : AppTheme.lightBackground,
-                    systemNavigationBarIconBrightness:
-                        isDark ? Brightness.light : Brightness.dark,
+                  value: AppTheme.statusBar(
+                    isDark,
+                    isAmoled: settings.isAmoledMode,
                   ),
                   child: child!,
                 ),

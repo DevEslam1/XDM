@@ -127,16 +127,25 @@ class _SettingsScreenState extends State<SettingsScreen>
         categoryTitle: isRtl ? 'المظهر والواجهة' : 'Appearance & UI',
         categoryIndex: 0,
         settingTitle: isRtl ? 'وضع المظهر' : 'Theme Mode',
-        subtitle: isRtl ? 'فاتح / داكن / تتبع النظام' : 'Light / Dark / Follow System',
-        keywords: const ['theme', 'dark', 'light', 'mode', 'system', 'color'],
+        subtitle: isRtl
+            ? 'فاتح / داكن / أسود (AMOLED) / تتبع النظام'
+            : 'Light / Dark / AMOLED / Follow System',
+        keywords: const ['theme', 'dark', 'light', 'amoled', 'black', 'mode', 'system', 'color'],
         accentColor: amber,
         builder: (ctx) => DropdownTile<String>(
           accentColor: amber,
           title: isRtl ? 'وضع المظهر' : 'Theme Mode',
-          subtitle: isRtl ? 'فاتح / داكن / تتبع النظام' : 'Light / Dark / Follow System',
+          subtitle: isRtl
+              ? 'فاتح / داكن / أسود (AMOLED) / تتبع النظام'
+              : 'Light / Dark / AMOLED / Follow System',
           value: settings.themeMode,
-          items: const ['light', 'dark', 'system'],
-          itemLabels: const {'light': 'LIGHT', 'dark': 'DARK', 'system': 'SYSTEM'},
+          items: const ['light', 'dark', 'amoled', 'system'],
+          itemLabels: const {
+            'light': 'LIGHT',
+            'dark': 'DARK',
+            'amoled': 'AMOLED',
+            'system': 'SYSTEM',
+          },
           onChanged: (val) => val != null ? settings.setThemeMode(val) : null,
         ),
       ),
@@ -385,10 +394,16 @@ class _SettingsScreenState extends State<SettingsScreen>
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           backgroundColor: classicUi
-              ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-              : Colors.transparent,
+              ? (isDark
+                  ? (settings.isAmoledMode
+                      ? AppTheme.amoledBackground
+                      : AppTheme.surface)
+                  : AppTheme.lightSurface)
+              : (settings.isAmoledMode
+                  ? AppTheme.amoledBackground
+                  : Colors.transparent),
           elevation: 0,
-          flexibleSpace: classicUi
+          flexibleSpace: (classicUi || settings.isAmoledMode)
               ? null
               : ClipRect(
                   child: DmxBackdropFilter(

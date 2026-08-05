@@ -164,8 +164,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
         return _isDarkMode;
       }
     }
-    return themeMode == 'dark';
+    return themeMode == 'dark' || themeMode == 'amoled';
   }
+
+  bool get isAmoledMode => themeMode == 'amoled';
 
   set isDarkMode(bool value) {
     _isDarkMode = value;
@@ -375,7 +377,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     languageCode = _prefs.getString(_languageCodeKey) ?? languageCode;
     themeMode = _prefs.getString(_themeModeKey) ?? 'system';
     // Validate themeMode value
-    if (!['light', 'dark', 'system'].contains(themeMode)) {
+    if (!['light', 'dark', 'amoled', 'system'].contains(themeMode)) {
       themeMode = 'system';
     }
     _isDarkMode = _prefs.getBool(_isDarkModeKey) ?? isDarkMode;
@@ -904,6 +906,7 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       case 'light':
         return ThemeMode.light;
       case 'dark':
+      case 'amoled':
         return ThemeMode.dark;
       case 'system':
       default:
@@ -942,9 +945,10 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setThemeMode(String value) async {
+    if (!['light', 'dark', 'amoled', 'system'].contains(value)) return;
     themeMode = value;
     await _prefs.setString(_themeModeKey, value);
-    final resolved = value == 'dark'
+    final resolved = (value == 'dark' || value == 'amoled')
         ? true
         : value == 'light'
             ? false

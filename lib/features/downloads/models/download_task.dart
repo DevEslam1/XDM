@@ -162,10 +162,9 @@ class DownloadTask {
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
       final vSize = fileSize > 0 ? fileSize : 0;
-      if (vSize == 0 && audioSize > 0) {
-        // Video size unknown — return audioSize but flag as partial via isTotalSizePartial
-        return audioSize;
-      }
+      // FIX-D1: When video size is unknown, return 0 so the UI shows
+      // indeterminate progress instead of a misleading percentage.
+      if (vSize == 0) return 0;
       return vSize + audioSize;
     }
     return resolvedFileSize;
@@ -173,7 +172,9 @@ class DownloadTask {
 
   /// Combined downloaded bytes including audio stream bytes for YouTube downloads.
   int get combinedDownloadedBytes {
-    final vDownloaded = downloadedBytes < 0 ? 0 : downloadedBytes;
+    // FIX-D1: When video fileSize is unknown, exclude video bytes from
+    // the combined total to prevent progress from exceeding 100%.
+    final vDownloaded = (fileSize <= 0) ? 0 : (downloadedBytes < 0 ? 0 : downloadedBytes);
     if (hasMergedAudio && audioSize > 0) {
       final aDownloaded =
           (audioProgress.clamp(0.0, 1.0) * audioSize).round().clamp(0, audioSize);

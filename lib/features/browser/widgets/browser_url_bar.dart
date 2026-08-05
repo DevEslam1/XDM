@@ -48,14 +48,21 @@ class BrowserUrlBar extends StatelessWidget {
     final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
     final muted = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
 
+    final isAmoled = settings.isAmoledMode;
+    final navBg = isDark
+        ? (isAmoled ? AppTheme.amoledBackground : AppTheme.surface)
+        : AppTheme.lightSurface;
+
     return Container(
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
-          alpha: 0.95,
+        color: navBg.withValues(
+          alpha: isAmoled ? 1.0 : 0.95,
         ),
         border: Border(
           bottom: BorderSide(
-            color: isDark ? AppTheme.border : AppTheme.lightBorder,
+            color: isDark
+                ? (isAmoled ? AppTheme.amoledBorder : AppTheme.border)
+                : AppTheme.lightBorder,
             width: 1,
           ),
         ),

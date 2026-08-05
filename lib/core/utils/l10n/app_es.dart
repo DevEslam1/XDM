@@ -76,6 +76,7 @@ const Map<String, String> esTranslations = {
   'onboarding_setup_mode': 'INTERFAZ',
   'onboarding_theme_light': 'Claro',
   'onboarding_theme_dark': 'Oscuro',
+  'onboarding_theme_amoled': 'AMOLED',
   'onboarding_theme_system': 'Sistema',
   'onboarding_mode_modern': 'Moderno',
   'onboarding_mode_classic': 'Clásico',

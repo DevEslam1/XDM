@@ -79,6 +79,7 @@ const Map<String, String> arTranslations = {
   'onboarding_setup_mode': 'الواجهة',
   'onboarding_theme_light': 'فاتح',
   'onboarding_theme_dark': 'داكن',
+  'onboarding_theme_amoled': 'أسود (AMOLED)',
   'onboarding_theme_system': 'تلقائي',
   'onboarding_mode_modern': 'حديث',
   'onboarding_mode_classic': 'كلاسيكي',

@@ -15,6 +15,16 @@ class AppTheme {
   static const Color cardBg = Color(0xFF1B202B);
   static const Color overlayScrim = Color(0xB3070910);
 
+  // ── Surfaces (AMOLED dark) ──
+  static const Color amoledBackground = Color(0xFF000000);
+  static const Color amoledBgSunken = Color(0xFF000000);
+  static const Color amoledSurface = Color(0xFF08090D);
+  static const Color amoledSurfaceRaised = Color(0xFF10121A);
+  static const Color amoledCardBg = Color(0xFF0D0F16);
+  static const Color amoledOverlayScrim = Color(0xCC000000);
+  static const Color amoledBorder = Color(0xFF1E2230);
+  static const Color amoledBorderSubtle = Color(0xFF141722);
+
   // ── Surfaces (light) ──
   static const Color lightBackground = Color(0xFFF3F5F9);
   static const Color lightBgSunken = Color(0xFFE9EDF4);
@@ -139,8 +149,12 @@ class AppTheme {
       isDark ? dark : light;
 
   /// Panel background color used for inner form fields, well inputs, and option panels.
-  static Color panelBg(bool isDark) =>
-      isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
+  static Color panelBg(bool isDark, {bool isAmoled = false}) =>
+      isDark ? (isAmoled ? amoledBgSunken : const Color(0xFF0F0F16)) : const Color(0xFFF1F5F9);
+
+  /// Background color considering theme mode and amoled flag.
+  static Color getBackground(bool isDark, {bool isAmoled = false}) =>
+      isDark ? (isAmoled ? amoledBackground : background) : lightBackground;
 
   /// Primary channel accent for the current mode.
   static Color accent(bool isDark) => isDark ? neonBlue : lightNeonBlue;
@@ -376,6 +390,7 @@ class AppTheme {
   // ── Decoration helpers ──
   static BoxDecoration panel({
     required bool isDark,
+    bool isAmoled = false,
     double radius = 16,
     Color? accentColor,
     double accentAlpha = 0.28,
@@ -383,10 +398,12 @@ class AppTheme {
   }) {
     final borderClr = accentColor != null
         ? accentColor.withValues(alpha: accentAlpha)
-        : (isDark ? border : lightBorder);
+        : (isDark ? (isAmoled ? amoledBorder : border) : lightBorder);
     return BoxDecoration(
       color: isDark
-          ? (elevated ? surfaceRaised : surface)
+          ? (isAmoled
+              ? (elevated ? amoledSurfaceRaised : amoledSurface)
+              : (elevated ? surfaceRaised : surface))
           : (elevated ? lightSurfaceRaised : lightSurface),
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
@@ -405,12 +422,16 @@ class AppTheme {
     );
   }
 
-  static BoxDecoration well({required bool isDark, double radius = 12}) {
+  static BoxDecoration well({
+    required bool isDark,
+    bool isAmoled = false,
+    double radius = 12,
+  }) {
     return BoxDecoration(
-      color: isDark ? bgSunken : lightBgSunken,
+      color: isDark ? (isAmoled ? amoledBgSunken : bgSunken) : lightBgSunken,
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(
-        color: isDark ? borderSubtle : lightBorderSubtle,
+        color: isDark ? (isAmoled ? amoledBorderSubtle : borderSubtle) : lightBorderSubtle,
         width: 0.8,
       ),
     );
@@ -530,12 +551,14 @@ class AppTheme {
     );
   }
 
-  static SystemUiOverlayStyle statusBar(bool isDark) {
+  static SystemUiOverlayStyle statusBar(bool isDark, {bool isAmoled = false}) {
     return SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor: isDark ? background : lightBackground,
+      systemNavigationBarColor: isDark
+          ? (isAmoled ? amoledBackground : background)
+          : lightBackground,
       systemNavigationBarIconBrightness:
           isDark ? Brightness.light : Brightness.dark,
     );
@@ -545,19 +568,36 @@ class AppTheme {
   static ThemeData? _cachedDarkTheme;
   static ThemeData get darkTheme =>
       _cachedDarkTheme ??= _buildTheme(isDark: true);
+  static ThemeData? _cachedAmoledTheme;
+  static ThemeData get amoledTheme =>
+      _cachedAmoledTheme ??= _buildTheme(isDark: true, isAmoled: true);
   static ThemeData? _cachedLightTheme;
   static ThemeData get lightTheme =>
       _cachedLightTheme ??= _buildTheme(isDark: false);
 
-  static ThemeData _buildTheme({required bool isDark}) {
-    final bg = isDark ? background : lightBackground;
-    final surf = isDark ? surface : lightSurface;
-    final card = isDark ? cardBg : lightCardBg;
-    final bdr = isDark ? border : lightBorder;
+  static ThemeData _buildTheme({required bool isDark, bool isAmoled = false}) {
+    final bg = isDark
+        ? (isAmoled ? amoledBackground : background)
+        : lightBackground;
+    final surf = isDark
+        ? (isAmoled ? amoledSurface : surface)
+        : lightSurface;
+    final card = isDark
+        ? (isAmoled ? amoledCardBg : cardBg)
+        : lightCardBg;
+    final bdr = isDark
+        ? (isAmoled ? amoledBorder : border)
+        : lightBorder;
     final primary = isDark ? neonBlue : lightNeonBlue;
     final secondary = isDark ? neonViolet : lightNeonViolet;
     final error = isDark ? neonRed : lightNeonRed;
     final muted = isDark ? textMuted : lightTextMuted;
+    final bgSunkenColor = isDark
+        ? (isAmoled ? amoledBgSunken : bgSunken)
+        : lightBgSunken;
+    final surfaceRaisedColor = isDark
+        ? (isAmoled ? amoledSurfaceRaised : surfaceRaised)
+        : lightSurfaceRaised;
 
     return ThemeData(
       useMaterial3: true,
@@ -605,7 +645,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark ? bgSunken : lightBgSunken,
+        fillColor: bgSunkenColor,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
@@ -678,7 +718,7 @@ class AppTheme {
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: isDark ? surfaceRaised : lightSurfaceRaised,
+        backgroundColor: surfaceRaisedColor,
         side: BorderSide(color: bdr, width: 0.8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
         labelStyle: TextStyle(

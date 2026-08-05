@@ -199,9 +199,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     // PERF: Use Selector so this shell only rebuilds when the navigation
     // state actually changes — not on every download-progress tick.
     return Selector<SettingsProvider,
-        ({bool isDark, bool classicUi, bool vibration})>(
-      selector: (_, s) =>
-          (isDark: s.isDarkMode, classicUi: s.classicUi, vibration: s.vibration),
+        ({bool isDark, bool isAmoled, bool classicUi, bool vibration})>(
+      selector: (_, s) => (
+        isDark: s.isDarkMode,
+        isAmoled: s.isAmoledMode,
+        classicUi: s.classicUi,
+        vibration: s.vibration,
+      ),
       builder: (context, settingsTuple, _) {
         final isDark = settingsTuple.isDark;
         final isRtl = L10n.isRtl(context);
@@ -225,8 +229,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             );
 
             return Scaffold(
-              backgroundColor:
-                  isDark ? AppTheme.background : AppTheme.lightBackground,
+              backgroundColor: AppTheme.getBackground(
+                isDark,
+                isAmoled: settingsTuple.isAmoled,
+              ),
               extendBody: true,
               body: screenType == ScreenType.desktop
                   ? Row(
@@ -309,7 +315,7 @@ class _FadeIndexedStackState extends State<_FadeIndexedStack>
 }
 
 class _PhoneBottomNavBar extends StatelessWidget {
-  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
+  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
   final ({int activeTabIndex, bool isNavbarVisible}) navState;
   final bool isDark;
   final bool isRtl;
@@ -324,6 +330,12 @@ class _PhoneBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentIndex = navState.activeTabIndex;
+    final navBg = isDark
+        ? (settingsTuple.isAmoled
+            ? AppTheme.amoledBackground
+            : AppTheme.surface)
+        : AppTheme.lightSurface;
+
     return AnimatedSlide(
       offset: currentIndex != 1 ? Offset.zero : const Offset(0, 1.0),
       duration: AppTheme.motionBase,
@@ -336,17 +348,22 @@ class _PhoneBottomNavBar extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               color: settingsTuple.classicUi
-                  ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                  : (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                      .withValues(alpha: 0.7),
+                  ? navBg
+                  : navBg.withValues(alpha: settingsTuple.isAmoled ? 1.0 : 0.7),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(24)),
               border: Border(
                 top: BorderSide(
                   color: settingsTuple.classicUi
-                      ? (isDark ? AppTheme.border : AppTheme.lightBorder)
+                      ? (isDark
+                          ? (settingsTuple.isAmoled
+                              ? AppTheme.amoledBorder
+                              : AppTheme.border)
+                          : AppTheme.lightBorder)
                       : (isDark
-                          ? AppTheme.glassBorder
+                          ? (settingsTuple.isAmoled
+                              ? AppTheme.amoledBorder
+                              : AppTheme.glassBorder)
                           : AppTheme.lightGlassBorder),
                   width: settingsTuple.classicUi ? 1.0 : 0.6,
                 ),
@@ -401,7 +418,7 @@ class _PhoneBottomNavBar extends StatelessWidget {
 }
 
 class _TabletFloatingNavBar extends StatelessWidget {
-  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
+  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
   final ({int activeTabIndex, bool isNavbarVisible}) navState;
   final bool isDark;
   final bool isRtl;
@@ -416,6 +433,12 @@ class _TabletFloatingNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentIndex = navState.activeTabIndex;
+    final navBg = isDark
+        ? (settingsTuple.isAmoled
+            ? AppTheme.amoledBackground
+            : AppTheme.surface)
+        : AppTheme.lightSurface;
+
     return AnimatedSlide(
       offset: currentIndex != 1 ? Offset.zero : const Offset(0, 1.8),
       duration: AppTheme.motionSlow,
@@ -430,20 +453,27 @@ class _TabletFloatingNavBar extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 460),
             decoration: settingsTuple.classicUi
                 ? BoxDecoration(
-                    color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+                    color: navBg,
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
-                      color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                      color: isDark
+                          ? (settingsTuple.isAmoled
+                              ? AppTheme.amoledBorder
+                              : AppTheme.border)
+                          : AppTheme.lightBorder,
                       width: 1.0,
                     ),
                   )
                 : BoxDecoration(
-                    color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                        .withValues(alpha: 0.7),
+                    color: navBg.withValues(
+                      alpha: settingsTuple.isAmoled ? 1.0 : 0.7,
+                    ),
                     borderRadius: BorderRadius.circular(30),
                     border: Border.all(
                       color: isDark
-                          ? AppTheme.glassBorder
+                          ? (settingsTuple.isAmoled
+                              ? AppTheme.amoledBorder
+                              : AppTheme.glassBorder)
                           : AppTheme.lightGlassBorder,
                       width: 0.8,
                     ),
@@ -508,7 +538,7 @@ class _TabletFloatingNavBar extends StatelessWidget {
 }
 
 class _NavigationRailWidget extends StatelessWidget {
-  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
+  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
   final bool isDark;
   final bool isRtl;
   final int currentIndex;
@@ -526,6 +556,11 @@ class _NavigationRailWidget extends StatelessWidget {
     final activeColor = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final inactiveColor =
         isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
+    final navBg = isDark
+        ? (settingsTuple.isAmoled
+            ? AppTheme.amoledBackground
+            : AppTheme.surface)
+        : AppTheme.lightSurface;
 
     return DmxBackdropFilter(
       sigmaX: 15,
@@ -533,20 +568,28 @@ class _NavigationRailWidget extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: settingsTuple.classicUi
-              ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-              : (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
-                  alpha: 0.85,
+              ? navBg
+              : navBg.withValues(
+                  alpha: settingsTuple.isAmoled ? 1.0 : 0.85,
                 ),
           border: isRtl
               ? Border(
                   left: BorderSide(
-                    color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                    color: isDark
+                        ? (settingsTuple.isAmoled
+                            ? AppTheme.amoledBorder
+                            : AppTheme.border)
+                        : AppTheme.lightBorder,
                     width: 1.0,
                   ),
                 )
               : Border(
                   right: BorderSide(
-                    color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                    color: isDark
+                        ? (settingsTuple.isAmoled
+                            ? AppTheme.amoledBorder
+                            : AppTheme.border)
+                        : AppTheme.lightBorder,
                     width: 1.0,
                   ),
                 ),
@@ -687,7 +730,7 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final IconData activeIcon;
   final String label;
-  final ({bool isDark, bool classicUi, bool vibration}) settingsTuple;
+  final ({bool isDark, bool isAmoled, bool classicUi, bool vibration}) settingsTuple;
   final bool isDark;
   final int currentIndex;
 

@@ -45,5 +45,13 @@ void main() {
 
       expect(find.byType(SettingsScreen), findsOneWidget);
     });
+    testWidgets('supports setting theme mode to amoled', (tester) async {
+      final settings = createMockSettingsProvider();
+      await settings.setThemeMode('amoled');
+
+      expect(settings.themeMode, equals('amoled'));
+      expect(settings.isDarkMode, isTrue);
+      expect(settings.isAmoledMode, isTrue);
+    });
   });
 }

@@ -416,15 +416,22 @@ mixin DownloadTorrentMixin {
     filteredTasksDirty = true;
     await providerDatabaseService.saveTask(updated);
 
-    // Propagate priority changes to the live torrent engine.
+    // Propagate priority changes to the live torrent engine safely.
     final torrentId = providerTorrentIds[taskId];
     if (torrentId != null) {
-      final priorities = files.map((f) {
-        final selected = f['selected'] as bool? ?? true;
-        if (!selected) return 0;
-        return f['priority'] as int? ?? 4;
-      }).toList();
-      TorrentService.setFilePriorities(torrentId, priorities);
+      try {
+        final nativeFiles = TorrentService.getFiles(torrentId);
+        if (nativeFiles.length == files.length) {
+          final priorities = files.map((f) {
+            final selected = f['selected'] as bool? ?? true;
+            if (!selected) return 0;
+            return f['priority'] as int? ?? 4;
+          }).toList();
+          TorrentService.setFilePriorities(torrentId, priorities);
+        }
+      } catch (e) {
+        debugPrint('[DownloadTorrentMixin] Failed to set file priorities: $e');
+      }
     }
 
     providerNotifyListeners();

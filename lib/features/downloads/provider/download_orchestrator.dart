@@ -2275,11 +2275,28 @@ class DownloadOrchestrator {
           // silently reused a dead id and resume hung until the 45s
           // metadata timeout, then failed.
           if (_isTorrentAlive(existingTorrentId)) {
-            torrentId = existingTorrentId;
-            // Wake the session early so torrentUpdates starts emitting while
-            // the engine waits for metadata; a paused torrent can otherwise
-            // stay silent and stall the metadata wait.
-            TorrentService.resumeTorrent(existingTorrentId);
+            // FIX-D6: If the native torrent handle exists but is in an error/stalled
+            // state, remove it and re-add so the retry actually starts fresh.
+            final latestStats = _host.providerLatestTorrentStats[existingTorrentId];
+            if (latestStats != null &&
+                latestStats.stateLabel.toLowerCase().contains('error')) {
+              debugPrint(
+                '[DMX] FIX-D6: Torrent $existingTorrentId is in error state. '
+                'Removing and re-adding for clean retry.',
+              );
+              try {
+                TorrentService.pauseTorrent(existingTorrentId);
+                TorrentService.removeTorrent(existingTorrentId, deleteFiles: false);
+              } catch (_) {}
+              _host.providerTorrentIds.remove(task.id);
+              torrentId = null;
+            } else {
+              torrentId = existingTorrentId;
+              // Wake the session early so torrentUpdates starts emitting while
+              // the engine waits for metadata; a paused torrent can otherwise
+              // stay silent and stall the metadata wait.
+              TorrentService.resumeTorrent(existingTorrentId);
+            }
           } else {
             _host.providerTorrentIds.remove(task.id);
           }

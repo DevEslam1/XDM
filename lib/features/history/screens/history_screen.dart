@@ -33,9 +33,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final isRtl = L10n.isRtl(context);
 
-    return Selector<SettingsProvider, bool>(
-      selector: (_, s) => s.isDarkMode,
-      builder: (context, isDark, _) {
+    return Selector<SettingsProvider,
+        ({bool isDarkMode, bool isAmoledMode})>(
+      selector: (_, s) =>
+          (isDarkMode: s.isDarkMode, isAmoledMode: s.isAmoledMode),
+      builder: (context, settingsState, _) {
+        final isDark = settingsState.isDarkMode;
+        final isAmoled = settingsState.isAmoledMode;
         final textClr =
             isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
         final secClr =
@@ -76,17 +80,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: Scaffold(
                 backgroundColor: Colors.transparent,
                 appBar: AppBar(
-                  flexibleSpace: ClipRect(
-                    child: DmxBackdropFilter(
-                      sigmaX: 12,
-                      sigmaY: 12,
-                      child: Container(
-                        color:
-                            (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                                .withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ),
+                  backgroundColor: isDark
+                      ? (isAmoled ? AppTheme.amoledBackground : Colors.transparent)
+                      : Colors.transparent,
+                  flexibleSpace: isAmoled
+                      ? null
+                      : ClipRect(
+                          child: DmxBackdropFilter(
+                            sigmaX: 12,
+                            sigmaY: 12,
+                            child: Container(
+                              color: (isDark
+                                      ? AppTheme.surface
+                                      : AppTheme.lightSurface)
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ),
                   title: Text(
                     'XDM',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(

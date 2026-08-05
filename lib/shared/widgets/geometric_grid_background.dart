@@ -95,9 +95,10 @@ class _GeometricGridBackgroundState extends State<GeometricGridBackground> {
   @override
   Widget build(BuildContext context) {
     final isDark = context.select((SettingsProvider s) => s.isDarkMode);
+    final isAmoled = context.select((SettingsProvider s) => s.isAmoledMode);
     final classicUi = context.select((SettingsProvider s) => s.classicUi);
     final gridOpacity = context.select((SettingsProvider s) => s.gridOpacity);
-    final bgColor = isDark ? AppTheme.background : AppTheme.lightBackground;
+    final bgColor = AppTheme.getBackground(isDark, isAmoled: isAmoled);
 
     if (classicUi) {
       return Container(color: bgColor, child: widget.child);

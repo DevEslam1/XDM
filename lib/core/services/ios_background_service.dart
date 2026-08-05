@@ -126,12 +126,19 @@ class IosBackgroundService {
     }
   }
 
+  static bool _isRegistered = false;
+
   /// Schedules a native iOS background refresh task via BGTaskScheduler.
   static Future<bool> scheduleBackgroundDownload() async {
     if (!Platform.isIOS) return false;
+    if (_isRegistered) {
+      debugPrint('[IosBackgroundService] BGTaskScheduler already registered. Skipping duplicate registration.');
+      return true;
+    }
     try {
       final bool success =
           await _channel.invokeMethod<bool>('scheduleDownload') ?? false;
+      if (success) _isRegistered = true;
       return success;
     } catch (e) {
       debugPrint('Failed to schedule iOS background download: $e');

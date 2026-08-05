@@ -481,53 +481,136 @@ class DropdownTile<T> extends StatelessWidget {
                 width: 1,
               ),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<T>(
-                isDense: true,
-                isExpanded: true,
-                dropdownColor:
-                    isDark ? AppTheme.surface : AppTheme.lightSurface,
-                borderRadius: BorderRadius.circular(14),
-                elevation: 4,
-                menuMaxHeight: 250,
-                value: value,
-                icon: Icon(
-                  Icons.expand_more_rounded,
-                  color: accentColor,
-                  size: 18,
-                ),
-                style: TextStyle(
-                  color: accentColor,
-                  fontFamily: 'Space Grotesk',
-                  fontSize: 11.0,
-                  fontWeight: FontWeight.w700,
-                ),
-                items: items.map((item) {
-                  return DropdownMenuItem<T>(
-                    value: item,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        itemLabels != null
-                            ? itemLabels![item]!
-                            : item.toString(),
-                        style: TextStyle(
-                          color: isDark
-                              ? AppTheme.textPrimary
-                              : AppTheme.lightTextPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11.0,
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                primaryColor: accentColor,
+                focusColor: accentColor.withValues(alpha: 0.15),
+                hoverColor: accentColor.withValues(alpha: 0.1),
+                splashColor: accentColor.withValues(alpha: 0.15),
+                highlightColor: accentColor.withValues(alpha: 0.15),
+                canvasColor: isDark
+                    ? Color.alphaBlend(
+                        accentColor.withValues(alpha: 0.16),
+                        AppTheme.surfaceRaised,
+                      )
+                    : Color.alphaBlend(
+                        accentColor.withValues(alpha: 0.08),
+                        AppTheme.lightSurfaceRaised,
+                      ),
+                colorScheme: Theme.of(context).colorScheme.copyWith(
+                      primary: accentColor,
+                      secondary: accentColor,
+                    ),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<T>(
+                  isDense: true,
+                  isExpanded: true,
+                  dropdownColor: isDark
+                      ? Color.alphaBlend(
+                          accentColor.withValues(alpha: 0.16),
+                          AppTheme.surfaceRaised,
+                        )
+                      : Color.alphaBlend(
+                          accentColor.withValues(alpha: 0.08),
+                          AppTheme.lightSurfaceRaised,
+                        ),
+                  borderRadius: BorderRadius.circular(14),
+                  elevation: 4,
+                  menuMaxHeight: 250,
+                  value: value,
+                  icon: Icon(
+                    Icons.expand_more_rounded,
+                    color: accentColor,
+                    size: 18,
+                  ),
+                  style: TextStyle(
+                    color: accentColor,
+                    fontFamily: 'Space Grotesk',
+                    fontSize: 11.0,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  selectedItemBuilder: (BuildContext context) {
+                    return items.map((item) {
+                      final itemText = itemLabels != null
+                          ? (itemLabels![item] ?? item.toString())
+                          : item.toString();
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          itemText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: accentColor,
+                            fontFamily: 'Space Grotesk',
+                            fontSize: 11.0,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    }).toList();
+                  },
+                  items: items.map((item) {
+                    final isSelected = item == value;
+                    final itemText = itemLabels != null
+                        ? (itemLabels![item] ?? item.toString())
+                        : item.toString();
+                    return DropdownMenuItem<T>(
+                      value: item,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? accentColor.withValues(alpha: 0.18)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                itemText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? accentColor
+                                      : (isDark
+                                          ? AppTheme.textPrimary
+                                          : AppTheme.lightTextPrimary),
+                                  fontFamily: 'Space Grotesk',
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  fontSize: 11.0,
+                                ),
+                              ),
+                            ),
+                            if (isSelected) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.check_rounded,
+                                size: 14,
+                                color: accentColor,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
-                onChanged: disabled
-                    ? null
-                    : (val) {
-                        HapticFeedback.lightImpact();
-                        onChanged!(val);
-                      },
+                    );
+                  }).toList(),
+                  onChanged: disabled
+                      ? null
+                      : (val) {
+                          HapticFeedback.lightImpact();
+                          onChanged!(val);
+                        },
+                ),
               ),
             ),
           ),

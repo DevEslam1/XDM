@@ -1528,8 +1528,8 @@ class DownloadEngine {
             bool isEstimated;
 
             if (f.downloadedBytes >= 0) {
-              // True per-file progress from libtorrent
-              resolvedBytes = f.downloadedBytes;
+              // True per-file progress from libtorrent (clamped to file size)
+              resolvedBytes = f.size > 0 ? f.downloadedBytes.clamp(0, f.size) : f.downloadedBytes;
               isEstimated = false;
             } else {
               // FIX(06): Use 0 instead of stale DB value to avoid showing wrong data
@@ -1640,11 +1640,15 @@ class DownloadEngine {
         return;
       }
 
-      final isFullyDownloaded = totalSize > 0 && downloadedBytes >= totalSize;
-
       final isStableFinished = stateLabel == 'seeding' ||
           stateLabel == 'completed' ||
           stateLabel == 'finished';
+
+      // FIX-D4: Guard against totalSize == 0. If the torrent reports zero
+      // wanted bytes but is in a stable finished state, treat it as complete.
+      final isFullyDownloaded = totalSize > 0
+          ? downloadedBytes >= totalSize
+          : isStableFinished;
 
       // FIX(7): Require a stable finished/seeding/completed state instead of
       // accepting `progress >= 0.999`. The old shortcut could fire while
@@ -2023,7 +2027,7 @@ class DownloadEngine {
       final chunkSizes = List<int>.filled(threadCount, 0);
 
       var totalSize = resolvedFileSize;
-      var partSize = (totalSize / threadCount).floor();
+      var partSize = max(1, (totalSize / threadCount).floor());
 
 
       final targetFile = File(currentTempFilePath);
@@ -2116,7 +2120,7 @@ class DownloadEngine {
       }
 
       // FIX(H-1): recompute partSize after totalSize may have changed
-      partSize = (totalSize / threadCount).floor();
+      partSize = max(1, (totalSize / threadCount).floor());
 
       if (!canResume) {
 
@@ -2231,16 +2235,13 @@ class DownloadEngine {
             (i == threadCount - 1) ? (totalSize - 1) : (start + partSize - 1);
         final size = end - start + 1;
 
-        // FIX(02): Replace hard reset with proportional rescaling when size changes
-        final oldSize = chunkSizes[i];
-        final newSize = size;
-        if (oldSize > 0 && newSize > 0 && oldSize != newSize && chunkProgress[i] > 0) {
-          final ratio = chunkProgress[i] / oldSize;
-          chunkProgress[i] = (ratio * newSize).round().clamp(0, newSize);
-        } else if (chunkProgress[i] > newSize) {
-          chunkProgress[i] = chunkProgress[i].clamp(0, newSize);
+        // FIX-D2: Removed dead proportional-rescale branch.
+        // chunkSizes[i] is always 0 on first pass, so oldSize > 0 was never true.
+        // The clamp below is the only guard that actually executes.
+        if (chunkProgress[i] > size) {
+          chunkProgress[i] = chunkProgress[i].clamp(0, size);
         }
-        chunkSizes[i] = newSize;
+        chunkSizes[i] = size;
       }
 
       // Spot-check resume integrity before spawning threads

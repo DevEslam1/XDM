@@ -75,16 +75,23 @@ class CategoriesScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          flexibleSpace: ClipRect(
-            child: DmxBackdropFilter(
-              sigmaX: 12,
-              sigmaY: 12,
-              child: Container(
-                color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                    .withValues(alpha: 0.5),
-              ),
-            ),
-          ),
+          backgroundColor: isDark
+              ? (settings.isAmoledMode
+                  ? AppTheme.amoledBackground
+                  : Colors.transparent)
+              : Colors.transparent,
+          flexibleSpace: settings.isAmoledMode
+              ? null
+              : ClipRect(
+                  child: DmxBackdropFilter(
+                    sigmaX: 12,
+                    sigmaY: 12,
+                    child: Container(
+                      color: (isDark ? AppTheme.surface : AppTheme.lightSurface)
+                          .withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
           title: Text(
             'XDM',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(

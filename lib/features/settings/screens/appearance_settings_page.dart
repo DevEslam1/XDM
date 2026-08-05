@@ -34,12 +34,15 @@ class AppearanceSettingsPage extends StatelessWidget with HapticHelper {
               DropdownTile<String>(
                 accentColor: accent,
                 title: isRtl ? 'وضع المظهر' : 'Theme Mode',
-                subtitle: isRtl ? 'فاتح / داكن / تتبع النظام' : 'Light / Dark / Follow System',
+                subtitle: isRtl
+                    ? 'فاتح / داكن / أسود (AMOLED) / تتبع النظام'
+                    : 'Light / Dark / AMOLED / Follow System',
                 value: settings.themeMode,
-                items: const ['light', 'dark', 'system'],
+                items: const ['light', 'dark', 'amoled', 'system'],
                 itemLabels: const {
                   'light': 'LIGHT',
                   'dark': 'DARK',
+                  'amoled': 'AMOLED',
                   'system': 'SYSTEM',
                 },
                 onChanged: (val) {

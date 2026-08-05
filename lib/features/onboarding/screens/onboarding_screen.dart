@@ -1890,6 +1890,11 @@ class _QuickSetupCard extends StatelessWidget {
                     icon: Icons.nightlight_round,
                   ),
                   _SegmentOption(
+                    value: 'amoled',
+                    label: L10n.of(context, 'onboarding_theme_amoled'),
+                    icon: Icons.contrast_rounded,
+                  ),
+                  _SegmentOption(
                     value: 'system',
                     label: L10n.of(context, 'onboarding_theme_system'),
                     icon: Icons.brightness_auto_rounded,

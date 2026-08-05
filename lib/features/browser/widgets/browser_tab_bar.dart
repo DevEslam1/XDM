@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
+import '../../settings/provider/settings_provider.dart';
 import '../models/browser_tab.dart';
 
 class BrowserTabBar extends StatelessWidget {
@@ -25,18 +27,24 @@ class BrowserTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (tabs.isEmpty) return const SizedBox.shrink();
 
+    final isAmoled = context.watch<SettingsProvider>().isAmoledMode;
     final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final navBg = isDark
+        ? (isAmoled ? AppTheme.amoledBackground : AppTheme.surface)
+        : AppTheme.lightSurface;
 
     return Container(
       height: 46,
       decoration: BoxDecoration(
-        color: (isDark ? AppTheme.surface : AppTheme.lightSurface).withValues(
-          alpha: 0.92,
+        color: navBg.withValues(
+          alpha: isAmoled ? 1.0 : 0.92,
         ),
         border: Border(
           bottom: BorderSide(
-            color: isDark ? AppTheme.border : AppTheme.lightBorder,
+            color: isDark
+                ? (isAmoled ? AppTheme.amoledBorder : AppTheme.border)
+                : AppTheme.lightBorder,
             width: 1,
           ),
         ),

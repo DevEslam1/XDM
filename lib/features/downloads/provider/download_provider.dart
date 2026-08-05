@@ -3433,18 +3433,19 @@ class DownloadProvider extends ChangeNotifier
 
     final audioChanged = clearAudioUrl ||
         (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl);
+    // FIX-D5: When the audio URL changes, delete all audio sidecar files
+    // to prevent the engine from resuming from stale/corrupt audio bytes.
     if (audioChanged) {
       for (final path in [
         '${task.tempFilePath}.audio',
         '${task.tempFilePath}.audio.dmxstate',
         '${task.tempFilePath}.audio.journal',
       ]) {
-
         try {
           final f = File(path);
           if (await f.exists()) await f.delete();
         } catch (e) {
-          debugPrint('[DMX] audio temp cleanup failed: $e');
+          debugPrint('[DMX] FIX-D5: Failed to delete audio sidecar $path: $e');
         }
       }
     }

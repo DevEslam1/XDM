@@ -265,10 +265,14 @@ class _HomeScreenState extends State<HomeScreen>
   PreferredSizeWidget _buildSelectionAppBar(
       BuildContext context, bool isDark, Color textClr, Color accentClr) {
     final provider = context.watch<DownloadProvider>();
+    final settings = context.watch<SettingsProvider>();
+    final isAmoled = settings.isAmoledMode;
     final count = provider.selectedTaskIds.length;
 
     return AppBar(
-      backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
+      backgroundColor: isDark
+          ? (isAmoled ? AppTheme.amoledBackground : AppTheme.surface)
+          : AppTheme.lightSurface,
       elevation: 0,
       leading: IconButton(
         icon: Icon(Icons.close_rounded, color: textClr),
@@ -297,6 +301,8 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildBatchActionBar(
       BuildContext context, bool isDark, Color textClr, Color accentClr) {
     final provider = context.watch<DownloadProvider>();
+    final settings = context.watch<SettingsProvider>();
+    final isAmoled = settings.isAmoledMode;
     final selectedIds = provider.selectedTaskIds;
     final safeAreaBottom = MediaQuery.paddingOf(context).bottom;
 
@@ -304,10 +310,14 @@ class _HomeScreenState extends State<HomeScreen>
       padding: EdgeInsetsDirectional.only(
           bottom: safeAreaBottom + 8, top: 12, start: 16, end: 16),
       decoration: BoxDecoration(
-        color: isDark ? AppTheme.surface : AppTheme.lightSurface,
+        color: isDark
+            ? (isAmoled ? AppTheme.amoledBackground : AppTheme.surface)
+            : AppTheme.lightSurface,
         border: Border(
             top: BorderSide(
-                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                color: isDark
+                    ? (isAmoled ? AppTheme.amoledBorder : AppTheme.border)
+                    : AppTheme.lightBorder,
                 width: 0.8)),
         boxShadow: [
           BoxShadow(
@@ -403,15 +413,22 @@ class _HomeScreenState extends State<HomeScreen>
     required Color accentClr,
     required bool isRtl,
   }) {
+    final settings = context.watch<SettingsProvider>();
+    final isAmoled = settings.isAmoledMode;
+
     return AppBar(
       backgroundColor: classicUi
-          ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-          : Colors.transparent,
+          ? (isDark
+              ? (isAmoled ? AppTheme.amoledBackground : AppTheme.surface)
+              : AppTheme.lightSurface)
+          : (isAmoled ? AppTheme.amoledBackground : Colors.transparent),
       elevation: 0,
-      shape: classicUi
+      shape: (classicUi || isAmoled)
           ? Border(
               bottom: BorderSide(
-                color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                color: isDark
+                    ? (isAmoled ? AppTheme.amoledBorder : AppTheme.border)
+                    : AppTheme.lightBorder,
                 width: 1.0,
               ),
             )
