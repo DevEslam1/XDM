@@ -8,6 +8,7 @@ import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/design/dmx_design.dart';
 import 'category_detail_screen.dart';
 
 class CategoriesScreen extends StatelessWidget {
@@ -210,166 +211,118 @@ class CategoriesScreen extends StatelessWidget {
                             ),
                           );
                         },
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
-                          child: DmxBackdropFilter(
-                            sigmaX: 8,
-                            sigmaY: 8,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppTheme.glassBg
-                                    : AppTheme.lightGlassBg,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: isDark
-                                      ? AppTheme.glassBorder
-                                      : AppTheme.lightGlassBorder,
-                                  width: 0.8,
-                                ),
-                              ),
-                              child: Stack(
-                                children: [
-                                  Positioned(
-                                    top: 0,
-                                    left: 0,
-                                    right: 0,
-                                    child: Container(
-                                      height: 3,
+                        child: DmxCardShell(
+                          accent: color,
+                          radius: 20,
+                          showRail: false,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        borderRadius:
-                                            const BorderRadius.vertical(
-                                          top: Radius.circular(20),
+                                        color: color.withValues(
+                                          alpha: 0.08,
                                         ),
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            color.withValues(alpha: 0.7),
-                                            color.withValues(alpha: 0.1),
-                                            Colors.transparent,
-                                          ],
+                                        borderRadius: BorderRadius.circular(
+                                          12,
                                         ),
                                       ),
+                                      child: Icon(
+                                        icon,
+                                        color: color,
+                                        size: 22,
+                                      ),
                                     ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(14.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Container(
-                                              padding: const EdgeInsets.all(8),
-                                              decoration: BoxDecoration(
-                                                color: color.withValues(
-                                                  alpha: 0.08,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                  12,
-                                                ),
-                                              ),
-                                              child: Icon(
-                                                icon,
-                                                color: color,
-                                                size: 22,
-                                              ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? AppTheme.glassBg
+                                            : AppTheme.lightGlassBg,
+                                        borderRadius: BorderRadius.circular(
+                                          12,
+                                        ),
+                                        border: Border.all(
+                                          color: isDark
+                                              ? AppTheme.glassBorder
+                                              : AppTheme.lightGlassBorder,
+                                          width: 0.6,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '$count ${isRtl ? 'عناصر' : 'ITEMS'}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelMedium
+                                            ?.copyWith(
+                                              color: textClr,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
                                             ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 10,
-                                                vertical: 4,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: isDark
-                                                    ? AppTheme.glassBg
-                                                    : AppTheme.lightGlassBg,
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                  12,
-                                                ),
-                                                border: Border.all(
-                                                  color: isDark
-                                                      ? AppTheme.glassBorder
-                                                      : AppTheme
-                                                          .lightGlassBorder,
-                                                  width: 0.6,
-                                                ),
-                                              ),
-                                              child: Text(
-                                                '$count ${isRtl ? 'عناصر' : 'ITEMS'}',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelMedium
-                                                    ?.copyWith(
-                                                      color: textClr,
-                                                      fontSize: 9,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                    ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const Spacer(),
-                                        Text(
-                                          _translateCategoryName(context, name)
-                                              .toUpperCase(),
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                letterSpacing: 0.8,
-                                                color: textClr,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          desc,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                fontSize: 9,
-                                                color: mutedClr,
-                                              ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          sizeText,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelLarge
-                                              ?.copyWith(
-                                                fontSize: 13,
-                                                color: color,
-                                                fontWeight: FontWeight.bold,
-                                                shadows: isDark
-                                                    ? [
-                                                        Shadow(
-                                                          color:
-                                                              color.withValues(
-                                                            alpha: 0.25,
-                                                          ),
-                                                          blurRadius: 4.0,
-                                                        ),
-                                                      ]
-                                                    : null,
-                                              ),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
+                                const Spacer(),
+                                Text(
+                                  _translateCategoryName(context, name)
+                                      .toUpperCase(),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.8,
+                                        color: textClr,
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  desc,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        fontSize: 9,
+                                        color: mutedClr,
+                                      ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  sizeText,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(
+                                        fontSize: 13,
+                                        color: color,
+                                        fontWeight: FontWeight.bold,
+                                        shadows: isDark
+                                            ? [
+                                                Shadow(
+                                                  color: color.withValues(
+                                                    alpha: 0.25,
+                                                  ),
+                                                  blurRadius: 4.0,
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

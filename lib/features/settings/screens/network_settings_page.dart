@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../../../core/services/doh_resolver.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
@@ -47,32 +48,22 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     super.dispose();
   }
 
-  void _maybeConfirmBypassSSL(BuildContext context, SettingsProvider settings) {
+  void _maybeConfirmBypassSSL(BuildContext context, SettingsProvider settings) async {
     if (!settings.pendingBypassSSLConfirmation) return;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(L10n.of(dialogContext, 'bypass_ssl_dialog_title')),
-        content: Text(L10n.of(dialogContext, 'bypass_ssl_dialog_body')),
-        actions: [
-          TextButton(
-            onPressed: () {
-              settings.setBypassSSL(false);
-              Navigator.pop(dialogContext);
-            },
-            child: Text(L10n.of(dialogContext, 'cancel_btn')),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () {
-              settings.confirmBypassSSL();
-              Navigator.pop(dialogContext);
-            },
-            child: Text(L10n.of(dialogContext, 'bypass_ssl_dialog_confirm')),
-          ),
-        ],
-      ),
+    final confirmed = await DmxConfirmDialog.show(
+      context,
+      title: L10n.of(context, 'bypass_ssl_dialog_title'),
+      message: L10n.of(context, 'bypass_ssl_dialog_body'),
+      confirmLabel: L10n.of(context, 'bypass_ssl_dialog_confirm'),
+      cancelLabel: L10n.of(context, 'cancel_btn'),
+      isDestructive: true,
+      icon: Icons.shield_outlined,
     );
+    if (confirmed == true) {
+      settings.confirmBypassSSL();
+    } else {
+      settings.setBypassSSL(false);
+    }
   }
 
   @override

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/app_theme.dart';
+import '../../../shared/design/dmx_design.dart';
 
 class SettingsSectionHeader extends StatelessWidget {
   final String title;
@@ -17,38 +17,11 @@ class SettingsSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = accentColor ?? (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue);
-    return Padding(
+    return DmxSectionHeader(
+      title: title,
+      accentColor: accentColor,
+      isDark: isDark,
       padding: padding,
-      child: Row(
-        children: [
-          Container(
-            width: 3,
-            height: 12,
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(2),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.5),
-                  blurRadius: 4,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            title.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-              fontFamily: 'Space Grotesk',
-              color: accent,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

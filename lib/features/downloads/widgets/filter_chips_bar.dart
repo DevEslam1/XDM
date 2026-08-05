@@ -94,8 +94,8 @@ class FilterChipsBar extends StatelessWidget {
                     ),
                   ),
 
-                // ── Status filter segmented pill ──
-                _StatusSegmentedBar(
+                // ── Status filter standalone buttons ──
+                _StatusFilterButtons(
                   filters: filters,
                   activeFilter: state.activeFilter,
                   isDark: isDark,
@@ -113,9 +113,9 @@ class FilterChipsBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Segmented bar — glass/neon in modern mode, opaque in classic mode
+// Standalone filter buttons matching Settings tab button design
 // ─────────────────────────────────────────────────────────────────────────────
-class _StatusSegmentedBar extends StatelessWidget {
+class _StatusFilterButtons extends StatelessWidget {
   final List<String> filters;
   final String activeFilter;
   final bool isDark;
@@ -123,7 +123,7 @@ class _StatusSegmentedBar extends StatelessWidget {
   final bool classicUi;
   final bool glow;
 
-  const _StatusSegmentedBar({
+  const _StatusFilterButtons({
     required this.filters,
     required this.activeFilter,
     required this.isDark,
@@ -145,149 +145,144 @@ class _StatusSegmentedBar extends StatelessWidget {
     };
   }
 
+  IconData _iconForFilter(String filter) {
+    return switch (filter) {
+      'All' => Icons.space_dashboard_rounded,
+      'Downloading' => Icons.arrow_downward_rounded,
+      'Completed' => Icons.check_circle_outline_rounded,
+      'Failed' => Icons.error_outline_rounded,
+      'Paused' => Icons.pause_circle_outline_rounded,
+      'Scheduled' => Icons.schedule_rounded,
+      'Torrents' => Icons.grain_rounded,
+      _ => Icons.filter_alt_rounded,
+    };
+  }
+
   String _labelFor(BuildContext context, String filter) {
     return switch (filter) {
       'All' => L10n.of(context, 'filter_all').toUpperCase(),
       'Downloading' => L10n.of(context, 'stats_downloading').toUpperCase(),
-      'Completed' =>
-        L10n.of(context, 'stats_completed_short').toUpperCase(),
+      'Completed' => L10n.of(context, 'stats_completed_short').toUpperCase(),
       'Failed' => L10n.of(context, 'stats_failed_short').toUpperCase(),
       'Paused' => L10n.of(context, 'stats_paused_short').toUpperCase(),
-      'Scheduled' =>
-        L10n.of(context, 'add_download_schedule').toUpperCase(),
+      'Scheduled' => L10n.of(context, 'add_download_schedule').toUpperCase(),
       'Torrents' => L10n.of(context, 'filter_torrents').toUpperCase(),
       _ => filter.toUpperCase(),
     };
   }
 
-  // The accent color of whichever filter is currently active
-  Color get _activeAccent => _colorForFilter(activeFilter);
-
   @override
   Widget build(BuildContext context) {
     final isScrollable = filters.length > 3;
 
-    // Glass background — transparent in modern, solid in classic
-    final bgColor = classicUi
-        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-        : (isDark
-            ? AppTheme.surface.withValues(alpha: 0.35)
-            : AppTheme.lightSurface.withValues(alpha: 0.35));
+    if (isScrollable) {
+      return SizedBox(
+        height: 38,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: filters.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, i) => _buildButton(context, filters[i]),
+        ),
+      );
+    }
 
-    // Border: neon glow on active accent in modern+glow, subtle otherwise
-    final borderColor = (!classicUi && glow)
-        ? _activeAccent.withValues(alpha: isDark ? 0.50 : 0.40)
-        : (isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle);
+    return Row(
+      children: [
+        for (int i = 0; i < filters.length; i++) ...[
+          Expanded(child: _buildButton(context, filters[i])),
+          if (i < filters.length - 1) const SizedBox(width: 8),
+        ],
+      ],
+    );
+  }
 
-    // Outer glow shadow only in modern+glow mode
-    final shadows = (!classicUi && glow)
+  Widget _buildButton(BuildContext context, String filter) {
+    final selected = activeFilter == filter;
+    final color = _colorForFilter(filter);
+    final icon = _iconForFilter(filter);
+    final label = _labelFor(context, filter);
+
+    final bgColor = selected
+        ? color
+        : (classicUi
+            ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+            : (isDark
+                ? AppTheme.surface.withValues(alpha: 0.40)
+                : AppTheme.lightSurface.withValues(alpha: 0.40)));
+
+    final textColor = selected
+        ? AppTheme.inkOn(color)
+        : (isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary);
+
+    final iconColor = selected ? textColor : color;
+
+    final borderColor = selected
+        ? color
+        : color.withValues(alpha: isDark ? 0.30 : 0.35);
+
+    final shadows = (selected && glow && !classicUi)
         ? [
             BoxShadow(
-              color: _activeAccent.withValues(alpha: isDark ? 0.18 : 0.10),
-              blurRadius: 14,
-              spreadRadius: 1,
-            ),
-          ]
-        : <BoxShadow>[
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-              blurRadius: 8,
+              color: color.withValues(alpha: isDark ? 0.35 : 0.20),
+              blurRadius: 10,
+              spreadRadius: 0,
               offset: const Offset(0, 2),
             ),
-          ];
+          ]
+        : <BoxShadow>[];
 
-    Widget container = Container(
-      height: 40,
-      padding: const EdgeInsets.all(4),
+    Widget buttonContent = Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: borderColor, width: 1.0),
         boxShadow: shadows,
       ),
-      child: isScrollable
-          ? ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: filters.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 4),
-              itemBuilder: (context, i) => _buildSegment(context, filters[i]),
-            )
-          : Row(
-              children: [
-                for (int i = 0; i < filters.length; i++) ...[
-                  Expanded(child: _buildSegment(context, filters[i])),
-                  if (i < filters.length - 1) const SizedBox(width: 4),
-                ],
-              ],
-            ),
-    );
-
-    // Wrap with backdrop blur in modern UI mode
-    if (!classicUi) {
-      container = ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: DmxBackdropFilter(
-          sigmaX: 14,
-          sigmaY: 14,
-          child: container,
-        ),
-      );
-    }
-
-    return container;
-  }
-
-  Widget _buildSegment(BuildContext context, String filter) {
-    final selected = activeFilter == filter;
-    final color = _colorForFilter(filter);
-    final label = _labelFor(context, filter);
-
-    // Selected fill: solid in classic, slightly translucent in modern
-    final fillColor = selected
-        ? (classicUi ? color : color.withValues(alpha: isDark ? 0.85 : 0.80))
-        : Colors.transparent;
-
-    return GestureDetector(
-      onTap: () {
-        if (vibration) HapticFeedback.selectionClick();
-        context.read<DownloadProvider>().setStatusFilter(filter);
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: fillColor,
-          borderRadius: BorderRadius.circular(6),
-          // In modern+glow: add a soft inner glow on the selected pill
-          boxShadow: (selected && !classicUi && glow)
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.35),
-                    blurRadius: 8,
-                    spreadRadius: 0,
-                  ),
-                ]
-              : null,
-        ),
-        child: Center(
-          child: Text(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 15, color: iconColor),
+          const SizedBox(width: 6),
+          Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: selected
-                  ? Colors.white
-                  : (isDark
-                      ? AppTheme.textSecondary
-                      : AppTheme.lightTextSecondary),
+              color: textColor,
               fontFamily: 'Space Grotesk',
               fontSize: responsiveFontSize(context, 11),
-              fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-              letterSpacing: 0.3,
+              fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+              letterSpacing: 0.4,
             ),
           ),
+        ],
+      ),
+    );
+
+    if (!classicUi && !selected) {
+      buttonContent = ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: DmxBackdropFilter(
+          sigmaX: 10,
+          sigmaY: 10,
+          child: buttonContent,
         ),
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (vibration) HapticFeedback.selectionClick();
+          context.read<DownloadProvider>().setStatusFilter(filter);
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: buttonContent,
       ),
     );
   }
@@ -315,22 +310,23 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgAlpha = classicUi ? 0.18 : 0.10;
-    final chip = Container(
+    final bgColor = classicUi
+        ? color.withValues(alpha: isDark ? 0.15 : 0.12)
+        : color.withValues(alpha: isDark ? 0.20 : 0.16);
+
+    final borderColor = color.withValues(alpha: isDark ? 0.45 : 0.35);
+
+    Widget chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: bgAlpha),
+        color: bgColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: color.withValues(alpha: classicUi ? 0.35 : 0.55),
-          width: 1.0,
-        ),
-        boxShadow: (!classicUi && glow)
+        border: Border.all(color: borderColor, width: 1.0),
+        boxShadow: (glow && !classicUi)
             ? [
                 BoxShadow(
                   color: color.withValues(alpha: isDark ? 0.20 : 0.10),
                   blurRadius: 8,
-                  spreadRadius: 0,
                 ),
               ]
             : null,
@@ -342,9 +338,9 @@ class _CategoryChip extends StatelessWidget {
             label,
             style: TextStyle(
               color: color,
-              fontFamily: 'Space Grotesk',
               fontSize: 11,
               fontWeight: FontWeight.bold,
+              fontFamily: 'Space Grotesk',
             ),
           ),
           const SizedBox(width: 4),
@@ -357,28 +353,48 @@ class _CategoryChip extends StatelessWidget {
     );
 
     if (!classicUi) {
-      return ClipRRect(
+      chip = ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: DmxBackdropFilter(sigmaX: 12, sigmaY: 12, child: chip),
+        child: DmxBackdropFilter(
+          sigmaX: 8,
+          sigmaY: 8,
+          child: chip,
+        ),
       );
     }
+
     return chip;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// State holder
+// State holder for Selector
 // ─────────────────────────────────────────────────────────────────────────────
 class _FilterState {
   final String activeFilter;
   final List<String> categoryFilters;
   final Map<String, int> categoryCounts;
 
-  _FilterState({
+  const _FilterState({
     required this.activeFilter,
     required this.categoryFilters,
     required this.categoryCounts,
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _FilterState &&
+          runtimeType == other.runtimeType &&
+          activeFilter == other.activeFilter &&
+          _listEquals(categoryFilters, other.categoryFilters) &&
+          _mapEquals(categoryCounts, other.categoryCounts);
+
+  @override
+  int get hashCode =>
+      activeFilter.hashCode ^
+      Object.hashAll(categoryFilters) ^
+      Object.hashAll(categoryCounts.entries);
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -395,21 +411,4 @@ class _FilterState {
     }
     return true;
   }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _FilterState &&
-          runtimeType == other.runtimeType &&
-          activeFilter == other.activeFilter &&
-          _listEquals(categoryFilters, other.categoryFilters) &&
-          _mapEquals(categoryCounts, other.categoryCounts);
-
-  @override
-  int get hashCode => Object.hash(
-        activeFilter,
-        Object.hashAll(categoryFilters),
-        Object.hashAll(
-            categoryCounts.entries.map((e) => Object.hash(e.key, e.value))),
-      );
 }

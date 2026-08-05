@@ -333,49 +333,7 @@ class _DetailsScreenState extends State<DetailsScreen>
 
 
 
-            Color statusColor;
-
-            switch (task.status) {
-
-              case DownloadStatus.queued:
-
-                statusColor =
-
-                    isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
-
-                break;
-
-              case DownloadStatus.downloading:
-
-                statusColor =
-
-                    isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
-
-                break;
-
-              case DownloadStatus.paused:
-
-                statusColor =
-
-                    isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
-
-                break;
-
-              case DownloadStatus.completed:
-
-                statusColor =
-
-                    isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
-
-                break;
-
-              case DownloadStatus.failed:
-
-                statusColor = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-
-                break;
-
-            }
+            final statusColor = DmxStatusColors.of(task.status, isDark);
 
 
 

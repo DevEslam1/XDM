@@ -6,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/services/update_service.dart';
 import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../../downloads/provider/download_provider.dart';
 import '../../settings/provider/settings_provider.dart';
 
@@ -28,31 +29,18 @@ Future<void> showUpdateInfoDialog(
 
   if (!context.mounted) return;
 
+  final accent = isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen;
+
   showDialog(
     context: context,
     barrierDismissible: !update.mandatory,
     builder: (dialogCtx) {
-      return AlertDialog(
-        backgroundColor: isDark ? AppTheme.surface : AppTheme.lightSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(
-              Icons.system_update_rounded,
-              color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                isRtl
-                    ? 'تحديث جديد متوفر v${update.latestVersion}'
-                    : 'New Update Available v${update.latestVersion}',
-                style:
-                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
+      return DmxDialog(
+        title: isRtl
+            ? 'تحديث جديد متوفر v${update.latestVersion}'
+            : 'New Update Available v${update.latestVersion}',
+        icon: Icons.system_update_rounded,
+        accentColor: accent,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,10 +59,10 @@ Future<void> showUpdateInfoDialog(
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isDark ? Colors.black26 : Colors.grey.shade100,
+                color: AppTheme.panelBg(isDark),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: isDark ? AppTheme.border : AppTheme.lightBorder,
+                  color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
                 ),
               ),
               child: Text(
@@ -90,21 +78,23 @@ Future<void> showUpdateInfoDialog(
           if (!update.mandatory)
             TextButton(
               onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(L10n.of(dialogCtx, 'btn_later')),
+              child: Text(
+                L10n.of(dialogCtx, 'btn_later'),
+                style: TextStyle(
+                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+                  fontFamily: 'Space Grotesk',
+                ),
+              ),
             ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-              foregroundColor: Colors.black,
-            ),
-            icon: Icon(
-                isDownloaded ? Icons.install_mobile : Icons.download_rounded),
-            label: Text(
-              isDownloaded
-                  ? L10n.of(dialogCtx, 'btn_install_now')
-                  : L10n.of(dialogCtx, 'update_now_btn'),
-            ),
+          const SizedBox(width: 8),
+          DmxButton.filled(
+            label: isDownloaded
+                ? L10n.of(dialogCtx, 'btn_install_now')
+                : L10n.of(dialogCtx, 'update_now_btn'),
+            icon: isDownloaded
+                ? Icons.install_mobile
+                : Icons.download_rounded,
+            color: accent,
             onPressed: () async {
               Navigator.pop(dialogCtx);
               if (isDownloaded) {
@@ -131,13 +121,17 @@ Future<void> showMandatoryUpdateDialog(
     builder: (dialogCtx) {
       return PopScope(
         canPop: false,
-        child: AlertDialog(
-          title: Text(L10n.of(dialogCtx, 'update_mandatory_title')),
+        child: DmxDialog(
+          title: L10n.of(dialogCtx, 'update_mandatory_title'),
+          icon: Icons.system_update_rounded,
           content: Text(
             '${L10n.of(dialogCtx, 'update_mandatory_title')}\n\n${update.changelog}',
+            style: const TextStyle(fontSize: 13),
           ),
           actions: [
-            ElevatedButton(
+            DmxButton.filled(
+              label: L10n.of(dialogCtx, 'update_now_btn'),
+              icon: Icons.download_rounded,
               onPressed: () async {
                 final updatesDir = await UpdateService().getUpdatesDirectory();
                 final fileName =
@@ -149,7 +143,6 @@ Future<void> showMandatoryUpdateDialog(
                   await provider.startUpdateDownload(update);
                 }
               },
-              child: Text(L10n.of(dialogCtx, 'update_now_btn')),
             ),
           ],
         ),

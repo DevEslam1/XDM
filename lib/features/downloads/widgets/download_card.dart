@@ -2242,27 +2242,32 @@ void _showUpdateLinkDialog(
   final urlController = TextEditingController(text: task.url);
   showDialog(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(L10n.of(context, 'update_link')),
-      content: TextField(
+    builder: (dialogCtx) => DmxDialog(
+      title: L10n.of(dialogCtx, 'update_link'),
+      icon: Icons.link_rounded,
+      content: DmxTextField(
         controller: urlController,
-        decoration:
-            InputDecoration(hintText: L10n.of(context, 'enter_new_url')),
+        hintText: L10n.of(dialogCtx, 'enter_new_url'),
+        autofocus: true,
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(L10n.of(context, 'cancel_btn')),
+          onPressed: () => Navigator.pop(dialogCtx),
+          child: Text(
+            L10n.of(dialogCtx, 'cancel_btn'),
+            style: const TextStyle(fontFamily: 'Space Grotesk'),
+          ),
         ),
-        ElevatedButton(
+        const SizedBox(width: 8),
+        DmxButton.filled(
+          label: L10n.of(dialogCtx, 'update_btn'),
           onPressed: () async {
-            Navigator.pop(context);
+            Navigator.pop(dialogCtx);
             await provider.updateTaskUrlAndResume(
               task.id,
               urlController.text.trim(),
             );
           },
-          child: Text(L10n.of(context, 'update_btn')),
         ),
       ],
     ),

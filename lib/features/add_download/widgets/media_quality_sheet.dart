@@ -6,6 +6,7 @@ import '../../../core/utils/file_utils.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../../settings/provider/settings_provider.dart';
 
 class MediaQualitySheet extends StatefulWidget {
@@ -677,69 +678,13 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
     required String content,
     required bool isDark,
   }) async {
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: isDark ? AppTheme.surface : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(
-              color: isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder,
-            ),
-          ),
-          title: Text(
-            title,
-            style: TextStyle(
-              color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          content: Text(
-            content,
-            style: TextStyle(
-              color:
-                  isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
-              fontSize: 13,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(
-                L10n.isRtl(context) ? 'إلغاء' : 'Cancel',
-                style: TextStyle(
-                  color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                        .withValues(alpha: 0.1),
-                side: BorderSide(
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(
-                L10n.isRtl(context) ? 'متابعة' : 'Proceed',
-                style: TextStyle(
-                  color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    final result = await DmxConfirmDialog.show(
+      context,
+      title: title,
+      message: content,
+      confirmLabel: L10n.isRtl(context) ? 'متابعة' : 'Proceed',
+      cancelLabel: L10n.isRtl(context) ? 'إلغاء' : 'Cancel',
+      icon: Icons.warning_amber_rounded,
     );
     return result ?? false;
   }

@@ -11,6 +11,7 @@ import '../../../core/services/xdm_backend_client.dart';
 import '../../../core/services/app_lock_service.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
+import '../../../shared/design/dmx_design.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/app_lock_screen.dart';
 import '../widgets/settings_section_header.dart';
@@ -101,36 +102,27 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
     }
   }
 
-  void _showResetConfirmDialog(BuildContext context, SettingsProvider settings) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Text(L10n.of(dialogCtx, 'settings_reset_confirm_title')),
-        content: Text(L10n.of(dialogCtx, 'settings_reset_confirm_body')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text(L10n.of(dialogCtx, 'cancel_btn')),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppTheme.neonRed),
-            onPressed: () async {
-              Navigator.pop(dialogCtx);
-              await settings.resetToDefaults();
-              if (context.mounted) {
-                ThemedSnackbar.show(
-                  context,
-                  message: L10n.of(context, 'settings_reset_done'),
-                  color: AppTheme.neonGreen,
-                  icon: Icons.check_circle_outline,
-                );
-              }
-            },
-            child: Text(L10n.of(dialogCtx, 'settings_reset_confirm_btn')),
-          ),
-        ],
-      ),
+  void _showResetConfirmDialog(BuildContext context, SettingsProvider settings) async {
+    final confirmed = await DmxConfirmDialog.show(
+      context,
+      title: L10n.of(context, 'settings_reset_confirm_title'),
+      message: L10n.of(context, 'settings_reset_confirm_body'),
+      confirmLabel: L10n.of(context, 'settings_reset_confirm_btn'),
+      cancelLabel: L10n.of(context, 'cancel_btn'),
+      isDestructive: true,
+      icon: Icons.restore_rounded,
     );
+    if (confirmed == true && context.mounted) {
+      await settings.resetToDefaults();
+      if (context.mounted) {
+        ThemedSnackbar.show(
+          context,
+          message: L10n.of(context, 'settings_reset_done'),
+          color: AppTheme.neonGreen,
+          icon: Icons.check_circle_outline,
+        );
+      }
+    }
   }
 
   @override

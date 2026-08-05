@@ -9,6 +9,7 @@ import '../../downloads/widgets/download_card.dart';
 import '../../settings/provider/settings_provider.dart';
 import '../../../shared/widgets/geometric_grid_background.dart';
 import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../../../shared/design/dmx_design.dart';
 
 /// Displays a drill-down view for a single download category.
 /// Shows: total size, file count, pie chart, list of completed downloads.
@@ -150,28 +151,13 @@ class CategoryDetailScreen extends StatelessWidget {
                 // Downloads list
                 Expanded(
                   child: categoryTasks.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                categoryIcon,
-                                size: 48,
-                                color: mutedClr.withValues(alpha: 0.4),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                isRtl
-                                    ? 'لا توجد ملفات في هذه الفئة'
-                                    : 'No files in this category',
-                                style: TextStyle(
-                                  color: mutedClr,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ? DmxEmptyState(
+                          icon: categoryIcon,
+                          title: categoryName,
+                          subtitle: isRtl
+                              ? 'لا توجد ملفات في هذه الفئة'
+                              : 'No files in this category',
+                          accentColor: categoryColor,
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(
@@ -262,10 +248,12 @@ class _SummaryCard extends StatelessWidget {
 
     return Semantics(
       label: '$categoryName category: $fileCount files, $totalSizeText',
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
-        child: Row(
+      child: DmxCardShell(
+        accent: categoryColor,
+        radius: 20,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
           children: [
             // Pie Chart
             SizedBox(
@@ -367,6 +355,7 @@ class _SummaryCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

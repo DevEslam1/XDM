@@ -18,9 +18,9 @@ import '../../../shared/widgets/geometric_grid_background.dart';
 // themed_snackbar removed - unused in this file
 import '../../add_download/widgets/add_download_dialog.dart';
 import '../../../core/utils/haptic_helper.dart';
-import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/skeleton_loader.dart';
 import '../../../shared/mixins/pausable_loop_animation.dart';
+import '../../../shared/design/dmx_design.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -966,104 +966,35 @@ class _HomeScreenState extends State<HomeScreen>
     DownloadProvider provider,
     bool isDark,
     bool isRtl,
-  ) {
-    final surfaceClr = isDark ? AppTheme.surface : AppTheme.lightSurface;
-    final glassBorder =
-        isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
-    final redClr = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
-    final secClr =
-        isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final tasksToClear = provider.filteredTasks.where((task) {
-          final isSeeding = task.status == DownloadStatus.completed &&
-              task.isTorrent &&
-              task.seedingEnabled;
-          return (task.status == DownloadStatus.completed ||
-                  task.status == DownloadStatus.failed) &&
-              !isSeeding;
-        }).toList();
-        return Directionality(
-          textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-          child: AlertDialog(
-            backgroundColor: surfaceClr.withValues(alpha: 0.95),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-              side: BorderSide(color: glassBorder, width: 0.8),
-            ),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: redClr.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.delete_sweep_rounded,
-                    color: redClr,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    L10n.of(context, 'clear_history'),
-                    style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                          color: redClr,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                ),
-              ],
-            ),
-            content: Text(
-              isRtl
-                  ? 'هل أنت متأكد من حذف جميع ${tasksToClear.length} سجل مكتمل؟'
-                  : 'Delete all ${tasksToClear.length} completed records? This cannot be undone.',
-              style: Theme.of(
-                ctx,
-              ).textTheme.bodyMedium?.copyWith(color: secClr, height: 1.4),
-            ),
-            actions: [
-              TextButton(
-                style: TextButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  L10n.of(ctx, 'cancel_btn'),
-                  style: TextStyle(color: secClr),
-                ),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: redClr.withValues(alpha: 0.1),
-                  foregroundColor: redClr,
-                  side: BorderSide(color: redClr.withValues(alpha: 0.4)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  L10n.of(context, 'clear_all'),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                onPressed: () async {
-                  for (final task in tasksToClear) {
-                    await provider.deleteTask(task.id);
-                  }
-                  if (ctx.mounted) Navigator.of(ctx).pop();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+  ) async {
+    final tasksToClear = provider.filteredTasks.where((task) {
+      final isSeeding = task.status == DownloadStatus.completed &&
+          task.isTorrent &&
+          task.seedingEnabled;
+      return (task.status == DownloadStatus.completed ||
+              task.status == DownloadStatus.failed) &&
+          !isSeeding;
+    }).toList();
+
+    final message = isRtl
+        ? 'هل أنت متأكد من حذف جميع ${tasksToClear.length} سجل مكتمل؟'
+        : 'Delete all ${tasksToClear.length} completed records? This cannot be undone.';
+
+    final confirmed = await DmxConfirmDialog.show(
+      context,
+      title: L10n.of(context, 'clear_history'),
+      message: message,
+      confirmLabel: L10n.of(context, 'clear_all'),
+      cancelLabel: L10n.of(context, 'cancel_btn'),
+      isDestructive: true,
+      icon: Icons.delete_sweep_rounded,
     );
+
+    if (confirmed == true && context.mounted) {
+      for (final task in tasksToClear) {
+        await provider.deleteTask(task.id);
+      }
+    }
   }
 }
 
@@ -1219,19 +1150,12 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
             );
           }).toList();
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: settings.classicUi
-          ? BoxDecoration(
-              color: isDark ? AppTheme.surface : AppTheme.lightSurface,
-              border: Border.all(
-                color: isDark ? AppTheme.border : AppTheme.lightBorder,
-                width: 1.0,
-              ),
-              borderRadius: BorderRadius.circular(20),
-            )
-          : AppTheme.glassDecoration(borderRadius: 20, isDark: isDark),
+    return DmxCardShell(
+      accent: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+      radius: 20,
+      showRail: true,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1418,8 +1342,9 @@ class _RedesignedAnalyticsPanel extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   String _translateCat(String name) {
     switch (name) {
@@ -1871,90 +1796,11 @@ class _EmptyState extends StatelessWidget {
           ),
         );
       },
-      child: Center(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: settings.classicUi
-                      ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
-                      : (isDark ? AppTheme.glassBg : AppTheme.lightGlassBg),
-                  border: Border.all(
-                    color: settings.classicUi
-                        ? (isDark ? AppTheme.border : AppTheme.lightBorder)
-                        : (isDark
-                            ? AppTheme.glassBorder
-                            : AppTheme.lightGlassBorder),
-                    width: 0.8,
-                  ),
-                  boxShadow: isDark && !settings.classicUi
-                      ? [
-                          BoxShadow(
-                            color: accentClr.withValues(alpha: 0.04),
-                            blurRadius: 24,
-                            spreadRadius: 4,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Icon(
-                  icon,
-                  size: 40,
-                  color: (isDark ? AppTheme.textMuted : AppTheme.lightTextMuted)
-                      .withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: isDark
-                          ? AppTheme.textSecondary
-                          : AppTheme.lightTextSecondary,
-                      letterSpacing: 0.5,
-                      fontWeight: FontWeight.w700,
-                      fontSize: responsiveFontSize(context, 13),
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isDark
-                            ? AppTheme.textMuted
-                            : AppTheme.lightTextMuted,
-                        fontSize: 11,
-                        height: 1.4,
-                      ),
-                ),
-              ),
-              if (selectedTab == 0) ...[
-                const SizedBox(height: 24),
-                NeonGlowButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => const AddDownloadDialog(),
-                    );
-                  },
-                  text: L10n.of(context, 'add_new_transmission'),
-                  icon: Icons.add_rounded,
-                  isFilled: true,
-                  color: accentClr,
-                  hasGlow: true,
-                ),
-              ],
-            ],
-          ),
-        ),
+      child: DmxEmptyState(
+        icon: icon,
+        title: title,
+        subtitle: subtitle,
+        accentColor: accentClr,
       ),
     );
   }

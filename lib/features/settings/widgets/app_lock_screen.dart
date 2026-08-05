@@ -1,9 +1,15 @@
 import 'dart:async';
 
-import 'package:dmx/core/utils/localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../../core/app_theme.dart';
 import '../../../core/services/app_lock_service.dart';
+import '../../../core/utils/localization.dart';
+import '../../../shared/design/dmx_design.dart';
+import '../../../shared/widgets/geometric_grid_background.dart';
+import '../../../shared/widgets/themed_snackbar.dart';
+import '../provider/settings_provider.dart';
 
 /// Screen for entering or setting up PIN lock.
 class AppLockScreen extends StatefulWidget {
@@ -70,8 +76,11 @@ class _AppLockScreenState extends State<AppLockScreen> {
     if (widget.isSettingUp) {
       await AppLockService.setPin(pin);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(L10n.of(context, 'security_pin_set'))),
+      ThemedSnackbar.show(
+        context,
+        message: L10n.of(context, 'security_pin_set'),
+        color: AppTheme.neonGreen,
+        icon: Icons.check_circle_outline,
       );
       Navigator.of(context).pop();
       return;
@@ -96,63 +105,112 @@ class _AppLockScreenState extends State<AppLockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final screen = Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isSettingUp ? 'Set Security PIN' : 'Enter PIN'),
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.lock_rounded,
-              size: 64,
-              color: theme.colorScheme.primary,
+    final isDark = context.watch<SettingsProvider>().isDarkMode;
+    final accent = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
+    final textClr = isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary;
+
+    final screen = GeometricGridBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          title: Text(
+            (widget.isSettingUp ? 'Set Security PIN' : 'Enter PIN').toUpperCase(),
+            style: TextStyle(
+              fontFamily: 'Space Grotesk',
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              letterSpacing: 1.5,
+              color: textClr,
             ),
-            const SizedBox(height: 16),
-            Text(
-              widget.isSettingUp
-                  ? 'Enter a 4-digit PIN to secure XDM'
-                  : 'Enter your Security PIN to unlock',
-              style: theme.textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _pinController,
-              enabled: !_isLockedOut,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              obscureText: true,
-              maxLength: 6,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 24, letterSpacing: 8),
-              decoration: InputDecoration(
-                counterText: '',
-                errorText: _isLockedOut
-                    ? 'Too many attempts. Try again in ${_remainingSeconds}s.'
-                    : _errorMessage,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+          ),
+          centerTitle: true,
+        ),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: DmxCardShell(
+                accent: accent,
+                radius: 20,
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: accent.withValues(alpha: 0.12),
+                        ),
+                        child: Icon(
+                          Icons.lock_rounded,
+                          size: 40,
+                          color: accent,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        widget.isSettingUp
+                            ? 'Enter a 4 to 6 digit PIN to secure XDM'
+                            : 'Enter your Security PIN to unlock',
+                        style: TextStyle(
+                          fontFamily: 'Space Grotesk',
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: textClr,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      TextField(
+                        controller: _pinController,
+                        enabled: !_isLockedOut,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        obscureText: true,
+                        maxLength: 6,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          letterSpacing: 8,
+                          color: textClr,
+                          fontFamily: 'Space Grotesk',
+                        ),
+                        decoration: InputDecoration(
+                          counterText: '',
+                          errorText: _isLockedOut
+                              ? 'Too many attempts. Try again in ${_remainingSeconds}s.'
+                              : _errorMessage,
+                          filled: true,
+                          fillColor: AppTheme.panelBg(isDark),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+                            ),
+                          ),
+                        ),
+                        onSubmitted: (_) => _handleSubmit(),
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: DmxButton.filled(
+                          label: widget.isSettingUp ? 'Save PIN' : 'Unlock',
+                          onPressed: _isLockedOut ? null : _handleSubmit,
+                          color: accent,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              onSubmitted: (_) => _handleSubmit(),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _isLockedOut ? null : _handleSubmit,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(widget.isSettingUp ? 'Save PIN' : 'Unlock'),
-            ),
-          ],
+          ),
         ),
       ),
     );

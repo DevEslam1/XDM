@@ -138,6 +138,10 @@ class AppTheme {
   static Color resolve(bool isDark, Color dark, Color light) =>
       isDark ? dark : light;
 
+  /// Panel background color used for inner form fields, well inputs, and option panels.
+  static Color panelBg(bool isDark) =>
+      isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
+
   /// Primary channel accent for the current mode.
   static Color accent(bool isDark) => isDark ? neonBlue : lightNeonBlue;
 
