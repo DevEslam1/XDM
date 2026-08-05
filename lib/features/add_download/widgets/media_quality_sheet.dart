@@ -157,14 +157,86 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
         isDark ? AppTheme.glassBorder : AppTheme.lightGlassBorder;
     final panelBg = isDark ? const Color(0xFF0F0F16) : const Color(0xFFF1F5F9);
 
-    final muxed = _streams.where((s) => s['type'] == 'muxed').toList();
-    final audio = _streams.where((s) => s['type'] == 'audio').toList();
-    final combined = _streams.where((s) => s['type'] == 'combined').toList()
+    final audio = _streams.where((s) => s['type'] == 'audio').toList()
       ..sort((a, b) {
-        final aQuality = _parseQuality(a['quality'] as String? ?? '');
-        final bQuality = _parseQuality(b['quality'] as String? ?? '');
-        return bQuality.compareTo(aQuality);
+        final aSize = a['size'] as int? ?? 0;
+        final bSize = b['size'] as int? ?? 0;
+        return bSize.compareTo(aSize);
       });
+
+    final rawVideos = _streams
+        .where((s) =>
+            s['type'] == 'video_only' ||
+            s['type'] == 'combined' ||
+            s['type'] == 'muxed')
+        .toList();
+
+    final Map<int, Map<String, dynamic>> videosByHeight = {};
+    for (final s in rawVideos) {
+      final qStr = s['quality'] as String? ?? '';
+      final h = _parseQuality(qStr);
+      final key = h > 0 ? h : rawVideos.indexOf(s);
+
+      if (!videosByHeight.containsKey(key)) {
+        videosByHeight[key] = Map<String, dynamic>.from(s);
+      } else {
+        final existing = videosByHeight[key]!;
+        final existingSize = (existing['videoSize'] as int? ?? 0) > 0
+            ? (existing['videoSize'] as int)
+            : (existing['size'] as int? ?? 0);
+        final currentSize = (s['videoSize'] as int? ?? 0) > 0
+            ? (s['videoSize'] as int)
+            : (s['size'] as int? ?? 0);
+        if (currentSize > existingSize) {
+          videosByHeight[key] = Map<String, dynamic>.from(s);
+        }
+      }
+    }
+
+    final videoList = videosByHeight.entries.map((entry) {
+      final h = entry.key;
+      final v = entry.value;
+      final vType = v['type'] as String? ?? 'muxed';
+
+      if (audio.isNotEmpty &&
+          (vType == 'video_only' ||
+              v['audioSrc'] == null ||
+              v['audioSrc'].toString().isEmpty)) {
+        Map<String, dynamic> pairedAudio;
+        if (h >= 720) {
+          pairedAudio = audio.first;
+        } else if (h == 480) {
+          pairedAudio = audio[audio.length ~/ 2];
+        } else {
+          pairedAudio = audio.last;
+        }
+
+        final audioUrl = pairedAudio['src'] ??
+            pairedAudio['direct_url'] ??
+            pairedAudio['url'];
+        final aSize = (pairedAudio['size'] as int? ?? 0) > 0
+            ? (pairedAudio['size'] as int)
+            : (pairedAudio['audioSize'] as int? ?? 0);
+        final vSize = (v['videoSize'] as int? ?? 0) > 0
+            ? (v['videoSize'] as int)
+            : (v['size'] as int? ?? 0);
+
+        v['audioSrc'] = audioUrl?.toString();
+        v['videoSize'] = vSize;
+        v['audioSize'] = aSize;
+        v['size'] = vSize + aSize;
+        v['type'] = 'combined';
+        final qLabel = v['quality']?.toString() ?? '';
+        v['label'] = qLabel.isNotEmpty ? '$qLabel MP4' : 'Video MP4';
+      }
+      return v;
+    }).toList()
+      ..sort((a, b) {
+        final aHeight = _parseQuality(a['quality'] as String? ?? '');
+        final bHeight = _parseQuality(b['quality'] as String? ?? '');
+        return bHeight.compareTo(aHeight);
+      });
+
     final videoTitle = _streams.isNotEmpty
         ? (_streams.first['title'] as String? ?? 'Media')
         : 'Media';
@@ -529,7 +601,7 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
                           if (_selectedTabIndex == 0) ...[
-                            if (combined.isNotEmpty) ...[
+                            if (videoList.isNotEmpty) ...[
                               _sectionHeader(
                                 context,
                                 L10n.of(context, 'video_label'),
@@ -540,32 +612,18 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
                                 isDark,
                                 trailing: _recommendBadge(isDark),
                               ),
-                              ...combined.map(
+                              ...videoList.map(
                                 (s) =>
                                     _streamTile(context, s, isDark, settings),
                               ),
                               const SizedBox(height: 12),
                             ],
-                            if (combined.isEmpty && muxed.isNotEmpty) ...[
-                              _sectionHeader(
-                                context,
-                                'VIDEO + AUDIO (MUXED)',
-                                Icons.ondemand_video_outlined,
-                                accent,
-                                isDark,
-                              ),
-                              ...muxed.map(
-                                (s) =>
-                                    _streamTile(context, s, isDark, settings),
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                            if (combined.isEmpty && muxed.isEmpty)
+                            if (videoList.isEmpty)
                               Padding(
                                 padding: const EdgeInsets.all(32),
                                 child: Center(
                                   child: Text(
-                                    'No MP4 video streams found.',
+                                    'No video streams found.',
                                     style: TextStyle(
                                       color: secClr,
                                       fontSize: 12,
@@ -730,7 +788,9 @@ class _MediaQualitySheetState extends State<MediaQualitySheet> {
           borderRadius: BorderRadius.circular(13),
           onTap: () async {
             runHaptic(settings);
-            if (type == 'video_only') {
+            final hasAudio = stream['audioSrc'] != null &&
+                stream['audioSrc'].toString().isNotEmpty;
+            if (type == 'video_only' && !hasAudio) {
               final confirm = await _showConfirmDialog(
                 context: context,
                 title: L10n.isRtl(context)

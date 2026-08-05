@@ -23,7 +23,7 @@ class ChannelProgressPainter extends CustomPainter {
     // Track
     final trackPaint = Paint()
       ..color = (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-          .withValues(alpha: 0.08)
+          .withValues(alpha: isDark ? 0.15 : 0.12)
       ..style = PaintingStyle.fill;
     canvas.drawRRect(
       RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),

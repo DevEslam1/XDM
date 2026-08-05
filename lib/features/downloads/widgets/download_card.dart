@@ -337,11 +337,6 @@ class _StatusChipState extends State<_StatusChip>
         task.scheduledAt != null &&
         task.scheduledAt!.isAfter(DateTime.now());
 
-    final provider = context.watch<DownloadProvider>();
-    final isQueued = task.status == DownloadStatus.queued;
-    final activeCount = provider.downloadingTasksCount;
-    final maxCount = context.watch<SettingsProvider>().maxDownloads;
-
     final isPulseActive = _shouldPulse(task) && _pulseAnimation != null;
 
     final Widget chipContent = isPulseActive
@@ -414,58 +409,68 @@ class _StatusChipState extends State<_StatusChip>
             ),
           );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            chipContent,
-            if (isScheduled) ...[
-              const SizedBox(width: 6),
-              Tooltip(
-                message: formatLocalizedDateTime(context, task.scheduledAt!),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: AppTheme.chipDecoration(
-                    color: AppTheme.neonAmber,
-                    isDark: isDark,
-                    radius: 8,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.schedule_rounded,
-                          size: 12, color: AppTheme.neonAmber),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Scheduled for ${formatLocalizedTime(context, task.scheduledAt!)}',
-                        style: TextStyle(
-                          fontSize: responsiveFontSize(context, 10),
-                          color: AppTheme.neonAmber,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+        chipContent,
+        if (isScheduled) ...[
+          const SizedBox(width: 6),
+          Tooltip(
+            message: formatLocalizedDateTime(context, task.scheduledAt!),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: AppTheme.chipDecoration(
+                color: AppTheme.neonAmber,
+                isDark: isDark,
+                radius: 8,
               ),
-            ],
-          ],
-        ),
-        if (isQueued) ...[
-          const SizedBox(height: 2),
-          Text(
-            'Waiting for slot ($activeCount/$maxCount active)',
-            style: TextStyle(
-              fontSize: responsiveFontSize(context, 9),
-              color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.schedule_rounded,
+                      size: 12, color: AppTheme.neonAmber),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Scheduled for ${formatLocalizedTime(context, task.scheduledAt!)}',
+                    style: TextStyle(
+                      fontSize: responsiveFontSize(context, 10),
+                      color: AppTheme.neonAmber,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ],
+    );
+  }
+}
+
+class _QueuedSubtext extends StatelessWidget {
+  final DownloadTask task;
+  final bool isDark;
+
+  const _QueuedSubtext({required this.task, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    if (task.status != DownloadStatus.queued) return const SizedBox.shrink();
+    final provider = context.watch<DownloadProvider>();
+    final activeCount = provider.downloadingTasksCount;
+    final maxCount = context.watch<SettingsProvider>().maxDownloads;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Text(
+        'Waiting for slot ($activeCount/$maxCount active)',
+        style: TextStyle(
+          fontSize: responsiveFontSize(context, 9.5),
+          color: isDark ? AppTheme.textMuted : AppTheme.lightTextMuted,
+        ),
+      ),
     );
   }
 }
@@ -486,92 +491,166 @@ class _TelemetryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final seeding = _isSeeding(task);
+    final isCompleted = task.status == DownloadStatus.completed && !seeding;
+    final isDownloading = task.status == DownloadStatus.downloading || seeding;
+    final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
+    final secClr = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
 
-    final String etaText;
-    if (task.status == DownloadStatus.downloading) {
-      etaText = task.etaFormatted;
-    } else if (task.status == DownloadStatus.completed) {
-      etaText = 'DONE';
-    } else {
-      etaText = '--';
+    final proto = ProtocolCache.get(task.url);
+    final protoLabel = switch (proto) {
+      ProtocolSupport.http3 => 'H3',
+      ProtocolSupport.http2 => 'H2',
+      _ => 'H1.1',
+    };
+
+    final protoBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
+            .withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        protoLabel,
+        style: TextStyle(
+          fontSize: responsiveFontSize(context, 10),
+          fontWeight: FontWeight.bold,
+          fontFamily: 'Space Grotesk',
+          color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+        ),
+      ),
+    );
+
+    // Completed downloads: clean single metadata line
+    if (isCompleted) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
+            const SizedBox(width: 4),
+            Text(
+              task.sizeFormatted,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 12,
+                weight: FontWeight.w600,
+                color: secClr,
+              ),
+            ),
+            const Spacer(),
+            protoBadge,
+          ],
+        ),
+      );
     }
 
-    final String speedText;
-    if (task.status == DownloadStatus.downloading) {
-      speedText = task.speedFormatted;
-    } else if (seeding) {
-      speedText = '${formatBytes(seedingUploadSpeed)}/s';
-    } else {
-      speedText = '--';
+    // Active downloading or seeding: 2-row live telemetry with sparkline
+    if (isDownloading) {
+      final speedText = seeding
+          ? '${formatBytes(seedingUploadSpeed)}/s'
+          : task.speedFormatted;
+      final etaText = seeding ? 'SEEDING' : task.etaFormatted;
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(Icons.speed_rounded, size: 14, color: accent),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    speedText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 12,
+                      weight: FontWeight.bold,
+                      color: accent,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(Icons.schedule_rounded, size: 14, color: mutedClr),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    etaText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 12,
+                      color: secClr,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Builder(
+                  builder: (context) {
+                    final provider = context.watch<DownloadProvider>();
+                    final history = provider.getSpeedHistory(task.id);
+                    if (history.length >= 2) {
+                      return _CardSparklineGraph(history: history, color: accent);
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    '${task.downloadedSizeFormatted} / ${task.sizeFormatted}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.dataStyle(
+                      isDark: isDark,
+                      size: 11,
+                      color: secClr,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                protoBadge,
+              ],
+            ),
+          ],
+        ),
+      );
     }
 
+    // Paused / Queued / Failed:
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
         children: [
-          Row(
-            children: [
-              _TelemetryTile(icon: Icons.speed, label: speedText),
-              const SizedBox(width: 16),
-              _TelemetryTile(icon: Icons.access_time, label: etaText),
-              const Spacer(),
-              Builder(
-                builder: (context) {
-                  final provider = context.watch<DownloadProvider>();
-                  final history = provider.getSpeedHistory(task.id);
-                  if (task.status == DownloadStatus.downloading &&
-                      history.length >= 2) {
-                    return _CardSparklineGraph(history: history, color: accent);
-                  }
-                  return const SizedBox.shrink();
-                },
+          Icon(Icons.sd_storage_outlined, size: 14, color: mutedClr),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              task.downloadedBytes > 0
+                  ? '${task.downloadedSizeFormatted} / ${task.sizeFormatted}'
+                  : task.sizeFormatted,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.dataStyle(
+                isDark: isDark,
+                size: 12,
+                weight: FontWeight.w600,
+                color: secClr,
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _TelemetryTile(
-                icon: Icons.storage,
-                label: task.downloadedSizeFormatted,
-              ),
-              const SizedBox(width: 16),
-              _TelemetryTile(
-                icon: Icons.percent,
-                label: '${(task.progress * 100).toInt()}%',
-              ),
-              const Spacer(),
-              Builder(
-                builder: (context) {
-                  final proto = ProtocolCache.get(task.url);
-                  final label = switch (proto) {
-                    ProtocolSupport.http3 => 'H3',
-                    ProtocolSupport.http2 => 'H2',
-                    _ => 'H1.1',
-                  };
-                  return Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color:
-                          (isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue)
-                              .withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: responsiveFontSize(context, 10),
-                        fontWeight: FontWeight.bold,
-                        color:
-                            isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+          const SizedBox(width: 8),
+          protoBadge,
         ],
       ),
     );
@@ -690,19 +769,24 @@ class _ProgressRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: _ChunkedProgressBar(task: task, isDark: isDark, color: color),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         // Total percentage readout
-        Text(
-          task.progressPercentString,
-          style: AppTheme.dataStyle(
-            isDark: isDark,
-            size: 15,
-            weight: FontWeight.w800,
-            color: color,
+        SizedBox(
+          width: 48,
+          child: Text(
+            task.progressPercentString,
+            textAlign: TextAlign.end,
+            style: AppTheme.dataStyle(
+              isDark: isDark,
+              size: 13,
+              weight: FontWeight.w800,
+              color: color,
+            ),
           ),
         ),
       ],
@@ -744,7 +828,7 @@ class _ControlButtonState extends State<_ControlButton> {
       button: true,
       label: widget.tooltip,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         child: Center(
           child: Tooltip(
             message: widget.tooltip,
@@ -979,7 +1063,10 @@ class _FileCard extends StatelessWidget with HapticHelper {
       onLongPress: () => _showAdvancedControls(context, task, settings),
       child: ClipRect(
         child: Padding(
-          padding: EdgeInsets.all(compact ? 12 : 14),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 14,
+            vertical: compact ? 10 : 14,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1010,6 +1097,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
                       children: [
                         Text(
                           task.fileName,
+                          textDirection: TextDirection.ltr,
                           style: AppTheme.dataStyle(
                             isDark: isDark,
                             size: compact ? 13 : 14,
@@ -1019,23 +1107,23 @@ class _FileCard extends StatelessWidget with HapticHelper {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 5),
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             _StatusChip(task: task, isDark: isDark),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                L10n.translateCategory(
-                                  context,
-                                  task.category,
-                                ).toUpperCase(),
-                                style: AppTheme.microLabel(
-                                  isDark: isDark,
-                                  size: 8.5,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              L10n.translateCategory(
+                                context,
+                                task.category,
+                              ).toUpperCase(),
+                              style: AppTheme.microLabel(
+                                isDark: isDark,
+                                size: 8.5,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -1120,7 +1208,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
     final mutedClr = isDark ? AppTheme.textMuted : AppTheme.lightTextMuted;
     final qualityColor = _isAudioOnly
         ? (isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen)
-        : (isDark ? AppTheme.neonRed : AppTheme.lightNeonRed);
+        : (isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan);
 
     return _CardShell(
       accent: statusColor,
@@ -1135,9 +1223,13 @@ class _MediaCard extends StatelessWidget with HapticHelper {
       onLongPress: () => _showAdvancedControls(context, task, settings),
       child: ClipRect(
         child: Padding(
-          padding: EdgeInsets.all(compact ? 12 : 14),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 14,
+            vertical: compact ? 10 : 14,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1185,6 +1277,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                       children: [
                         Text(
                           task.fileName,
+                          textDirection: TextDirection.ltr,
                           style: AppTheme.dataStyle(
                             isDark: isDark,
                             size: compact ? 13 : 14,
@@ -1193,11 +1286,13 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 5),
-                        Row(
+                        SizedBox(height: compact ? 2 : 3),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             _StatusChip(task: task, isDark: isDark),
-                            const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 7,
@@ -1220,33 +1315,47 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                                 ),
                               ),
                             ),
-                            if (_hasAudioTrack && !_isAudioOnly) ...[
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.audio_file_rounded,
-                                size: 12,
-                                color: mutedClr,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                'A/V',
-                                style: AppTheme.microLabel(
-                                  isDark: isDark,
-                                  size: 8,
+                            if (_hasAudioTrack && !_isAudioOnly)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: mutedClr.withValues(alpha: 0.10),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.audio_file_rounded,
+                                      size: 11,
+                                      color: mutedClr,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'A/V',
+                                      style: AppTheme.microLabel(
+                                        isDark: isDark,
+                                        size: 8,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
                           ],
                         ),
+                        _QueuedSubtext(task: task, isDark: isDark),
                       ],
                     ),
                   ),
                   _ControlCluster(task: task),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: compact ? 2 : 4),
               _TelemetryStrip(task: task, isDark: isDark, accent: statusColor),
-              const SizedBox(height: 8),
+              SizedBox(height: compact ? 2 : 4),
               _ProgressRow(task: task, isDark: isDark, color: statusColor),
               if (task.statusMessage != null &&
                   task.statusMessage!.isNotEmpty &&
@@ -1330,7 +1439,10 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
               _showAdvancedControls(context, widget.task, settings),
           child: ClipRect(
             child: Padding(
-              padding: EdgeInsets.all(widget.compact ? 12 : 14),
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.compact ? 12 : 14,
+                vertical: widget.compact ? 10 : 14,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1364,6 +1476,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                           children: [
                             Text(
                               widget.task.fileName,
+                              textDirection: TextDirection.ltr,
                               style: AppTheme.dataStyle(
                                 isDark: isDark,
                                 size: widget.compact ? 13 : 14,
@@ -2705,39 +2818,6 @@ Future<bool?> showDeleteConfirmationDialog(
     }
     return null;
   });
-}
-
-class _TelemetryTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _TelemetryTile({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final color = isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary;
-
-    return Expanded(
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              label,
-              style: AppTheme.dataStyle(
-                isDark: isDark,
-                size: 11,
-                color: color,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _CardSparklineGraph extends StatelessWidget {

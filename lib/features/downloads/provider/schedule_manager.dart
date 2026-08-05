@@ -10,13 +10,24 @@ import '../../../core/services/update_service.dart';
 import '../models/download_task.dart';
 import 'package:dmx/core/services/logging_service.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULED DOWNLOAD FIXES (applied together)
+//   SCHED-FIX-1: Preserve schedule origin when wifi-only blocks promotion
+//   SCHED-FIX-2: Don't destroy future schedule on manual pause
+//   SCHED-FIX-3: Dynamic timer targeting nearest scheduled task
+//   SCHED-FIX-4: Disposal guard inside promotion loop
+//   SCHED-FIX-5: Notification when scheduled download starts
+//   SCHED-FIX-6: Revert in-memory state on save failure
+//   SCHED-FIX-7: Skip promotion until provider is fully loaded
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Owns the periodic scheduling timer and schedule evaluation.
 ///
-/// Extracted from [DownloadProvider] (Refactor A). Every 15 seconds it
-/// promotes due scheduled tasks to the queue, triggers the periodic app
-/// update check, and keeps the background service heartbeat alive while
-/// downloads are running. All task/queue mutations go through the
-/// constructor callbacks into the provider.
+/// Extracted from [DownloadProvider] (Refactor A). Every 15 seconds (or on a
+/// dynamically targeted schedule) it promotes due scheduled tasks to the
+/// queue, triggers the periodic app update check, and keeps the background
+/// service heartbeat alive while downloads are running. All task/queue
+/// mutations go through the constructor callbacks into the provider.
 class ScheduleManager {
   ScheduleManager({
     required List<DownloadTask> Function() tasks,
@@ -26,13 +37,16 @@ class ScheduleManager {
     required void Function() updateTorrentUploadLimit,
     required void Function() notifyListeners,
     required void Function() pumpQueue,
+    void Function(String taskName, DateTime scheduledAt)?
+        onScheduledTaskStarted,
   })  : _tasks = tasks,
         _databaseService = databaseService,
         _isDisposed = isDisposed,
         _downloadingTasksCount = downloadingTasksCount,
         _updateTorrentUploadLimit = updateTorrentUploadLimit,
         _notifyListeners = notifyListeners,
-        _pumpQueue = pumpQueue;
+        _pumpQueue = pumpQueue,
+        _onScheduledTaskStarted = onScheduledTaskStarted;
 
   final List<DownloadTask> Function() _tasks;
   final DatabaseService _databaseService;
@@ -41,41 +55,84 @@ class ScheduleManager {
   final void Function() _updateTorrentUploadLimit;
   final void Function() _notifyListeners;
   final void Function() _pumpQueue;
+  final void Function(String taskName, DateTime scheduledAt)?
+      _onScheduledTaskStarted;
 
   Timer? _schedulingTimer;
   DateTime? _lastUpdateCheckTime;
+  bool _ready = false;
+
+  // SCHED-FIX-7: Mark schedule manager ready after initial load completes
+  void markReady() {
+    _ready = true;
+    reschedule();
+  }
+
+  // SCHED-FIX-3: Retarget the scheduling timer when schedule state changes
+  void reschedule() {
+    _scheduleNextCheck();
+  }
 
   void start() {
     _schedulingTimer?.cancel();
-    _schedulingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
-      if (_isDisposed()) {
-        timer.cancel();
-        return;
+    _scheduleNextCheck();
+  }
+
+  // SCHED-FIX-3: Dynamic timer targeting the nearest upcoming scheduled task
+  void _scheduleNextCheck() {
+    _schedulingTimer?.cancel();
+    if (_isDisposed()) return;
+
+    final now = DateTime.now().toUtc();
+    DateTime? nearest;
+    for (final task in _tasks()) {
+      if (task.status == DownloadStatus.paused &&
+          !task.pausedByUser &&
+          task.scheduledAt != null &&
+          task.scheduledAt!.toUtc().isAfter(now)) {
+        if (nearest == null || task.scheduledAt!.toUtc().isBefore(nearest)) {
+          nearest = task.scheduledAt!.toUtc();
+        }
       }
+    }
+
+    Duration delay;
+    if (nearest != null) {
+      delay = nearest.difference(now) + const Duration(seconds: 1);
+      if (delay.isNegative) delay = const Duration(seconds: 1);
+    } else {
+      delay = const Duration(seconds: 15);
+    }
+
+    _schedulingTimer = Timer(delay, () {
+      if (_isDisposed()) return;
       unawaited(
-        checkScheduledDownloads().catchError((e) {
-          debugPrint('[ScheduleManager] checkScheduledDownloads error: $e');
+        _onTimerTick().then((_) {
+          if (!_isDisposed()) _scheduleNextCheck();
+        }).catchError((e) {
+          debugPrint('[ScheduleManager] timer tick error: $e');
+          if (!_isDisposed()) _scheduleNextCheck();
         }),
       );
-      unawaited(
-        _checkPeriodicAppUpdate().catchError((e) {
-          LoggingService.logger('ScheduleManager').warning(
-            '[ScheduleManager] periodic app update check failed',
-            e,
-          );
-        }),
-      );
-      if (_downloadingTasksCount() > 0) {
-        unawaited(
-          BackgroundService.sendHeartbeat().catchError((e) {
-            LoggingService.logger('ScheduleManager').warning(
-              '[ScheduleManager] background heartbeat failed',
-              e,
-            );
-          }),
-        );
-      }
     });
+  }
+
+  Future<void> _onTimerTick() async {
+    await checkScheduledDownloads();
+    await _checkPeriodicAppUpdate().catchError((e) {
+      LoggingService.logger('ScheduleManager').warning(
+        '[ScheduleManager] periodic app update check failed',
+        e,
+      );
+    });
+    if (_downloadingTasksCount() > 0) {
+      await BackgroundService.sendHeartbeat().catchError((e) {
+        LoggingService.logger('ScheduleManager').warning(
+          '[ScheduleManager] background heartbeat failed',
+          e,
+        );
+      });
+    }
   }
 
   Future<void> _checkPeriodicAppUpdate() async {
@@ -93,12 +150,18 @@ class ScheduleManager {
   }
 
   Future<void> checkScheduledDownloads() async {
+    // SCHED-FIX-7: skip promotion until provider is fully loaded
+    if (!_ready) return;
+
     // Compare in UTC so device timezone changes do not affect trigger timing.
     final nowUtc = DateTime.now().toUtc();
     var hasChanges = false;
     final saves = <Future<void>>[];
     final tasks = _tasks();
+    final promotedIndices = <int>[];
+
     for (var i = 0; i < tasks.length; i++) {
+      if (_isDisposed()) return; // SCHED-FIX-4: bail out if disposed
       final task = tasks[i];
       if (task.status == DownloadStatus.paused &&
           !task.pausedByUser &&
@@ -109,28 +172,48 @@ class ScheduleManager {
           clearError: true,
           clearCompletedAt: true,
           clearScheduledAt: true,
+          wasScheduledAt: task.scheduledAt, // SCHED-FIX-1: preserve origin
         );
+        promotedIndices.add(i);
         saves.add(_databaseService.saveTask(tasks[i]));
         hasChanges = true;
       }
     }
+
+    // SCHED-FIX-6: Revert in-memory state on save failure
     if (saves.isNotEmpty) {
-      // Run all saves concurrently; eagerError: false ensures every save is
-      // attempted even if an earlier one fails (unlike the default behaviour
-      // which stops at the first error and silently drops remaining saves).
-      await Future.wait(
-        saves.map(
-          (f) => f.catchError((Object e) {
-            debugPrint('Failed to save a scheduled task: $e');
-          }),
-        ),
-        eagerError: false,
-      );
+      try {
+        await Future.wait(saves, eagerError: true);
+      } catch (e) {
+        debugPrint(
+            '[ScheduleManager] Save failed, state may be inconsistent: $e');
+        for (final idx in promotedIndices) {
+          if (idx < tasks.length) {
+            tasks[idx] = tasks[idx].copyWith(
+              status: DownloadStatus.paused,
+              scheduledAt: tasks[idx].wasScheduledAt,
+              clearWasScheduledAt: true,
+            );
+          }
+        }
+        return; // Don't pump queue with inconsistent state
+      }
     }
+
     if (hasChanges) {
       _updateTorrentUploadLimit();
       _notifyListeners();
       _pumpQueue();
+
+      // SCHED-FIX-5: Notification when scheduled download starts
+      for (final idx in promotedIndices) {
+        if (idx < tasks.length) {
+          final t = tasks[idx];
+          if (t.wasScheduledAt != null && t.status == DownloadStatus.queued) {
+            _onScheduledTaskStarted?.call(t.fileName, t.wasScheduledAt!);
+          }
+        }
+      }
     }
   }
 

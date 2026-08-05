@@ -270,6 +270,22 @@ class NotificationCoordinator {
     }
   }
 
+  /// SCHED-FIX-5: Shows notification when a scheduled download starts.
+  void showScheduledStarted(String taskName, DateTime scheduledAt) {
+    if (!_settingsProvider.notificationsEnabled) return;
+    final quietHours = _settingsProvider.isInQuietHoursNow();
+    final id = 8000 + (scheduledAt.millisecondsSinceEpoch % 1000);
+    final local = scheduledAt.toLocal();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    _notificationService.showDownloadComplete(
+      notificationId: id,
+      title: 'Scheduled download started',
+      body: '$taskName (scheduled for $hour:$minute)',
+      playSound: _settingsProvider.soundNotification && !quietHours,
+    );
+  }
+
   /// Updates the per-task progress notification. No-op when notifications
   /// are disabled. Multiple active downloads are grouped under one summary.
   void showProgress({

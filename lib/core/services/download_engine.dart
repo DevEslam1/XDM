@@ -425,20 +425,29 @@ class DownloadEngine {
       final dir = File(tempFilePath).parent;
       if (!await dir.exists()) return;
 
-      // FIX-AUDIT-3: Build patterns from the FULL tempFilePath, not from
-      // basenameWithoutExtension, because sidecar files are named as
-      // "${tempFilePath}.dmxstate", "${tempFilePath}.journal", etc.
-      final patterns = <String>[
+      // FIX-AUDIT-3: Build patterns from both FULL tempFilePath and
+      // withoutExtension, supporting both file.dmxpart.dmxstate and file.dmxstate
+      final baseWithoutExt = p.withoutExtension(tempFilePath);
+      final patterns = <String>{
         tempFilePath, // the .dmxpart file itself
+        baseWithoutExt,
         '$tempFilePath.dmxstate',
+        '$baseWithoutExt.dmxstate',
         '$tempFilePath.journal',
+        '$baseWithoutExt.journal',
         '$tempFilePath.audio',
+        '$baseWithoutExt.audio',
         '$tempFilePath.audio.dmxstate',
+        '$baseWithoutExt.audio.dmxstate',
         '$tempFilePath.audio.journal',
+        '$baseWithoutExt.audio.journal',
         '$tempFilePath.merged',
+        '$baseWithoutExt.merged',
         '$tempFilePath.merged.mp4',
+        '$baseWithoutExt.merged.mp4',
         '$tempFilePath.merged.mkv',
-      ];
+        '$baseWithoutExt.merged.mkv',
+      };
 
 
       for (final path in patterns) {
@@ -451,10 +460,10 @@ class DownloadEngine {
       }
 
       // Also clean any leftover .partN files
-      final baseName = p.basename(tempFilePath);
+      final stem = p.basenameWithoutExtension(tempFilePath);
       await for (final entity in dir.list()) {
         if (entity is File &&
-            entity.path.contains('$baseName.part') &&
+            entity.path.contains('$stem.part') &&
             entity.path != tempFilePath) {
           try {
             await entity.delete();

@@ -1519,9 +1519,16 @@ class _DownloadTaskList extends StatelessWidget {
               itemCount: renderItems.length,
               onReorderItem: (oldIndex, newIndex) {
                 runHaptic(context.read<SettingsProvider>());
+                final p = context.read<DownloadProvider>();
+                if (p.statusFilter != 'All' ||
+                    p.searchQuery.isNotEmpty ||
+                    p.categoryFilters.isNotEmpty) {
+                  debugPrint('[Queue] Reorder blocked in UI: filters active');
+                  return;
+                }
                 final actualNewIndex =
                     oldIndex < newIndex ? newIndex + 1 : newIndex;
-                context.read<DownloadProvider>().reorderTasks(
+                p.reorderTasks(
                     provider.filteredTasks, oldIndex, actualNewIndex);
               },
               itemBuilder: (context, index) {

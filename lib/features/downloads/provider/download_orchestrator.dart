@@ -412,11 +412,18 @@ class DownloadOrchestrator {
   final Map<String, int> _ytRefreshAttempts = {};
 
   int get pendingStartCount => _startingTaskIds.length;
+  bool isTaskPendingStart(String taskId) => _startingTaskIds.contains(taskId);
 
-  Future<void> startTask(DownloadTask task) async {
-    if (_host.cancelTokens.containsKey(task.id)) return;
-    if (_startingTaskIds.contains(task.id)) return;
+  // QUEUE-FIX-5: Return bool indicating if startTask was accepted
+  bool startTask(DownloadTask task) {
+    if (_host.cancelTokens.containsKey(task.id)) return false;
+    if (_startingTaskIds.contains(task.id)) return false;
     _startingTaskIds.add(task.id);
+    unawaited(_runStartTaskBody(task));
+    return true;
+  }
+
+  Future<void> _runStartTaskBody(DownloadTask task) async {
     try {
       await _startTaskBody(task);
     } finally {
@@ -1494,7 +1501,23 @@ class DownloadOrchestrator {
               }
             }
 
-            debugPrint('[DMX] Parallel download: starting audio stream.');
+            final resolvedAudioThreads = liveAudioSize <= 0
+                ? 2
+                : liveAudioSize < 5 * 1024 * 1024
+                    ? 1
+                    : liveAudioSize < 50 * 1024 * 1024
+                        ? 2
+                        : min(4, liveAudioSize > 200 * 1024 * 1024 ? 4 : 3);
+
+            final audioTaskIdx =
+                _host.providerTasks.indexWhere((x) => x.id == task.id);
+            if (audioTaskIdx != -1) {
+              _host.providerTasks[audioTaskIdx] = _host
+                  .providerTasks[audioTaskIdx]
+                  .copyWith(audioThreadCount: resolvedAudioThreads);
+            }
+
+            debugPrint('[DMX] Parallel download: starting audio stream ($resolvedAudioThreads threads).');
             await _host.downloadEngine.download(
               taskId: task.id,
               url: liveAudioTask.mergedAudioUrl!,
@@ -1505,15 +1528,7 @@ class DownloadOrchestrator {
               cancelToken: audioCancelToken,
               cookies: cookieString,
               oauthToken: YoutubeService.oauthToken,
-              // FIX-AUDIT-7: Scale audio threads with file size.
-              // Small audio (<5MB): 1 thread. Medium (<50MB): 2. Large: up to 4.
-              threadCount: liveAudioSize <= 0
-                  ? 2
-                  : liveAudioSize < 5 * 1024 * 1024
-                      ? 1
-                      : liveAudioSize < 50 * 1024 * 1024
-                          ? 2
-                          : min(4, liveAudioSize > 200 * 1024 * 1024 ? 4 : 3),
+              threadCount: resolvedAudioThreads,
 
               adaptiveThreads: _host.providerSettingsProvider.adaptiveThreads,
               speedLimitKbps: task.speedLimitKbps,

@@ -4,6 +4,17 @@ import '../../models/download_task.dart';
 import '../../../../core/services/database_service.dart';
 import '../../../../features/settings/provider/settings_provider.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// QUEUE CONCURRENCY FIXES (applied together)
+//   QUEUE-FIX-1: Count pendingStartCount against concurrency cap
+//   QUEUE-FIX-2: Unified denominator for slot check and thread budget
+//   QUEUE-FIX-3: Skip tasks already pending start
+//   QUEUE-FIX-4: Block reorder when filters are active
+//   QUEUE-FIX-5: Don't count rejected starts against slot budget
+//   QUEUE-FIX-6: Defensive override cleanup on exception
+//   QUEUE-FIX-7: Preserve maxConcurrentOverride through coalesced re-pump
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Mixin that encapsulates download queue concurrency management — the pump
 /// loop, batch‑mode coalescing, slot calculation, and global connection cap.
 ///
@@ -11,7 +22,7 @@ import '../../../../features/settings/provider/settings_provider.dart';
 ///  - `List<DownloadTask> get providerTasks`
 ///  - `SettingsProvider get providerSettingsProvider`
 ///  - `int get downloadingTasksCount`
-///  - `void startTaskFromQueue(DownloadTask task)` — kicks off a single task
+///  - `bool startTaskFromQueue(DownloadTask task)` — kicks off a single task
 mixin DownloadQueueMixin {
   // ---------------------------------------------------------------------------
   // Abstract contract — must be provided by the host class
@@ -20,7 +31,8 @@ mixin DownloadQueueMixin {
   SettingsProvider get providerSettingsProvider;
   int get downloadingTasksCount;
   int get pendingStartCount;
-  void startTaskFromQueue(DownloadTask task);
+  bool startTaskFromQueue(DownloadTask task);
+  bool isTaskPendingStart(String taskId);
   bool isTaskWaitingForRetry(String taskId);
   Future<void> pauseTask(String id);
   Future<void> resumeTask(String id);
@@ -29,6 +41,10 @@ mixin DownloadQueueMixin {
   set filteredTasksDirty(bool value); // FIX(13)
   void notifyListeners(); // FIX(13)
 
+  String get statusFilter;
+  String get searchQuery;
+  Set<String> get categoryFilters;
+
   // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
@@ -36,6 +52,7 @@ mixin DownloadQueueMixin {
   bool _batchMode = false;
   bool _needsNotify = false;
   bool _needsRePump = false;
+  int? _pendingMaxConcurrentOverride;
 
   /// Per-task effective thread count overrides calculated by [pumpQueue] to
   /// enforce the global connection cap. The host class should check this map
@@ -76,6 +93,11 @@ mixin DownloadQueueMixin {
   /// Reorders tasks by their new index positions.
   /// Called from a ReorderableListView's onReorder callback.
   Future<void> reorderTasks(List<DownloadTask> visibleTasks, int oldIndex, int newIndex) async {
+    // QUEUE-FIX-4: Guard: only allow reordering when the full unfiltered list is visible
+    if (statusFilter != 'All' || searchQuery.isNotEmpty || categoryFilters.isNotEmpty) {
+      debugPrint('[Queue] Reorder blocked: filters active');
+      return;
+    }
     // 1. Adjust newIndex if moving downward (Flutter quirk)
     if (oldIndex < newIndex) newIndex -= 1;
     // 2. Remove item at oldIndex, insert at newIndex
@@ -106,22 +128,32 @@ mixin DownloadQueueMixin {
     bool skipPump = false,
     int? maxConcurrentOverride,
   }) {
+    // QUEUE-FIX-7: Preserve maxConcurrentOverride through coalesced re-pump
     if (skipPump || _queueProcessing) {
-      if (!skipPump) _needsRePump = true;
+      if (!skipPump) {
+        _needsRePump = true;
+        _pendingMaxConcurrentOverride = maxConcurrentOverride;
+      }
       return;
     }
     _queueProcessing = true;
     _needsRePump = false;
+    final effectiveOverride = maxConcurrentOverride ?? _pendingMaxConcurrentOverride;
+    _pendingMaxConcurrentOverride = null;
     try {
       final settings = providerSettingsProvider;
       final activeCount = providerTasks
           .where((t) => t.status == DownloadStatus.downloading)
           .length;
 
-      // Use override when provided (batch playlist), otherwise normal setting.
-      final maxActive = maxConcurrentOverride ?? settings.maxDownloads;
+      // QUEUE-FIX-1: Count pendingStartCount against concurrency cap
+      final effectiveActive = activeCount + pendingStartCount;
 
-      if (activeCount >= maxActive) return;
+      // Use override when provided (batch playlist), otherwise normal setting.
+      final maxActive = effectiveOverride ?? settings.maxDownloads;
+
+      // QUEUE-FIX-1: Early exit guard using effectiveActive
+      if (effectiveActive >= maxActive) return;
 
       final queued = providerTasks
           .where((task) =>
@@ -145,20 +177,20 @@ mixin DownloadQueueMixin {
 
       var startedThisPass = 0;
       for (final task in queued) {
-        if (activeCount + startedThisPass >= maxActive) break;
+        // QUEUE-FIX-1: Per-task loop guard using effectiveActive
+        if (effectiveActive + startedThisPass >= maxActive) break;
 
-        // FIX-C-M4: Skip if this task already has a pending override or is currently downloading
+        // QUEUE-FIX-3: Skip if this task already has a pending override, is downloading, or is pending start
         final isRunning = providerTasks.any(
           (t) => t.id == task.id && t.status == DownloadStatus.downloading,
         );
-        if (effectiveThreadOverrides.containsKey(task.id) || isRunning) continue;
+        final hasPendingOverride = effectiveThreadOverrides.containsKey(task.id);
+        final isPendingStart = isTaskPendingStart(task.id);
+        if (isRunning || hasPendingOverride || isPendingStart) continue;
 
-
-
-        // Enforce global connection cap: distribute connections evenly across
-        // all concurrent downloads (including the ones being started this pass).
+        // QUEUE-FIX-2: Unified denominator for slot check and thread budget using effectiveActive
         final totalConcurrent =
-            max(1, activeCount + pendingStartCount + startedThisPass + 1);
+            max(1, effectiveActive + startedThisPass + 1);
         final baseLimit = min(
           settings.maxTotalConnections ~/ totalConcurrent,
           settings.defaultThreadCount,
@@ -167,8 +199,16 @@ mixin DownloadQueueMixin {
         final clampedThreads = min(task.threadCount, effectiveThreads);
         effectiveThreadOverrides[task.id] = clampedThreads;
 
-        startTaskFromQueue(task);
-        startedThisPass++;
+        // QUEUE-FIX-5 & QUEUE-FIX-6: Don't count rejected starts and handle exception cleanup
+        try {
+          final started = startTaskFromQueue(task);
+          if (started) {
+            startedThisPass++;
+          }
+        } catch (e) {
+          debugPrint('[Queue] startTaskFromQueue threw for ${task.id}: $e');
+          effectiveThreadOverrides.remove(task.id);
+        }
       }
     } catch (e) {
       debugPrint('Queue pump error: $e');
@@ -176,7 +216,9 @@ mixin DownloadQueueMixin {
       _queueProcessing = false;
       if (_needsRePump) {
         _needsRePump = false;
-        Future.microtask(() => pumpQueue());
+        final pendingOverride = _pendingMaxConcurrentOverride;
+        _pendingMaxConcurrentOverride = null;
+        Future.microtask(() => pumpQueue(maxConcurrentOverride: pendingOverride));
       }
     }
   }

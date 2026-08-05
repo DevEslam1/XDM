@@ -4326,6 +4326,16 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                       true,
                                                                   mediaPlaybackRequiresUserGesture:
                                                                       false,
+                                                                  javaScriptEnabled:
+                                                                      true,
+                                                                  domStorageEnabled:
+                                                                      true,
+                                                                  databaseEnabled:
+                                                                      true,
+                                                                  thirdPartyCookiesEnabled:
+                                                                      true,
+                                                                  cacheEnabled:
+                                                                      true,
                                                                   supportZoom: settings
                                                                           .desktopMode ||
                                                                       settings
@@ -4336,6 +4346,21 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                   incognito: tab
                                                                       .isIncognito,
                                                                 ),
+                                                                onConsoleMessage:
+                                                                    (controller,
+                                                                        consoleMessage) {
+                                                                  final msg =
+                                                                      consoleMessage
+                                                                          .message;
+                                                                  if (msg.contains(
+                                                                          'recaptcha') ||
+                                                                      msg.contains(
+                                                                          "reading 'e3'")) {
+                                                                    return;
+                                                                  }
+                                                                  _log.fine(
+                                                                      '[WebView Console] ${consoleMessage.messageLevel}: $msg');
+                                                                },
                                                                 gestureRecognizers: <Factory<
                                                                     OneSequenceGestureRecognizer>>{
                                                                   Factory<VerticalDragGestureRecognizer>(

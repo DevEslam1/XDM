@@ -43,6 +43,7 @@ class DownloadTask {
   final DateTime updatedAt;
   final DateTime? completedAt;
   final DateTime? scheduledAt;
+  final DateTime? wasScheduledAt; // SCHED-FIX-1: Preserved after schedule fires
   final bool supportsResume;
   // Speed Limit and Torrent Seeding Fields
   final int speedLimitKbps; // 0 = unlimited
@@ -54,6 +55,7 @@ class DownloadTask {
   final String? mergedAudioUrl;
   final int audioSize;
   final double audioProgress;
+  final int audioThreadCount;
   final bool pausedByUser;
   final String? youtubeQualityPreset;
   final String? notes;
@@ -87,6 +89,7 @@ class DownloadTask {
     required this.updatedAt,
     this.completedAt,
     this.scheduledAt,
+    this.wasScheduledAt,
     this.supportsResume = false,
     this.speedLimitKbps = 0,
     this.seedingEnabled = false,
@@ -97,6 +100,7 @@ class DownloadTask {
     this.mergedAudioUrl,
     this.audioSize = 0,
     this.audioProgress = 0.0,
+    this.audioThreadCount = 2,
     this.pausedByUser = false,
     this.youtubeQualityPreset,
     this.notes,
@@ -131,18 +135,38 @@ class DownloadTask {
     return 0;
   }
 
+  /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
+  int get combinedTotalSize {
+    if (hasMergedAudio && audioSize > 0) {
+      final vSize = fileSize > 0 ? fileSize : 0;
+      return vSize + audioSize;
+    }
+    return resolvedFileSize;
+  }
+
+  /// Combined downloaded bytes including audio stream bytes for YouTube downloads.
+  int get combinedDownloadedBytes {
+    final vDownloaded = downloadedBytes < 0 ? 0 : downloadedBytes;
+    if (hasMergedAudio && audioSize > 0) {
+      final aDownloaded =
+          (audioProgress.clamp(0.0, 1.0) * audioSize).round().clamp(0, audioSize);
+      return vDownloaded + aDownloaded;
+    }
+    return vDownloaded;
+  }
+
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
-    final total = resolvedFileSize;
-    if (total <= 0) return 0.0; // FIX-C2: Prevent division by zero
-    final downloaded = downloadedBytes.clamp(0, total); // FIX-C2: Clamp to [0, total]
+    final total = combinedTotalSize;
+    if (total <= 0) return 0.0;
+    final downloaded = combinedDownloadedBytes.clamp(0, total);
     return (downloaded / total).clamp(0.0, 1.0);
   }
 
   String get progressPercentString {
     if (status == DownloadStatus.completed) return '100.0%';
-    final total = resolvedFileSize;
-    if (total <= 0) return '0.0%'; // FIX-C3: Handle zero fileSize
+    final total = combinedTotalSize;
+    if (total <= 0) return '0.0%';
     return '${(progress * 100).toStringAsFixed(1)}%';
   }
 
@@ -219,10 +243,11 @@ class DownloadTask {
   }
 
   String get sizeFormatted {
-    final total = resolvedFileSize;
+    final total = combinedTotalSize;
     if (total > 0) return formatBytes(total);
-    if (status == DownloadStatus.completed && downloadedBytes > 0) {
-      return formatBytes(downloadedBytes);
+    final downloaded = combinedDownloadedBytes;
+    if (status == DownloadStatus.completed && downloaded > 0) {
+      return formatBytes(downloaded);
     }
     return 'Unknown';
   }
@@ -230,9 +255,10 @@ class DownloadTask {
   /// Downloaded bytes, clamped so a late-resolved total can never render
   /// "1.4 GB / 800 MB" style rows.
   String get downloadedSizeFormatted {
-    final total = resolvedFileSize;
-    if (total > 0 && downloadedBytes > total) return formatBytes(total);
-    return formatBytes(downloadedBytes);
+    final total = combinedTotalSize;
+    final downloaded = combinedDownloadedBytes;
+    if (total > 0 && downloaded > total) return formatBytes(total);
+    return formatBytes(downloaded);
   }
 
   String get audioSizeFormatted =>
@@ -265,6 +291,8 @@ class DownloadTask {
     bool clearCompletedAt = false,
     DateTime? scheduledAt,
     bool clearScheduledAt = false,
+    DateTime? wasScheduledAt,
+    bool clearWasScheduledAt = false,
     bool? supportsResume,
     int? speedLimitKbps,
     bool? seedingEnabled,
@@ -278,6 +306,7 @@ class DownloadTask {
     bool clearMergedAudioUrl = false,
     int? audioSize,
     double? audioProgress,
+    int? audioThreadCount,
     bool? pausedByUser,
     String? youtubeQualityPreset,
     bool clearYoutubeQualityPreset = false,
@@ -313,6 +342,8 @@ class DownloadTask {
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       scheduledAt: clearScheduledAt ? null : (scheduledAt ?? this.scheduledAt),
+      wasScheduledAt:
+          clearWasScheduledAt ? null : (wasScheduledAt ?? this.wasScheduledAt),
       supportsResume: supportsResume ?? this.supportsResume,
       speedLimitKbps: speedLimitKbps ?? this.speedLimitKbps,
       seedingEnabled: seedingEnabled ?? this.seedingEnabled,
@@ -327,6 +358,7 @@ class DownloadTask {
           clearMergedAudioUrl ? null : (mergedAudioUrl ?? this.mergedAudioUrl),
       audioSize: audioSize ?? this.audioSize,
       audioProgress: audioProgress ?? this.audioProgress,
+      audioThreadCount: audioThreadCount ?? this.audioThreadCount,
       pausedByUser: pausedByUser ?? this.pausedByUser,
       youtubeQualityPreset: clearYoutubeQualityPreset
           ? null
@@ -365,6 +397,7 @@ class DownloadTask {
       'updatedAt': updatedAt.millisecondsSinceEpoch,
       'completedAt': completedAt?.millisecondsSinceEpoch,
       'scheduledAt': scheduledAt?.millisecondsSinceEpoch,
+      'wasScheduledAt': wasScheduledAt?.millisecondsSinceEpoch,
       'supportsResume': supportsResume,
       'speedLimitKbps': speedLimitKbps,
       'seedingEnabled': seedingEnabled,
@@ -375,6 +408,7 @@ class DownloadTask {
       'mergedAudioUrl': mergedAudioUrl,
       'audioSize': audioSize,
       'audioProgress': audioProgress,
+      'audioThreadCount': audioThreadCount,
       'pausedByUser': pausedByUser,
       'youtubeQualityPreset': youtubeQualityPreset,
       'notes': notes,
@@ -485,6 +519,7 @@ class DownloadTask {
       updatedAt: _parseFlexDate(map['updatedAt']),
       completedAt: _parseNullableFlexDate(map['completedAt']),
       scheduledAt: _parseNullableFlexDate(map['scheduledAt']),
+      wasScheduledAt: _parseNullableFlexDate(map['wasScheduledAt']),
       supportsResume: map['supportsResume'] as bool? ?? false,
       speedLimitKbps: (map['speedLimitKbps'] as num?)?.toInt() ?? 0,
       seedingEnabled: map['seedingEnabled'] as bool? ?? false,
@@ -497,6 +532,7 @@ class DownloadTask {
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
+      audioThreadCount: (map['audioThreadCount'] as num?)?.toInt() ?? 2,
       pausedByUser: map['pausedByUser'] as bool? ?? false,
       youtubeQualityPreset: map['youtubeQualityPreset'] as String?,
       notes: map['notes'] as String?,
@@ -516,9 +552,12 @@ class DownloadTask {
   // FIX 5: Helper getter for merged audio status
   bool get hasMergedAudio => mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty;
 
-  // FIX(H-4): Expose displayDownloadedBytes clamped to resolvedFileSize for UI rendering
-  int get displayDownloadedBytes =>
-      resolvedFileSize > 0 ? min(downloadedBytes, resolvedFileSize) : downloadedBytes;
+  // FIX(H-4): Expose displayDownloadedBytes clamped to combinedTotalSize for UI rendering
+  int get displayDownloadedBytes {
+    final total = combinedTotalSize;
+    final downloaded = combinedDownloadedBytes;
+    return total > 0 ? min(downloaded, total) : downloaded;
+  }
 
 
   // Identity equality based on [id] (plus playlist grouping keys) so cards

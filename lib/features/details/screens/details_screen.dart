@@ -767,116 +767,64 @@ class _TelemetryHero extends StatelessWidget {
                 // Readouts
 
                 Expanded(
-
                   child: Column(
-
                     crossAxisAlignment: CrossAxisAlignment.start,
-
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-
                       // Status chip
-
                       Container(
-
                         padding: const EdgeInsets.symmetric(
-
                           horizontal: 10,
-
                           vertical: 4,
-
                         ),
-
                         decoration: BoxDecoration(
-
                           color: statusColor.withValues(alpha: 0.12),
-
                           borderRadius: BorderRadius.circular(8),
-
                           border: Border.all(
-
                             color: statusColor.withValues(alpha: 0.35),
-
                             width: 0.8,
-
                           ),
-
                         ),
-
                         child: Text(
-
                           L10n.translateStatusName(
-
                             context,
-
                             task.status,
-
                           ).toUpperCase(),
-
                           style: AppTheme.microLabel(
-
                             isDark: isDark,
-
                             color: statusColor,
-
                             size: 9,
-
                           ),
-
                         ),
-
                       ),
-
-                      const SizedBox(height: 12),
-
-                      // Big speed readout
-
-                      Text(
-
-                        speedText,
-
-                        style: AppTheme.dataStyle(
-
-                          isDark: isDark,
-
-                          size: 22,
-
-                          weight: FontWeight.w800,
-
-                          color: statusColor,
-
-                        ),
-
-                        maxLines: 1,
-
-                        overflow: TextOverflow.ellipsis,
-
-                      ),
-
                       const SizedBox(height: 6),
 
+                      // Big speed readout
                       Text(
-
-                        etaText,
-
-                        maxLines: 1,
-
-                        overflow: TextOverflow.ellipsis,
-
+                        speedText,
                         style: AppTheme.dataStyle(
-
                           isDark: isDark,
-
-                          size: 12,
-
-                          weight: FontWeight.w600,
-
-                          color: mutedClr,
-
+                          size: 22,
+                          weight: FontWeight.w800,
+                          color: statusColor,
                         ),
-
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 4),
 
-                      const SizedBox(height: 10),
+                      Text(
+                        etaText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.dataStyle(
+                          isDark: isDark,
+                          size: 12,
+                          weight: FontWeight.w600,
+                          color: mutedClr,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
 
                       // Transferred / size
 

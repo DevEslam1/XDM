@@ -335,7 +335,8 @@ void main() {
       );
 
       // Trigger task start which will call _executeDownload, fail, and trigger catchError
-      await orchestrator.startTask(task);
+      orchestrator.startTask(task);
+      await Future.delayed(Duration.zero);
 
       final future = host.activeFutures[task.id];
       if (future != null) {
