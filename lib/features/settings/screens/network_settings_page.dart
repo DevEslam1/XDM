@@ -94,6 +94,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               SwitchTile(
                 accentColor: accent,
@@ -114,6 +115,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               SwitchTile(
                 accentColor: accent,
@@ -212,6 +214,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               if (settings.developerMode)
                 SwitchTile(
@@ -258,6 +261,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               SwitchTile(
                 accentColor: accent,

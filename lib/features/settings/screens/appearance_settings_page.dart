@@ -29,6 +29,7 @@ class AppearanceSettingsPage extends StatelessWidget with HapticHelper {
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               DropdownTile<String>(
                 accentColor: accent,
@@ -113,28 +114,6 @@ class AppearanceSettingsPage extends StatelessWidget with HapticHelper {
                     settings.setLanguageCode(val);
                     triggerHaptic(settings);
                   }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SettingsSectionHeader(
-            title: isRtl ? 'إدارة الطاقة والبطارية' : 'Power Management',
-            accentColor: AppTheme.neonAmber,
-            isDark: isDark,
-          ),
-          SettingsSectionGroup(
-            children: [
-              SwitchTile(
-                accentColor: AppTheme.neonAmber,
-                title: isRtl ? 'وضع توفير البطارية' : 'Battery Saver Mode',
-                subtitle: isRtl
-                    ? 'يحدد التحميلات المتزامنة بـ 1، الخيوط بـ 2، ويفعل الواجهة الكلاسيكية'
-                    : 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
-                value: settings.batterySaverMode,
-                onChanged: (val) {
-                  settings.setBatterySaverMode(val);
-                  triggerHaptic(settings);
                 },
               ),
             ],

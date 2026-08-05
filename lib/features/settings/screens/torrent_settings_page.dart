@@ -29,6 +29,7 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               SwitchTile(
                 accentColor: accent,
@@ -135,6 +136,7 @@ class TorrentSettingsPage extends StatelessWidget with HapticHelper {
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               SwitchTile(
                 accentColor: accent,

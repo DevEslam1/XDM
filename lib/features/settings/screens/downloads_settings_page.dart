@@ -31,6 +31,7 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               SwitchTile(
                 accentColor: accent,
@@ -111,6 +112,7 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               SwitchTile(
                 accentColor: accent,
@@ -187,6 +189,7 @@ class DownloadsSettingsPage extends StatelessWidget with HapticHelper {
             isDark: isDark,
           ),
           SettingsSectionGroup(
+            accentColor: accent,
             children: [
               PathPickerTile(
                 accentColor: accent,

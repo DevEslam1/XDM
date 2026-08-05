@@ -1,66 +1,99 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
-
+import '../../../shared/widgets/themed_snackbar.dart';
+import '../../../shared/widgets/dmx_backdrop_filter.dart';
+import '../provider/settings_provider.dart';
 /// Unified container for grouping setting tiles inside a single clean card
 class SettingsSectionGroup extends StatelessWidget {
   final List<Widget> children;
+  final Color? accentColor;
 
   const SettingsSectionGroup({
     super.key,
     required this.children,
+    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDark ? AppTheme.surface : AppTheme.lightSurface;
+    final settings = context.watch<SettingsProvider>();
+    final classicUi = settings.classicUi;
+    final isDark = settings.isDarkMode;
+    final glow = settings.enableGlow && accentColor != null;
+
+    final backgroundColor = classicUi
+        ? (isDark ? AppTheme.surface : AppTheme.lightSurface)
+        : (isDark
+            ? AppTheme.surface.withValues(alpha: 0.4)
+            : AppTheme.lightSurface.withValues(alpha: 0.4));
+
+    Widget content = Material(
+      color: backgroundColor,
+      child: Column(
+        children: List.generate(children.length, (index) {
+          final child = children[index];
+          if (index == children.length - 1) {
+            return child;
+          }
+          return Column(
+            children: [
+              child,
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark
+                    ? AppTheme.borderSubtle
+                    : AppTheme.lightBorderSubtle,
+                indent: 16,
+                endIndent: 16,
+              ),
+            ],
+          );
+        }),
+      ),
+    );
+
+    if (!classicUi) {
+      content = DmxBackdropFilter(
+        sigmaX: 12,
+        sigmaY: 12,
+        child: content,
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle,
+          color: glow
+              ? accentColor!.withValues(alpha: isDark ? 0.24 : 0.28)
+              : (isDark ? AppTheme.borderSubtle : AppTheme.lightBorderSubtle),
           width: 1,
         ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
+          if (glow)
+            BoxShadow(
+              color: accentColor!.withValues(alpha: isDark ? 0.08 : 0.04),
+              blurRadius: 16,
+              spreadRadius: 1,
+              offset: const Offset(0, 4),
+            )
+          else
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
         ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Material(
-          color: backgroundColor,
-          child: Column(
-            children: List.generate(children.length, (index) {
-              final child = children[index];
-              if (index == children.length - 1) {
-                return child;
-              }
-              return Column(
-                children: [
-                  child,
-                  Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: isDark
-                        ? AppTheme.borderSubtle
-                        : AppTheme.lightBorderSubtle,
-                    indent: 16,
-                    endIndent: 16,
-                  ),
-                ],
-              );
-            }),
-          ),
-        ),
+        child: content,
       ),
     );
   }
@@ -85,13 +118,28 @@ class SwitchTile extends StatelessWidget {
     this.batterySaverOverride = false,
   });
 
+  void _showBatterySaverLockedMessage(BuildContext context) {
+    final isRtl = L10n.isRtl(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    HapticFeedback.vibrate();
+    ThemedSnackbar.show(
+      context,
+      message: isRtl
+          ? 'وضع توفير البطارية نشط حالياً. قم بإيقافه من علامة تبويب الأداء والطاقة لتغيير هذا الخيار.'
+          : 'Battery Saver is active. Turn it off in the "Power & Perf" tab to change this option.',
+      color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
+      icon: Icons.battery_alert_rounded,
+      isDarkMode: isDark,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isRtl = L10n.isRtl(context);
     final disabled = onChanged == null || batterySaverOverride;
 
-    return Directionality(
+    final Widget tile = Directionality(
       textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
       child: SwitchListTile(
         value: value,
@@ -169,6 +217,17 @@ class SwitchTile extends StatelessWidget {
         ),
       ),
     );
+
+    if (batterySaverOverride) {
+      return GestureDetector(
+        onTap: () => _showBatterySaverLockedMessage(context),
+        behavior: HitTestBehavior.opaque,
+        child: IgnorePointer(
+          child: tile,
+        ),
+      );
+    }
+    return tile;
   }
 }
 

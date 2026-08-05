@@ -15,6 +15,7 @@ import '../provider/settings_provider.dart';
 import '../widgets/app_lock_screen.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
+import '../utils/backup_helper.dart';
 
 class AdvancedSettingsPage extends StatefulWidget {
   const AdvancedSettingsPage({super.key});
@@ -137,11 +138,11 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
     final isRtl = L10n.isRtl(context);
-    final accent = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+    final accent = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -150,24 +151,29 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
             accentColor: accent,
             isDark: isDark,
           ),
-          SwitchTile(
+          SettingsSectionGroup(
             accentColor: accent,
-            title: 'Enable Developer Mode',
-            subtitle: 'Unlocks advanced debugging, SSL configuration, and internal logs',
-            value: settings.developerMode,
-            onChanged: (val) {
-              settings.toggleDeveloperMode();
-              triggerHaptic(settings);
-            },
-          ),
-          SwitchTile(
-            accentColor: accent,
-            title: isRtl ? 'قفل التطبيق (PIN)' : 'App Lock (PIN)',
-            subtitle: isRtl
-                ? 'حماية التطبيق برقم سري لمنع الاستخدام غير المصرح'
-                : 'Protect XDM with a passcode PIN upon launch',
-            value: _appLockEnabled,
-            onChanged: (val) => _setAppLock(val),
+            children: [
+              SwitchTile(
+                accentColor: accent,
+                title: 'Enable Developer Mode',
+                subtitle: 'Unlocks advanced debugging, SSL configuration, and internal logs',
+                value: settings.developerMode,
+                onChanged: (val) {
+                  settings.toggleDeveloperMode();
+                  triggerHaptic(settings);
+                },
+              ),
+              SwitchTile(
+                accentColor: accent,
+                title: isRtl ? 'قفل التطبيق (PIN)' : 'App Lock (PIN)',
+                subtitle: isRtl
+                    ? 'حماية التطبيق برقم سري لمنع الاستخدام غير المصرح'
+                    : 'Protect XDM with a passcode PIN upon launch',
+                value: _appLockEnabled,
+                onChanged: (val) => _setAppLock(val),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
@@ -175,26 +181,63 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
             accentColor: accent,
             isDark: isDark,
           ),
-          SwitchTile(
+          SettingsSectionGroup(
             accentColor: accent,
-            title: L10n.of(context, 'settings_use_remote_backend'),
-            subtitle: L10n.of(context, 'settings_use_remote_backend_sub'),
-            value: settings.useRemoteBackend,
-            onChanged: (val) {
-              settings.setUseRemoteBackend(val);
-              triggerHaptic(settings);
-            },
+            children: [
+              SwitchTile(
+                accentColor: accent,
+                title: L10n.of(context, 'settings_use_remote_backend'),
+                subtitle: L10n.of(context, 'settings_use_remote_backend_sub'),
+                value: settings.useRemoteBackend,
+                onChanged: (val) {
+                  settings.setUseRemoteBackend(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              if (settings.useRemoteBackend) ...[
+                TextFieldTile(
+                  accentColor: accent,
+                  title: L10n.of(context, 'settings_backend_url'),
+                  subtitle: 'e.g. https://yt.example.com',
+                  controller: _backendUrlController,
+                  onChanged: (val) => _onBackendUrlChanged(val, settings),
+                ),
+              ],
+              SwitchTile(
+                accentColor: accent,
+                title: L10n.of(context, 'settings_use_local_yt_fallback'),
+                subtitle: L10n.of(context, 'settings_use_local_yt_fallback_sub'),
+                value: settings.useLocalYtFallback,
+                onChanged: (val) {
+                  settings.setUseLocalYtFallback(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              SwitchTile(
+                accentColor: accent,
+                title: isRtl ? 'إرسال كوكيز المتصفح للخادم' : 'Send Cookies to Backend',
+                subtitle: isRtl
+                    ? 'إرفاق جلسات المتصفح للوصول للفيديوهات الخاصة والمقيدة'
+                    : 'Send browser session cookies for age-restricted / private media',
+                value: settings.sendBrowserCookiesToBackend,
+                onChanged: (val) {
+                  settings.setSendBrowserCookiesToBackend(val);
+                  triggerHaptic(settings);
+                },
+              ),
+              TextFieldTile(
+                accentColor: accent,
+                title: isRtl ? 'وكيل المستخدم المخصص (User-Agent)' : 'Custom User-Agent',
+                subtitle: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...',
+                controller: _uaController,
+                onChanged: (val) => settings.setCustomUserAgent(val),
+                onSubmitted: (val) => settings.setCustomUserAgent(val),
+              ),
+            ],
           ),
-          if (settings.useRemoteBackend) ...[
-            TextFieldTile(
-              accentColor: accent,
-              title: L10n.of(context, 'settings_backend_url'),
-              subtitle: 'e.g. https://yt.example.com',
-              controller: _backendUrlController,
-              onChanged: (val) => _onBackendUrlChanged(val, settings),
-            ),
+          if (settings.useRemoteBackend)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
               child: NeonGlowButton(
                 isFilled: false,
                 color: accent,
@@ -228,158 +271,66 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
                       },
               ),
             ),
-          ],
-          SwitchTile(
-            accentColor: accent,
-            title: L10n.of(context, 'settings_use_local_yt_fallback'),
-            subtitle: L10n.of(context, 'settings_use_local_yt_fallback_sub'),
-            value: settings.useLocalYtFallback,
-            onChanged: (val) {
-              settings.setUseLocalYtFallback(val);
-              triggerHaptic(settings);
-            },
-          ),
-          SwitchTile(
-            accentColor: accent,
-            title: isRtl ? 'إرسال كوكيز المتصفح للخادم' : 'Send Cookies to Backend',
-            subtitle: isRtl
-                ? 'إرفاق جلسات المتصفح للوصول للفيديوهات الخاصة والمقيدة'
-                : 'Send browser session cookies for age-restricted / private media',
-            value: settings.sendBrowserCookiesToBackend,
-            onChanged: (val) {
-              settings.setSendBrowserCookiesToBackend(val);
-              triggerHaptic(settings);
-            },
-          ),
-          TextFieldTile(
-            accentColor: accent,
-            title: isRtl ? 'وكيل المستخدم المخصص (User-Agent)' : 'Custom User-Agent',
-            subtitle: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...',
-            controller: _uaController,
-            onChanged: (val) => settings.setCustomUserAgent(val),
-            onSubmitted: (val) => settings.setCustomUserAgent(val),
-          ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
             title: isRtl ? 'جدولة النطاق الترددي' : 'Bandwidth Schedule',
             accentColor: accent,
             isDark: isDark,
           ),
-          SwitchTile(
+          SettingsSectionGroup(
             accentColor: accent,
-            title: isRtl ? 'تفعيل جدولة السرعة' : 'Enable Bandwidth Schedule',
-            subtitle: isRtl
-                ? 'تطبيق حد سرعة مخصص خلال ساعات محددة تلقائياً'
-                : 'Automatically restrict download speed during scheduled hours',
-            value: settings.bandwidthScheduleEnabled,
-            onChanged: (val) {
-              settings.setBandwidthScheduleEnabled(val);
-              triggerHaptic(settings);
-            },
-          ),
-          if (settings.bandwidthScheduleEnabled) ...[
-            ActionSettingTile(
-              accentColor: accent,
-              title: isRtl ? 'وقت بداية الجدولة' : 'Schedule Start Time',
-              subtitle: 'Starts at ${settings.scheduleStartTime}',
-              buttonText: settings.scheduleStartTime,
-              onTap: () => _pickTime(
-                context,
-                settings.scheduleStartTime,
-                (val) => settings.setScheduleStartTime(val),
+            children: [
+              SwitchTile(
+                accentColor: accent,
+                title: isRtl ? 'تفعيل جدولة السرعة' : 'Enable Bandwidth Schedule',
+                subtitle: isRtl
+                    ? 'تطبيق حد سرعة مخصص خلال ساعات محددة تلقائياً'
+                    : 'Automatically restrict download speed during scheduled hours',
+                value: settings.bandwidthScheduleEnabled,
+                onChanged: (val) {
+                  settings.setBandwidthScheduleEnabled(val);
+                  triggerHaptic(settings);
+                },
               ),
-            ),
-            ActionSettingTile(
-              accentColor: accent,
-              title: isRtl ? 'وقت نهاية الجدولة' : 'Schedule End Time',
-              subtitle: 'Ends at ${settings.scheduleEndTime}',
-              buttonText: settings.scheduleEndTime,
-              onTap: () => _pickTime(
-                context,
-                settings.scheduleEndTime,
-                (val) => settings.setScheduleEndTime(val),
-              ),
-            ),
-            SliderTile(
-              accentColor: accent,
-              title: isRtl ? 'سرعة الجدولة' : 'Scheduled Speed Limit',
-              subtitle: settings.scheduleSpeedLimitMb == 0
-                  ? (isRtl ? 'غير محدود' : 'Unlimited')
-                  : '${settings.scheduleSpeedLimitMb.toStringAsFixed(1)} MB/s',
-              value: settings.scheduleSpeedLimitMb,
-              min: 0,
-              max: 100,
-              divisions: 100,
-              onChanged: (val) {
-                settings.setScheduleSpeedLimitMb(val);
-              },
-            ),
-          ],
-          const SizedBox(height: 12),
-          SettingsSectionHeader(
-            title: isRtl ? 'تحسينات الأداء والذاكرة' : 'Power & Performance Tuning',
-            accentColor: accent,
-            isDark: isDark,
-          ),
-          SwitchTile(
-            accentColor: accent,
-            title: isRtl ? 'حوض المعالجات الذكي' : 'Power-Aware Isolate Pool',
-            subtitle: isRtl
-                ? 'تعديل عدد معالجات الخلفية تلقائياً بناءً على مستوى البطارية'
-                : 'Dynamically scale isolate worker pool based on battery level',
-            value: settings.powerAwareIsolatePool,
-            onChanged: (val) {
-              settings.setPowerAwareIsolatePool(val);
-              triggerHaptic(settings);
-            },
-          ),
-          SwitchTile(
-            accentColor: accent,
-            title: isRtl ? 'محدد الحرارة للخيوط' : 'Thermal Thread Limiter',
-            subtitle: isRtl
-                ? 'تقليل الخيوط عند ارتفاع حرارة الجهاز لتجنب التباطؤ'
-                : 'Throttle thread concurrency during thermal throttling events',
-            value: settings.thermalThreadLimiting,
-            onChanged: (val) {
-              settings.setThermalThreadLimiting(val);
-              triggerHaptic(settings);
-            },
-          ),
-          SwitchTile(
-            accentColor: accent,
-            title: isRtl ? 'توفير البطارية عند التقطيع' : 'Auto Battery Saver on Jank',
-            subtitle: isRtl
-                ? 'تفعيل موفر البطارية تلقائياً عند سقوط الفريمات المتكرر'
-                : 'Auto-enable Battery Saver mode if 3 consecutive frame windows drop below 92% FPS',
-            value: settings.jankAutoBatterySaver,
-            onChanged: (val) {
-              settings.setJankAutoBatterySaver(val);
-              triggerHaptic(settings);
-            },
-          ),
-          SwitchTile(
-            accentColor: accent,
-            title: isRtl ? 'دفعة الكتابة على القرص' : 'Disk Write Batching',
-            subtitle: isRtl
-                ? 'تجميع كتابات القرص في دُفعات 256KB لتخفيف الضغط على I/O'
-                : 'Buffer disk writes in 256KB chunks to maximize Flash SSD lifespan',
-            value: settings.diskWriteBatching,
-            onChanged: (val) {
-              settings.setDiskWriteBatching(val);
-              triggerHaptic(settings);
-            },
-          ),
-          SwitchTile(
-            accentColor: accent,
-            title: isRtl ? 'خنق سرعة الشبكة حسب الطاقة' : 'Power Bandwidth Throttling',
-            subtitle: isRtl
-                ? 'تخفيض السرعة تلقائياً في وضع البطارية المنخفضة'
-                : 'Throttle max throughput on low battery to conserve energy',
-            value: settings.powerBandwidthThrottling,
-            onChanged: (val) {
-              settings.setPowerBandwidthThrottling(val);
-              triggerHaptic(settings);
-            },
+              if (settings.bandwidthScheduleEnabled) ...[
+                ActionSettingTile(
+                  accentColor: accent,
+                  title: isRtl ? 'وقت بداية الجدولة' : 'Schedule Start Time',
+                  subtitle: 'Starts at ${settings.scheduleStartTime}',
+                  buttonText: settings.scheduleStartTime,
+                  onTap: () => _pickTime(
+                    context,
+                    settings.scheduleStartTime,
+                    (val) => settings.setScheduleStartTime(val),
+                  ),
+                ),
+                ActionSettingTile(
+                  accentColor: accent,
+                  title: isRtl ? 'وقت نهاية الجدولة' : 'Schedule End Time',
+                  subtitle: 'Ends at ${settings.scheduleEndTime}',
+                  buttonText: settings.scheduleEndTime,
+                  onTap: () => _pickTime(
+                    context,
+                    settings.scheduleEndTime,
+                    (val) => settings.setScheduleEndTime(val),
+                  ),
+                ),
+                SliderTile(
+                  accentColor: accent,
+                  title: isRtl ? 'سرعة الجدولة' : 'Scheduled Speed Limit',
+                  subtitle: settings.scheduleSpeedLimitMb == 0
+                      ? (isRtl ? 'غير محدود' : 'Unlimited')
+                      : '${settings.scheduleSpeedLimitMb.toStringAsFixed(1)} MB/s',
+                  value: settings.scheduleSpeedLimitMb,
+                  min: 0,
+                  max: 100,
+                  divisions: 100,
+                  onChanged: (val) {
+                    settings.setScheduleSpeedLimitMb(val);
+                  },
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
@@ -387,25 +338,24 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
             accentColor: accent,
             isDark: isDark,
           ),
-          ActionSettingTile(
-            accentColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
-            title: isRtl ? 'تصدير النسخة الاحتياطية' : 'Export Settings Backup',
-            subtitle: 'Save all configurations and bookmarks to a JSON file',
-            buttonText: 'EXPORT',
-            onTap: () {
-              triggerHaptic(settings);
-              // Invoke export
-            },
-          ),
-          ActionSettingTile(
+          SettingsSectionGroup(
             accentColor: accent,
-            title: isRtl ? 'استعادة النسخة الاحتياطية' : 'Import Settings Backup',
-            subtitle: 'Restore settings and bookmarks from a backup file',
-            buttonText: 'IMPORT',
-            onTap: () {
-              triggerHaptic(settings);
-              // Invoke import
-            },
+            children: [
+              ActionSettingTile(
+                accentColor: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+                title: isRtl ? 'تصدير النسخة الاحتياطية' : 'Export Settings Backup',
+                subtitle: 'Save all configurations and bookmarks to a JSON file',
+                buttonText: 'EXPORT',
+                onTap: () => BackupHelper.exportBackup(context, settings),
+              ),
+              ActionSettingTile(
+                accentColor: accent,
+                title: isRtl ? 'استعادة النسخة الاحتياطية' : 'Import Settings Backup',
+                subtitle: 'Restore settings and bookmarks from a backup file',
+                buttonText: 'IMPORT',
+                onTap: () => BackupHelper.importBackup(context, settings),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           SettingsSectionHeader(
@@ -413,13 +363,18 @@ class _AdvancedSettingsPageState extends State<AdvancedSettingsPage>
             accentColor: AppTheme.neonRed,
             isDark: isDark,
           ),
-          ActionSettingTile(
-            accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
-            isDestructive: true,
-            title: isRtl ? 'إعادة تعيين الإعدادات' : 'Reset All Settings',
-            subtitle: 'Restore all application preferences to factory defaults',
-            buttonText: 'RESET',
-            onTap: () => _showResetConfirmDialog(context, settings),
+          SettingsSectionGroup(
+            accentColor: accent,
+            children: [
+              ActionSettingTile(
+                accentColor: isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+                isDestructive: true,
+                title: isRtl ? 'إعادة تعيين الإعدادات' : 'Reset All Settings',
+                subtitle: 'Restore all application preferences to factory defaults',
+                buttonText: 'RESET',
+                onTap: () => _showResetConfirmDialog(context, settings),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           _DeveloperAboutCard(settings: settings, isDark: isDark),

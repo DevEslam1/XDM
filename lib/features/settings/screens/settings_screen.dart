@@ -13,6 +13,7 @@ import 'downloads_settings_page.dart';
 import 'network_settings_page.dart';
 import 'notifications_settings_page.dart';
 import 'torrent_settings_page.dart';
+import 'power_settings_page.dart';
 import 'advanced_settings_page.dart';
 import '../widgets/settings_tiles.dart';
 
@@ -84,7 +85,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (s.contains('net') || s.contains('proxy') || s.contains('dns') || s.contains('sec') || s == '03' || s == '08') return 2;
     if (s.contains('notif') || s.contains('alert') || s == '04') return 3;
     if (s.contains('torrent') || s == '05') return 4;
-    if (s.contains('adv') || s.contains('back') || s.contains('comm') || s == '06' || s == '09') return 5;
+    if (s.contains('power') || s.contains('perf') || s.contains('battery')) return 5;
+    if (s.contains('adv') || s.contains('back') || s.contains('comm') || s == '06' || s == '09') return 6;
     return 0;
   }
 
@@ -112,6 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     bool isRtl,
   ) {
     final amber = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+    final orange = isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange;
     final blue = isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue;
     final cyan = isDark ? AppTheme.neonCyan : AppTheme.lightNeonCyan;
     final violet = isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
@@ -287,13 +290,30 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ),
 
-      // Category 5: Advanced
+      // Category 5: Power & Performance
       _SettingSearchEntry(
-        categoryTitle: isRtl ? 'متقدم وتطوير' : 'Advanced & Power',
+        categoryTitle: isRtl ? 'الأداء والطاقة' : 'Power & Performance',
         categoryIndex: 5,
+        settingTitle: 'Battery Saver Mode',
+        subtitle: 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
+        keywords: const ['power', 'performance', 'battery', 'saver', 'jank', 'thermal', 'isolate', 'threads'],
+        accentColor: orange,
+        builder: (ctx) => SwitchTile(
+          accentColor: orange,
+          title: 'Battery Saver Mode',
+          subtitle: 'Limits downloads to 1, threads to 2, and forces Classic UI mode',
+          value: settings.batterySaverMode,
+          onChanged: (val) => settings.setBatterySaverMode(val),
+        ),
+      ),
+
+      // Category 6: Advanced
+      _SettingSearchEntry(
+        categoryTitle: isRtl ? 'متقدم وتطوير' : 'Advanced',
+        categoryIndex: 6,
         settingTitle: 'Enable Developer Mode',
         subtitle: 'Unlocks advanced debugging, SSL bypass, internal logs',
-        keywords: const ['developer', 'dev', 'ssl', 'backend', 'yt-dlp', 'schedule', 'isolate', 'jank', 'backup', 'reset'],
+        keywords: const ['developer', 'dev', 'ssl', 'backend', 'yt-dlp', 'schedule', 'backup', 'reset'],
         accentColor: red,
         builder: (ctx) => SwitchTile(
           accentColor: red,
@@ -345,6 +365,12 @@ class _SettingsScreenState extends State<SettingsScreen>
         title: isRtl ? 'التورنت' : 'Torrent',
         icon: Icons.cloud_download_outlined,
         color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+      ),
+      _CategoryMeta(
+        id: 'power',
+        title: isRtl ? 'الأداء والطاقة' : 'Power & Perf',
+        icon: Icons.bolt_rounded,
+        color: isDark ? AppTheme.neonOrange : AppTheme.lightNeonOrange,
       ),
       _CategoryMeta(
         id: 'advanced',
@@ -496,6 +522,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     NetworkSettingsPage(),
                                     NotificationsSettingsPage(),
                                     TorrentSettingsPage(),
+                                    PowerSettingsPage(),
                                     AdvancedSettingsPage(),
                                   ],
                                 ),
@@ -516,6 +543,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     return Padding(
                                       padding: const EdgeInsets.only(right: 8.0),
                                       child: ChoiceChip(
+                                        showCheckmark: false,
                                         avatar: Icon(
                                           cat.icon,
                                           size: 16,
@@ -557,6 +585,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                                     NetworkSettingsPage(),
                                     NotificationsSettingsPage(),
                                     TorrentSettingsPage(),
+                                    PowerSettingsPage(),
                                     AdvancedSettingsPage(),
                                   ],
                                 ),
