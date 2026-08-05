@@ -628,6 +628,10 @@ class _TelemetryStrip extends StatelessWidget {
     }
 
     // Paused / Queued / Failed:
+    final speedText = task.status == DownloadStatus.queued
+        ? 'Queued'
+        : (task.status == DownloadStatus.paused ? 'Paused' : '—');
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
@@ -647,6 +651,16 @@ class _TelemetryStrip extends StatelessWidget {
                 weight: FontWeight.w600,
                 color: secClr,
               ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            speedText,
+            style: AppTheme.dataStyle(
+              isDark: isDark,
+              size: 11,
+              weight: FontWeight.w600,
+              color: mutedClr,
             ),
           ),
           const SizedBox(width: 8),
@@ -676,7 +690,7 @@ class _ChunkedProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final chunks = task.chunks;
     final Widget bar;
-    if (chunks.length <= 1 || task.hasMergedAudio) {
+    if (task.isTorrent || chunks.length <= 1 || task.hasMergedAudio) {
       final provider = context.read<DownloadProvider>();
       bar = IsolatedProgressBar(
         progress: provider.progressNotifier(task.id),
@@ -768,27 +782,96 @@ class _ProgressRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    final isDownloading = task.status == DownloadStatus.downloading;
+    final showIndeterminate = task.hasUnknownSize && isDownloading;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: _ChunkedProgressBar(task: task, isDark: isDark, color: color),
-        ),
-        const SizedBox(width: 10),
-        // Total percentage readout
-        SizedBox(
-          width: 48,
-          child: Text(
-            task.progressPercentString,
-            textAlign: TextAlign.end,
-            style: AppTheme.dataStyle(
-              isDark: isDark,
-              size: 13,
-              weight: FontWeight.w800,
-              color: color,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: showIndeterminate
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        minHeight: 8,
+                        color: color,
+                        backgroundColor: color.withValues(alpha: 0.15),
+                      ),
+                    )
+                  : _ChunkedProgressBar(
+                      task: task, isDark: isDark, color: color),
             ),
-          ),
+            const SizedBox(width: 10),
+            // Total percentage or byte count readout
+            SizedBox(
+              width: showIndeterminate ? 80 : 48,
+              child: Text(
+                showIndeterminate
+                    ? formatBytes(task.downloadedBytes)
+                    : task.progressPercentString,
+                textAlign: TextAlign.end,
+                style: AppTheme.dataStyle(
+                  isDark: isDark,
+                  size: showIndeterminate ? 11 : 13,
+                  weight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
         ),
+        // FIX(05): Audio progress indicator for YouTube downloads with separate audio track
+        if (task.hasMergedAudio) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.audiotrack,
+                  size: 12, color: color.withValues(alpha: 0.8)),
+              const SizedBox(width: 4),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: task.audioProgressPercent,
+                    minHeight: 3,
+                    color: color,
+                    backgroundColor: color.withValues(alpha: 0.15),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                task.audioProgressString,
+                style: AppTheme.dataStyle(
+                  isDark: isDark,
+                  size: 10,
+                  weight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ],
+        // FIX(09 & FIX-17): Display status message / partial size indicator
+        if (task.isTotalSizePartial) ...[
+          const SizedBox(height: 2),
+          Text(
+            'Video size unknown',
+            style: AppTheme.microLabel(isDark: isDark, color: color, size: 9),
+          ),
+        ] else if (task.statusMessage != null &&
+            task.statusMessage!.isNotEmpty &&
+            (task.hasUnknownSize || isDownloading)) ...[
+          const SizedBox(height: 2),
+          Text(
+            task.statusMessage!,
+            style: AppTheme.microLabel(isDark: isDark, color: color, size: 9),
+          ),
+        ],
       ],
     );
   }
@@ -1583,6 +1666,18 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                             weight: FontWeight.w600,
                           ),
                         ),
+                        if (widget.task.seedingEnabled) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            'Ratio: ${widget.task.seedingRatio.toStringAsFixed(2)}',
+                            style: AppTheme.dataStyle(
+                              isDark: isDark,
+                              size: 10,
+                              color: violetClr,
+                              weight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                         const Spacer(),
                         Switch(
                           value: widget.task.seedingEnabled,

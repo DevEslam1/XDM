@@ -929,16 +929,15 @@ class YoutubeService {
                         oldItag),
             orElse: () => <String, dynamic>{},
           );
-          if (matched.isEmpty) {
-            debugPrint(
-              '[YouTubeService] refreshStreamUrl: itag "$oldItag" not found in refreshed streams. Returning null.',
-            );
-            return null;
+          if (matched.isNotEmpty) {
+            return {
+              'url': matched['src'] as String?,
+              'audioUrl': matched['audioSrc'] as String?,
+            };
           }
-          return {
-            'url': matched['src'] as String?,
-            'audioUrl': matched['audioSrc'] as String?,
-          };
+          debugPrint(
+            '[YouTubeService] FIX(10): refreshStreamUrl: itag "$oldItag" not found in refreshed streams. Attempting quality/type fallback.',
+          );
         }
 
         final oldQuality = oldUri?.queryParameters['quality'] ??
@@ -980,6 +979,10 @@ class YoutubeService {
           );
 
           if (first.isEmpty) {
+            debugPrint(
+              '[YouTube] refreshStreamUrl: No itag/quality match found. '
+              'Falling back to first stream (quality may differ).',
+            );
             first = streams.firstWhere(
               (s) => s['src'] != null,
               orElse: () => <String, dynamic>{},

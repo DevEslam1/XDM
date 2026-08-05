@@ -456,6 +456,13 @@ mixin DownloadTorrentMixin {
         completedAt: task.completedAt,
       );
 
+      if (stats.totalPayloadUpload >= 0 && stats.totalPayloadUpload != task.uploadedBytes) {
+        final idx = providerTasks.indexWhere((t) => t.id == task.id);
+        if (idx != -1) {
+          providerTasks[idx] = providerTasks[idx].copyWith(uploadedBytes: stats.totalPayloadUpload);
+        }
+      }
+
       if (stop) {
         debugPrint(
           '[DownloadTorrentMixin] Task ${task.id} stopping seeding based on policy limits',

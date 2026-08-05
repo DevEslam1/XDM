@@ -486,6 +486,21 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
       await TorrentResumeStore.saveAll(
         TorrentService.activeTorrentIds,
         TorrentService.progressFor,
+        (tid) {
+          // FIX-T1: Persist per-file progress
+          try {
+            final files = TorrentService.getFiles(tid);
+            return files.map((f) => {
+              'name': f.name,
+              'length': f.size,
+              'downloadedBytes': f.downloadedBytes,
+              'selected': f.selected,
+              'priority': f.priority,
+            }).toList();
+          } catch (_) {
+            return null;
+          }
+        },
       );
     } catch (e) {
       debugPrint('Failed to save torrent background state: $e');

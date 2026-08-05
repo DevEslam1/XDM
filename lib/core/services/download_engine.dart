@@ -1532,9 +1532,8 @@ class DownloadEngine {
               resolvedBytes = f.downloadedBytes;
               isEstimated = false;
             } else {
-              // No true progress available, use stale bytes as fallback
-              final staleBytes = (existing?['downloadedBytes'] as int?) ?? 0;
-              resolvedBytes = staleBytes;
+              // FIX(06): Use 0 instead of stale DB value to avoid showing wrong data
+              resolvedBytes = 0;
               isEstimated = true;
             }
 
@@ -2232,11 +2231,16 @@ class DownloadEngine {
             (i == threadCount - 1) ? (totalSize - 1) : (start + partSize - 1);
         final size = end - start + 1;
 
-        chunkSizes[i] = size;
-
-        if (chunkProgress[i] > size) {
-          chunkProgress[i] = 0;
+        // FIX(02): Replace hard reset with proportional rescaling when size changes
+        final oldSize = chunkSizes[i];
+        final newSize = size;
+        if (oldSize > 0 && newSize > 0 && oldSize != newSize && chunkProgress[i] > 0) {
+          final ratio = chunkProgress[i] / oldSize;
+          chunkProgress[i] = (ratio * newSize).round().clamp(0, newSize);
+        } else if (chunkProgress[i] > newSize) {
+          chunkProgress[i] = chunkProgress[i].clamp(0, newSize);
         }
+        chunkSizes[i] = newSize;
       }
 
       // Spot-check resume integrity before spawning threads

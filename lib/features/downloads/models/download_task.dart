@@ -95,6 +95,7 @@ class DownloadTask {
     this.seedingEnabled = false,
     this.seedingLimited = false,
     this.seedingLimitKbps = 500,
+    this.uploadedBytes = 0,
     this.torrentFiles,
     this.downloadPageUrl,
     this.mergedAudioUrl,
@@ -135,10 +136,36 @@ class DownloadTask {
     return 0;
   }
 
+  // FIX(07): Track uploaded bytes for torrent seeding ratio
+  final int uploadedBytes;
+
+  // FIX(01): Helper getter for indeterminate progress state
+  bool get hasUnknownSize => resolvedFileSize <= 0;
+
+  // FIX(05): Audio progress computed getters
+  double get audioProgressPercent => audioProgress.clamp(0.0, 1.0);
+  String get audioProgressString =>
+      '${(audioProgressPercent * 100).toStringAsFixed(1)}%';
+  bool get isAudioComplete => audioProgress >= 1.0;
+
+  // FIX(07): Seeding ratio computed getter
+  double get seedingRatio {
+    if (downloadedBytes <= 0) return 0.0;
+    return uploadedBytes / downloadedBytes;
+  }
+
+  // FIX(17): Helper flag when video size is unknown but audio size is known
+  bool get isTotalSizePartial =>
+      hasMergedAudio && fileSize <= 0 && audioSize > 0;
+
   /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
   int get combinedTotalSize {
     if (hasMergedAudio && audioSize > 0) {
       final vSize = fileSize > 0 ? fileSize : 0;
+      if (vSize == 0 && audioSize > 0) {
+        // Video size unknown — return audioSize but flag as partial via isTotalSizePartial
+        return audioSize;
+      }
       return vSize + audioSize;
     }
     return resolvedFileSize;
@@ -298,6 +325,7 @@ class DownloadTask {
     bool? seedingEnabled,
     bool? seedingLimited,
     int? seedingLimitKbps,
+    int? uploadedBytes,
     List<Map<String, dynamic>>? torrentFiles,
     bool clearTorrentFiles = false,
     String? downloadPageUrl,
@@ -349,6 +377,7 @@ class DownloadTask {
       seedingEnabled: seedingEnabled ?? this.seedingEnabled,
       seedingLimited: seedingLimited ?? this.seedingLimited,
       seedingLimitKbps: seedingLimitKbps ?? this.seedingLimitKbps,
+      uploadedBytes: uploadedBytes ?? this.uploadedBytes,
       torrentFiles:
           clearTorrentFiles ? null : (torrentFiles ?? this.torrentFiles),
       downloadPageUrl: clearDownloadPageUrl
@@ -403,6 +432,7 @@ class DownloadTask {
       'seedingEnabled': seedingEnabled,
       'seedingLimited': seedingLimited,
       'seedingLimitKbps': seedingLimitKbps,
+      'uploadedBytes': uploadedBytes,
       'torrentFiles': torrentFiles,
       'downloadPageUrl': downloadPageUrl,
       'mergedAudioUrl': mergedAudioUrl,
@@ -525,6 +555,7 @@ class DownloadTask {
       seedingEnabled: map['seedingEnabled'] as bool? ?? false,
       seedingLimited: map['seedingLimited'] as bool? ?? false,
       seedingLimitKbps: (map['seedingLimitKbps'] as num?)?.toInt() ?? 500,
+      uploadedBytes: (map['uploadedBytes'] as num?)?.toInt() ?? 0,
       torrentFiles: (map['torrentFiles'] as List?)
           ?.map((e) => e as Map<String, dynamic>)
           .toList(),

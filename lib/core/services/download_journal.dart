@@ -144,7 +144,7 @@ class DownloadJournal {
   }
 
   /// Recovers the latest chunk progress from a journal file.
-  static Future<List<int>?> recover(String journalPath) async {
+  static Future<List<int>?> recover(String journalPath, [int? expectedThreadCount]) async {
     final file = File(journalPath);
     if (!await file.exists()) return null;
 
@@ -225,6 +225,23 @@ class DownloadJournal {
         'Treating as no journal.',
       );
       return null;
+    }
+
+    // FIX(13): Rescale journal if thread count does not match expectedThreadCount
+    if (lastCheckpoint != null &&
+        expectedThreadCount != null &&
+        expectedThreadCount > 0 &&
+        lastCheckpoint.length != expectedThreadCount) {
+      final totalBytes = lastCheckpoint.fold<int>(0, (a, b) => a + b);
+      final perThread = totalBytes ~/ expectedThreadCount;
+      final newCheckpoint = List.filled(expectedThreadCount, perThread);
+      newCheckpoint[expectedThreadCount - 1] +=
+          totalBytes - (perThread * expectedThreadCount);
+      debugPrint(
+        '[DownloadJournal] FIX(13): Rescaled journal checkpoint from '
+        '${lastCheckpoint.length} threads to $expectedThreadCount threads.',
+      );
+      lastCheckpoint = newCheckpoint;
     }
 
     return lastCheckpoint;

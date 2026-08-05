@@ -121,13 +121,14 @@ class PositionalFileWriter {
       final pos = await raf.position();
       if (pos != 0) {
         await raf.close();
-        // Fallback: open in append+write mode
-        final raf2 = await file.open(mode: FileMode.append);
+        // FIX-H2: Use FileMode.write (read+write without truncate) instead of append
+        final raf2 = await file.open(mode: FileMode.write);
         return PositionalFileWriter._(raf2, threadCount, bufferSize);
       }
     } catch (_) {
       await raf.close();
-      final raf2 = await file.open(mode: FileMode.append);
+      // FIX-H2: Use FileMode.write (read+write without truncate) instead of append
+      final raf2 = await file.open(mode: FileMode.write);
       return PositionalFileWriter._(raf2, threadCount, bufferSize);
     }
     return PositionalFileWriter._(raf, threadCount, bufferSize);

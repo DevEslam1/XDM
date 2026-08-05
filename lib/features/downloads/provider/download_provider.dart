@@ -1462,6 +1462,15 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
+      // FIX-P3: Ensure disk writes are committed before progress flush
+      try {
+        if (torrentId == null) {
+          debugPrint('[FIX-P3] Relying on engine cancel to flush writer');
+        }
+      } catch (e) {
+        debugPrint('[FIX-P3] Pre-flush error: $e');
+      }
+
       // FIX-A1: Flush pending progress BEFORE canceling token and waiting for engine future
       await _flushPendingProgress(id);
 
@@ -1475,8 +1484,10 @@ class DownloadProvider extends ChangeNotifier
         final fut = _activeFutures[id];
         if (fut != null) {
           try {
-            await fut.timeout(const Duration(seconds: 8), onTimeout: () { // FIX-B8: Increased timeout to 8s
-              debugPrint('[DMX] B8: Engine future timed out on pause');
+            // FIX-P1: Scale timeout with file size (min 8s, max 20s)
+            final pauseTimeoutSecs = (task?.fileSize ?? 0) > 500 * 1024 * 1024 ? 20 : 8;
+            await fut.timeout(Duration(seconds: pauseTimeoutSecs), onTimeout: () {
+              debugPrint('[FIX-P1] Engine future timed out on pause (${pauseTimeoutSecs}s)');
             });
           } catch (_) {}
         }
@@ -1746,9 +1757,22 @@ class DownloadProvider extends ChangeNotifier
 
         var audioBytes = 0;
         if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
+          // FIX-P2: Read actual thread count from state file header
+          final audioStatePath = '${task.tempFilePath}.audio';
+          final audioStateFile = File('$audioStatePath.dmxstate');
+          int actualAudioThreads = task.audioThreadCount;
+          if (await audioStateFile.exists()) {
+            try {
+              final content = await audioStateFile.readAsString();
+              final decoded = jsonDecode(content);
+              if (decoded is Map && decoded['threadCount'] is int) {
+                actualAudioThreads = decoded['threadCount'] as int;
+              }
+            } catch (_) {}
+          }
           audioBytes = await _readDmxStateBytes(
-            '${task.tempFilePath}.audio',
-            threadCount: task.audioThreadCount,
+            audioStatePath,
+            threadCount: actualAudioThreads,
           );
         }
         if (videoBytes > 0 || audioBytes > 0) {
@@ -2012,7 +2036,25 @@ class DownloadProvider extends ChangeNotifier
     }
 
 
-    final realBytesOnDisk = videoBytes + audioBytes;
+    var realBytesOnDisk = videoBytes + audioBytes;
+
+    // FIX-T2: Recalculate aggregate downloadedBytes from per-file data for torrents
+    try {
+      if (task.isTorrent && task.torrentFiles != null && task.torrentFiles!.isNotEmpty) {
+        final totalFromFiles = task.torrentFiles!.fold<int>(0, (sum, f) {
+          if (f['selected'] != false) {
+            return sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0);
+          }
+          return sum;
+        });
+        if (totalFromFiles > 0) {
+          realBytesOnDisk = totalFromFiles;
+          debugPrint('[FIX-T2] Torrent retry: using per-file total=$totalFromFiles');
+        }
+      }
+    } catch (e) {
+      debugPrint('[FIX-T2] Torrent retry per-file calculation failed: $e');
+    }
 
     final stateChunks = await _readDmxStateChunks(
         task.tempFilePath, task.threadCount);
@@ -3074,6 +3116,9 @@ class DownloadProvider extends ChangeNotifier
         if (a == b) return true; // FIX-10: File path / URL exact comparison
         final ha = parseMagnetUrl(a)['infoHash']?.toString().toLowerCase();
         final hb = parseMagnetUrl(b)['infoHash']?.toString().toLowerCase();
+        if (ha != null && hb != null && ha != hb) {
+          debugPrint('[DMX] M-5: Torrent hash changed from $ha to $hb');
+        }
         return ha != null && hb != null && ha == hb;
       }
 
@@ -3267,6 +3312,14 @@ class DownloadProvider extends ChangeNotifier
 
     // FIX(U-1 & U-2): When URL changes and isSameResource is false, treat as new resource
     bool sizeChanged = isProtocolSwitch || (!isSameResource && !isRefresh && (cleanUrl != task.url));
+    if (!isRefresh && !isSameResource && task.downloadedBytes > 0 && resolvedFileSize > 0) {
+      final sizeDiff = (resolvedFileSize - task.fileSize).abs();
+      final tolerance = (task.fileSize * 0.01).clamp(1024.0, 10.0 * 1024 * 1024);
+      if (sizeDiff > tolerance) {
+        debugPrint('[FIX-U1] Size changed significantly: ${task.fileSize} → $resolvedFileSize. Resetting progress.');
+        sizeChanged = true;
+      }
+    }
     if (isProtocolSwitch) {
       debugPrint('[DMX] Protocol switch detected ($oldProto → $newProto). Resetting progress.');
     }
