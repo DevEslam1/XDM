@@ -881,6 +881,29 @@ class DownloadProvider extends ChangeNotifier
       }
     }
 
+    // FIX R-3: Recover torrent IDs for paused/in-progress torrents from TorrentService
+    for (final task in _tasks) {
+      if (task.isTorrent &&
+          task.status != DownloadStatus.completed &&
+          task.status != DownloadStatus.failed &&
+          !_torrentIds.containsKey(task.id)) {
+        for (final tid in TorrentService.activeTorrentIds) {
+          try {
+            final stats = TorrentService.getFiles(tid);
+            if (stats.isNotEmpty &&
+                task.torrentFiles != null &&
+                stats.length == task.torrentFiles!.length) {
+              _torrentIds[task.id] = tid;
+              debugPrint(
+                '[DMX] load(): recovered torrent ID $tid for task ${task.id}',
+              );
+              break;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     updateActualTorrentUploadLimit();
 
     _startWidgetTimer();
@@ -1694,6 +1717,13 @@ class DownloadProvider extends ChangeNotifier
       if (snapshotFiles != null) {
         torrentTotalDownloaded = torrentBytesFromFiles(snapshotFiles);
       }
+      if ((snapshotFiles == null || snapshotFiles.isEmpty) &&
+          task.torrentFiles != null &&
+          task.torrentFiles!.isNotEmpty) {
+        debugPrint(
+          '[DMX] FIX-T4: getFiles returned empty, keeping existing torrentFiles',
+        );
+      }
       await _setTask(
         latest.copyWith(
           status: DownloadStatus.paused,
@@ -1713,18 +1743,29 @@ class DownloadProvider extends ChangeNotifier
 
 
 
-    // FIX(H-1): Flush pending progress to ensure state file is up-to-date
-    await _flushPendingProgress(id);
-
-    // FIX(H-7): Validate state file integrity before reading progress
+    // FIX P-1 / FIX(H-7): Validate state file integrity before reading progress
     final stateFile = File('${latest.tempFilePath}.dmxstate');
     if (await stateFile.exists()) {
       try {
         final content = await stateFile.readAsString();
         jsonDecode(content); // throws on corrupt JSON
       } catch (e) {
-        debugPrint('[DMX] H-7 FIX: Corrupt .dmxstate detected in pauseTask, deleting.');
-        try { await stateFile.delete(); } catch (_) {}
+        debugPrint('[DMX] pauseTask: .dmxstate corrupt, attempting journal fallback');
+        // Try journal recovery BEFORE deleting
+        final journalFile = File('${latest.tempFilePath}.journal');
+        bool recoveredFromJournal = false;
+        try {
+          final recovered = await DownloadJournal.recover(journalFile.path);
+          if (recovered != null && recovered.isNotEmpty) {
+            recoveredFromJournal = true;
+            debugPrint('[DMX] pauseTask: journal has data, preserving .dmxstate');
+          }
+        } catch (_) {}
+
+        if (!recoveredFromJournal) {
+          try { await stateFile.delete(); } catch (_) {}
+          debugPrint('[DMX] pauseTask: deleted corrupt .dmxstate (no journal fallback)');
+        }
       }
     }
 
@@ -1961,6 +2002,20 @@ class DownloadProvider extends ChangeNotifier
         }
       } catch (e) {
         debugPrint('[DMX] resumeTask .dmxstate read failed: $e');
+        // FIX R-1: Fallback to journal if .dmxstate read fails
+        try {
+          final journalPath = '${task.tempFilePath}.journal';
+          final recovered = await DownloadJournal.recover(journalPath);
+          if (recovered != null && recovered.isNotEmpty) {
+            final journalTotal = recovered.fold<int>(0, (s, b) => s + b);
+            if (journalTotal > 0) {
+              realBytesOnDisk = journalTotal;
+              debugPrint(
+                '[DMX] resumeTask: recovered $journalTotal bytes from journal',
+              );
+            }
+          }
+        } catch (_) {}
       }
     }
 
@@ -2521,10 +2576,21 @@ class DownloadProvider extends ChangeNotifier
     }
 
 
-    // 5. Delete from DB (fire and forget — don't block UI)
-    unawaited(_databaseService.deleteTask(id).catchError((e) {
-      _log.warning('[deleteTask] DB delete failed for $id: $e');
-    }));
+    // 5. Delete from DB (with retries in background)
+    unawaited(() async {
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          await _databaseService.deleteTask(id);
+          return;
+        } catch (e) {
+          debugPrint('[DMX] deleteTask DB attempt ${attempt + 1} failed: $e');
+          if (attempt < 2) {
+            await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+          }
+        }
+      }
+      debugPrint('[DMX] deleteTask DB delete permanently failed for $id');
+    }());
 
     // 6. Heavy cleanup in BACKGROUND
     unawaited(_backgroundDeleteCleanup(task, deleteFiles));

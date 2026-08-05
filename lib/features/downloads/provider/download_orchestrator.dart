@@ -904,7 +904,8 @@ class DownloadOrchestrator {
           status: DownloadStatus.failed,
           errorMessage: '${DownloadStatusMessages.ffmpegMergeFailed} Audio preserved — retry to re-attempt merge.',
           localFilePath: videoOnlyPath,
-          audioProgress: 0.0,
+          // FIX-F1: Preserve audio progress — audio file still exists on disk
+          audioProgress: current.audioProgress,
         ),
       );
       return false;
