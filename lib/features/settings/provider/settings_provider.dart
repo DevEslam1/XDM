@@ -105,8 +105,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _useRemoteBackendKey = 'use_remote_backend';
   static const _batteryOptimizationPromptedKey = 'batteryOptimizationPrompted';
   static const _maxTotalConnectionsKey = 'maxTotalConnections';
-  static const _dnsEnabledKey = 'dnsEnabled';
-  static const _dnsProviderKey = 'dnsProvider';
   static const _adaptiveThreadsKey = 'adaptiveThreads';
   static const _autoVerifyChecksumKey = 'autoVerifyChecksum';
 
@@ -227,9 +225,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// fall back to the on-device platform extractor (Android NewPipe
   /// Extractor via the `com.example.dmx/youtube_extractor` channel).
   bool useLocalYtFallback = true;
-
-  bool dnsEnabled = true;
-  String dnsProvider = 'dns.adguard.com';
 
   // Torrent Seeding settings
   bool globalTorrentSeeding = true;
@@ -493,8 +488,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (![8, 16, 24, 32, 48, 64].contains(_maxTotalConnections)) {
       _maxTotalConnections = 32;
     }
-    dnsEnabled = _prefs.getBool(_dnsEnabledKey) ?? true;
-    dnsProvider = _prefs.getString(_dnsProviderKey) ?? 'dns.adguard.com';
     adaptiveThreads = _prefs.getBool(_adaptiveThreadsKey) ?? false;
     autoVerifyChecksum = _prefs.getBool(_autoVerifyChecksumKey) ?? false;
 
@@ -1087,18 +1080,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> setDnsEnabled(bool value) async {
-    dnsEnabled = value;
-    await _prefs.setBool(_dnsEnabledKey, value);
-    notifyListeners();
-  }
-
-  Future<void> setDnsProvider(String value) async {
-    dnsProvider = value.trim();
-    await _prefs.setString(_dnsProviderKey, dnsProvider);
-    notifyListeners();
-  }
-
   Future<bool> testProxyConnection(
     String host,
     int port,
@@ -1201,8 +1182,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       _sendBrowserCookiesToBackendKey,
       _useRemoteBackendKey,
       _useLocalYtFallbackKey,
-      _dnsEnabledKey,
-      _dnsProviderKey,
     ];
     for (final key in settingsKeys) {
       if (key == _proxyPasswordKey || key == _backendTokenKey) {
@@ -1275,8 +1254,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
     sendBrowserCookiesToBackend = true;
     useRemoteBackend = true;
     useLocalYtFallback = false;
-    dnsEnabled = true;
-    dnsProvider = 'dns.adguard.com';
     resumeIntegrityCheck = true;
 
     await _prefs.setBool(_isDarkModeKey, _isDarkMode);
@@ -1349,8 +1326,6 @@ class SettingsProvider extends ChangeNotifier with WidgetsBindingObserver {
       sendBrowserCookiesToBackend,
     );
     await _prefs.setBool(_useRemoteBackendKey, useRemoteBackend);
-    await _prefs.setBool(_dnsEnabledKey, dnsEnabled);
-    await _prefs.setString(_dnsProviderKey, dnsProvider);
     if (customDownloadPath != null) {
       await _prefs.setString(_customDownloadPathKey, customDownloadPath!);
     }

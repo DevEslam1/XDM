@@ -85,7 +85,7 @@ class ProfessionalRetryInterceptor extends Interceptor {
     _log.info(
       'Retry ${count + 1}/$maxRetries for '
       '${err.requestOptions.uri} in ${delayMs}ms '
-      '(error: ${err.type}, status: ${err.response?.statusCode})',
+      '(error: ${err.type}, status: ${err.response?.statusCode}, message: ${err.message})',
     );
 
     await Future.delayed(Duration(milliseconds: delayMs));

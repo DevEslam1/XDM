@@ -36,8 +36,6 @@ class DownloadCommand {
   final List<String>? mirrorUrls;
   final bool adaptiveThreads;
   final int speedLimitKbps;
-  final bool dnsEnabled;
-  final String dnsProvider;
 
   DownloadCommand({
     required this.url,
@@ -65,8 +63,6 @@ class DownloadCommand {
     this.mirrorUrls,
     this.adaptiveThreads = false,
     this.speedLimitKbps = 0,
-    this.dnsEnabled = true,
-    this.dnsProvider = 'dns.adguard.com',
   });
 }
 
@@ -84,8 +80,6 @@ class IsolateMessage {
 class DownloadIsolatePool {
   final int size;
   final bool powerAware;
-  bool dohEnabled;
-  String dohProvider;
   final List<_Worker> _workers = [];
 
   int _currentMaxJobsPerWorker = 2;
@@ -103,8 +97,6 @@ class DownloadIsolatePool {
   DownloadIsolatePool({
     this.size = 4,
     this.powerAware = false,
-    this.dohEnabled = true,
-    this.dohProvider = 'dns.adguard.com',
   }) {
     _powerListener = _handlePowerStateChange;
     PowerMonitor.throttleFactorNotifier.addListener(_powerListener!);
@@ -145,11 +137,7 @@ class DownloadIsolatePool {
 
   Future<void> init() async {
     for (int i = 0; i < size; i++) {
-      final worker = _Worker(
-        i,
-        dohEnabled: dohEnabled,
-        dohProvider: dohProvider,
-      );
+      final worker = _Worker(i);
       worker.onJobCompleted = _onJobCompleted;
       try {
         await worker.spawn().timeout(
@@ -165,15 +153,6 @@ class DownloadIsolatePool {
       }
     }
     _handlePowerStateChange();
-  }
-
-  void updateDohSettings(bool enabled, String provider) {
-    dohEnabled = enabled;
-    dohProvider = provider;
-    for (final worker in _workers) {
-      worker.dohEnabled = enabled;
-      worker.dohProvider = provider;
-    }
   }
 
   DownloadJob submit(DownloadCommand command, {int priority = 0}) {
@@ -352,8 +331,6 @@ class _Worker {
   ReceivePort? _errorPort;
 
   final Map<int, DownloadJob> _jobs = {};
-  bool dohEnabled;
-  String dohProvider;
   int _nextJobId = 0;
 
   bool _isAlive = false;
@@ -369,7 +346,7 @@ class _Worker {
   int _respawnAttempts = 0;
   Timer? _respawnTimer;
 
-  _Worker(this.id, {required this.dohEnabled, required this.dohProvider});
+  _Worker(this.id);
 
   Future<void> spawn({bool isRespawn = false}) async {
     if (_shuttingDown) return;
@@ -475,8 +452,6 @@ class _Worker {
         _downloadWorkerMain,
         {
           'mainSendPort': receivePort.sendPort,
-          'dnsEnabled': dohEnabled,
-          'dnsProvider': dohProvider,
         },
         debugName: 'DownloadPoolWorker_$id',
         onError: errorPort.sendPort,
@@ -550,8 +525,6 @@ class _Worker {
       'type': 'start',
       'jobId': jobId,
       'command': command,
-      'dnsEnabled': command.dnsEnabled,
-      'dnsProvider': command.dnsProvider,
     });
 
     return job;
@@ -569,8 +542,6 @@ class _Worker {
       'type': 'start',
       'jobId': jobId,
       'command': command,
-      'dnsEnabled': command.dnsEnabled,
-      'dnsProvider': command.dnsProvider,
     });
 
     return job;
@@ -752,15 +723,7 @@ class _WorkerJobState {
 void _downloadWorkerMain(Object bootstrap) {
   final payload = bootstrap as Map;
   final mainSendPort = payload['mainSendPort'] as SendPort;
-  final dnsEnabled = payload['dnsEnabled'] as bool? ?? true;
-  final dnsProvider = payload['dnsProvider'] as String? ?? 'dns.adguard.com';
 
-  // Isolates do not inherit HttpOverrides.global. This bootstrap is captured
-  // at spawn time; each new job also refreshes it for changed settings.
-  HttpOverrides.global = DohHttpOverrides.fromValues(
-    dnsEnabled: dnsEnabled,
-    dnsProvider: dnsProvider,
-  );
   final commandPort = ReceivePort();
   final jobs = <int, _WorkerJobState>{};
 
@@ -781,11 +744,6 @@ void _downloadWorkerMain(Object bootstrap) {
       final type = message['type'];
 
       if (type == 'start') {
-        HttpOverrides.global = DohHttpOverrides.fromValues(
-          dnsEnabled: (message['dnsEnabled'] as bool?) ?? dnsEnabled,
-          dnsProvider: (message['dnsProvider'] as String?) ?? dnsProvider,
-        );
-        debugPrint('[DMX Worker] DoH settings applied for new job');
         final jobId = message['jobId'] as int;
         final command = message['command'] as DownloadCommand;
 

@@ -4,7 +4,6 @@ import '../../../core/app_theme.dart';
 import '../../../core/utils/localization.dart';
 import '../../../core/utils/haptic_helper.dart';
 import '../../../shared/design/dmx_design.dart';
-import '../../../core/services/doh_resolver.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../core/services/xdm_backend_client.dart';
@@ -26,7 +25,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
   late final TextEditingController _proxyPortController;
   late final TextEditingController _proxyUsernameController;
   late final TextEditingController _proxyPasswordController;
-  late final TextEditingController _dohController;
   late final TextEditingController _backendUrlController;
   bool _testingProxy = false;
   // FIX-5: State variable for testing backend health
@@ -41,7 +39,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     _proxyPortController = TextEditingController(text: settings.proxyPort.toString());
     _proxyUsernameController = TextEditingController(text: settings.proxyUsername);
     _proxyPasswordController = TextEditingController(text: settings.proxyPassword);
-    _dohController = TextEditingController(text: settings.dnsProvider);
     _backendUrlController = TextEditingController(text: settings.backendUrl);
   }
 
@@ -51,7 +48,6 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
     _proxyPortController.dispose();
     _proxyUsernameController.dispose();
     _proxyPasswordController.dispose();
-    _dohController.dispose();
     _backendUrlController.dispose();
     super.dispose();
   }
@@ -411,180 +407,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
               ],
             ],
           ),
-          const SizedBox(height: 12),
-          SettingsSectionHeader(
-            title: isRtl ? 'DNS المخصص (DoH)' : 'Encrypted DNS (DoH)',
-            accentColor: accent,
-            isDark: isDark,
-          ),
-          SettingsSectionGroup(
-            accentColor: accent,
-            children: [
-              SwitchTile(
-                accentColor: accent,
-                title: isRtl ? 'تفعيل DNS المشفر (DoH)' : 'Enable Custom DNS (DoH)',
-                subtitle: isRtl
-                    ? 'تشفير طلبات اسم المضيف لتجاوز حجب مزود الخدمة المحلي'
-                    : 'Encrypt DNS queries and bypass local ISP resolvers',
-                value: settings.dnsEnabled,
-                onChanged: (val) {
-                  settings.setDnsEnabled(val);
-                  triggerHaptic(settings);
-                },
-              ),
-              if (settings.dnsEnabled) ...[
-                TextFieldTile(
-                  accentColor: accent,
-                  title: isRtl ? 'مزود DoH' : 'DoH Provider Hostname',
-                  subtitle: 'dns.adguard.com',
-                  controller: _dohController,
-                  onChanged: (val) => settings.setDnsProvider(val),
-                  onSubmitted: (val) => settings.setDnsProvider(val),
-                ),
-              ],
-            ],
-          ),
-          if (settings.dnsEnabled) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  _DnsProviderChip(
-                    label: 'AdGuard',
-                    host: 'dns.adguard.com',
-                    selected: settings.dnsProvider == 'dns.adguard.com',
-                    onTap: () {
-                      _dohController.text = 'dns.adguard.com';
-                      settings.setDnsProvider('dns.adguard.com');
-                    },
-                    accentColor: accent,
-                    isDark: isDark,
-                  ),
-                  _DnsProviderChip(
-                    label: 'Cloudflare',
-                    host: 'cloudflare-dns.com',
-                    selected: settings.dnsProvider == 'cloudflare-dns.com',
-                    onTap: () {
-                      _dohController.text = 'cloudflare-dns.com';
-                      settings.setDnsProvider('cloudflare-dns.com');
-                    },
-                    accentColor: accent,
-                    isDark: isDark,
-                  ),
-                  _DnsProviderChip(
-                    label: 'Google',
-                    host: 'dns.google',
-                    selected: settings.dnsProvider == 'dns.google',
-                    onTap: () {
-                      _dohController.text = 'dns.google';
-                      settings.setDnsProvider('dns.google');
-                    },
-                    accentColor: accent,
-                    isDark: isDark,
-                  ),
-                  _DnsProviderChip(
-                    label: 'Quad9',
-                    host: 'dns.quad9.net',
-                    selected: settings.dnsProvider == 'dns.quad9.net',
-                    onTap: () {
-                      _dohController.text = 'dns.quad9.net';
-                      settings.setDnsProvider('dns.quad9.net');
-                    },
-                    accentColor: accent,
-                    isDark: isDark,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-              child: NeonGlowButton(
-                isFilled: false,
-                color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
-                text: isRtl ? 'اختبار DoH' : 'TEST DNS RESOLUTION',
-                onPressed: () async {
-                  ThemedSnackbar.show(
-                    context,
-                    message: isRtl ? 'جاري التحقق...' : 'Testing DoH resolution...',
-                    color: accent,
-                    isDarkMode: isDark,
-                    icon: Icons.sync,
-                  );
-                  final ip = await DohResolver.instance.resolve(
-                    'google.com',
-                    settings.dnsProvider,
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    if (ip != null) {
-                      ThemedSnackbar.show(
-                        context,
-                        message: isRtl ? 'نجح الاتصال! IP: $ip' : 'Success: Resolved to $ip',
-                        color: AppTheme.neonGreen,
-                        icon: Icons.check_circle_outline,
-                        isDarkMode: isDark,
-                      );
-                    } else {
-                      ThemedSnackbar.show(
-                        context,
-                        message: isRtl ? 'فشل تحليل DNS' : 'Failed to resolve via ${settings.dnsProvider}',
-                        color: AppTheme.neonRed,
-                        icon: Icons.error_outline,
-                        isDarkMode: isDark,
-                      );
-                    }
-                  }
-                },
-              ),
-            ),
-          ],
         ],
       ),
-    );
-  }
-}
-
-class _DnsProviderChip extends StatelessWidget {
-  final String label;
-  final String host;
-  final bool selected;
-  final VoidCallback onTap;
-  final Color accentColor;
-  final bool isDark;
-
-  const _DnsProviderChip({
-    required this.label,
-    required this.host,
-    required this.selected,
-    required this.onTap,
-    required this.accentColor,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ActionChip(
-      label: Text(
-        label,
-        style: TextStyle(
-          color: selected ? Colors.white : accentColor,
-          fontFamily: 'Space Grotesk',
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      backgroundColor: selected
-          ? accentColor
-          : (isDark ? AppTheme.surfaceRaised : AppTheme.lightSurfaceRaised),
-      side: BorderSide(
-        color: selected ? accentColor : accentColor.withValues(alpha: 0.3),
-        width: 1,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      onPressed: onTap,
     );
   }
 }

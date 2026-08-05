@@ -17,7 +17,6 @@ import 'package:synchronized/synchronized.dart';
 import 'package:dmx/core/services/bandwidth_governor.dart';
 import 'package:dmx/core/services/connection_manager.dart';
 import 'package:dmx/core/services/download_journal.dart';
-import '../http_overrides.dart';
 import 'package:dmx/core/services/diagnostic_service.dart';
 import 'package:dmx/core/services/mirror_failover.dart';
 import 'package:dmx/core/services/positional_file_writer.dart';
@@ -136,8 +135,6 @@ class DownloadEngine {
   }
 
   DownloadIsolatePool? _pool;
-  bool _dohEnabled;
-  String _dohProvider;
   Future<DownloadIsolatePool>? _poolInit;
   final _httpEngine = HttpDownloadEngine();
 
@@ -155,11 +152,7 @@ class DownloadEngine {
   DownloadEngine({
     Dio? dio,
     bool enableCleanupTimer = true,
-    bool dohEnabled = true,
-    String dohProvider = 'dns.adguard.com',
-  })  : _sharedDio = dio ?? Dio(),
-        _dohEnabled = dohEnabled,
-        _dohProvider = dohProvider {
+  })  : _sharedDio = dio ?? Dio() {
     if (enableCleanupTimer) {
       _cleanupTimer = Timer.periodic(const Duration(seconds: 120), (_) {
         if (_closed) return;
@@ -223,15 +216,6 @@ class DownloadEngine {
     }
   }
 
-  /// Updates DoH settings for subsequent worker jobs and future respawns.
-  /// Existing sockets retain their current connection; new jobs receive the
-  /// latest settings through the worker command.
-  void updateDohSettings(bool enabled, String provider) {
-    _dohEnabled = enabled;
-    _dohProvider = provider;
-    _pool?.updateDohSettings(enabled, provider);
-  }
-
   Future<DownloadIsolatePool> _ensurePool() {
     final existing = _pool;
     if (existing != null) return Future.value(existing);
@@ -239,8 +223,6 @@ class DownloadEngine {
     return _poolInit ??= () async {
       final pool = DownloadIsolatePool(
         size: _isolatePoolSize,
-        dohEnabled: _dohEnabled,
-        dohProvider: _dohProvider,
       );
       await pool.init();
       _pool = pool;
@@ -289,9 +271,12 @@ class DownloadEngine {
           (referer != null && referer.isNotEmpty)
               ? referer
               : 'https://www.youtube.com/';
+      // FIX(UA): precisely match NewPipe UA used in extraction to avoid 403/throttling
       client.options.headers['User-Agent'] =
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-          '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+          'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
+      client.options.headers['Accept'] = '*/*';
+      client.options.headers['Accept-Language'] = 'en-US,en;q=0.9';
 
       if (oauthToken != null && oauthToken.isNotEmpty) {
         client.options.headers['Authorization'] = 'Bearer $oauthToken';
@@ -1052,8 +1037,6 @@ class DownloadEngine {
       mirrorUrls: mirrorUrls,
       adaptiveThreads: adaptiveThreads,
       speedLimitKbps: speedLimitKbps,
-      dnsEnabled: _dohEnabled,
-      dnsProvider: _dohProvider,
     );
 
     final pool = await _ensurePool();
@@ -1995,13 +1978,21 @@ class DownloadEngine {
         );
       }
 
-      threadCount = await _probeOptimalThreads(
-        isolatedDio,
-        punyUrl,
-        effectiveThreads,
-        resolvedFileSize,
-        cancelToken: cancelToken,
-      );
+      // FIX(PROBE): Skip optimal thread probe for YouTube/GoogleVideo streams.
+      // These servers often reject HEAD requests or small Range probes, leading
+      // to connection drops (Connection closed before full header) and 0% hangs.
+      if (punyUrl.contains('googlevideo.com')) {
+        debugPrint('[DownloadEngine] YouTube stream detected. Skipping probe, using requested threads: $effectiveThreads');
+        threadCount = effectiveThreads;
+      } else {
+        threadCount = await _probeOptimalThreads(
+          isolatedDio,
+          punyUrl,
+          effectiveThreads,
+          resolvedFileSize,
+          cancelToken: cancelToken,
+        );
+      }
       threadCount = threadCount.clamp(1, PowerMonitor.maxAllowedThreads);
 
       debugPrint('[DownloadEngine] Final thread count: $threadCount');

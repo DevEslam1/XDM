@@ -278,21 +278,6 @@ class _SettingsScreenState extends State<SettingsScreen>
           onChanged: (val) => settings.setEnableProxy(val),
         ),
       ),
-      _SettingSearchEntry(
-        categoryTitle: isRtl ? 'الشبكة والأمان' : 'Network & Security',
-        categoryIndex: 2,
-        settingTitle: 'Custom DNS (DoH)',
-        subtitle: 'Encrypt DNS queries with DoH providers',
-        keywords: const ['dns', 'doh', 'adguard', 'cloudflare', 'google', 'quad9'],
-        accentColor: cyan,
-        builder: (ctx) => SwitchTile(
-          accentColor: cyan,
-          title: 'Custom DNS (DoH)',
-          subtitle: 'Encrypt DNS queries with DoH providers',
-          value: settings.dnsEnabled,
-          onChanged: (val) => settings.setDnsEnabled(val),
-        ),
-      ),
 
       // Category 3: Notifications
       _SettingSearchEntry(

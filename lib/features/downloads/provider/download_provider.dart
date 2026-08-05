@@ -112,11 +112,7 @@ class DownloadProvider extends ChangeNotifier
     bool enableBackgroundTimers = true,
   })  : _databaseService = databaseService,
         _settingsProvider = settingsProvider,
-        _downloadEngine = downloadEngine ??
-            DownloadEngine(
-              dohEnabled: settingsProvider.dnsEnabled,
-              dohProvider: settingsProvider.dnsProvider,
-            ),
+        _downloadEngine = downloadEngine ?? DownloadEngine(),
         _permissionService = permissionService ?? PermissionService(),
         _notificationService = notificationService ?? NotificationService(),
         enableBackgroundTimers = enableBackgroundTimers &&
@@ -3062,11 +3058,6 @@ class DownloadProvider extends ChangeNotifier
 
   void _onSettingsChanged() {
     _networkMonitor.checkNetworkConnectivity();
-
-    _downloadEngine.updateDohSettings(
-      _settingsProvider.dnsEnabled,
-      _settingsProvider.dnsProvider,
-    );
 
     _downloadEngine.updateSpeedLimit(
       _effectiveSpeedLimit(),

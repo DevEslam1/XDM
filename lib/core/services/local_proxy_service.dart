@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:logging/logging.dart';
-import 'doh_resolver.dart';
-import '../../features/settings/provider/settings_provider.dart';
 
 /// A minimal local HTTP proxy that routes traffic through Dart's networking.
 /// This ensures that the native WebView respects Dart-side DNS (DoH) and proxy settings.
@@ -43,28 +41,19 @@ class LocalProxyService {
     final host = hostPort[0];
     final port = hostPort.length > 1 ? (int.tryParse(hostPort[1]) ?? 443) : 443;
 
-    final settings = SettingsProvider.instance;
-    String targetHost = host;
-
-    // Explicitly resolve via DoH for Socket connections (HTTPS tunnels)
-    if (settings.dnsEnabled) {
-      final resolved =
-          await DohResolver.instance.resolve(host, settings.dnsProvider);
-      if (resolved != null) {
-        targetHost = resolved;
-      }
-    }
+    final String targetHost = host;
 
     try {
-      final targetSocket =
-          await Socket.connect(targetHost, port, timeout: const Duration(seconds: 15));
-      
+      final targetSocket = await Socket.connect(targetHost, port,
+          timeout: const Duration(seconds: 15));
+
       // Send 200 OK to the client
       request.response.statusCode = HttpStatus.ok;
       request.response.reasonPhrase = 'Connection Established';
-      
+
       // Detach and bridge
-      final clientSocket = await request.response.detachSocket(writeHeaders: false);
+      final clientSocket =
+          await request.response.detachSocket(writeHeaders: false);
       _bridgeSockets(clientSocket, targetSocket);
     } catch (e) {
       _log.warning('[LocalProxy] CONNECT failure to $host:$port: $e');
@@ -76,10 +65,10 @@ class LocalProxyService {
   Future<void> _handleRegular(HttpRequest request) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 15);
-    
+
     try {
       final targetRequest = await client.openUrl(request.method, request.uri);
-      
+
       // Copy headers
       request.headers.forEach((name, values) {
         if (name != 'host') {
