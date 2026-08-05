@@ -65,13 +65,23 @@ class CircuitBreaker {
     }
   }
 
+  DateTime? _lastFailureTimestamp;
+
   /// Records a failed attempt, tripping the breaker when the threshold is met.
+  /// Deduplicates concurrent failure reports within 500ms to prevent thread amplification.
   void recordFailure() {
+    final now = _clock();
+    if (_lastFailureTimestamp != null &&
+        now.difference(_lastFailureTimestamp!) < const Duration(milliseconds: 500)) {
+      return;
+    }
+    _lastFailureTimestamp = now;
+
     _consecutiveFailures++;
     _probeInFlight = false;
     if (_state == CircuitBreakerState.halfOpen ||
         _consecutiveFailures >= failureThreshold) {
-      _transition(CircuitBreakerState.open, _clock());
+      _transition(CircuitBreakerState.open, now);
     }
   }
 

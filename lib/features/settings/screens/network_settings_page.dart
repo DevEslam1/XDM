@@ -8,6 +8,7 @@ import '../../../core/services/doh_resolver.dart';
 import '../../../shared/widgets/neon_glow_button.dart';
 import '../../../shared/widgets/themed_snackbar.dart';
 import '../../../core/services/xdm_backend_client.dart';
+import '../../../features/browser/services/ad_blocker_service.dart';
 import '../provider/settings_provider.dart';
 import '../widgets/settings_section_header.dart';
 import '../widgets/settings_tiles.dart';
@@ -30,6 +31,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
   bool _testingProxy = false;
   // FIX-5: State variable for testing backend health
   bool _testingBackend = false;
+  bool _updatingAdblock = false;
 
   @override
   void initState() {
@@ -306,6 +308,107 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage>
                   triggerHaptic(settings);
                 },
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // AdBlocker & Host Filters Section
+          SettingsSectionHeader(
+            title: L10n.of(context, 'settings_adblock_title'),
+            accentColor: accent,
+            isDark: isDark,
+          ),
+          SettingsSectionGroup(
+            accentColor: accent,
+            children: [
+              SwitchTile(
+                accentColor: accent,
+                title: L10n.of(context, 'settings_enable_adblock'),
+                subtitle: L10n.of(context, 'settings_enable_adblock_sub'),
+                value: AdBlockerService.instance.isEnabled,
+                onChanged: (val) async {
+                  await AdBlockerService.instance.setEnabled(val);
+                  triggerHaptic(settings);
+                  if (mounted) setState(() {});
+                },
+              ),
+              if (AdBlockerService.instance.isEnabled) ...[
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  title: Text(
+                    L10n.of(context, 'settings_adblock_rules'),
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppTheme.textPrimary : AppTheme.lightTextPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${AdBlockerService.instance.ruleCount} ${isRtl ? 'قاعدة نشطة محملة' : 'active blocklist rules loaded'}',
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontSize: 12,
+                      color: isDark ? AppTheme.textSecondary : AppTheme.lightTextSecondary,
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.security_outlined,
+                    color: accent,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: NeonGlowButton(
+                    isFilled: false,
+                    color: accent,
+                    text: _updatingAdblock
+                        ? L10n.of(context, 'settings_updating_adblock_hosts')
+                        : L10n.of(context, 'settings_update_adblock_hosts'),
+                    onPressed: _updatingAdblock
+                        ? null
+                        : () async {
+                            setState(() => _updatingAdblock = true);
+                            ThemedSnackbar.show(
+                              context,
+                              message: L10n.of(context, 'settings_adblock_updating_msg'),
+                              color: accent,
+                              isDarkMode: isDark,
+                              icon: Icons.sync,
+                            );
+                            try {
+                              final updated = await AdBlockerService.instance.updateFilters(force: true);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: updated
+                                      ? L10n.of(context, 'settings_adblock_success_msg')
+                                      : L10n.of(context, 'settings_adblock_success_msg'),
+                                  color: AppTheme.neonGreen,
+                                  icon: Icons.check_circle_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                ThemedSnackbar.show(
+                                  context,
+                                  message: L10n.of(context, 'settings_adblock_failed_msg'),
+                                  color: AppTheme.neonRed,
+                                  icon: Icons.error_outline,
+                                  isDarkMode: isDark,
+                                );
+                              }
+                            } finally {
+                              if (mounted) {
+                                setState(() => _updatingAdblock = false);
+                              }
+                            }
+                          },
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 12),

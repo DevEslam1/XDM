@@ -82,12 +82,13 @@ class LoggingService {
       (_) => 'Basic [REDACTED]',
     );
     // Redact API keys / tokens / signatures in query params. Extended for
-    // AWS SigV4 and common signed-URL params (FIX(21)).
+    // AWS SigV4, CDN signed URLs, and OAuth (FIX(21)).
     result = result.replaceAllMapped(
       RegExp(
         r'[?&](api[_-]?key|apikey|token|access[_-]?token|secret|password|'
         r'signature|sig|auth|key|x-amz-signature|x-amz-credential|'
-        r'x-amz-security-token|awsaccesskeyid|googleaccessid|credential)='
+        r'x-amz-security-token|awsaccesskeyid|googleaccessid|credential|'
+        r'hdnts|hdnea|st|exp|code|session_token)='
         r'[^&\s]+',
         caseSensitive: false,
       ),

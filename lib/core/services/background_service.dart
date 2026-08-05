@@ -239,4 +239,13 @@ class BackgroundService {
       _log.warning('Failed to release wake lock', e);
     }
   }
+
+  /// Resets all internal timer states and releases the wake lock safely.
+  static Future<void> resetWakeLockState() async {
+    _wakeLockRenewalTimer?.cancel();
+    _wakeLockRenewalTimer = null;
+    _wakeLockSafetyTimer?.cancel();
+    _wakeLockSafetyTimer = null;
+    await releaseWakeLock();
+  }
 }

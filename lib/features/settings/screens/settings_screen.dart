@@ -345,6 +345,17 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ),
 
+      // Category 2: Network — AdBlocker entry
+      _SettingSearchEntry(
+        categoryTitle: isRtl ? 'الشبكة والأمان' : 'Network & Security',
+        categoryIndex: 2,
+        settingTitle: L10n.of(context, 'settings_update_adblock_hosts'),
+        subtitle: L10n.of(context, 'settings_enable_adblock_sub'),
+        keywords: const ['adblock', 'ad', 'block', 'hosts', 'filter', 'easylist', 'tracking', 'update'],
+        accentColor: cyan,
+        builder: (ctx) => const NetworkSettingsPage(),
+      ),
+
       // Category 6: Advanced
       _SettingSearchEntry(
         categoryTitle: isRtl ? 'متقدم وتطوير' : 'Advanced',

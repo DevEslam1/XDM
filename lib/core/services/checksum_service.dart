@@ -12,8 +12,17 @@ class ChecksumService {
       digest = results.single;
     });
     final sink = sha256.startChunkedConversion(innerSink);
-    await for (final chunk in File(path).openRead()) {
-      sink.add(chunk);
+    final file = File(path);
+    final raf = await file.open(mode: FileMode.read);
+    try {
+      const bufferSize = 1024 * 1024; // 1MB buffer for high-throughput hashing
+      while (true) {
+        final bytes = await raf.read(bufferSize);
+        if (bytes.isEmpty) break;
+        sink.add(bytes);
+      }
+    } finally {
+      await raf.close();
     }
     sink.close();
     return digest.toString();
@@ -25,8 +34,17 @@ class ChecksumService {
       digest = results.single;
     });
     final sink = sha1.startChunkedConversion(innerSink);
-    await for (final chunk in File(path).openRead()) {
-      sink.add(chunk);
+    final file = File(path);
+    final raf = await file.open(mode: FileMode.read);
+    try {
+      const bufferSize = 1024 * 1024;
+      while (true) {
+        final bytes = await raf.read(bufferSize);
+        if (bytes.isEmpty) break;
+        sink.add(bytes);
+      }
+    } finally {
+      await raf.close();
     }
     sink.close();
     return digest.toString();
@@ -38,8 +56,17 @@ class ChecksumService {
       digest = results.single;
     });
     final sink = md5.startChunkedConversion(innerSink);
-    await for (final chunk in File(path).openRead()) {
-      sink.add(chunk);
+    final file = File(path);
+    final raf = await file.open(mode: FileMode.read);
+    try {
+      const bufferSize = 1024 * 1024;
+      while (true) {
+        final bytes = await raf.read(bufferSize);
+        if (bytes.isEmpty) break;
+        sink.add(bytes);
+      }
+    } finally {
+      await raf.close();
     }
     sink.close();
     return digest.toString();
