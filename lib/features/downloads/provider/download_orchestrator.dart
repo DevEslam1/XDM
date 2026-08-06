@@ -478,11 +478,27 @@ class DownloadOrchestrator {
               final totalSize = (videoSize + audioSize) > 0
                   ? videoSize + audioSize
                   : (streamInfo['size'] as int? ?? 0);
+
+              // FIX-YT-4: Guard mergedAudioUrl from empty string wipes
+              final rawAudioUrl = streamInfo['audioSrc']?.toString();
+              final effectiveAudioUrl = (rawAudioUrl != null && rawAudioUrl.isNotEmpty) ? rawAudioUrl : null;
+
+              // FIX-YT-2: Reset audioProgress when audio URL/format changes
+              final oldAudioItag = Uri.tryParse(task.mergedAudioUrl ?? '')?.queryParameters['itag'];
+              final newAudioItag = Uri.tryParse(effectiveAudioUrl ?? '')?.queryParameters['itag'];
+              final audioFormatChanged = oldAudioItag != null && newAudioItag != null && oldAudioItag != newAudioItag;
+              if (audioFormatChanged) {
+                for (final p in ['${task.tempFilePath}.audio', '${task.tempFilePath}.audio.dmxstate', '${task.tempFilePath}.audio.journal']) {
+                  try { final f = File(p); if (await f.exists()) await f.delete(); } catch (_) {}
+                }
+              }
+
               task = task.copyWith(
                 url: resolvedUrl,
-                mergedAudioUrl: streamInfo['audioSrc']?.toString(),
+                mergedAudioUrl: effectiveAudioUrl ?? task.mergedAudioUrl,
+                audioProgress: audioFormatChanged ? 0.0 : task.audioProgress,
+                audioSize: audioFormatChanged ? audioSize : (audioSize > 0 ? audioSize : task.audioSize),
                 fileSize: totalSize,
-                audioSize: audioSize,
                 fileName:
                     task.fileName.isNotEmpty ? task.fileName : resolvedFileName,
                 localFilePath: resolvedLocalPath,
@@ -578,7 +594,7 @@ class DownloadOrchestrator {
 
   /// Merge audio and video streams via FFmpeg.
   /// Returns true on success, false if no merge was needed or already handled.
-  Future<bool> _mergeAudioVideo(String taskId, String audioTempPath) async {
+  Future<bool> _mergeAudioVideo(String taskId, String audioTempPath, {int? notificationId}) async {
     final current = _host.findTaskById(taskId);
     if (current == null) return false;
 
@@ -763,7 +779,9 @@ class DownloadOrchestrator {
     }
 
     final preMergeCheck = _host.findTaskById(taskId);
-    if (preMergeCheck == null || preMergeCheck.status != DownloadStatus.downloading) {
+    if (preMergeCheck == null ||
+        (preMergeCheck.status != DownloadStatus.downloading &&
+            preMergeCheck.status != DownloadStatus.merging)) {
       debugPrint('[DMX] _mergeAudioVideo aborted: task paused/cancelled during merge');
       return false;
     }
@@ -776,17 +794,31 @@ class DownloadOrchestrator {
       expectedDuration: expectedDuration,
       onProgress: (double p) async {
         final live = _host.findTaskById(taskId);
-        if (live != null && live.status == DownloadStatus.downloading) {
+        if (live != null &&
+            (live.status == DownloadStatus.downloading ||
+                live.status == DownloadStatus.merging)) {
           final pct = (p * 100).toStringAsFixed(0);
           await _host.setTaskState(
             live.copyWith(statusMessage: 'Merging… $pct%'),
           );
+          if (notificationId != null) {
+            _host.notifications.showProgress(
+              notificationId: notificationId,
+              title: live.fileName,
+              progressPercent: 100,
+              speed: 'Merging… $pct%',
+              eta: '',
+              payload: _host.notifications.opaqueHandleFor(live.id),
+            );
+          }
         }
       },
     );
 
     final latest = _host.findTaskById(taskId);
-    if (latest == null || latest.status != DownloadStatus.downloading) {
+    if (latest == null ||
+        (latest.status != DownloadStatus.downloading &&
+            latest.status != DownloadStatus.merging)) {
       debugPrint(
         '[DMX] Task $taskId was cancelled or deleted during FFmpeg merge — cleaning up merged file.',
       );
@@ -2088,7 +2120,9 @@ class DownloadOrchestrator {
               return;
             }
             // FIX-AUDIT-4: Check merge result. If merge failed, do NOT proceed to finalize.
-            final mergeOk = await _mergeAudioVideo(task.id, audioTempPath);
+            // FIX-YT-1: Set merging status before merge in normal download path
+            await _host.setTaskState(preMergeCheck.copyWith(status: DownloadStatus.merging));
+            final mergeOk = await _mergeAudioVideo(task.id, audioTempPath, notificationId: notificationId);
 
             if (!mergeOk) {
               final current = _host.findTaskById(task.id);
@@ -2107,7 +2141,9 @@ class DownloadOrchestrator {
 
             // FIX-MERGE-6: Add a status re-check after _mergeAudioVideo succeeds but before calling _finalizeDownload
             final postMergeTask = _host.findTaskById(task.id);
-            if (postMergeTask == null || postMergeTask.status != DownloadStatus.downloading) {
+            if (postMergeTask == null ||
+                (postMergeTask.status != DownloadStatus.downloading &&
+                    postMergeTask.status != DownloadStatus.merging)) {
               debugPrint('[DMX] Skipping finalize: task state changed during merge');
               return;
             }

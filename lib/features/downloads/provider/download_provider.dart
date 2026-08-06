@@ -3231,8 +3231,8 @@ class DownloadProvider extends ChangeNotifier
                 ? task.speed.round()
                 : 0,
             etaSeconds: task.eta,
-            fileSizeBytes: task.resolvedFileSize,
-            downloadedBytes: task.downloadedBytes,
+            fileSizeBytes: task.combinedTotalSize,
+            downloadedBytes: task.combinedDownloadedBytes,
             category: task.category,
             thumbnailUrl: task.thumbnailUrl,
             playlistId: task.playlistId,
@@ -3812,6 +3812,7 @@ class DownloadProvider extends ChangeNotifier
 
 
       final audioChanged = clearAudioUrl ||
+          streamIdentityChanged || // FIX-YT-5
           (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl);
       // FIX-D5: When the audio URL changes, delete all audio sidecar files
       // to prevent the engine from resuming from stale/corrupt audio bytes.
@@ -4043,6 +4044,20 @@ class DownloadProvider extends ChangeNotifier
       unawaited(TorrentResumeStore.delete(torrentId)); // FIX-9: Clear TorrentResumeStore
     }
 
+
+    // FIX-R-1: Delete audio sidecars when newAudioUrl differs from task.mergedAudioUrl
+    if (newAudioUrl != null && newAudioUrl != task.mergedAudioUrl) {
+      for (final p in [
+        '${task.tempFilePath}.audio',
+        '${task.tempFilePath}.audio.dmxstate',
+        '${task.tempFilePath}.audio.journal',
+      ]) {
+        try {
+          final f = File(p);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+    }
 
     // Preserve any existing partial bytes and state so a restart can resume
     // from the current temp file instead of discarding it.

@@ -170,11 +170,11 @@ class DownloadTask {
 
   /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
   int get combinedTotalSize {
-    // FIX-B4
+    // FIX-B4 & FIX-YT-3
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       if (fileSize > 0) return fileSize;
-      return audioSize;
+      return 0; // FIX-YT-3: unknown total size; prevents false 100% progress
     }
     return resolvedFileSize;
   }
@@ -194,7 +194,7 @@ class DownloadTask {
     if (status == DownloadStatus.completed) return 1.0;
     final total = combinedTotalSize;
     if (total <= 0) return 0.0;
-    final downloaded = combinedDownloadedBytes.clamp(0, total);
+    final downloaded = combinedDownloadedBytes.clamp(0, total); // FIX-D-1
     return (downloaded / total).clamp(0.0, 1.0);
   }
 

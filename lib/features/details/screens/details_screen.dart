@@ -4015,7 +4015,7 @@ class _TorrentFilesPanelState extends State<_TorrentFilesPanel>
 
                 final speed = (f['speed'] as num?)?.toDouble() ?? 0.0;
 
-                final rawResolvedBytes = _resolvedBytes(index, estimatedBytes);
+                final rawResolvedBytes = _resolvedBytes(index, estimatedBytes).clamp(0, length > 0 ? length : 0); // FIX-T-1 / FIX-UI-1
 
                 final resolvedBytes =
 
