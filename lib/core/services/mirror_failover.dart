@@ -1,133 +1,81 @@
 import 'package:dio/dio.dart';
-import 'package:logging/logging.dart';
-
 import 'mirror_health_store.dart';
 
-/// Orders a list of mirror URLs for best-first use.
-///
-/// Ranking rules:
-///  1. Blacklisted mirrors always sort last.
-///  2. Non-blacklisted mirrors are ranked by persisted speed (descending),
-///     with a large penalty per persisted failure so flaky mirrors drop.
-/// The given [primary] URL (if any) is always returned first when present in
-/// [urls], before any ranking is applied.
 List<String> orderMirrorUrls(List<String> urls, {String? primary}) {
-  if (urls.length <= 1) return List.of(urls);
-
-  final ordered = <String>[];
-  if (primary != null && urls.contains(primary)) {
-    ordered.add(primary);
-  }
-
-  final remaining = urls.where((u) => !ordered.contains(u)).toList();
-  final scored = remaining.map((url) {
-    var score = 0.0;
-    if (MirrorHealthStore.isBlacklisted(url)) {
-      score = -1000000.0;
-    } else {
-      score = MirrorHealthStore.getPersistedSpeed(url) -
-          MirrorHealthStore.getFailureCount(url) * 100000.0;
-    }
-    return MapEntry(url, score);
-  }).toList();
-
-  scored.sort((a, b) => b.value.compareTo(a.value));
-  ordered.addAll(scored.map((e) => e.key));
-  return ordered;
+  final list = List<String>.from(urls.where((u) => u.startsWith('http')));
+  list.sort((a, b) {
+    if (a == primary) return -1;
+    if (b == primary) return 1;
+    final blackA = MirrorHealthStore.isBlacklisted(a);
+    final blackB = MirrorHealthStore.isBlacklisted(b);
+    if (blackA != blackB) return blackA ? 1 : -1;
+    final speedA = MirrorHealthStore.getPersistedSpeed(a);
+    final speedB = MirrorHealthStore.getPersistedSpeed(b);
+    return speedB.compareTo(speedA);
+  });
+  return list;
 }
 
-/// Returns `true` when [error] should NOT be retried against another mirror.
-///
-/// Client errors (4xx) indicate the request itself is bad — a different
-/// mirror serving the same file would fail identically, so we propagate.
-bool isNonRetryableMirrorError(Object error) {
-  if (error is DioException) {
-    final status = error.response?.statusCode;
-    if (status != null && status >= 400 && status < 500) return true;
-    if (error.type == DioExceptionType.cancel) return true;
-  }
-  return false;
-}
-
-/// Runs [attempt] against each mirror in order until one succeeds.
-///
-/// Failures are recorded in [MirrorHealthStore]; successes reset health.
-/// Returns the mirror URL that succeeded, or `null` when all mirrors failed.
-/// Non-retryable errors (4xx / cancel) abort immediately.
+/// Task-level mirror rotation. The engine advances to the next mirror only
+/// after [failureThreshold] consecutive chunk-level failures on the current
+/// URL, then resets per-chunk attempt counters so a bad mirror doesn't burn
+/// every retry budget.
 class MirrorFailover {
-  static final _log = Logger('MirrorFailover');
+  MirrorFailover(List<String> urls)
+      : _urls = List<String>.unmodifiable(
+          urls.where((u) => u.startsWith('http')).toList(),
+        );
 
-  final List<String> mirrorUrls;
-  int mirrorSwitches = 0;
-  String? _lastAttempted;
+  final List<String> _urls;
+  int _index = 0;
+  int _consecutiveErrors = 0;
+  int _switches = 0;
 
-  MirrorFailover(List<String> urls, {String? primary})
-      : mirrorUrls = orderMirrorUrls(urls, primary: primary);
+  static const int failureThreshold = 2;
 
-  /// The mirror URL that was attempted last (or `null` before any attempt).
-  String? get lastAttempted => _lastAttempted;
+  String get activeUrl => _urls.isEmpty ? '' : _urls[_index];
+  bool get hasAlternatives => _urls.length > 1;
+  int get remainingAlternatives => _urls.length - 1 - _index;
+  int get mirrorSwitches => _switches;
 
-  /// Attempts [attempt] for each ordered mirror.
-  ///
-  /// `attempt` must throw on failure and return normally on success. When
-  /// [onSwitch] is provided it is invoked whenever a non-primary mirror is
-  /// used successfully.
-  ///
-  /// FIX-M7: [maxAttempts] caps how many mirrors will be tried. When omitted
-  /// (or set to 0) all mirrors are tried. This prevents extremely long wait
-  /// times when many mirrors are registered but most are unhealthy.
-  Future<String?> run(
-    Future<void> Function(String mirrorUrl) attempt, {
-    void Function(int index, String mirrorUrl)? onSwitch,
-    int maxAttempts = 0, // FIX-M7: 0 = unlimited (try all mirrors)
-  }) async {
-    final limit = maxAttempts > 0 ? maxAttempts : mirrorUrls.length;
-    int attempted = 0;
-    for (var i = 0; i < mirrorUrls.length && attempted < limit; i++) {
-      final mirrorUrl = mirrorUrls[i];
+  void reportSuccess() => _consecutiveErrors = 0;
 
-      if (MirrorHealthStore.isBlacklisted(mirrorUrl)) {
-        _log.fine('[MirrorFailover] Skipping blacklisted: $mirrorUrl');
-        continue;
+  void reportFailure() => _consecutiveErrors++;
+
+  bool get shouldFailover =>
+      _consecutiveErrors >= failureThreshold && _index < _urls.length - 1;
+
+  /// Moves to the next mirror. Returns the new URL, or null when exhausted.
+  String? advance() {
+    if (_index >= _urls.length - 1) return null;
+    _index++;
+    _switches++;
+    _consecutiveErrors = 0;
+    return _urls[_index];
+  }
+
+  Future<String?> run(Future<void> Function(String url) action) async {
+    final validUrls = _urls.where((u) => !MirrorHealthStore.isBlacklisted(u)).toList();
+    final candidateUrls = validUrls.isNotEmpty ? validUrls : _urls;
+    
+    for (final url in candidateUrls) {
+      if (url != candidateUrls.first) {
+        _switches++;
       }
-
-      _lastAttempted = mirrorUrl;
-      attempted++;
       try {
-        await attempt(mirrorUrl);
-        await MirrorHealthStore.recordSuccess(
-          mirrorUrl,
-          speedBps: 0,
-        );
-        if (i > 0) {
-          mirrorSwitches++;
-          _log.info('[MirrorFailover] Switched to mirror #$i: $mirrorUrl');
-          onSwitch?.call(i, mirrorUrl);
-        }
-        return mirrorUrl;
+        await action(url);
+        await MirrorHealthStore.recordSuccess(url);
+        return url;
       } catch (e) {
-        final statusCode = e is DioException ? e.response?.statusCode ?? 0 : 0;
-        await MirrorHealthStore.recordFailure(
-          mirrorUrl,
-          statusCode: statusCode,
-        );
-        _log.warning(
-          '[MirrorFailover] Mirror failed: $mirrorUrl ($e)',
-        );
-
-        if (isNonRetryableMirrorError(e)) {
-          _log.info(
-            '[MirrorFailover] Non-retryable error (${e.runtimeType}) — '
-            'aborting mirror loop',
-          );
-          return null;
+        await MirrorHealthStore.recordFailure(url);
+        if (e is DioException) {
+          final status = e.response?.statusCode;
+          if (status != null && status >= 400 && status < 500 && status != 408 && status != 429) {
+            return null;
+          }
         }
       }
     }
-
-    _log.severe(
-      '[MirrorFailover] All ${mirrorUrls.length} mirrors failed',
-    );
     return null;
   }
 }

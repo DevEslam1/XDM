@@ -1,173 +1,136 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../../core/services/download_journal.dart';
 import 'package:dmx/features/downloads/models/download_task.dart';
-import 'package:logging/logging.dart';
 
-import '../checksum_service.dart';
-import '../positional_file_writer.dart';
+// ═══════════════════════════════════════════════════════════════════════════
+// CHUNK SCHEDULING — pure functions, no I/O, fully unit-testable.
+// Execution lives in the engine's isolate jobs; a chunk executor can only
+// ever write inside its own ChunkState range.
+// ═══════════════════════════════════════════════════════════════════════════
 
-class HttpDownloadEngine {
-  final Logger _log = Logger('HttpDownloadEngine');
+class ChunkScheduler {
+  ChunkScheduler._();
 
-  // Adaptive thread monitor
-  Timer? _adaptiveThreadTimer;
-  int _currentThreads = 0;
-  double _emaSpeed = 0.0;
-  final List<double> _throughputHistory = [];
+  /// Files smaller than this never benefit from parallel ranges.
+  static const int minSizeForMultithread = 512 * 1024;
 
-  void startAdaptiveThreadMonitor(DownloadTask task) {
-    _currentThreads = task.threadCount;
-    _emaSpeed = 0.0;
-    _throughputHistory.clear();
-    _adaptiveThreadTimer?.cancel();
-    _adaptiveThreadTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _evaluateThreadAdjustment(task),
-    );
+  /// Fixed partition of [totalSize] into [threadCount] contiguous ranges.
+  /// This layout is IDENTICAL to the legacy v2 layout, which makes v2→v3
+  /// migration a 1:1 mapping of the `progress` array.
+  static List<ChunkState> plan({
+    required int totalSize,
+    required int threadCount,
+  }) {
+    if (totalSize <= 0) {
+      return [ChunkState(start: 0, end: -1)];
+    }
+    var n = threadCount.clamp(1, 32);
+    if (totalSize < minSizeForMultithread) n = 1;
+    if (totalSize < n * 1024) n = 1;
+    final part = totalSize ~/ n;
+    return List<ChunkState>.generate(n, (i) {
+      final start = i * part;
+      final end = (i == n - 1) ? totalSize - 1 : start + part - 1;
+      return ChunkState(start: start, end: end);
+    });
   }
 
-  void startAdaptiveMonitorIfEnabled(DownloadTask task, bool enabled) {
-    if (enabled) {
-      startAdaptiveThreadMonitor(task);
-    }
-  }
+  /// Rebuilds a layout for resume: keeps completed chunks, returns only the
+  /// ranges that still need work (each starting at its saved high-water
+  /// mark). Chunk failures therefore retry ONLY the affected range.
+  static List<ChunkState> pendingWork(List<ChunkState> chunks) =>
+      chunks.where((c) => !c.isComplete).toList();
 
-  void stopAdaptiveThreadMonitor() {
-    _adaptiveThreadTimer?.cancel();
-    _adaptiveThreadTimer = null;
-    _throughputHistory.clear();
-  }
-
-  void _evaluateThreadAdjustment(DownloadTask task) {
-    final currentSpeed = task.speed.toDouble();
-    if (_emaSpeed == 0.0) {
-      _emaSpeed = currentSpeed;
-    } else {
-      _emaSpeed = 0.3 * currentSpeed + 0.7 * _emaSpeed;
-    }
-    _throughputHistory.add(currentSpeed);
-    if (_throughputHistory.length > 8) _throughputHistory.removeAt(0);
-    if (_throughputHistory.length < 4) return;
-
-    final recentAvg = _emaSpeed;
-    final olderAvg = _throughputHistory.first;
-    final trend = olderAvg > 0 ? (recentAvg - olderAvg) / olderAvg : 0.0;
-
-    // 15% hysteresis barrier to prevent oscillation
-    if (trend < -0.15 && _currentThreads > 2) {
-      _currentThreads--;
-      _log.info(
-        '[AdaptiveThreads] Reducing threads to $_currentThreads '
-        '(EMA trend: ${(trend * 100).toStringAsFixed(1)}%)',
-      );
-    } else if (trend > 0.15 &&
-        _currentThreads < task.threadCount &&
-        _currentThreads < 16) {
-      _currentThreads++;
-      _log.info(
-        '[AdaptiveThreads] Increasing threads to $_currentThreads '
-        '(EMA trend: ${(trend * 100).toStringAsFixed(1)}%)',
-      );
-    }
-  }
-
-  // ============================================================
-  // FIXED: verifyAndRepair — streaming SHA-256 + single Dio + finally close
-  // ============================================================
-
-  Future<bool> verifyAndRepair({
-    required DownloadTask task,
-    required PositionalFileWriter writer,
-    required String expectedSha256,
-    required CancelToken cancelToken,
-  }) async {
-    final file = File(task.localFilePath);
-    if (!await file.exists()) return false;
-
-    // FIX(BUG-2): Streaming SHA-256 — constant memory usage regardless of file size
-    // Previously used file.readAsBytes() which caused OOM on multi-GB files
-    final actualHash =
-        (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
-
-    if (actualHash == expectedSha256.toLowerCase()) {
-      _log.info('[Verify] SHA-256 matched successfully: $actualHash');
-      return true;
-    }
-
-    _log.warning(
-      '[Verify] SHA-256 mismatch ($actualHash vs $expectedSha256). '
-      'Attempting chunk repair...',
-    );
-
-    final chunkSize = (task.fileSize / task.threadCount).ceil();
-    final corruptedChunks = <int>[];
-
-    // FIX(BUG-3): Single Dio instance created OUTSIDE the loop, closed in finally
-    // Previously created a new Dio() per chunk iteration, leaking connections
-    final repairDio = Dio();
-    try {
-      for (var i = 0; i < task.threadCount; i++) {
-        if (cancelToken.isCancelled) return false;
-        final start = i * chunkSize;
-        final end = (i == task.threadCount - 1)
-            ? task.fileSize - 1
-            : start + chunkSize - 1;
-        try {
-          final response = await repairDio.get<List<int>>(
-            task.url,
-            options: Options(
-              headers: {'Range': 'bytes=$start-$end'},
-              responseType: ResponseType.bytes,
-            ),
-            cancelToken: cancelToken,
-          );
-          if (response.data != null) {
-            final freshData = response.data!;
-            final existing = await writer.readRange(start, freshData.length);
-            if (!_bytesEqual(freshData, existing)) {
-              corruptedChunks.add(i);
-              await writer.writeAt(start, freshData);
-            }
-          }
-        } catch (e) {
-          _log.warning('[Verify] Range request failed for chunk $i: $e');
-        }
-      }
-    } finally {
-      repairDio.close(); // FIX: Always closed, even on cancel/exception
-    }
-
-    if (corruptedChunks.isEmpty) {
-      _log.warning('[Verify] No corrupted chunk found during repair check.');
-      return false;
-    }
-
-    await writer.flushAll();
-
-    // FIX(BUG-2): Streaming SHA-256 re-verification to prevent OOM
-    // Previously used file.readAsBytes() which caused OOM on multi-GB files
-    final repairedHash =
-        (await ChecksumService.sha256File(task.localFilePath)).toLowerCase();
-
-    if (repairedHash == expectedSha256.toLowerCase()) {
-      _log.info(
-        '[Verify] Successfully repaired ${corruptedChunks.length} corrupted chunks!',
-      );
-      return true;
-    }
-    return false;
-  }
-
-  bool _bytesEqual(List<int> a, List<int> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  // ============================================================
+  /// Collapses any layout into a single open-ended chunk (fallback when the
+  /// server turns out not to honor Range).
+  static List<ChunkState> singleStream(int totalSize) => [
+        ChunkState(
+          start: 0,
+          end: totalSize > 0 ? totalSize - 1 : -1,
+        ),
+      ];
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ADAPTIVE THREAD MONITOR
+//
+// Collects throughput samples per task and publishes a recommendation for
+// the NEXT start of that task. Deliberately not allowed to re-thread a
+// running transfer: changing chunk layout mid-flight is exactly the class
+// of mutation that produced the old drift bugs. The recommendation applies
+// when the task next leaves the queue.
+// ═══════════════════════════════════════════════════════════════════════════
+
+class HttpDownloadEngine {
+  final Map<String, _AdaptiveTracker> _trackers = {};
+  Timer? _monitorTimer;
+
+  void startAdaptiveMonitorIfEnabled(DownloadTask task, bool enabled) {
+    if (!enabled) return;
+    _trackers.putIfAbsent(task.id, () => _AdaptiveTracker(task.threadCount));
+    _monitorTimer ??= Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _evaluate(),
+    );
+  }
+
+  /// Called by transfer jobs with each progress sample.
+  void recordSample(String taskId, double bytesPerSec, int threads) {
+    _trackers[taskId]?.add(bytesPerSec, threads);
+  }
+
+  /// Thread count to use the next time this task starts.
+  int recommendedThreads(String taskId, int fallback) {
+    final t = _trackers[taskId];
+    if (t == null) return fallback;
+    return t.recommendation.clamp(1, fallback);
+  }
+
+  void stopFor(String taskId) => _trackers.remove(taskId);
+
+  void stopAdaptiveThreadMonitor() {
+    _monitorTimer?.cancel();
+    _monitorTimer = null;
+    _trackers.clear();
+  }
+
+  void _evaluate() {
+    for (final tracker in _trackers.values) {
+      tracker.evaluate();
+    }
+  }
+}
+
+class _AdaptiveTracker {
+  _AdaptiveTracker(this.currentThreads);
+
+  final int currentThreads;
+  final List<double> _samples = [];
+  int recommendation = 0;
+
+  void add(double bytesPerSec, int threads) {
+    if (bytesPerSec > 0) {
+      _samples.add(bytesPerSec);
+      if (_samples.length > 12) _samples.removeAt(0);
+    }
+  }
+
+  /// Plateau detection: three consecutive samples within ±5% mean more
+  /// parallelism is not helping → recommend shedding threads on next start.
+  void evaluate() {
+    if (recommendation != 0 || _samples.length < 6) return;
+    final tail = _samples.sublist(_samples.length - 3);
+    final avg = tail.reduce((a, b) => a + b) / tail.length;
+    if (avg <= 0) return;
+    final plateau = tail.every((s) => (s - avg).abs() / avg < 0.05);
+    if (plateau && currentThreads > 1) {
+      recommendation = (currentThreads / 2).ceil().clamp(1, currentThreads);
+      debugPrint(
+          '[AdaptiveThreads] plateau at ${avg ~/ 1024} KB/s with '
+          '$currentThreads threads → next start uses $recommendation');
+    }
+  }
+}

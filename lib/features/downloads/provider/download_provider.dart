@@ -1587,7 +1587,7 @@ class DownloadProvider extends ChangeNotifier
           try {
             await TorrentResumeStore.saveAll(
               {torrentId},
-              (tid) => TorrentService.progressFor(tid),
+              (tid) => TorrentService.resumeBlobFor(tid),
             );
           } catch (e) {
             debugPrint('[DMX] FIX-06: Failed to save resume data on pause: $e');
@@ -2464,126 +2464,28 @@ class DownloadProvider extends ChangeNotifier
   }
 
   /// ── FIX-4 / FIX-1 / FIX-11: Robust .dmxstate reading with journal fallback ──
+  /// ── FIX-4 / FIX-1 / FIX-11: Robust .dmxstate reading via StateStore ──
   static Future<int> _readDmxStateBytes(
     String tempFilePath, {
     int threadCount = 1,
   }) async {
-    final stateFile = File('$tempFilePath.dmxstate');
-    int stateTotal = 0;
-    bool hasStateFile = false;
-
-    if (await stateFile.exists()) {
-      try {
-        final content = await stateFile.readAsString();
-        final decoded = jsonDecode(content);
-        if (decoded is Map) {
-          final progressList = decoded['progress'] as List?;
-          if (progressList != null) {
-            BigInt total = BigInt.zero;
-            for (final chunk in progressList) {
-              total += BigInt.from((chunk as num).toInt());
-            }
-            stateTotal = total.toInt();
-            hasStateFile = true;
-          }
-        }
-      } catch (e) {
-        debugPrint('[DMX] _readDmxStateBytes failed for $tempFilePath: $e');
-      }
-    }
-
-    // FIX-11: If journal exists, compare and use whichever has more bytes
-    final journalPath = '$tempFilePath.journal';
-    final journalFile = File(journalPath);
-    if (await journalFile.exists()) {
-      try {
-        final journalBytes = await DownloadJournal.recover(journalPath);
-        if (journalBytes != null && journalBytes.isNotEmpty) {
-          final journalTotal = journalBytes.fold<int>(0, (sum, b) => sum + b);
-          if (journalTotal > stateTotal) {
-            debugPrint(
-              '[DMX] FIX-11: Journal has more bytes ($journalTotal) '
-              'than state file ($stateTotal). Using journal.',
-            );
-            return journalTotal;
-          }
-        }
-      } catch (e) {
-        debugPrint('[DMX] FIX-11: Journal read failed, using state: $e');
-      }
-    }
-
-    if (hasStateFile) {
-      return stateTotal;
-    }
-
-    // FIX-1: For multi-threaded downloads, tempFile.length() is pre-allocated size, NOT downloaded bytes.
-    if (threadCount > 1) {
-      debugPrint(
-        '[DMX] No state file for multi-threaded download. '
-        'Returning 0 instead of pre-allocated file size.',
-      );
-      return 0;
-    }
-
-    // Single-threaded: file length is accurate
-    final tempFile = File(tempFilePath);
-    if (await tempFile.exists()) {
-      return await tempFile.length();
-    }
-    return 0;
+    return actualDownloadedBytes(tempFilePath, threadCount: threadCount);
   }
 
-  /// Reads per-chunk progress percentages from a `.dmxstate` sidecar file.
-  /// Returns null when the file is missing, corrupt, or empty.
+  /// Reads per-chunk progress percentages via StateStore.
   static Future<List<double>?> _readDmxStateChunks(
       String tempFilePath, int threadCount) async {
-    final stateFile = File('$tempFilePath.dmxstate');
-    if (!await stateFile.exists()) return null;
     try {
-      final decoded = jsonDecode(await stateFile.readAsString());
-      if (decoded is Map && decoded['progress'] is List) {
-        // FIX-C5: Wrap element parsing in per-element try-catch to prevent corrupt entries from crashing
-        final progress = <int>[];
-        for (final e in (decoded['progress'] as List)) {
-          try {
-            if (e is num) {
-              progress.add(e.toInt());
-            } else {
-              progress.add(0);
-            }
-          } catch (_) {
-            progress.add(0);
-          }
-        }
-
-        final total = decoded['totalSize'] is num
-            ? (decoded['totalSize'] as num).toInt()
-            : 0;
-        if (total <= 0 || progress.isEmpty) return null;
-
-        // FIX-5: Validate chunk sum doesn't exceed total
-        final chunkSum = progress.fold<int>(0, (sum, b) => sum + b);
-        if (chunkSum > total) {
-          debugPrint(
-            '[DMX] FIX-5: Chunk sum ($chunkSum) exceeds total ($total). '
-            'Clamping chunks.',
-          );
-          final scale = total / chunkSum;
-          for (var i = 0; i < progress.length; i++) {
-            progress[i] = (progress[i] * scale).toInt();
-          }
-        }
-
-        final partSize = (total / progress.length).floor();
-        return List.generate(progress.length, (i) {
-          final end =
-              i == progress.length - 1 ? total - i * partSize : partSize;
-          return end > 0 ? (progress[i] / end).clamp(0.0, 1.0) : 0.0;
-        });
-      }
-    } catch (_) {}
-    return null;
+      final result = await StateStore.loadOrCreate(
+        tempFilePath,
+        url: '',
+        threadCount: threadCount,
+        knownFileSize: 0,
+      );
+      return result.state.chunkRatios;
+    } catch (_) {
+      return null;
+    }
   }
 
 

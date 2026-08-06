@@ -147,7 +147,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       await Future.any([
         TorrentResumeStore.saveAll(
           TorrentService.activeTorrentIds,
-          TorrentService.progressFor,
+          TorrentService.resumeBlobFor,
         ),
         Future.delayed(const Duration(seconds: 3)),
       ]);

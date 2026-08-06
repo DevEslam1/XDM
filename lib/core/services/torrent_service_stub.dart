@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'torrent_models.dart';
 import '../../features/settings/provider/settings_provider.dart';
@@ -9,7 +10,8 @@ class TorrentService {
   static Future<void> get ready => Future.value();
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
   static Set<int> get activeTorrentIds => const <int>{};
-  static double progressFor(int id) => 0.0;
+  static Uint8List? progressFor(int id) => null;
+  static Uint8List? resumeBlobFor(int id) => null;
   static bool fileProgressSupported = false;
   static bool filePrioritiesSupported = false;
   static bool get sequentialDownloadEnabled => false;

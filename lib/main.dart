@@ -227,7 +227,6 @@ Future<void> main(List<String> args) async {
           if (TorrentService.isSupported) {
             initFutures.add(() async {
               try {
-                await TorrentResumeStore.init();
                 await TorrentService.init();
                 debugPrint('Torrent service initialized successfully');
               } catch (e, s) {
@@ -483,7 +482,7 @@ class _AppLifecycleObserver with WidgetsBindingObserver {
       await TorrentService.saveAllResumeData();
       await TorrentResumeStore.saveAll(
         TorrentService.activeTorrentIds,
-        TorrentService.progressFor,
+        TorrentService.resumeBlobFor,
         (tid) {
           // FIX-T1: Persist per-file progress
           try {

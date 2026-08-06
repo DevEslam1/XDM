@@ -327,6 +327,19 @@ class TorrentService {
   /// Returns the latest known progress for a torrent, or 0.0 if unknown.
   static double progressFor(int id) => _latestProgress[id] ?? 0.0;
 
+  /// Returns the native fast-resume blob for [id], or null when unavailable.
+  static Uint8List? resumeBlobFor(int id) {
+    if (_state == TorrentSessionState.uninitialized ||
+        _state == TorrentSessionState.initializing) {
+      return null;
+    }
+    try {
+      return _CapabilityGate.instance.saveResumeData(id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> _readyOrThrow() async {
     if (_state == TorrentSessionState.ready) return;
     await ready;
@@ -351,7 +364,6 @@ class TorrentService {
     _state = TorrentSessionState.initializing;
     _initCompleter = Completer<void>();
     try {
-      await TorrentResumeStore.init();
       try {
         await LibtorrentFlutter.init();
         _CapabilityGate.instance.probeCapabilities();
@@ -530,9 +542,12 @@ class TorrentService {
       if (data != null) {
         final source = _torrentSources[torrentId];
         if (source != null) {
-          await TorrentResumeStore.saveResumeDataForSource(source, data);
+          await TorrentResumeStore.saveAndWait(
+            torrentId: torrentId,
+            sourceUrl: source,
+            fetchResumeData: () => data,
+          );
         }
-        await TorrentResumeStore.saveResumeData(torrentId, data);
       }
     } catch (e) {
       _log.warning('saveResumeData failed for torrentId $torrentId: $e');
@@ -592,7 +607,7 @@ class TorrentService {
       await saveAllResumeData();
       await TorrentResumeStore.saveAll(
         _activeTorrentIds,
-        (id) => _latestProgress[id] ?? 0.0,
+        (id) => _CapabilityGate.instance.saveResumeData(id),
       );
     } catch (e) {
       _log.warning('Error saving resume data during dispose: $e');
@@ -748,8 +763,6 @@ class TorrentService {
     if (!isInitialized) return;
     if (id >= 0) {
       try {
-        final progress = _latestProgress[id] ?? 0.0;
-
         // Snapshot torrent file priorities/selections BEFORE pausing so they
         // survive a forced kill. getFiles() calls the native session which is
         // still running at this point.
@@ -771,17 +784,18 @@ class TorrentService {
           _log.warning('getFiles snapshot failed for id $id (non-fatal): $e');
         }
 
-        // Persist JSON progress + file priorities atomically.
-        await TorrentResumeStore.save(
-          id,
-          progress: progress,
-          torrentFiles: torrentFiles,
-        );
-
-        // Persist native fast-resume bytes under BOTH the stable source key
-        // and the numeric-id path. Best-effort: never throw out of pauseTorrent.
+        // Persist native fast-resume bytes under the stable source key.
+        // Best-effort: never throw out of pauseTorrent.
         try {
-          await saveResumeData(id);
+          final source = _torrentSources[id];
+          if (source != null) {
+            await TorrentResumeStore.saveAndWait(
+              torrentId: id,
+              sourceUrl: source,
+              fetchResumeData: () => _CapabilityGate.instance.saveResumeData(id),
+              files: torrentFiles,
+            );
+          }
         } catch (e) {
           _log.warning('saveResumeData failed for id $id: $e');
         }

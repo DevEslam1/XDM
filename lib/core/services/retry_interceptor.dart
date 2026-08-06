@@ -1,145 +1,58 @@
-import 'dart:math' as math;
+import 'dart:math';
+
 import 'package:dio/dio.dart';
-import 'package:logging/logging.dart';
 
-import 'circuit_breaker.dart';
-
+/// Retries idempotent (GET/HEAD) requests on transient failures:
+/// connection errors, 429/5xx. Exponential backoff with jitter, max 2
+/// retries. Never retries a cancelled request and never retries when the
+/// caller supplied an explicit `Range` continuation mid-stream (those are
+/// handled by the chunk executor's own resume logic).
 class ProfessionalRetryInterceptor extends Interceptor {
+  ProfessionalRetryInterceptor(this._dio, {this.maxRetries = 2});
+
   final Dio _dio;
-
-  /// Retries reuse [_dio] so proxy, SSL, and header configuration are
-  /// preserved across attempts (a bare `Dio()` would bypass user settings).
-  ProfessionalRetryInterceptor(this._dio);
-
-  static final _log = Logger('RetryInterceptor');
-  static const int maxRetries = 5;
-  static const int baseDelayMs = 1000;
-  static const int maxDelayMs = 30000;
-  static final _rng = math.Random();
-
-  /// Trip the retry loop after enough consecutive transient failures so a
-  /// failing host is not hammered. Shared per interceptor instance (per Dio),
-  /// so it applies across all requests on the same connection.
-  final CircuitBreaker _breaker = CircuitBreaker(
-    failureThreshold: 4,
-    openTimeout: const Duration(seconds: 20),
-  );
-
-  final Expando<int> _retryCounts = Expando<int>();
-  final Expando<int> _retryTimestamps = Expando<int>();
+  final int maxRetries;
+  static const _retryableStatus = {429, 500, 502, 503, 504};
+  static const _retryableTypes = {
+    DioExceptionType.connectionTimeout,
+    DioExceptionType.connectionError,
+  };
+  static final Random _rng = Random();
 
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) async {
-    final requestOptions = err.requestOptions;
+  Future<void> onError(
+      DioException err, ErrorInterceptorHandler handler) async {
+    final opts = err.requestOptions;
+    final method = opts.method.toUpperCase();
+    final attempt = (opts.extra['__retry'] as int?) ?? 0;
 
-    // Break infinite retry loops: if the request already carries a retry
-    // count at the max, stop retrying regardless of the in-memory map state.
-    final existingRetryCount = int.tryParse(
-          requestOptions.headers['X-Retry-Count']?.toString() ?? '0',
-        ) ??
-        0;
-    if (existingRetryCount >= maxRetries) {
-      _removeEntry(requestOptions);
+    final isMethodSafe = method == 'GET' || method == 'HEAD';
+    final isTransient = _retryableTypes.contains(err.type) ||
+        (err.type == DioExceptionType.badResponse &&
+            err.response != null &&
+            _retryableStatus.contains(err.response!.statusCode));
+
+    if (!isMethodSafe || !isTransient || attempt >= maxRetries) {
       handler.next(err);
       return;
     }
 
-    if (!_isTransient(err)) {
-      _log.fine(
-        'Permanent error (${err.type}, '
-        '${err.response?.statusCode}), not retrying: '
-        '${requestOptions.uri}',
-      );
-      _removeEntry(requestOptions);
-      handler.next(err);
-      return;
-    }
-
-    // Circuit breaker: skip retries while the host is cooling down.
-    if (!_breaker.allowRequest()) {
-      _log.warning(
-        'Circuit breaker open for ${requestOptions.uri} '
-        '(${_breaker.state.name}); skipping retry.',
-      );
-      _removeEntry(requestOptions);
-      handler.next(err);
-      return;
-    }
-
-    final count = _retryCounts[requestOptions] ?? 0;
-    if (count >= maxRetries) {
-      _log.warning(
-        'Max retries ($maxRetries) exhausted for '
-        '${requestOptions.uri}',
-      );
-      _removeEntry(requestOptions);
-      handler.next(err);
-      return;
-    }
-
-    _retryCounts[requestOptions] = count + 1;
-    _retryTimestamps[requestOptions] = DateTime.now().millisecondsSinceEpoch;
-
-    final delayMs = _computeDelay(err, count);
-
-    _log.info(
-      'Retry ${count + 1}/$maxRetries for '
-      '${err.requestOptions.uri} in ${delayMs}ms '
-      '(error: ${err.type}, status: ${err.response?.statusCode}, message: ${err.message})',
+    final backoff = Duration(
+      milliseconds: min(30000, (1 << attempt) * 800 + _rng.nextInt(400)),
     );
+    await Future<void>.delayed(backoff);
 
-    await Future.delayed(Duration(milliseconds: delayMs));
+    if (err.requestOptions.cancelToken?.isCancelled == true) {
+      handler.next(err);
+      return;
+    }
 
     try {
-      // Retry using the SAME Dio instance to preserve proxy, SSL, and header config.
-      // Add a retry-count header to allow servers / downstream interceptors to
-      // detect and break infinite retry loops.
-      requestOptions.headers['X-Retry-Count'] = (count + 1).toString();
-      final response = await _dio.fetch(requestOptions);
-      _breaker.recordSuccess();
-      _removeEntry(requestOptions);
+      opts.extra['__retry'] = attempt + 1;
+      final response = await _dio.fetch<dynamic>(opts);
       handler.resolve(response);
-    } catch (retryErr) {
-      _breaker.recordFailure();
-      _log.fine('Retry attempt failed: $retryErr');
-      handler.next(err);
+    } on DioException catch (e) {
+      handler.next(e);
     }
-  }
-
-  int _computeDelay(DioException err, int attemptCount) {
-    final retryAfter = err.response?.headers.value('retry-after');
-    if (retryAfter != null) {
-      final seconds = int.tryParse(retryAfter);
-      if (seconds != null && seconds > 0) {
-        return (seconds * 1000).clamp(baseDelayMs, maxDelayMs);
-      }
-    }
-
-    final exponential = baseDelayMs * math.pow(2, attemptCount);
-    final capped = math.min(exponential, maxDelayMs).toDouble();
-    final jitter = capped * 0.25 * (_rng.nextDouble() * 2 - 1);
-    return (capped + jitter).round().clamp(baseDelayMs, maxDelayMs);
-  }
-
-  bool _isTransient(DioException err) {
-    switch (err.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-      case DioExceptionType.connectionError:
-        return true;
-      case DioExceptionType.badResponse:
-        final code = err.response?.statusCode ?? 0;
-        return code == 408 || code == 425 || code == 429 || code >= 500;
-      case DioExceptionType.cancel:
-        return false;
-      default:
-        return false;
-    }
-  }
-
-  void _removeEntry(RequestOptions requestOptions) {
-    _retryCounts[requestOptions] = null;
-    _retryTimestamps[requestOptions] = null;
   }
 }
