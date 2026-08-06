@@ -108,6 +108,7 @@ class DownloadTask {
     this.audioSize = 0,
     this.videoStreamSize = 0, // FIX-B4
     this.audioProgress = 0.0,
+    this.audioDownloadedBytes = 0,
     this.audioThreadCount = 2,
     this.pausedByUser = false,
     this.youtubeQualityPreset,
@@ -147,6 +148,7 @@ class DownloadTask {
   }
 
   // FIX(07): Track uploaded bytes for torrent seeding ratio
+  final int audioDownloadedBytes; // actual audio bytes on disk
   final int uploadedBytes;
 
   // FIX(01): Helper getter for indeterminate progress state
@@ -174,7 +176,9 @@ class DownloadTask {
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       if (fileSize > 0) return fileSize;
-      return 0; // FIX-YT-3: unknown total size; prevents false 100% progress
+      // If we have downloaded bytes, use them as a floor
+      if (downloadedBytes > 0) return downloadedBytes + audioSize;
+      return 0; // unknown total size
     }
     return resolvedFileSize;
   }
@@ -183,8 +187,12 @@ class DownloadTask {
   int get combinedDownloadedBytes {
     final total = combinedTotalSize;
     var raw = downloadedBytes < 0 ? 0 : downloadedBytes;
-    if (hasMergedAudio && audioSize > 0 && audioProgress > 0) {
-      raw += (audioProgress * audioSize).round();
+    if (hasMergedAudio) {
+      if (audioSize > 0 && audioProgress > 0) {
+        raw += (audioProgress * audioSize).round();
+      } else if (audioDownloadedBytes > 0) {
+        raw += audioDownloadedBytes;
+      }
     }
     if (total > 0) return raw.clamp(0, total);
     return raw;
@@ -193,8 +201,11 @@ class DownloadTask {
   double get progress {
     if (status == DownloadStatus.completed) return 1.0;
     final total = combinedTotalSize;
-    if (total <= 0) return 0.0;
-    final downloaded = combinedDownloadedBytes.clamp(0, total); // FIX-D-1
+    if (total <= 0) {
+      if (downloadedBytes > 0) return -1.0; // indeterminate
+      return 0.0;
+    }
+    final downloaded = combinedDownloadedBytes.clamp(0, total);
     return (downloaded / total).clamp(0.0, 1.0);
   }
 
@@ -342,6 +353,7 @@ class DownloadTask {
     String? mergedAudioUrl,
     bool clearMergedAudioUrl = false,
     int? audioSize,
+    int? audioDownloadedBytes,
     int? videoStreamSize, // FIX-B4
     double? audioProgress,
     int? audioThreadCount,
@@ -400,6 +412,7 @@ class DownloadTask {
       mergedAudioUrl:
           clearMergedAudioUrl ? null : (mergedAudioUrl ?? this.mergedAudioUrl),
       audioSize: audioSize ?? this.audioSize,
+      audioDownloadedBytes: audioDownloadedBytes ?? this.audioDownloadedBytes,
       videoStreamSize: videoStreamSize ?? this.videoStreamSize, // FIX-B4
       audioProgress: audioProgress ?? this.audioProgress,
       audioThreadCount: audioThreadCount ?? this.audioThreadCount,
@@ -455,6 +468,7 @@ class DownloadTask {
       'downloadPageUrl': downloadPageUrl,
       'mergedAudioUrl': mergedAudioUrl,
       'audioSize': audioSize,
+      'audioDownloadedBytes': audioDownloadedBytes,
       'videoStreamSize': videoStreamSize, // FIX-B4
       'audioProgress': audioProgress,
       'audioThreadCount': audioThreadCount,
@@ -584,6 +598,7 @@ class DownloadTask {
       downloadPageUrl: map['downloadPageUrl'] as String?,
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
+      audioDownloadedBytes: (map['audioDownloadedBytes'] as num?)?.toInt() ?? 0,
       videoStreamSize: (map['videoStreamSize'] as num?)?.toInt() ?? 0, // FIX-B4
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       audioThreadCount: (map['audioThreadCount'] as num?)?.toInt() ?? 2,

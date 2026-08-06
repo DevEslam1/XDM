@@ -802,7 +802,7 @@ class _ProgressRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDownloading = task.status == DownloadStatus.downloading;
-    final showIndeterminate = task.hasUnknownSize && isDownloading;
+    final showIndeterminate = (task.hasUnknownSize || task.progress == -1.0) && isDownloading;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

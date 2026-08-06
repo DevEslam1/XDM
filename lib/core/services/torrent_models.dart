@@ -14,6 +14,12 @@ class TorrentFileItem {
     this.priority = 4,
     this.selected = true,
   });
+
+  /// Whether the engine has actual progress data for this file.
+  bool get hasProgressData => downloadedBytes >= 0;
+
+  /// Safe byte count (0 when no data available).
+  int get safeDownloadedBytes => downloadedBytes >= 0 ? downloadedBytes : 0;
 }
 
 class TorrentUpdateInfo {

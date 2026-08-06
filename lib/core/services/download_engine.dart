@@ -1112,15 +1112,15 @@ class DownloadEngine {
         ));
       }
     });
-    heartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
+    heartbeat = Timer.periodic(const Duration(seconds: 10), (_) {
       if (completer.isCompleted) return;
-      elapsed += 30;
+      elapsed += 10;
       onProgress(DownloadProgress(
         downloadedBytes: 0,
         fileSize: 0,
         speed: 0,
         eta: null,
-        statusMessage: 'Fetching metadata… (${elapsed}s elapsed)',
+        statusMessage: 'Fetching metadata… (${elapsed}s / 300s)',
       ));
     });
     final timeout = Timer(const Duration(seconds: 300), () {
@@ -1194,10 +1194,10 @@ class DownloadEngine {
                     orElse: () => null);
             int resolvedBytes;
             bool isEstimated;
-            if (f.downloadedBytes >= 0) {
+            if (f.hasProgressData) {
               resolvedBytes = f.size > 0
-                  ? f.downloadedBytes.clamp(0, f.size)
-                  : f.downloadedBytes;
+                  ? f.safeDownloadedBytes.clamp(0, f.size)
+                  : f.safeDownloadedBytes;
               isEstimated = false;
             } else {
               resolvedBytes = 0;
@@ -1243,7 +1243,7 @@ class DownloadEngine {
 
       final rawDownloaded = torrent.totalWantedDone > 0
           ? torrent.totalWantedDone
-          : torrent.totalDone;
+          : (torrent.totalWanted > 0 ? 0 : torrent.totalDone);
       final downloadedBytes =
           totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
 
@@ -1396,6 +1396,7 @@ class DownloadEngine {
         .where((f) => (f['progressEstimated'] as bool? ?? true) == true)
         .toList();
     if (needing.isEmpty || downloadedBytes <= 0) return;
+
     final confirmed = files
         .where((f) => (f['progressEstimated'] as bool? ?? true) == false)
         .fold<int>(0, (s, f) => s + ((f['downloadedBytes'] as int?) ?? 0));
@@ -1403,12 +1404,31 @@ class DownloadEngine {
     final selectedSize = needing.fold<int>(
         0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
     if (selectedSize <= 0) return;
+
+    // FIX T-5: Largest-remainder method to avoid over-allocation
+    final rawShares = <double>[];
+    final floorShares = <int>[];
+    var floorSum = 0;
     for (final f in needing) {
       final len = (f['length'] as num?)?.toInt() ?? 0;
-      final share = selectedSize > 0
-          ? (remaining * (len / selectedSize)).round().clamp(0, len)
-          : 0;
-      f['downloadedBytes'] = share;
+      final raw = remaining * (len / selectedSize);
+      final floor = raw.floor();
+      rawShares.add(raw - floor);
+      floorShares.add(floor);
+      floorSum += floor;
+    }
+    // Distribute leftover bytes to files with largest fractional parts
+    var leftover = remaining - floorSum;
+    final indices = List<int>.generate(needing.length, (i) => i)
+      ..sort((a, b) => rawShares[b].compareTo(rawShares[a]));
+    for (final idx in indices) {
+      if (leftover <= 0) break;
+      floorShares[idx]++;
+      leftover--;
+    }
+    for (var i = 0; i < needing.length; i++) {
+      final len = (needing[i]['length'] as num?)?.toInt() ?? 0;
+      needing[i]['downloadedBytes'] = floorShares[i].clamp(0, len);
     }
   }
 

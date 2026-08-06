@@ -473,11 +473,16 @@ class DownloadOrchestrator {
             }
 
             if (requiresMuxing) {
-              final videoSize = streamInfo['videoSize'] as int? ?? 0;
-              final audioSize = streamInfo['audioSize'] as int? ?? 0;
+              final rawVideoSize = streamInfo['videoSize'] as int? ?? 0;
+              final rawAudioSize = streamInfo['audioSize'] as int? ?? 0;
+              final fallbackSize = streamInfo['size'] as int? ?? 0;
+
+              // FIX YT-3: If sub-sizes are missing, use the combined size
+              final videoSize = rawVideoSize > 0 ? rawVideoSize : (fallbackSize > rawAudioSize ? fallbackSize - rawAudioSize : 0);
+              final audioSize = rawAudioSize > 0 ? rawAudioSize : 0;
               final totalSize = (videoSize + audioSize) > 0
                   ? videoSize + audioSize
-                  : (streamInfo['size'] as int? ?? 0);
+                  : fallbackSize;
 
               // FIX-YT-4: Guard mergedAudioUrl from empty string wipes
               final rawAudioUrl = streamInfo['audioSrc']?.toString();
@@ -691,18 +696,26 @@ class DownloadOrchestrator {
     debugPrint('[DMX]   Video size: $videoLen bytes');
     debugPrint('[DMX]   Audio size: $audioLen bytes');
 
+    // FIX YT-7: Verify video file size before merge
     if (videoLen == 0) {
-      debugPrint('[DMX] FIX-B4: video file empty: $actualVideoPath');
-      await _host.setTaskState(
-        current.copyWith(
-          status: DownloadStatus.failed,
-          statusMessage: DownloadStatusMessages.ffmpegMergeFailed,
-          errorMessage:
-              '${DownloadStatusMessages.ffmpegMergeFailed}Video file is empty. Please retry the download.',
-        ),
-      );
+      await _host.setTaskState(current.copyWith(
+        status: DownloadStatus.failed,
+        errorMessage: 'Video file is empty. Cannot merge.',
+      ));
       return false;
     }
+    // If we know expected video size, verify it's close
+    if (current.fileSize > 0 && current.audioSize > 0) {
+      final expectedVideo = current.fileSize - current.audioSize;
+      if (expectedVideo > 0 && videoLen < (expectedVideo * 0.95).toInt()) {
+        await _host.setTaskState(current.copyWith(
+          status: DownloadStatus.failed,
+          errorMessage: 'Video file incomplete: $videoLen / $expectedVideo bytes.',
+        ));
+        return false;
+      }
+    }
+
     if (audioLen == 0) {
       debugPrint('[DMX] FIX-B4: audio file empty: $actualAudioPath');
       await _host.setTaskState(
@@ -1324,7 +1337,7 @@ class DownloadOrchestrator {
     if (task.threadCount > 1) {
       // Pre-allocated file length is meaningless without the state file.
       videoBytesFromDisk =
-          hasStateFile ? await _readDmxStateBytes(task.tempFilePath) : 0;
+          hasStateFile ? await _readDmxStateBytes(task.tempFilePath, threadCount: task.threadCount) : 0;
     } else {
       final tempFile = File(task.tempFilePath);
       videoBytesFromDisk = tempFile.existsSync() ? await tempFile.length() : 0;
@@ -1592,7 +1605,11 @@ class DownloadOrchestrator {
             final isAudioComplete = (audioExists && audioLen > 0 &&
                 liveAudioSize > 0 && audioLen >= liveAudioSize) ||
                 (audioExists && audioLen > 0 &&
-                 liveAudioTask.audioProgress >= 1.0); // FIX-03
+                 liveAudioTask.audioProgress >= 1.0) ||
+                // FIX YT-2: Unknown size but file exists with data and state file confirms completion
+                (audioExists && audioLen > 0 && liveAudioSize <= 0 &&
+                 await File('$liveAudioTempPath.dmxstate').exists() &&
+                 liveAudioTask.audioProgress >= 0.99);
             if (isAudioComplete) {
               debugPrint('[DMX-FIX-05] Audio stream complete ($audioLen / $liveAudioSize bytes)');
             }
@@ -1688,8 +1705,8 @@ class DownloadOrchestrator {
                 // FIX-YT-01: Use engine-reported fileSize; fall back to byte-count heuristic
                 final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
 
-                // FIX-YT-01b: Propagate discovered audio size back to task
-                if (size == 0 && progress.fileSize > 0) {
+                // FIX YT-01b: Propagate discovered audio size back to task
+                if (t.audioSize == 0 && progress.fileSize > 0) {
                   final idx = _host.providerTasks.indexWhere((x) => x.id == task.id);
                   if (idx != -1) {
                     final updated = _host.providerTasks[idx].copyWith(
@@ -1711,8 +1728,8 @@ class DownloadOrchestrator {
                   (x) => x.id == task.id,
                 );
                 if (idx != -1) {
-                  // FIX-B14: audioProgress is derived in pushCombinedProgress, do not write directly
                   _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                    audioDownloadedBytes: progress.downloadedBytes,
                     audioSize: size > 0 ? size : _host.providerTasks[idx].audioSize,
                   );
                 }

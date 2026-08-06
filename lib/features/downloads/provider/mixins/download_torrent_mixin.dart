@@ -213,7 +213,7 @@ mixin DownloadTorrentMixin {
 
     try {
       final files = TorrentService.getFiles(torrentId);
-      return files.map((f) => f.downloadedBytes).toList();
+      return files.map((f) => f.safeDownloadedBytes).toList();
     } catch (e, st) {
       Logger(
         'download_torrent_mixin',

@@ -674,16 +674,18 @@ class HttpTransferJob {
           )));
       await writer.flushAll();
 
-      // Completion verification: state claims AND disk must agree.
+      // Completion verification: chunk sum is the authoritative source.
+      // diskLen is unreliable for pre-allocated files (always equals totalSize).
       final sum = st.downloadedBytes;
       if (st.totalSize > 0 && sum < st.totalSize) {
         throw DownloadIntegrityException(
             'Chunk sum $sum < expected ${st.totalSize}');
       }
+      // Note: diskLen check is informational only for pre-allocated files.
       final diskLen = await writer.length();
-      if (st.totalSize > 0 && diskLen != st.totalSize) {
+      if (st.totalSize > 0 && diskLen < st.totalSize) {
         throw DownloadIntegrityException(
-            'On-disk size $diskLen != expected ${st.totalSize}');
+            'On-disk size $diskLen < expected ${st.totalSize}');
       }
     } catch (e) {
       // Persist whatever IS proven before surfacing the error — retry picks

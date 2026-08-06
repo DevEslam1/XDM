@@ -779,7 +779,7 @@ class TorrentService {
                       'size': f.size,
                       'priority': f.priority,
                       'selected': f.selected,
-                      'downloadedBytes': f.downloadedBytes,
+                      'downloadedBytes': f.safeDownloadedBytes,
                     })
                 .toList();
           }
