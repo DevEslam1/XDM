@@ -9,6 +9,7 @@ import '../../../core/services/database/app_database.dart';
 import '../../../core/services/database_service.dart';
 import '../models/browser_tab.dart';
 import 'package:logging/logging.dart';
+import 'page_intent_classifier.dart';
 
 /// Signature matching the screen's `_createNewTab` factory — building a tab
 /// (WebViewController + NavigationDelegate) stays on the screen.
@@ -260,5 +261,59 @@ class TabManager {
         }
       });
     });
+  }
+
+  /// Navigate smartly based on URL/page intent classification
+  Future<PageClassification> smartNavigate(
+    String url, {
+    bool isUserInitiated = true,
+    bool isFromClick = false,
+  }) async {
+    final classifier = PageIntentClassifier.instance;
+    final classification = classifier.classifyWithContext(
+      currentUrl: currentIndex >= 0 && currentIndex < tabs.length
+          ? tabs[currentIndex].url
+          : '',
+      targetUrl: url,
+      isUserInitiated: isUserInitiated,
+      isFromClick: isFromClick,
+    );
+
+    _log.info('[SmartNav] $url -> ${classification.intent.name} '
+        '(action: ${classification.action.name}, '
+        'confidence: ${classification.confidence.toStringAsFixed(2)})');
+
+    switch (classification.action) {
+      case PageAction.block:
+        _log.info('[SmartNav] BLOCKED: $url (${classification.reason})');
+        return classification;
+
+      case PageAction.openSameTab:
+        if (currentIndex >= 0 && currentIndex < tabs.length) {
+          final tab = tabs[currentIndex];
+          tab.url = url;
+          tab.controller?.loadUrl(
+            urlRequest: URLRequest(url: WebUri(url)),
+          );
+        }
+        return classification;
+
+      case PageAction.openNewTab:
+      case PageAction.openNewTabWithWarning:
+      case PageAction.openNewTabWithDownloadSuggestion:
+        final newTab = createTab(initialUrl: url);
+        tabs.add(newTab);
+        currentIndex = tabs.length - 1;
+        return classification;
+
+      case PageAction.openBackgroundTab:
+        final newTab = createTab(initialUrl: url);
+        tabs.add(newTab);
+        return classification;
+
+      case PageAction.directDownload:
+        _log.info('[SmartNav] DIRECT DOWNLOAD: $url');
+        return classification;
+    }
   }
 }

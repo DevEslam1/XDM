@@ -207,6 +207,14 @@ class DownloadOrchestrator {
     _pushScheduled.remove(taskId);
   }
 
+  void clearPushScheduled(String taskId) {
+    _pushScheduled.remove(taskId);
+  }
+
+  void clearStartingFlag(String taskId) {
+    _startingTaskIds.remove(taskId);
+  }
+
   @visibleForTesting
   Map<String, ({String cookie, DateTime timestamp})> get cookieCache =>
       _cookieCache;
@@ -396,15 +404,18 @@ class DownloadOrchestrator {
       }
 
 
-      // FIX-YT-03: Validate audio file even when audioSize is unknown
-      if (task.audioSize <= 0) {
+      // Validate audio state regardless of whether audioSize is known
+      if (task.mergedAudioUrl != null && task.mergedAudioUrl!.isNotEmpty) {
         final audioFile = File('${task.tempFilePath}.audio');
         final audioStateFile = File('${task.tempFilePath}.audio.dmxstate');
-        if (!await audioFile.exists() && await audioStateFile.exists()) {
-          // State says progress but file is gone → reset
-          try { await audioStateFile.delete(); } catch (_) {}
-          task = task.copyWith(audioProgress: 0.0);
-          await _host.setTaskState(task);
+        if (!await audioFile.exists()) {
+          if (await audioStateFile.exists()) {
+            try { await audioStateFile.delete(); } catch (_) {}
+          }
+          if (task.audioProgress > 0) {
+            task = task.copyWith(audioProgress: 0.0);
+            await _host.setTaskState(task);
+          }
         }
       }
 
@@ -521,6 +532,22 @@ class DownloadOrchestrator {
       try {
         final videoId = YoutubeService.extractVideoId(youtubeUrl);
         if (videoId != null) {
+          final isRetry = (_host.retryCounts[task.id] ?? 0) > 0 ||
+              task.status == DownloadStatus.failed;
+          if (isRetry && task.downloadPageUrl != null) {
+            try {
+              final fresh = await YoutubeService.getFreshStreams(task.downloadPageUrl!);
+              if (fresh != null && fresh['url'] != null) {
+                task = task.copyWith(
+                  url: fresh['url'] as String,
+                  mergedAudioUrl: fresh['audioUrl'],
+                );
+              }
+            } catch (e) {
+              debugPrint('[DMX] Pre-refresh on retry failed: $e');
+            }
+          }
+
           final streamInfo = await YoutubeService.getStreamForVideo(
             videoId,
             task.youtubeQualityPreset,
@@ -1136,6 +1163,8 @@ class DownloadOrchestrator {
             : null,
       ),
     );
+
+    _sessionCachedTotalSize.remove(taskId);
 
     if (_host.providerSettingsProvider.vibration) {
       HapticFeedback.vibrate();

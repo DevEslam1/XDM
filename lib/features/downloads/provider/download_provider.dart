@@ -513,40 +513,21 @@ class DownloadProvider extends ChangeNotifier
     required int fileSize,
     required int threadCount,
   }) {
-    final effectiveThreadCount = max(1, threadCount);
-    final overallProgress = fileSize > 0 && actualBytesOnDisk > 0
-        ? (actualBytesOnDisk / fileSize).clamp(0.0, 1.0)
-        : 0.0;
-
+    final n = threadCount > 0 ? threadCount : 1;
+    if (fileSize <= 0 || actualBytesOnDisk <= 0) {
+      return List.filled(n, 0.0);
+    }
+    final overall = (actualBytesOnDisk / fileSize).clamp(0.0, 1.0);
     if (stateChunks == null || stateChunks.isEmpty) {
-      return List<double>.filled(effectiveThreadCount, overallProgress);
+      return List.filled(n, overall);
     }
-
-    if (stateChunks.length != effectiveThreadCount) {
-      final chunkAvg =
-          stateChunks.fold<double>(0.0, (s, c) => s + c) / stateChunks.length;
-      final bestProgress = max(chunkAvg, overallProgress).clamp(0.0, 1.0);
-      return List<double>.filled(effectiveThreadCount, bestProgress);
+    if (stateChunks.length != n) {
+      return List.filled(n, overall);
     }
-
-    if (fileSize > 0 && actualBytesOnDisk > 0) {
-      final chunkAvg =
-          stateChunks.fold<double>(0.0, (s, c) => s + c) / stateChunks.length;
-      if (chunkAvg <= 0) {
-        return List<double>.filled(effectiveThreadCount, overallProgress);
-      }
-      final scale = overallProgress / chunkAvg;
-      final result = stateChunks.map((c) => (c * scale).clamp(0.0, 1.0)).toList();
-      // FIX-H-04: Never scale a completed chunk below 1.0
-      for (var i = 0; i < result.length; i++) {
-        if (i < stateChunks.length && stateChunks[i] >= 1.0) {
-          result[i] = 1.0;
-        }
-      }
-      return result;
-    }
-
-    return stateChunks;
+    final chunkAvg = stateChunks.fold<double>(0.0, (s, c) => s + c) / n;
+    if (chunkAvg <= 0) return List.filled(n, overall);
+    final scale = overall / chunkAvg;
+    return stateChunks.map((c) => (c * scale).clamp(0.0, 1.0)).toList();
   }
 
   static Future<DownloadTask> validateAudioProgress(DownloadTask task) async {
@@ -1553,6 +1534,7 @@ class DownloadProvider extends ChangeNotifier
 
   @override
   Future<void> pauseTask(String id) async {
+    _orchestrator.clearStartingFlag(id);
     final initialTask = _findTask(id);
     if (initialTask == null) return;
     DownloadTask task = initialTask;
@@ -1673,6 +1655,7 @@ class DownloadProvider extends ChangeNotifier
         }
       }
 
+      _orchestrator.clearPushScheduled(id);
     }
 
     // FIX(S1): Clear stale thread override on pause
@@ -1786,6 +1769,13 @@ class DownloadProvider extends ChangeNotifier
       threadCount: latest.threadCount,
     );
 
+    // FIX 6: Re-read actual byte count from disk after timeout/cancel
+    final diskBytes = await actualDownloadedBytes(
+      latest.tempFilePath,
+      threadCount: latest.threadCount,
+    );
+    final safeBytes = diskBytes > 0 ? diskBytes : latest.downloadedBytes;
+
     // FIX(P1): Include audio bytes in the paused downloadedBytes total
     int audioBytesOnDisk = 0;
     if (latest.mergedAudioUrl != null && latest.mergedAudioUrl!.isNotEmpty) {
@@ -1794,7 +1784,8 @@ class DownloadProvider extends ChangeNotifier
         threadCount: latest.audioThreadCount > 0 ? latest.audioThreadCount : 1,
       );
     }
-    final totalBytes = stateBytes + audioBytesOnDisk;
+    final effectiveStateBytes = max(stateBytes, safeBytes);
+    final totalBytes = effectiveStateBytes + audioBytesOnDisk;
     final synced = totalBytes > 0 &&
             (latest.status == DownloadStatus.downloading ||
                 latest.status == DownloadStatus.paused)
@@ -3818,10 +3809,10 @@ class DownloadProvider extends ChangeNotifier
             ? null
             : task.youtubeQualityPreset,
         clearYoutubeQualityPreset: shouldClearYoutubeState || (isProtocolSwitch && oldProto == 'youtube'),
-        torrentFiles: (isProtocolSwitch && oldProto == 'torrent')
+        torrentFiles: isProtocolSwitch
             ? null
             : (metadata?.torrentFiles ?? task.torrentFiles),
-        clearTorrentFiles: (isProtocolSwitch && oldProto == 'torrent') ||
+        clearTorrentFiles: isProtocolSwitch ||
             (!preserve && metadata?.torrentFiles == null),
         supportsResume: resolvedSupportsResume,
         downloadedBytes: clampedBytes,

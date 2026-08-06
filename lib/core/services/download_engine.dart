@@ -1221,6 +1221,12 @@ class DownloadEngine {
   }) async {
     int id = torrentId ?? -1;
 
+    // Guard: reject stale handle so we re-add cleanly
+    if (id >= 0 && !TorrentService.isTorrentAlive(id)) {
+      debugPrint('[DMX] Stale torrent handle $id detected; re-adding.');
+      id = -1;
+    }
+
     if (id == -1) {
       final saveDir = File(currentLocalFilePath).parent.path;
 

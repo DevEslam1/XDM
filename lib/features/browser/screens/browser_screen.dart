@@ -49,6 +49,7 @@ import '../services/media_sniffer.dart';
 import '../services/reader_mode_service.dart';
 import '../services/tab_manager.dart';
 import '../services/redirect_guard.dart';
+import '../services/page_intent_classifier.dart';
 import '../screens/script_manager_screen.dart';
 import '../widgets/bookmark_manager_screen.dart';
 import '../widgets/browser_download_sheet.dart';
@@ -1073,6 +1074,49 @@ class _BrowserScreenState extends State<BrowserScreen>
       }
     });
     _saveTabs();
+  }
+
+  void _suggestDownload(String url, PageClassification classification) {
+    if (!mounted) return;
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final isDark = settings.isDarkMode;
+
+    ThemedSnackbar.show(
+      context,
+      message: classification.detectedFileName != null
+          ? 'Download available: ${classification.detectedFileName}'
+          : 'Downloadable content detected',
+      color: isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
+      icon: Icons.download_rounded,
+      isDarkMode: isDark,
+      actionLabel: 'DOWNLOAD',
+      onAction: () => _startDirectDownload(url, suggestedName: classification.detectedFileName),
+    );
+  }
+
+  void _showAdWarning(BuildContext context, String url) {
+    if (!mounted) return;
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    ThemedSnackbar.show(
+      context,
+      message: 'This page might be an advertisement',
+      color: AppTheme.neonAmber,
+      icon: Icons.warning_amber_rounded,
+      isDarkMode: settings.isDarkMode,
+    );
+  }
+
+  void _openInBackgroundTab(String url, {bool isIncognito = false}) {
+    if (!mounted || url.isEmpty) return;
+    _openInNewTab(url, isIncognito: isIncognito, switchToTab: false);
+    final isDark = context.read<SettingsProvider>().isDarkMode;
+    ThemedSnackbar.show(
+      context,
+      message: L10n.of(context, 'redirect_bg_opened'),
+      color: isDark ? AppTheme.neonBlue : AppTheme.lightNeonBlue,
+      icon: Icons.tab_rounded,
+      isDarkMode: isDark,
+    );
   }
 
   Future<void> _handleRedirectIntercept(
@@ -4584,6 +4628,12 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                           .url
                                                                           ?.toString() ??
                                                                       '';
+                                                              if (url.isEmpty) {
+                                                                return NavigationActionPolicy
+                                                                    .ALLOW;
+                                                              }
+
+                                                              // 1. Magnet link check
                                                               if (url.startsWith('magnet:') ||
                                                                   isMagnetUrl(url)) {
                                                                 _log.info(
@@ -4593,86 +4643,124 @@ class _BrowserScreenState extends State<BrowserScreen>
                                                                 return NavigationActionPolicy
                                                                     .CANCEL;
                                                               }
-                                                              if (navigationAction
-                                                                      .isForMainFrame ==
-                                                                  true) {
-                                                                if (settings
-                                                                        .httpsOnly &&
-                                                                    url.startsWith(
-                                                                        'http://')) {
-                                                                  final upgraded =
-                                                                      url.replaceFirst(
-                                                                          'http://',
-                                                                          'https://');
-                                                                  _log.warning(
-                                                                      '[Browser] HTTPS-only: upgrading $url -> $upgraded');
-                                                                  controller.loadUrl(
-                                                                      urlRequest:
-                                                                          URLRequest(
-                                                                              url: WebUri(upgraded)));
-                                                                  return NavigationActionPolicy
-                                                                      .CANCEL;
-                                                                }
-                                                                if (_adBlocker
-                                                                    .shouldBlock(
-                                                                        url)) {
+
+                                                              // 2. HTTPS-only upgrade check
+                                                              if (navigationAction.isForMainFrame ==
+                                                                      true &&
+                                                                  settings.httpsOnly &&
+                                                                  url.startsWith('http://')) {
+                                                                final upgraded =
+                                                                    url.replaceFirst(
+                                                                        'http://',
+                                                                        'https://');
+                                                                _log.warning(
+                                                                    '[Browser] HTTPS-only: upgrading $url -> $upgraded');
+                                                                controller.loadUrl(
+                                                                    urlRequest:
+                                                                        URLRequest(
+                                                                            url: WebUri(upgraded)));
+                                                                return NavigationActionPolicy
+                                                                    .CANCEL;
+                                                              }
+
+                                                              // 3. Bypass & User-initiated checks
+                                                              if (_interceptor.consumeBypass(url)) {
+                                                                return NavigationActionPolicy
+                                                                    .ALLOW;
+                                                              }
+                                                              if (_redirectGuard.consumeUserInitiated(url)) {
+                                                                return NavigationActionPolicy
+                                                                    .ALLOW;
+                                                              }
+
+                                                              // 4. Smart classification
+                                                              final classification = PageIntentClassifier
+                                                                  .instance
+                                                                  .classifyWithContext(
+                                                                currentUrl: tab.url,
+                                                                targetUrl: url,
+                                                                isUserInitiated:
+                                                                    navigationAction.isForMainFrame,
+                                                                isFromClick:
+                                                                    navigationAction.request.method ==
+                                                                        'GET',
+                                                              );
+
+                                                              _log.info(
+                                                                  '[Browser] Classification for $url: ${classification.action.name} (intent: ${classification.intent.name}, confidence: ${classification.confidence})');
+
+                                                              switch (classification.action) {
+                                                                case PageAction.block:
+                                                                  AdBlockerService.instance.recordBlockedRequest(url);
                                                                   _log.warning(
                                                                       '[AdBlocker] Blocked: $url');
                                                                   return NavigationActionPolicy
                                                                       .CANCEL;
-                                                                }
-                                                                if (_interceptor
-                                                                    .consumeBypass(
-                                                                        url)) {
+
+                                                                case PageAction.openNewTab:
+                                                                case PageAction.openNewTabWithWarning:
+                                                                case PageAction.openNewTabWithDownloadSuggestion:
+                                                                  _openInNewTab(url,
+                                                                      isIncognito: tab.isIncognito,
+                                                                      switchToTab: true);
+                                                                  if (classification.action ==
+                                                                      PageAction.openNewTabWithDownloadSuggestion) {
+                                                                    _suggestDownload(
+                                                                        url, classification);
+                                                                  }
+                                                                  if (classification.action ==
+                                                                      PageAction.openNewTabWithWarning) {
+                                                                    _showAdWarning(context, url);
+                                                                  }
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+
+                                                                case PageAction.openBackgroundTab:
+                                                                  _openInBackgroundTab(url,
+                                                                      isIncognito: tab.isIncognito);
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+
+                                                                case PageAction.directDownload:
+                                                                  _startDirectDownload(url,
+                                                                      suggestedName:
+                                                                          classification.detectedFileName);
+                                                                  return NavigationActionPolicy
+                                                                      .CANCEL;
+
+                                                                case PageAction.openSameTab:
+                                                                  if (_interceptor.shouldIntercept(
+                                                                      tabUrl: tab.url,
+                                                                      requestUrl: url)) {
+                                                                    setState(() {
+                                                                      _detectedDownloadUrls[tab.id] =
+                                                                          url;
+                                                                    });
+                                                                    _showInterceptionSheet(
+                                                                        context, url);
+                                                                    return NavigationActionPolicy
+                                                                        .CANCEL;
+                                                                  }
+                                                                  if (_redirectGuard
+                                                                      .isAlwaysNewTab(url)) {
+                                                                    _openInNewTab(url,
+                                                                        isIncognito: tab.isIncognito,
+                                                                        switchToTab: true);
+                                                                    return NavigationActionPolicy
+                                                                        .CANCEL;
+                                                                  }
+                                                                  if (_redirectGuard
+                                                                      .isSuspiciousRedirect(
+                                                                          currentTabUrl: tab.url,
+                                                                          targetUrl: url)) {
+                                                                    _handleRedirectIntercept(
+                                                                        tab, url);
+                                                                    return NavigationActionPolicy
+                                                                        .CANCEL;
+                                                                  }
                                                                   return NavigationActionPolicy
                                                                       .ALLOW;
-                                                                }
-                                                                if (_interceptor
-                                                                    .shouldIntercept(
-                                                                        tabUrl: tab
-                                                                            .url,
-                                                                        requestUrl:
-                                                                            url)) {
-                                                                  setState(() {
-                                                                    _detectedDownloadUrls[
-                                                                            tab.id] =
-                                                                        url;
-                                                                  });
-                                                                  _showInterceptionSheet(
-                                                                      context,
-                                                                      url);
-                                                                  return NavigationActionPolicy
-                                                                      .CANCEL;
-                                                                }
-                                                                if (_redirectGuard
-                                                                    .consumeUserInitiated(
-                                                                        url)) {
-                                                                  return NavigationActionPolicy
-                                                                      .ALLOW;
-                                                                }
-                                                                if (_redirectGuard
-                                                                    .isAlwaysNewTab(
-                                                                        url)) {
-                                                                  _openInNewTab(
-                                                                      url,
-                                                                      isIncognito:
-                                                                          tab.isIncognito);
-                                                                  return NavigationActionPolicy
-                                                                      .CANCEL;
-                                                                }
-                                                                if (_redirectGuard.isSuspiciousRedirect(
-                                                                    currentTabUrl:
-                                                                        tab.url,
-                                                                    targetUrl:
-                                                                        url)) {
-                                                                  _handleRedirectIntercept(
-                                                                      tab, url);
-                                                                  return NavigationActionPolicy
-                                                                      .CANCEL;
-                                                                }
                                                               }
-                                                              return NavigationActionPolicy
-                                                                  .ALLOW;
                                                             },
                                                           ),
                                                           // E13: Tab Suspension/Resume Visual Feedback

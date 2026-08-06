@@ -168,26 +168,23 @@ class DownloadTask {
 
   /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
   int get combinedTotalSize {
-    // FIX-YT-09: When video size unknown but audio known, use audio as partial total
     if (hasMergedAudio && audioSize > 0) {
-      final vSize = fileSize > 0 ? fileSize : 0;
-      if (vSize == 0) return audioSize; // Partial: at least audio is known
-      return vSize + audioSize;
+      // fileSize already = videoSize + audioSize (set in _resolveStreamUrl)
+      if (fileSize > 0) return fileSize;
+      return audioSize; // video size unknown; use audio as partial total
     }
     return resolvedFileSize;
   }
 
   /// Combined downloaded bytes including audio stream bytes for YouTube downloads.
   int get combinedDownloadedBytes {
-    // FIX-D1: When video fileSize is unknown, exclude video bytes from
-    // the combined total to prevent progress from exceeding 100%.
-    final vDownloaded = (fileSize <= 0) ? 0 : (downloadedBytes < 0 ? 0 : downloadedBytes);
+    final total = combinedTotalSize;
+    final raw = downloadedBytes < 0 ? 0 : downloadedBytes;
     if (hasMergedAudio && audioSize > 0) {
-      final aDownloaded =
-          (audioProgress.clamp(0.0, 1.0) * audioSize).round().clamp(0, audioSize);
-      return vDownloaded + aDownloaded;
+      // downloadedBytes already includes audio (written by pushCombinedProgress)
+      return total > 0 ? raw.clamp(0, total) : raw;
     }
-    return vDownloaded;
+    return raw;
   }
 
   double get progress {

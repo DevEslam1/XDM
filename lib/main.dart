@@ -25,6 +25,7 @@ import 'core/services/single_instance_service.dart';
 import 'core/services/xdm_backend_client.dart';
 import 'core/services/youtube_service.dart';
 import 'core/services/remote_api_service.dart';
+import 'features/browser/services/page_intent_classifier.dart';
 import 'features/downloads/provider/download_provider.dart';
 import 'features/settings/provider/settings_provider.dart';
 import 'features/onboarding/screens/onboarding_screen.dart';
@@ -305,6 +306,12 @@ Future<void> _initNonCriticalServices(
     await YoutubeService.init();
   } catch (e) {
     debugPrint('YouTube init failed: $e');
+  }
+
+  try {
+    await PageIntentClassifier.instance.init();
+  } catch (e) {
+    debugPrint('PageIntentClassifier init failed: $e');
   }
 
   unawaited(
