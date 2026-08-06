@@ -108,9 +108,13 @@ void main() {
 
     test('retains progress when state is valid and sizes match', () async {
       final taskFile = File('${tempDir.path}/task.iso');
-      await taskFile.writeAsString('partial-content');
+      await taskFile.writeAsBytes(List.filled(500, 0));
       final stateFile = File('${tempDir.path}/task.iso.dmxstate');
-      await stateFile.writeAsString(jsonEncode({'totalSize': 10000}));
+      await stateFile.writeAsString(jsonEncode({
+        'totalSize': 10000,
+        'threadCount': 2,
+        'progress': [500, 0],
+      }));
 
       final task = DownloadTask(
         id: 't_valid',
@@ -132,7 +136,7 @@ void main() {
       final result = await orchestrator.validateResumeState(task);
 
       expect(result.downloadedBytes, equals(500));
-      expect(result.chunks, equals(task.chunks));
+      expect(result.chunks, equals(const [0.1, 0.0]));
       expect(await stateFile.exists(), isTrue);
     });
   });

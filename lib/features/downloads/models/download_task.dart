@@ -18,7 +18,7 @@ abstract final class DownloadStatusMessages {
   static const forbidden = 'Forbidden';
 }
 
-enum DownloadStatus { queued, downloading, paused, completed, failed }
+enum DownloadStatus { queued, downloading, paused, completed, failed, merging } // FIX-B11
 
 enum SortOption { dateAdded, fileSize, fileName, status, manual } // FIX(13)
 
@@ -54,6 +54,7 @@ class DownloadTask {
   final String? downloadPageUrl;
   final String? mergedAudioUrl;
   final int audioSize;
+  final int videoStreamSize; // FIX-B4
   final double audioProgress;
   final int audioThreadCount;
   final bool pausedByUser;
@@ -105,6 +106,7 @@ class DownloadTask {
     this.downloadPageUrl,
     this.mergedAudioUrl,
     this.audioSize = 0,
+    this.videoStreamSize = 0, // FIX-B4
     this.audioProgress = 0.0,
     this.audioThreadCount = 2,
     this.pausedByUser = false,
@@ -168,14 +170,11 @@ class DownloadTask {
 
   /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
   int get combinedTotalSize {
+    // FIX-B4
     if (hasMergedAudio && audioSize > 0) {
-      // C4: fileSize is the combined video+audio total where it can be proven
-      // (set in _resolveStreamUrl). If only a video-only size was stored,
-      // add audio back on so the audio stream is never missing from the
-      // denominator and progress can't hit 100% before audio finishes.
-      if (fileSize > audioSize) return fileSize;
-      if (fileSize > 0) return fileSize + audioSize;
-      return audioSize; // video size unknown; use audio as partial total
+      if (videoStreamSize > 0) return videoStreamSize + audioSize;
+      if (fileSize > 0) return fileSize;
+      return audioSize;
     }
     return resolvedFileSize;
   }
@@ -183,10 +182,10 @@ class DownloadTask {
   /// Combined downloaded bytes including audio stream bytes for YouTube downloads.
   int get combinedDownloadedBytes {
     final total = combinedTotalSize;
-    final raw = downloadedBytes < 0 ? 0 : downloadedBytes;
-    // FIX-7: Always clamp when the total is known. Plain HTTP downloads can
-    // briefly exceed fileSize (over-long Range reads), which otherwise shows
-    // >100% in progress widgets and inflates backup exports.
+    var raw = downloadedBytes < 0 ? 0 : downloadedBytes;
+    if (hasMergedAudio && audioSize > 0 && audioProgress > 0) {
+      raw += (audioProgress * audioSize).round();
+    }
     if (total > 0) return raw.clamp(0, total);
     return raw;
   }
@@ -259,6 +258,7 @@ class DownloadTask {
         break;
       case DownloadStatus.downloading:
       case DownloadStatus.queued:
+      case DownloadStatus.merging:
         end = DateTime.now();
         break;
       case DownloadStatus.paused:
@@ -342,6 +342,7 @@ class DownloadTask {
     String? mergedAudioUrl,
     bool clearMergedAudioUrl = false,
     int? audioSize,
+    int? videoStreamSize, // FIX-B4
     double? audioProgress,
     int? audioThreadCount,
     bool? pausedByUser,
@@ -399,6 +400,7 @@ class DownloadTask {
       mergedAudioUrl:
           clearMergedAudioUrl ? null : (mergedAudioUrl ?? this.mergedAudioUrl),
       audioSize: audioSize ?? this.audioSize,
+      videoStreamSize: videoStreamSize ?? this.videoStreamSize, // FIX-B4
       audioProgress: audioProgress ?? this.audioProgress,
       audioThreadCount: audioThreadCount ?? this.audioThreadCount,
       pausedByUser: pausedByUser ?? this.pausedByUser,
@@ -453,6 +455,7 @@ class DownloadTask {
       'downloadPageUrl': downloadPageUrl,
       'mergedAudioUrl': mergedAudioUrl,
       'audioSize': audioSize,
+      'videoStreamSize': videoStreamSize, // FIX-B4
       'audioProgress': audioProgress,
       'audioThreadCount': audioThreadCount,
       'pausedByUser': pausedByUser,
@@ -581,6 +584,7 @@ class DownloadTask {
       downloadPageUrl: map['downloadPageUrl'] as String?,
       mergedAudioUrl: map['mergedAudioUrl'] as String?,
       audioSize: (map['audioSize'] as num?)?.toInt() ?? 0,
+      videoStreamSize: (map['videoStreamSize'] as num?)?.toInt() ?? 0, // FIX-B4
       audioProgress: (map['audioProgress'] as num?)?.toDouble() ?? 0.0,
       audioThreadCount: (map['audioThreadCount'] as num?)?.toInt() ?? 2,
       pausedByUser: map['pausedByUser'] as bool? ?? false,

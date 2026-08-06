@@ -491,7 +491,8 @@ class DownloadProvider extends ChangeNotifier
     if (files == null || files.isEmpty) return 0;
     return files.fold<int>(0, (sum, f) {
       if (f['selected'] != false) {
-        return sum + ((f['downloadedBytes'] as num?)?.toInt() ?? 0);
+        final bytes = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
+        return sum + (bytes > 0 ? bytes : 0);
       }
       return sum;
     });
@@ -1779,9 +1780,21 @@ class DownloadProvider extends ChangeNotifier
     // FIX(P1): Include audio bytes in the paused downloadedBytes total
     int audioBytesOnDisk = 0;
     if (latest.mergedAudioUrl != null && latest.mergedAudioUrl!.isNotEmpty) {
+      final audioStatePath = '${latest.tempFilePath}.audio';
+      final audioStateFile = File('$audioStatePath.dmxstate');
+      int actualAudioThreads = latest.audioThreadCount > 0 ? latest.audioThreadCount : 1;
+      if (await audioStateFile.exists()) {
+        try {
+          final content = await audioStateFile.readAsString();
+          final decoded = jsonDecode(content);
+          if (decoded is Map && decoded['threadCount'] is int) {
+            actualAudioThreads = decoded['threadCount'] as int;
+          }
+        } catch (_) {}
+      }
       audioBytesOnDisk = await actualDownloadedBytes(
-        '${latest.tempFilePath}.audio',
-        threadCount: latest.audioThreadCount > 0 ? latest.audioThreadCount : 1,
+        audioStatePath,
+        threadCount: actualAudioThreads,
       );
     }
     final effectiveStateBytes = max(stateBytes, safeBytes);
@@ -2214,6 +2227,22 @@ class DownloadProvider extends ChangeNotifier
       return;
     }
     var task = rawTask;
+
+    // FIX-B2: Check for merge-only retry before re-downloading
+    final isMergeFailure = task.statusMessage == 'MERGE_FAILED' ||
+        (task.errorMessage != null &&
+            task.errorMessage!.contains('FFmpeg merge failed'));
+    if (isMergeFailure) {
+      final videoPath = await File(task.localFilePath).exists()
+          ? task.localFilePath
+          : task.tempFilePath;
+      final audioPath = '${task.tempFilePath}.audio';
+      if (await File(videoPath).exists() && await File(audioPath).exists()) {
+        debugPrint('[DMX] FIX-B2: Retrying merge only for task ${task.id}');
+        await _orchestrator.retryMergeOnly(task);
+        return;
+      }
+    }
 
     // FIX(D1): If the failure was "file changed on server", the saved
     // progress is invalid. Delete state files so retry starts fresh.
@@ -3752,6 +3781,7 @@ class DownloadProvider extends ChangeNotifier
         for (final path in [
           task.tempFilePath,
           '${task.tempFilePath}.dmxstate',
+          '${task.tempFilePath}.dmxstate.tmp',
           '${task.tempFilePath}.journal',
           '${task.tempFilePath}.audio',
           '${task.tempFilePath}.audio.dmxstate',
@@ -3763,6 +3793,19 @@ class DownloadProvider extends ChangeNotifier
           } catch (e) {
             debugPrint('[DMX] Deleting stale file $path failed: $e');
           }
+        }
+      }
+
+      // FIX-7: delete stale state file so old ETag doesn't cause false restart
+      if (sizeChanged || cleanUrl != task.url) {
+        for (final path in [
+          '${task.tempFilePath}.dmxstate',
+          '${task.tempFilePath}.dmxstate.tmp',
+        ]) {
+          try {
+            final f = File(path);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
         }
       }
 
@@ -4020,23 +4063,19 @@ class DownloadProvider extends ChangeNotifier
         if (await tempFile.exists()) {
           await tempFile.delete();
         }
-        final dmxStateFile = File('${task.tempFilePath}.dmxstate');
-        if (await dmxStateFile.exists()) {
-          await dmxStateFile.delete();
-        }
-        if (task.mergedAudioUrl != null) {
-          final audioTempFile = File('${task.tempFilePath}.audio');
-          if (await audioTempFile.exists()) {
-            await audioTempFile.delete();
-          }
-          final audioDmxStateFile = File('${task.tempFilePath}.audio.dmxstate');
-          if (await audioDmxStateFile.exists()) {
-            await audioDmxStateFile.delete();
-          }
-          final audioJournalFile = File('${task.tempFilePath}.audio.journal');
-          if (await audioJournalFile.exists()) {
-            await audioJournalFile.delete();
-          }
+        for (final path in [
+          task.tempFilePath,
+          '${task.tempFilePath}.dmxstate',
+          '${task.tempFilePath}.dmxstate.tmp',
+          '${task.tempFilePath}.journal',
+          '${task.tempFilePath}.audio',
+          '${task.tempFilePath}.audio.dmxstate',
+          '${task.tempFilePath}.audio.journal',
+        ]) {
+          try {
+            final f = File(path);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
         }
 
       } catch (e) {

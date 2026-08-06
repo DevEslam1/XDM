@@ -162,6 +162,7 @@ class DownloadTasks extends Table {
   TextColumn get downloadPageUrl => text().nullable()();
   TextColumn get mergedAudioUrl => text().nullable()();
   IntColumn get audioSize => integer().withDefault(const Constant(0))();
+  IntColumn get videoStreamSize => integer().withDefault(const Constant(0))(); // FIX-B4
   RealColumn get audioProgress => real().withDefault(const Constant(0.0))();
   BoolColumn get pausedByUser => boolean().withDefault(const Constant(false))();
   TextColumn get youtubeQualityPreset => text().nullable()();
@@ -236,7 +237,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14; // FIX-B4
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -587,6 +588,12 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'UPDATE download_tasks SET queue_order = (SELECT COUNT(*) FROM download_tasks t2 WHERE t2.created_at < download_tasks.created_at)',
             );
+          }
+          if (from < 14) {
+            // Migration 13 -> 14: Add videoStreamSize column
+            await customStatement(
+              'ALTER TABLE download_tasks ADD COLUMN video_stream_size INTEGER NOT NULL DEFAULT 0',
+            ); // FIX-B4
           }
         },
       );

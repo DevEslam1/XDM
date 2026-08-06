@@ -21,6 +21,7 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
 
   bool _shouldPulse(DownloadTask task) {
     return task.status == DownloadStatus.downloading ||
+        task.status == DownloadStatus.merging ||
         (task.status == DownloadStatus.completed &&
             task.isTorrent &&
             task.seedingEnabled);
@@ -129,6 +130,10 @@ class _StatusChipState extends State<StatusChip> with TickerProviderStateMixin {
         case DownloadStatus.failed:
           color = isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
           label = L10n.of(context, 'stats_failed_short');
+          break;
+        case DownloadStatus.merging:
+          color = isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
+          label = 'MERGING';
           break;
       }
     }

@@ -24,6 +24,8 @@ class DmxStatusColors {
         isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
       DownloadStatus.failed =>
         isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+      DownloadStatus.merging =>
+        isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber, // FIX-B11
     };
   }
 }

@@ -160,6 +160,7 @@ Color _statusColor(DownloadStatus status, bool isDark) {
     DownloadStatus.completed =>
       isDark ? AppTheme.neonGreen : AppTheme.lightNeonGreen,
     DownloadStatus.failed => isDark ? AppTheme.neonRed : AppTheme.lightNeonRed,
+    DownloadStatus.merging => isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber, // FIX-B11
   };
 }
 
@@ -329,6 +330,7 @@ class _StatusChipState extends State<_StatusChip>
       DownloadStatus.paused => Icons.pause_circle,
       DownloadStatus.completed => Icons.check_circle,
       DownloadStatus.failed => Icons.error,
+      DownloadStatus.merging => Icons.merge_type_rounded, // FIX-B11
     };
   }
 
@@ -1806,15 +1808,14 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
   Widget build(BuildContext context) {
     try {
       final files = widget.task.torrentFiles ?? [];
+      final isChecking =
+          widget.task.statusMessage?.contains('checking') == true ||
+              widget.task.statusMessage?.contains('Checking') == true; // FIX-B10
       final displayFiles = files.map((f) {
         final selected = f['selected'] == true;
         final length = (f['length'] as num?)?.toInt() ?? 0;
         final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
 
-        // FIX(M-5): Guard per-file progress rendering during checking state to prevent flicker
-        final isChecking =
-            widget.task.statusMessage?.contains('checking') == true ||
-                widget.task.statusMessage?.contains('Checking') == true;
         final effectiveDownloaded = isChecking
             ? downloaded // FIX-B7: keep last known value to avoid flicker
             : (widget.task.status == DownloadStatus.completed && selected
@@ -1846,6 +1847,7 @@ class _TorrentFileListSectionState extends State<_TorrentFileListSection>
               file: f,
               isDark: widget.isDark,
               accent: widget.accent,
+              isChecking: isChecking, // FIX-B10
             ),
           ),
           if (hiddenCount > 0 || _showAllFiles)
@@ -1942,11 +1944,13 @@ class _TorrentFileRow extends StatelessWidget {
   final Map<String, dynamic> file;
   final bool isDark;
   final Color accent;
+  final bool isChecking; // FIX-B10
 
   const _TorrentFileRow({
     required this.file,
     required this.isDark,
     required this.accent,
+    this.isChecking = false, // FIX-B10
   });
 
   @override
@@ -2064,20 +2068,30 @@ class _TorrentFileRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                  Text(
-                    progressText,
-                    textAlign: TextAlign.end,
-                    style: AppTheme.dataStyle(
-                      isDark: isDark,
-                      size: 10,
-                      weight: FontWeight.w800,
-                      color: done
-                          ? greenClr
-                          : isEstimated
-                              ? textClr.withValues(alpha: 0.6)
-                              : accent,
+                  if (isChecking)
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: mutedClr,
+                      ),
+                    ) // FIX-B10
+                  else
+                    Text(
+                      progressText,
+                      textAlign: TextAlign.end,
+                      style: AppTheme.dataStyle(
+                        isDark: isDark,
+                        size: 10,
+                        weight: FontWeight.w800,
+                        color: done
+                            ? greenClr
+                            : isEstimated
+                                ? textClr.withValues(alpha: 0.6)
+                                : accent,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),

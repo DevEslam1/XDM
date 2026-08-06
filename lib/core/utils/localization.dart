@@ -162,6 +162,7 @@ class L10n {
         DownloadStatus.paused => 'Paused',
         DownloadStatus.queued => 'Queued',
         DownloadStatus.failed => 'Failed',
+        DownloadStatus.merging => 'Merging',
       };
     }
     return switch (status) {
@@ -170,6 +171,7 @@ class L10n {
       DownloadStatus.paused => 'موقوف مؤقتاً',
       DownloadStatus.queued => 'في الانتظار',
       DownloadStatus.failed => 'فشل الاتصال',
+      DownloadStatus.merging => 'جاري الدمج',
     };
   }
 }

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'torrent_service.dart';
 
 /// Crash-safe persistence for libtorrent fast-resume blobs.
 ///
@@ -113,7 +114,7 @@ class TorrentResumeStore {
       await saveAndWait(
         torrentId: id,
         sourceUrl: source,
-        fetchResumeData: () => progressFor(id),
+        fetchResumeData: () => TorrentService.fetchResumeBytes(id),
         files: filesFor?.call(id),
       );
     }

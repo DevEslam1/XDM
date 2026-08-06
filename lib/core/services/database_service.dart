@@ -538,6 +538,7 @@ class DatabaseService {
       downloadPageUrl: drift.Value(task.downloadPageUrl),
       mergedAudioUrl: drift.Value(task.mergedAudioUrl),
       audioSize: drift.Value(task.audioSize),
+      videoStreamSize: drift.Value(task.videoStreamSize), // FIX-B4
       audioProgress: drift.Value(task.audioProgress),
       pausedByUser: drift.Value(task.pausedByUser),
       youtubeQualityPreset: drift.Value(task.youtubeQualityPreset),
@@ -617,6 +618,7 @@ class DatabaseService {
       downloadPageUrl: row.downloadPageUrl,
       mergedAudioUrl: row.mergedAudioUrl,
       audioSize: row.audioSize,
+      videoStreamSize: row.videoStreamSize, // FIX-B4
       audioProgress: row.audioProgress,
       pausedByUser: row.pausedByUser,
       youtubeQualityPreset: row.youtubeQualityPreset,

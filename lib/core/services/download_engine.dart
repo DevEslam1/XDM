@@ -400,7 +400,7 @@ class DownloadEngine {
       final magnetParams = parseMagnetUrl(url);
       final resolvedName = requestedFileName?.trim().isNotEmpty == true
           ? safeFileName(requestedFileName!.trim())
-          : ((magnetParams['name'] as String?)?.trim().isNotEmpty == true
+          : ((magnetParams['name'])?.trim().isNotEmpty == true
               ? safeFileName((magnetParams['name'] as String).trim())
               : 'torrent_download.zip');
       final tempDir = (await getTemporaryDirectory()).path;
@@ -1308,7 +1308,7 @@ class DownloadEngine {
         await TorrentResumeStore.saveAndWait(
           torrentId: id,
           sourceUrl: url,
-          fetchResumeData: () => TorrentService.progressFor(id),
+          fetchResumeData: () => TorrentService.fetchResumeBytes(id),
           files: getTorrentFiles?.call(),
         );
       } catch (e) {

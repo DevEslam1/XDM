@@ -163,7 +163,7 @@ class NotificationCoordinator {
 
   /// Cancels the task's lingering progress notification, if any.
   void cancelForTask(String taskId) {
-    final notifId = _notificationIds[taskId];
+    final notifId = _notificationIds.remove(taskId);
     if (notifId != null) {
       unawaited(
         _notificationService.cancelNotification(notifId).catchError((e) {

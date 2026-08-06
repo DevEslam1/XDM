@@ -532,6 +532,9 @@ class TorrentService {
   }
 
   /// Attempts to save native fast-resume data for [torrentId].
+  static Uint8List? fetchResumeBytes(int torrentId) =>
+      _CapabilityGate.instance.saveResumeData(torrentId);
+
   static Future<void> saveResumeData(int torrentId) async {
     if (_state == TorrentSessionState.uninitialized ||
         _state == TorrentSessionState.initializing) {

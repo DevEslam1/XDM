@@ -274,6 +274,15 @@ class DownloadOrchestrator {
                 ? 'Resumed from legacy state'
                 : null,
           );
+          if ((result.created || result.diskAdjusted) &&
+              state.downloadedBytes == 0) {
+            final stateFile = File('${task.tempFilePath}.dmxstate');
+            if (await stateFile.exists()) {
+              try {
+                await stateFile.delete();
+              } catch (_) {}
+            }
+          }
           await _host.setTaskState(task);
         }
       }
@@ -573,8 +582,14 @@ class DownloadOrchestrator {
     final current = _host.findTaskById(taskId);
     if (current == null) return false;
 
+    final token = _host.cancelTokens[taskId];
+    if (token != null && token.isCancelled) {
+      return false;
+    }
+
     // FIX-MERGE-1: Add status guard to _mergeAudioVideo
-    if (current.status != DownloadStatus.downloading) {
+    if (current.status != DownloadStatus.downloading &&
+        current.status != DownloadStatus.merging) {
       debugPrint('[DMX] _mergeAudioVideo skipped: task $taskId status is ${current.status}');
       return false;
     }
@@ -865,6 +880,37 @@ class DownloadOrchestrator {
     return true;
   }
 
+  /// FIX-B2: Re-attempt merge only when both video and audio files already exist on disk
+  Future<void> retryMergeOnly(DownloadTask task) async {
+    final notificationId = _host.notifications.idFor(task.id);
+    await _host.setTaskState(
+      task.copyWith(
+        status: DownloadStatus.merging, // FIX-B11
+        statusMessage: 'Merging video and audio...',
+        clearError: true,
+      ),
+    );
+
+    final audioTempPath = '${task.tempFilePath}.audio';
+    final mergeOk = await _mergeAudioVideo(task.id, audioTempPath);
+
+    if (mergeOk) {
+      await _finalizeDownload(task.id, notificationId);
+    } else {
+      final current = _host.findTaskById(task.id);
+      if (current != null) {
+        await _host.setTaskState(
+          current.copyWith(
+            status: DownloadStatus.failed,
+            statusMessage: 'MERGE_FAILED', // FIX-B2
+            errorMessage:
+                '${DownloadStatusMessages.ffmpegMergeFailed} Video saved without audio. Tap retry to re-attempt merge.',
+          ),
+        );
+      }
+    }
+  }
+
   /// Finalize a completed download: SHA-256 check, status update, notification.
   Future<void> _finalizeDownload(String taskId, int notificationId) async {
     await _host.flushPendingProgress(taskId);
@@ -1043,10 +1089,22 @@ class DownloadOrchestrator {
         clearStatusMessage: true,
         status: DownloadStatus.completed,
         fileSize: finalFileSize,
-        // FIX F-1: Clamp to fileSize to prevent >100% display
-        downloadedBytes: finalFileSize > 0
-            ? finalFileSize.clamp(0, finalFileSize)
-            : current.downloadedBytes.clamp(0, finalFileSize > 0 ? finalFileSize : current.downloadedBytes),
+        // FIX-B12: On torrent completion, compute totalFromFiles and use max(totalFromFiles, fileSize)
+        downloadedBytes: current.isTorrent
+            ? max(
+                current.torrentFiles?.fold<int>(
+                      0,
+                      (s, f) => s + ((f['downloadedBytes'] as num?)?.toInt() ?? 0),
+                    ) ??
+                    finalFileSize,
+                finalFileSize,
+              )
+            : (finalFileSize > 0
+                ? finalFileSize.clamp(0, finalFileSize)
+                : current.downloadedBytes.clamp(
+                    0,
+                    finalFileSize > 0 ? finalFileSize : current.downloadedBytes,
+                  )),
 
 
         speed: 0,
@@ -1252,13 +1310,8 @@ class DownloadOrchestrator {
     }
     int audioBytesSoFar = audioBytesFromDisk;
 
-    int videoBytesSoFar = max(
-      videoBytesFromDisk,
-      (task.downloadedBytes - audioBytesFromDisk).clamp(
-        0,
-        task.fileSize > 0 ? task.fileSize : task.downloadedBytes,
-      ),
-    );
+    int videoBytesSoFar = videoBytesFromDisk; // FIX-B1
+    // FIX-B8: Speed resets on resume — speed is a live metric, not persisted.
     double audioSpeedNow = 0.0;
     double videoSpeedNow = 0.0;
     int videoSizeSoFar = videoTransferSize;
@@ -1293,7 +1346,7 @@ class DownloadOrchestrator {
       final effectiveVideoSize =
           videoSizeSoFar > 0 ? videoSizeSoFar : videoTransferSize;
       final calculatedTotal = effectiveVideoSize + audioContribution;
-      // FIX(B5): Allow denominator correction within tolerance.
+      // FIX-B13: Allow denominator correction within 5% tolerance.
       // Prevents permanent freeze from a single inflated report.
       final cachedMax = _sessionCachedTotalSize[task.id] ?? 0;
       final int totalSize;
@@ -1314,8 +1367,6 @@ class DownloadOrchestrator {
       if (totalSize > 0) {
         _sessionCachedTotalSize[task.id] = totalSize;
       }
-
-
 
       final totalDownloaded = (audioBytesSoFar + videoBytesSoFar).clamp(
           0, totalSize > 0 ? totalSize : (audioBytesSoFar + videoBytesSoFar));
@@ -1345,13 +1396,20 @@ class DownloadOrchestrator {
         }
       }
 
+      // FIX-B14: Derive audioProgress directly from audioBytesSoFar / audioSize
+      final computedAudioProgress = (hasAudio && base.audioSize > 0)
+          ? (audioBytesSoFar / base.audioSize).clamp(0.0, 1.0)
+          : (hasAudio && audioBytesSoFar > 0 ? 1.0 : base.audioProgress);
+
       final updated = base.copyWith(
         fileName: fileNameOverride ?? base.fileName,
         localFilePath: localFilePathOverride ?? base.localFilePath,
         tempFilePath: tempFilePathOverride ?? base.tempFilePath,
         category: categoryOverride ?? base.category,
         fileSize: totalSize,
-        downloadedBytes: totalDownloaded,
+        // FIX-B1: Store ONLY video bytes in downloadedBytes for tasks with audio
+        downloadedBytes: hasAudio ? videoBytesSoFar : totalDownloaded,
+        audioProgress: computedAudioProgress, // FIX-B14
         speed: combinedSpeed,
         eta: calculatedEta,
         clearEta: calculatedEta == null,
@@ -1482,7 +1540,7 @@ class DownloadOrchestrator {
                 liveAudioTask.mergedAudioUrl != null &&
                 liveAudioTask.mergedAudioUrl!.isNotEmpty;
             if (!liveHasAudio) return;
-            final liveAudioTempPath = '${liveAudioTask.tempFilePath}.audio';
+            final liveAudioTempPath = audioTempPath;
             final liveAudioSize = liveAudioTask.audioSize;
 
             final audioFile = File(liveAudioTempPath);
@@ -1597,13 +1655,6 @@ class DownloadOrchestrator {
                 audioSpeedNow = progress.speed;
                 // FIX-YT-01: Use engine-reported fileSize; fall back to byte-count heuristic
                 final size = t.audioSize > 0 ? t.audioSize : progress.fileSize;
-                final double fraction;
-                if (size > 0) {
-                  fraction = (progress.downloadedBytes / size).clamp(0.0, 1.0);
-                } else {
-                  // Truly unknown size: report raw bytes so UI can show "X MB downloaded"
-                  fraction = 0.0; // Don't fake progress
-                }
 
                 // FIX-YT-01b: Propagate discovered audio size back to task
                 if (size == 0 && progress.fileSize > 0) {
@@ -1628,8 +1679,8 @@ class DownloadOrchestrator {
                   (x) => x.id == task.id,
                 );
                 if (idx != -1) {
+                  // FIX-B14: audioProgress is derived in pushCombinedProgress, do not write directly
                   _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
-                    audioProgress: fraction,
                     audioSize: size > 0 ? size : _host.providerTasks[idx].audioSize,
                   );
                 }
@@ -1749,6 +1800,12 @@ class DownloadOrchestrator {
                   videoSpeedNow = progress.speed;
                   if (progress.fileSize > 0) {
                     videoSizeSoFar = progress.fileSize;
+                    final idx = _host.providerTasks.indexWhere((t) => t.id == task.id);
+                    if (idx != -1 && _host.providerTasks[idx].videoStreamSize == 0) {
+                      _host.providerTasks[idx] = _host.providerTasks[idx].copyWith(
+                        videoStreamSize: progress.fileSize,
+                      ); // FIX-B4
+                    }
                   }
 
                   if (isYoutube &&
@@ -2035,9 +2092,12 @@ class DownloadOrchestrator {
 
             if (!mergeOk) {
               final current = _host.findTaskById(task.id);
-              if (current != null && current.status == DownloadStatus.downloading) {
+              if (current != null &&
+                  (current.status == DownloadStatus.downloading ||
+                      current.status == DownloadStatus.merging)) {
                 await _host.setTaskState(current.copyWith(
                   status: DownloadStatus.failed,
+                  statusMessage: 'MERGE_FAILED', // FIX-B2
                   errorMessage:
                       '${DownloadStatusMessages.ffmpegMergeFailed} Video saved without audio. Tap retry to re-attempt merge.',
                 ));
@@ -2087,9 +2147,12 @@ class DownloadOrchestrator {
                 final refreshedUrl = fresh?['url']?.toString();
                 if (refreshedUrl != null && refreshedUrl.isNotEmpty) {
                   final refreshedAudioUrl = fresh?['audioUrl']?.toString();
+                  final audioChanged = refreshedAudioUrl != null &&
+                      refreshedAudioUrl != task.mergedAudioUrl;
                   task = task.copyWith(
                     url: refreshedUrl,
                     mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
+                    audioProgress: audioChanged ? 0.0 : task.audioProgress,
                   );
                   final idx = _host.providerTasks.indexWhere(
                     (x) => x.id == task.id,
@@ -2099,6 +2162,7 @@ class DownloadOrchestrator {
                         _host.providerTasks[idx].copyWith(
                       url: refreshedUrl,
                       mergedAudioUrl: refreshedAudioUrl ?? task.mergedAudioUrl,
+                      audioProgress: audioChanged ? 0.0 : task.audioProgress,
                     );
                     await _host.providerDatabaseService.saveTask(
                       _host.providerTasks[idx],
@@ -2253,7 +2317,16 @@ class DownloadOrchestrator {
     _host.updateTelemetryWidget();
 
     final resolved = await _resolveStreamUrl(task);
-    if (resolved == null) return;
+    if (resolved == null) {
+      final live = _host.findTaskById(task.id);
+      if (live != null && live.status == DownloadStatus.queued) {
+        await _host.setTaskState(live.copyWith(
+          status: DownloadStatus.failed,
+          errorMessage: 'Failed to resolve download stream.',
+        ));
+      }
+      return;
+    }
     task = resolved;
     final cookieString = _currentCookieString;
 
@@ -2832,9 +2905,21 @@ class DownloadOrchestrator {
       // FIX-INTEL: Record failure outcome
       SiteIntelligenceService().recordOutcome(task.url, false);
 
+      // FIX-B5: Delete state sidecars on permanent failure but preserve .dmxpart data
+      for (final path in [
+        '${current.tempFilePath}.dmxstate',
+        '${current.tempFilePath}.journal',
+        '${current.tempFilePath}.audio.dmxstate',
+      ]) {
+        try {
+          final f = File(path);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+
       try {
-        await _host.cleanupPartFiles(current, preserveParts: true);
-        await cleanupTempFiles(current, preserveParts: true);
+        await _host.cleanupPartFiles(current, preserveParts: false);
+        await cleanupTempFiles(current, preserveParts: false);
       } catch (e) {
         debugPrint(
           'Failed to clean up temp files on non-retryable error: $e',
@@ -3299,6 +3384,7 @@ class DownloadOrchestrator {
   /// FIX-9: Normalizes a chunk list so its sum equals `downloadedBytes /
   /// fileSize * chunks.length`. Adaptive thread redistribution can otherwise
   /// drift the per-chunk percentages, producing inconsistent bar segments.
+  // FIX-B6: Normalize chunks without distorting 100%-complete chunks
   static List<double> normalizeChunks(
     List<double> chunks,
     int fileSize,
@@ -3307,10 +3393,22 @@ class DownloadOrchestrator {
     if (fileSize <= 0 || chunks.isEmpty) return chunks;
     final targetSum =
         (downloadedBytes / fileSize).clamp(0.0, 1.0) * chunks.length;
-    final currentSum = chunks.fold<double>(0.0, (s, c) => s + c);
-    if (currentSum <= 0 || targetSum <= 0) return chunks;
-    final scale = targetSum / currentSum;
-    return chunks.map((c) => (c * scale).clamp(0.0, 1.0)).toList();
+    // Lock completed chunks
+    final locked = chunks.map((c) => c >= 0.999 ? 1.0 : c).toList();
+    final lockedSum =
+        locked.where((c) => c >= 1.0).fold<double>(0.0, (s, c) => s + c);
+    final remainingTarget =
+        (targetSum - lockedSum).clamp(0.0, locked.length - lockedSum);
+    final unlocked = locked.where((c) => c < 1.0).toList();
+    final unlockedSum = unlocked.fold<double>(0.0, (s, c) => s + c);
+    if (unlockedSum <= 0) return locked;
+    final scale = remainingTarget / unlockedSum;
+    int ui = 0;
+    return locked.map((c) {
+      if (c >= 1.0) return 1.0;
+      final scaled = (unlocked[ui++] * scale).clamp(0.0, 1.0);
+      return scaled;
+    }).toList();
   }
 }
 

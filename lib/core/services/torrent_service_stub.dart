@@ -11,6 +11,7 @@ class TorrentService {
   static final ValueNotifier<bool> isAvailable = ValueNotifier(false);
   static Set<int> get activeTorrentIds => const <int>{};
   static Uint8List? progressFor(int id) => null;
+  static Uint8List? fetchResumeBytes(int id) => null;
   static Uint8List? resumeBlobFor(int id) => null;
   static bool fileProgressSupported = false;
   static bool filePrioritiesSupported = false;

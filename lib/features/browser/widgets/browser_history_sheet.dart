@@ -983,6 +983,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         return Icons.error_outline;
       case DownloadStatus.queued:
         return Icons.schedule_rounded;
+      case DownloadStatus.merging:
+        return Icons.merge_type_rounded;
     }
   }
 
@@ -998,6 +1000,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         return isDark ? AppTheme.neonRed : AppTheme.lightNeonRed;
       case DownloadStatus.queued:
         return isDark ? AppTheme.neonViolet : AppTheme.lightNeonViolet;
+      case DownloadStatus.merging:
+        return isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber;
     }
   }
 
@@ -1013,6 +1017,8 @@ class _BrowserHistorySheetState extends State<BrowserHistorySheet>
         return L10n.of(context, 'browser_status_failed');
       case DownloadStatus.queued:
         return L10n.of(context, 'browser_status_queued');
+      case DownloadStatus.merging:
+        return 'Merging';
     }
   }
 }

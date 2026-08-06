@@ -12,444 +12,283 @@ class $DownloadTasksTable extends DownloadTasks
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _fileNameMeta = const VerificationMeta(
-    'fileName',
-  );
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _fileNameMeta =
+      const VerificationMeta('fileName');
   @override
   late final GeneratedColumn<String> fileName = GeneratedColumn<String>(
-    'file_name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'file_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _urlMeta = const VerificationMeta('url');
   @override
   late final GeneratedColumn<String> url = GeneratedColumn<String>(
-    'url',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _fileSizeMeta = const VerificationMeta(
-    'fileSize',
-  );
+      'url', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _fileSizeMeta =
+      const VerificationMeta('fileSize');
   @override
   late final GeneratedColumn<int> fileSize = GeneratedColumn<int>(
-    'file_size',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _downloadedBytesMeta = const VerificationMeta(
-    'downloadedBytes',
-  );
+      'file_size', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _downloadedBytesMeta =
+      const VerificationMeta('downloadedBytes');
   @override
   late final GeneratedColumn<int> downloadedBytes = GeneratedColumn<int>(
-    'downloaded_bytes',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
+      'downloaded_bytes', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _speedMeta = const VerificationMeta('speed');
   @override
   late final GeneratedColumn<double> speed = GeneratedColumn<double>(
-    'speed',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0.0),
-  );
+      'speed', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0.0));
   static const VerificationMeta _etaMeta = const VerificationMeta('eta');
   @override
   late final GeneratedColumn<int> eta = GeneratedColumn<int>(
-    'eta',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _categoryMeta = const VerificationMeta(
-    'category',
-  );
+      'eta', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _categoryMeta =
+      const VerificationMeta('category');
   @override
   late final GeneratedColumn<String> category = GeneratedColumn<String>(
-    'category',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'category', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
-    'status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _savePathMeta = const VerificationMeta(
-    'savePath',
-  );
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _savePathMeta =
+      const VerificationMeta('savePath');
   @override
   late final GeneratedColumn<String> savePath = GeneratedColumn<String>(
-    'save_path',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _localFilePathMeta = const VerificationMeta(
-    'localFilePath',
-  );
+      'save_path', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _localFilePathMeta =
+      const VerificationMeta('localFilePath');
   @override
   late final GeneratedColumn<String> localFilePath = GeneratedColumn<String>(
-    'local_file_path',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _tempFilePathMeta = const VerificationMeta(
-    'tempFilePath',
-  );
+      'local_file_path', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _tempFilePathMeta =
+      const VerificationMeta('tempFilePath');
   @override
   late final GeneratedColumn<String> tempFilePath = GeneratedColumn<String>(
-    'temp_file_path',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _errorMessageMeta = const VerificationMeta(
-    'errorMessage',
-  );
+      'temp_file_path', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _errorMessageMeta =
+      const VerificationMeta('errorMessage');
   @override
   late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
-    'error_message',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _threadCountMeta = const VerificationMeta(
-    'threadCount',
-  );
+      'error_message', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _threadCountMeta =
+      const VerificationMeta('threadCount');
   @override
   late final GeneratedColumn<int> threadCount = GeneratedColumn<int>(
-    'thread_count',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
+      'thread_count', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
   @override
   late final GeneratedColumnWithTypeConverter<List<double>?, String> chunks =
-      GeneratedColumn<String>(
-    'chunks',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  ).withConverter<List<double>?>($DownloadTasksTable.$converterchunks);
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
+      GeneratedColumn<String>('chunks', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<List<double>?>($DownloadTasksTable.$converterchunks);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
   @override
   late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
   @override
   late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _completedAtMeta = const VerificationMeta(
-    'completedAt',
-  );
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _completedAtMeta =
+      const VerificationMeta('completedAt');
   @override
   late final GeneratedColumn<int> completedAt = GeneratedColumn<int>(
-    'completed_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _scheduledAtMeta = const VerificationMeta(
-    'scheduledAt',
-  );
+      'completed_at', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _scheduledAtMeta =
+      const VerificationMeta('scheduledAt');
   @override
   late final GeneratedColumn<int> scheduledAt = GeneratedColumn<int>(
-    'scheduled_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _supportsResumeMeta = const VerificationMeta(
-    'supportsResume',
-  );
+      'scheduled_at', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _supportsResumeMeta =
+      const VerificationMeta('supportsResume');
   @override
   late final GeneratedColumn<bool> supportsResume = GeneratedColumn<bool>(
-    'supports_resume',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("supports_resume" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _speedLimitKbpsMeta = const VerificationMeta(
-    'speedLimitKbps',
-  );
+      'supports_resume', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("supports_resume" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _speedLimitKbpsMeta =
+      const VerificationMeta('speedLimitKbps');
   @override
   late final GeneratedColumn<int> speedLimitKbps = GeneratedColumn<int>(
-    'speed_limit_kbps',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _seedingEnabledMeta = const VerificationMeta(
-    'seedingEnabled',
-  );
+      'speed_limit_kbps', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _seedingEnabledMeta =
+      const VerificationMeta('seedingEnabled');
   @override
   late final GeneratedColumn<bool> seedingEnabled = GeneratedColumn<bool>(
-    'seeding_enabled',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("seeding_enabled" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _seedingLimitedMeta = const VerificationMeta(
-    'seedingLimited',
-  );
+      'seeding_enabled', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("seeding_enabled" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _seedingLimitedMeta =
+      const VerificationMeta('seedingLimited');
   @override
   late final GeneratedColumn<bool> seedingLimited = GeneratedColumn<bool>(
-    'seeding_limited',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("seeding_limited" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _seedingLimitKbpsMeta = const VerificationMeta(
-    'seedingLimitKbps',
-  );
+      'seeding_limited', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("seeding_limited" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _seedingLimitKbpsMeta =
+      const VerificationMeta('seedingLimitKbps');
   @override
   late final GeneratedColumn<int> seedingLimitKbps = GeneratedColumn<int>(
-    'seeding_limit_kbps',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(500),
-  );
+      'seeding_limit_kbps', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(500));
   @override
   late final GeneratedColumnWithTypeConverter<List<Map<String, dynamic>>?,
       String> torrentFiles = GeneratedColumn<String>(
-    'torrent_files',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  ).withConverter<List<Map<String, dynamic>>?>(
-    $DownloadTasksTable.$convertertorrentFiles,
-  );
-  static const VerificationMeta _downloadPageUrlMeta = const VerificationMeta(
-    'downloadPageUrl',
-  );
+          'torrent_files', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false)
+      .withConverter<List<Map<String, dynamic>>?>(
+          $DownloadTasksTable.$convertertorrentFiles);
+  static const VerificationMeta _downloadPageUrlMeta =
+      const VerificationMeta('downloadPageUrl');
   @override
   late final GeneratedColumn<String> downloadPageUrl = GeneratedColumn<String>(
-    'download_page_url',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _mergedAudioUrlMeta = const VerificationMeta(
-    'mergedAudioUrl',
-  );
+      'download_page_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _mergedAudioUrlMeta =
+      const VerificationMeta('mergedAudioUrl');
   @override
   late final GeneratedColumn<String> mergedAudioUrl = GeneratedColumn<String>(
-    'merged_audio_url',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _audioSizeMeta = const VerificationMeta(
-    'audioSize',
-  );
+      'merged_audio_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _audioSizeMeta =
+      const VerificationMeta('audioSize');
   @override
   late final GeneratedColumn<int> audioSize = GeneratedColumn<int>(
-    'audio_size',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _audioProgressMeta = const VerificationMeta(
-    'audioProgress',
-  );
+      'audio_size', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _videoStreamSizeMeta =
+      const VerificationMeta('videoStreamSize');
+  @override
+  late final GeneratedColumn<int> videoStreamSize = GeneratedColumn<int>(
+      'video_stream_size', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _audioProgressMeta =
+      const VerificationMeta('audioProgress');
   @override
   late final GeneratedColumn<double> audioProgress = GeneratedColumn<double>(
-    'audio_progress',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0.0),
-  );
-  static const VerificationMeta _pausedByUserMeta = const VerificationMeta(
-    'pausedByUser',
-  );
+      'audio_progress', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0.0));
+  static const VerificationMeta _pausedByUserMeta =
+      const VerificationMeta('pausedByUser');
   @override
   late final GeneratedColumn<bool> pausedByUser = GeneratedColumn<bool>(
-    'paused_by_user',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("paused_by_user" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
+      'paused_by_user', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("paused_by_user" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _youtubeQualityPresetMeta =
       const VerificationMeta('youtubeQualityPreset');
   @override
   late final GeneratedColumn<String> youtubeQualityPreset =
-      GeneratedColumn<String>(
-    'youtube_quality_preset',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
+      GeneratedColumn<String>('youtube_quality_preset', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-    'notes',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _playlistIdMeta = const VerificationMeta(
-    'playlistId',
-  );
+      'notes', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _playlistIdMeta =
+      const VerificationMeta('playlistId');
   @override
   late final GeneratedColumn<String> playlistId = GeneratedColumn<String>(
-    'playlist_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _playlistTitleMeta = const VerificationMeta(
-    'playlistTitle',
-  );
+      'playlist_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _playlistTitleMeta =
+      const VerificationMeta('playlistTitle');
   @override
   late final GeneratedColumn<String> playlistTitle = GeneratedColumn<String>(
-    'playlist_title',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _thumbnailUrlMeta = const VerificationMeta(
-    'thumbnailUrl',
-  );
+      'playlist_title', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _thumbnailUrlMeta =
+      const VerificationMeta('thumbnailUrl');
   @override
   late final GeneratedColumn<String> thumbnailUrl = GeneratedColumn<String>(
-    'thumbnail_url',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _isAppUpdateMeta = const VerificationMeta(
-    'isAppUpdate',
-  );
+      'thumbnail_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _isAppUpdateMeta =
+      const VerificationMeta('isAppUpdate');
   @override
   late final GeneratedColumn<bool> isAppUpdate = GeneratedColumn<bool>(
-    'is_app_update',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_app_update" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _priorityMeta = const VerificationMeta(
-    'priority',
-  );
+      'is_app_update', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("is_app_update" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _priorityMeta =
+      const VerificationMeta('priority');
   @override
   late final GeneratedColumn<int> priority = GeneratedColumn<int>(
-    'priority',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _expectedSha256Meta = const VerificationMeta(
-    'expectedSha256',
-  );
+      'priority', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _queueOrderMeta =
+      const VerificationMeta('queueOrder');
+  @override
+  late final GeneratedColumn<int> queueOrder = GeneratedColumn<int>(
+      'queue_order', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _expectedSha256Meta =
+      const VerificationMeta('expectedSha256');
   @override
   late final GeneratedColumn<String> expectedSha256 = GeneratedColumn<String>(
-    'expected_sha256',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
+      'expected_sha256', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   late final GeneratedColumnWithTypeConverter<List<String>?, String>
-      mirrorUrls = GeneratedColumn<String>(
-    'mirror_urls',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  ).withConverter<List<String>?>($DownloadTasksTable.$convertermirrorUrls);
+      mirrorUrls = GeneratedColumn<String>('mirror_urls', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<List<String>?>(
+              $DownloadTasksTable.$convertermirrorUrls);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -480,6 +319,7 @@ class $DownloadTasksTable extends DownloadTasks
         downloadPageUrl,
         mergedAudioUrl,
         audioSize,
+        videoStreamSize,
         audioProgress,
         pausedByUser,
         youtubeQualityPreset,
@@ -489,8 +329,9 @@ class $DownloadTasksTable extends DownloadTasks
         thumbnailUrl,
         isAppUpdate,
         priority,
+        queueOrder,
         expectedSha256,
-        mirrorUrls,
+        mirrorUrls
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -498,10 +339,8 @@ class $DownloadTasksTable extends DownloadTasks
   String get actualTableName => $name;
   static const String $name = 'download_tasks';
   @override
-  VerificationContext validateIntegrity(
-    Insertable<DbDownloadTask> instance, {
-    bool isInserting = false,
-  }) {
+  VerificationContext validateIntegrity(Insertable<DbDownloadTask> instance,
+      {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -510,297 +349,220 @@ class $DownloadTasksTable extends DownloadTasks
       context.missing(_idMeta);
     }
     if (data.containsKey('file_name')) {
-      context.handle(
-        _fileNameMeta,
-        fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta),
-      );
+      context.handle(_fileNameMeta,
+          fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta));
     } else if (isInserting) {
       context.missing(_fileNameMeta);
     }
     if (data.containsKey('url')) {
       context.handle(
-        _urlMeta,
-        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
-      );
+          _urlMeta, url.isAcceptableOrUnknown(data['url']!, _urlMeta));
     } else if (isInserting) {
       context.missing(_urlMeta);
     }
     if (data.containsKey('file_size')) {
-      context.handle(
-        _fileSizeMeta,
-        fileSize.isAcceptableOrUnknown(data['file_size']!, _fileSizeMeta),
-      );
+      context.handle(_fileSizeMeta,
+          fileSize.isAcceptableOrUnknown(data['file_size']!, _fileSizeMeta));
     }
     if (data.containsKey('downloaded_bytes')) {
       context.handle(
-        _downloadedBytesMeta,
-        downloadedBytes.isAcceptableOrUnknown(
-          data['downloaded_bytes']!,
           _downloadedBytesMeta,
-        ),
-      );
+          downloadedBytes.isAcceptableOrUnknown(
+              data['downloaded_bytes']!, _downloadedBytesMeta));
     }
     if (data.containsKey('speed')) {
       context.handle(
-        _speedMeta,
-        speed.isAcceptableOrUnknown(data['speed']!, _speedMeta),
-      );
+          _speedMeta, speed.isAcceptableOrUnknown(data['speed']!, _speedMeta));
     }
     if (data.containsKey('eta')) {
       context.handle(
-        _etaMeta,
-        eta.isAcceptableOrUnknown(data['eta']!, _etaMeta),
-      );
+          _etaMeta, eta.isAcceptableOrUnknown(data['eta']!, _etaMeta));
     }
     if (data.containsKey('category')) {
-      context.handle(
-        _categoryMeta,
-        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
-      );
+      context.handle(_categoryMeta,
+          category.isAcceptableOrUnknown(data['category']!, _categoryMeta));
     } else if (isInserting) {
       context.missing(_categoryMeta);
     }
     if (data.containsKey('status')) {
-      context.handle(
-        _statusMeta,
-        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
-      );
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
     } else if (isInserting) {
       context.missing(_statusMeta);
     }
     if (data.containsKey('save_path')) {
-      context.handle(
-        _savePathMeta,
-        savePath.isAcceptableOrUnknown(data['save_path']!, _savePathMeta),
-      );
+      context.handle(_savePathMeta,
+          savePath.isAcceptableOrUnknown(data['save_path']!, _savePathMeta));
     } else if (isInserting) {
       context.missing(_savePathMeta);
     }
     if (data.containsKey('local_file_path')) {
       context.handle(
-        _localFilePathMeta,
-        localFilePath.isAcceptableOrUnknown(
-          data['local_file_path']!,
           _localFilePathMeta,
-        ),
-      );
+          localFilePath.isAcceptableOrUnknown(
+              data['local_file_path']!, _localFilePathMeta));
     } else if (isInserting) {
       context.missing(_localFilePathMeta);
     }
     if (data.containsKey('temp_file_path')) {
       context.handle(
-        _tempFilePathMeta,
-        tempFilePath.isAcceptableOrUnknown(
-          data['temp_file_path']!,
           _tempFilePathMeta,
-        ),
-      );
+          tempFilePath.isAcceptableOrUnknown(
+              data['temp_file_path']!, _tempFilePathMeta));
     } else if (isInserting) {
       context.missing(_tempFilePathMeta);
     }
     if (data.containsKey('error_message')) {
       context.handle(
-        _errorMessageMeta,
-        errorMessage.isAcceptableOrUnknown(
-          data['error_message']!,
           _errorMessageMeta,
-        ),
-      );
+          errorMessage.isAcceptableOrUnknown(
+              data['error_message']!, _errorMessageMeta));
     }
     if (data.containsKey('thread_count')) {
       context.handle(
-        _threadCountMeta,
-        threadCount.isAcceptableOrUnknown(
-          data['thread_count']!,
           _threadCountMeta,
-        ),
-      );
+          threadCount.isAcceptableOrUnknown(
+              data['thread_count']!, _threadCountMeta));
     } else if (isInserting) {
       context.missing(_threadCountMeta);
     }
     if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
     if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
     if (data.containsKey('completed_at')) {
       context.handle(
-        _completedAtMeta,
-        completedAt.isAcceptableOrUnknown(
-          data['completed_at']!,
           _completedAtMeta,
-        ),
-      );
+          completedAt.isAcceptableOrUnknown(
+              data['completed_at']!, _completedAtMeta));
     }
     if (data.containsKey('scheduled_at')) {
       context.handle(
-        _scheduledAtMeta,
-        scheduledAt.isAcceptableOrUnknown(
-          data['scheduled_at']!,
           _scheduledAtMeta,
-        ),
-      );
+          scheduledAt.isAcceptableOrUnknown(
+              data['scheduled_at']!, _scheduledAtMeta));
     }
     if (data.containsKey('supports_resume')) {
       context.handle(
-        _supportsResumeMeta,
-        supportsResume.isAcceptableOrUnknown(
-          data['supports_resume']!,
           _supportsResumeMeta,
-        ),
-      );
+          supportsResume.isAcceptableOrUnknown(
+              data['supports_resume']!, _supportsResumeMeta));
     }
     if (data.containsKey('speed_limit_kbps')) {
       context.handle(
-        _speedLimitKbpsMeta,
-        speedLimitKbps.isAcceptableOrUnknown(
-          data['speed_limit_kbps']!,
           _speedLimitKbpsMeta,
-        ),
-      );
+          speedLimitKbps.isAcceptableOrUnknown(
+              data['speed_limit_kbps']!, _speedLimitKbpsMeta));
     }
     if (data.containsKey('seeding_enabled')) {
       context.handle(
-        _seedingEnabledMeta,
-        seedingEnabled.isAcceptableOrUnknown(
-          data['seeding_enabled']!,
           _seedingEnabledMeta,
-        ),
-      );
+          seedingEnabled.isAcceptableOrUnknown(
+              data['seeding_enabled']!, _seedingEnabledMeta));
     }
     if (data.containsKey('seeding_limited')) {
       context.handle(
-        _seedingLimitedMeta,
-        seedingLimited.isAcceptableOrUnknown(
-          data['seeding_limited']!,
           _seedingLimitedMeta,
-        ),
-      );
+          seedingLimited.isAcceptableOrUnknown(
+              data['seeding_limited']!, _seedingLimitedMeta));
     }
     if (data.containsKey('seeding_limit_kbps')) {
       context.handle(
-        _seedingLimitKbpsMeta,
-        seedingLimitKbps.isAcceptableOrUnknown(
-          data['seeding_limit_kbps']!,
           _seedingLimitKbpsMeta,
-        ),
-      );
+          seedingLimitKbps.isAcceptableOrUnknown(
+              data['seeding_limit_kbps']!, _seedingLimitKbpsMeta));
     }
     if (data.containsKey('download_page_url')) {
       context.handle(
-        _downloadPageUrlMeta,
-        downloadPageUrl.isAcceptableOrUnknown(
-          data['download_page_url']!,
           _downloadPageUrlMeta,
-        ),
-      );
+          downloadPageUrl.isAcceptableOrUnknown(
+              data['download_page_url']!, _downloadPageUrlMeta));
     }
     if (data.containsKey('merged_audio_url')) {
       context.handle(
-        _mergedAudioUrlMeta,
-        mergedAudioUrl.isAcceptableOrUnknown(
-          data['merged_audio_url']!,
           _mergedAudioUrlMeta,
-        ),
-      );
+          mergedAudioUrl.isAcceptableOrUnknown(
+              data['merged_audio_url']!, _mergedAudioUrlMeta));
     }
     if (data.containsKey('audio_size')) {
+      context.handle(_audioSizeMeta,
+          audioSize.isAcceptableOrUnknown(data['audio_size']!, _audioSizeMeta));
+    }
+    if (data.containsKey('video_stream_size')) {
       context.handle(
-        _audioSizeMeta,
-        audioSize.isAcceptableOrUnknown(data['audio_size']!, _audioSizeMeta),
-      );
+          _videoStreamSizeMeta,
+          videoStreamSize.isAcceptableOrUnknown(
+              data['video_stream_size']!, _videoStreamSizeMeta));
     }
     if (data.containsKey('audio_progress')) {
       context.handle(
-        _audioProgressMeta,
-        audioProgress.isAcceptableOrUnknown(
-          data['audio_progress']!,
           _audioProgressMeta,
-        ),
-      );
+          audioProgress.isAcceptableOrUnknown(
+              data['audio_progress']!, _audioProgressMeta));
     }
     if (data.containsKey('paused_by_user')) {
       context.handle(
-        _pausedByUserMeta,
-        pausedByUser.isAcceptableOrUnknown(
-          data['paused_by_user']!,
           _pausedByUserMeta,
-        ),
-      );
+          pausedByUser.isAcceptableOrUnknown(
+              data['paused_by_user']!, _pausedByUserMeta));
     }
     if (data.containsKey('youtube_quality_preset')) {
       context.handle(
-        _youtubeQualityPresetMeta,
-        youtubeQualityPreset.isAcceptableOrUnknown(
-          data['youtube_quality_preset']!,
           _youtubeQualityPresetMeta,
-        ),
-      );
+          youtubeQualityPreset.isAcceptableOrUnknown(
+              data['youtube_quality_preset']!, _youtubeQualityPresetMeta));
     }
     if (data.containsKey('notes')) {
       context.handle(
-        _notesMeta,
-        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
-      );
+          _notesMeta, notes.isAcceptableOrUnknown(data['notes']!, _notesMeta));
     }
     if (data.containsKey('playlist_id')) {
       context.handle(
-        _playlistIdMeta,
-        playlistId.isAcceptableOrUnknown(data['playlist_id']!, _playlistIdMeta),
-      );
+          _playlistIdMeta,
+          playlistId.isAcceptableOrUnknown(
+              data['playlist_id']!, _playlistIdMeta));
     }
     if (data.containsKey('playlist_title')) {
       context.handle(
-        _playlistTitleMeta,
-        playlistTitle.isAcceptableOrUnknown(
-          data['playlist_title']!,
           _playlistTitleMeta,
-        ),
-      );
+          playlistTitle.isAcceptableOrUnknown(
+              data['playlist_title']!, _playlistTitleMeta));
     }
     if (data.containsKey('thumbnail_url')) {
       context.handle(
-        _thumbnailUrlMeta,
-        thumbnailUrl.isAcceptableOrUnknown(
-          data['thumbnail_url']!,
           _thumbnailUrlMeta,
-        ),
-      );
+          thumbnailUrl.isAcceptableOrUnknown(
+              data['thumbnail_url']!, _thumbnailUrlMeta));
     }
     if (data.containsKey('is_app_update')) {
       context.handle(
-        _isAppUpdateMeta,
-        isAppUpdate.isAcceptableOrUnknown(
-          data['is_app_update']!,
           _isAppUpdateMeta,
-        ),
-      );
+          isAppUpdate.isAcceptableOrUnknown(
+              data['is_app_update']!, _isAppUpdateMeta));
     }
     if (data.containsKey('priority')) {
+      context.handle(_priorityMeta,
+          priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta));
+    }
+    if (data.containsKey('queue_order')) {
       context.handle(
-        _priorityMeta,
-        priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
-      );
+          _queueOrderMeta,
+          queueOrder.isAcceptableOrUnknown(
+              data['queue_order']!, _queueOrderMeta));
     }
     if (data.containsKey('expected_sha256')) {
       context.handle(
-        _expectedSha256Meta,
-        expectedSha256.isAcceptableOrUnknown(
-          data['expected_sha256']!,
           _expectedSha256Meta,
-        ),
-      );
+          expectedSha256.isAcceptableOrUnknown(
+              data['expected_sha256']!, _expectedSha256Meta));
     }
     return context;
   }
@@ -811,168 +573,92 @@ class $DownloadTasksTable extends DownloadTasks
   DbDownloadTask map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DbDownloadTask(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      fileName: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}file_name'],
-      )!,
-      url: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}url'],
-      )!,
-      fileSize: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}file_size'],
-      )!,
-      downloadedBytes: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}downloaded_bytes'],
-      )!,
-      speed: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}speed'],
-      )!,
-      eta: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}eta'],
-      ),
-      category: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}category'],
-      )!,
-      status: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status'],
-      )!,
-      savePath: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}save_path'],
-      )!,
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      fileName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}file_name'])!,
+      url: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}url'])!,
+      fileSize: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}file_size'])!,
+      downloadedBytes: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}downloaded_bytes'])!,
+      speed: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}speed'])!,
+      eta: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}eta']),
+      category: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}category'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      savePath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}save_path'])!,
       localFilePath: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}local_file_path'],
-      )!,
-      tempFilePath: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}temp_file_path'],
-      )!,
-      errorMessage: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}error_message'],
-      ),
-      threadCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}thread_count'],
-      )!,
-      chunks: $DownloadTasksTable.$converterchunks.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}chunks'],
-        ),
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}updated_at'],
-      )!,
-      completedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}completed_at'],
-      ),
-      scheduledAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}scheduled_at'],
-      ),
-      supportsResume: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}supports_resume'],
-      )!,
-      speedLimitKbps: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}speed_limit_kbps'],
-      )!,
-      seedingEnabled: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}seeding_enabled'],
-      )!,
-      seedingLimited: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}seeding_limited'],
-      )!,
+          DriftSqlType.string, data['${effectivePrefix}local_file_path'])!,
+      tempFilePath: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}temp_file_path'])!,
+      errorMessage: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}error_message']),
+      threadCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}thread_count'])!,
+      chunks: $DownloadTasksTable.$converterchunks.fromSql(attachedDatabase
+          .typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}chunks'])),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}updated_at'])!,
+      completedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}completed_at']),
+      scheduledAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}scheduled_at']),
+      supportsResume: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}supports_resume'])!,
+      speedLimitKbps: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}speed_limit_kbps'])!,
+      seedingEnabled: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}seeding_enabled'])!,
+      seedingLimited: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}seeding_limited'])!,
       seedingLimitKbps: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}seeding_limit_kbps'],
-      )!,
+          DriftSqlType.int, data['${effectivePrefix}seeding_limit_kbps'])!,
       torrentFiles: $DownloadTasksTable.$convertertorrentFiles.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}torrent_files'],
-        ),
-      ),
+          attachedDatabase.typeMapping.read(
+              DriftSqlType.string, data['${effectivePrefix}torrent_files'])),
       downloadPageUrl: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}download_page_url'],
-      ),
+          DriftSqlType.string, data['${effectivePrefix}download_page_url']),
       mergedAudioUrl: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}merged_audio_url'],
-      ),
-      audioSize: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}audio_size'],
-      )!,
-      audioProgress: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}audio_progress'],
-      )!,
-      pausedByUser: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}paused_by_user'],
-      )!,
+          DriftSqlType.string, data['${effectivePrefix}merged_audio_url']),
+      audioSize: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}audio_size'])!,
+      videoStreamSize: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}video_stream_size'])!,
+      audioProgress: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}audio_progress'])!,
+      pausedByUser: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}paused_by_user'])!,
       youtubeQualityPreset: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}youtube_quality_preset'],
-      ),
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      ),
-      playlistId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}playlist_id'],
-      ),
-      playlistTitle: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}playlist_title'],
-      ),
-      thumbnailUrl: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}thumbnail_url'],
-      ),
-      isAppUpdate: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_app_update'],
-      )!,
-      priority: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}priority'],
-      )!,
-      expectedSha256: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}expected_sha256'],
-      ),
-      mirrorUrls: $DownloadTasksTable.$convertermirrorUrls.fromSql(
-        attachedDatabase.typeMapping.read(
           DriftSqlType.string,
-          data['${effectivePrefix}mirror_urls'],
-        ),
-      ),
+          data['${effectivePrefix}youtube_quality_preset']),
+      notes: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notes']),
+      playlistId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}playlist_id']),
+      playlistTitle: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}playlist_title']),
+      thumbnailUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}thumbnail_url']),
+      isAppUpdate: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_app_update'])!,
+      priority: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}priority'])!,
+      queueOrder: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}queue_order'])!,
+      expectedSha256: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}expected_sha256']),
+      mirrorUrls: $DownloadTasksTable.$convertermirrorUrls.fromSql(
+          attachedDatabase.typeMapping.read(
+              DriftSqlType.string, data['${effectivePrefix}mirror_urls'])),
     );
   }
 
@@ -984,9 +670,8 @@ class $DownloadTasksTable extends DownloadTasks
   static TypeConverter<List<double>?, String?> $converterchunks =
       const NullAwareTypeConverter.wrap(DoubleListConverter());
   static TypeConverter<List<Map<String, dynamic>>?, String?>
-      $convertertorrentFiles = const NullAwareTypeConverter.wrap(
-    TorrentFilesConverter(),
-  );
+      $convertertorrentFiles =
+      const NullAwareTypeConverter.wrap(TorrentFilesConverter());
   static TypeConverter<List<String>?, String?> $convertermirrorUrls =
       const NullAwareTypeConverter.wrap(StringListConverter());
 }
@@ -1020,6 +705,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? downloadPageUrl;
   final String? mergedAudioUrl;
   final int audioSize;
+  final int videoStreamSize;
   final double audioProgress;
   final bool pausedByUser;
   final String? youtubeQualityPreset;
@@ -1029,49 +715,51 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
   final String? thumbnailUrl;
   final bool isAppUpdate;
   final int priority;
+  final int queueOrder;
   final String? expectedSha256;
   final List<String>? mirrorUrls;
-  const DbDownloadTask({
-    required this.id,
-    required this.fileName,
-    required this.url,
-    required this.fileSize,
-    required this.downloadedBytes,
-    required this.speed,
-    this.eta,
-    required this.category,
-    required this.status,
-    required this.savePath,
-    required this.localFilePath,
-    required this.tempFilePath,
-    this.errorMessage,
-    required this.threadCount,
-    this.chunks,
-    required this.createdAt,
-    required this.updatedAt,
-    this.completedAt,
-    this.scheduledAt,
-    required this.supportsResume,
-    required this.speedLimitKbps,
-    required this.seedingEnabled,
-    required this.seedingLimited,
-    required this.seedingLimitKbps,
-    this.torrentFiles,
-    this.downloadPageUrl,
-    this.mergedAudioUrl,
-    required this.audioSize,
-    required this.audioProgress,
-    required this.pausedByUser,
-    this.youtubeQualityPreset,
-    this.notes,
-    this.playlistId,
-    this.playlistTitle,
-    this.thumbnailUrl,
-    required this.isAppUpdate,
-    required this.priority,
-    this.expectedSha256,
-    this.mirrorUrls,
-  });
+  const DbDownloadTask(
+      {required this.id,
+      required this.fileName,
+      required this.url,
+      required this.fileSize,
+      required this.downloadedBytes,
+      required this.speed,
+      this.eta,
+      required this.category,
+      required this.status,
+      required this.savePath,
+      required this.localFilePath,
+      required this.tempFilePath,
+      this.errorMessage,
+      required this.threadCount,
+      this.chunks,
+      required this.createdAt,
+      required this.updatedAt,
+      this.completedAt,
+      this.scheduledAt,
+      required this.supportsResume,
+      required this.speedLimitKbps,
+      required this.seedingEnabled,
+      required this.seedingLimited,
+      required this.seedingLimitKbps,
+      this.torrentFiles,
+      this.downloadPageUrl,
+      this.mergedAudioUrl,
+      required this.audioSize,
+      required this.videoStreamSize,
+      required this.audioProgress,
+      required this.pausedByUser,
+      this.youtubeQualityPreset,
+      this.notes,
+      this.playlistId,
+      this.playlistTitle,
+      this.thumbnailUrl,
+      required this.isAppUpdate,
+      required this.priority,
+      required this.queueOrder,
+      this.expectedSha256,
+      this.mirrorUrls});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1094,9 +782,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     }
     map['thread_count'] = Variable<int>(threadCount);
     if (!nullToAbsent || chunks != null) {
-      map['chunks'] = Variable<String>(
-        $DownloadTasksTable.$converterchunks.toSql(chunks),
-      );
+      map['chunks'] =
+          Variable<String>($DownloadTasksTable.$converterchunks.toSql(chunks));
     }
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
@@ -1113,8 +800,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     map['seeding_limit_kbps'] = Variable<int>(seedingLimitKbps);
     if (!nullToAbsent || torrentFiles != null) {
       map['torrent_files'] = Variable<String>(
-        $DownloadTasksTable.$convertertorrentFiles.toSql(torrentFiles),
-      );
+          $DownloadTasksTable.$convertertorrentFiles.toSql(torrentFiles));
     }
     if (!nullToAbsent || downloadPageUrl != null) {
       map['download_page_url'] = Variable<String>(downloadPageUrl);
@@ -1123,6 +809,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       map['merged_audio_url'] = Variable<String>(mergedAudioUrl);
     }
     map['audio_size'] = Variable<int>(audioSize);
+    map['video_stream_size'] = Variable<int>(videoStreamSize);
     map['audio_progress'] = Variable<double>(audioProgress);
     map['paused_by_user'] = Variable<bool>(pausedByUser);
     if (!nullToAbsent || youtubeQualityPreset != null) {
@@ -1142,13 +829,13 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     }
     map['is_app_update'] = Variable<bool>(isAppUpdate);
     map['priority'] = Variable<int>(priority);
+    map['queue_order'] = Variable<int>(queueOrder);
     if (!nullToAbsent || expectedSha256 != null) {
       map['expected_sha256'] = Variable<String>(expectedSha256);
     }
     if (!nullToAbsent || mirrorUrls != null) {
       map['mirror_urls'] = Variable<String>(
-        $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls),
-      );
+          $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls));
     }
     return map;
   }
@@ -1196,6 +883,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? const Value.absent()
           : Value(mergedAudioUrl),
       audioSize: Value(audioSize),
+      videoStreamSize: Value(videoStreamSize),
       audioProgress: Value(audioProgress),
       pausedByUser: Value(pausedByUser),
       youtubeQualityPreset: youtubeQualityPreset == null && nullToAbsent
@@ -1214,6 +902,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           : Value(thumbnailUrl),
       isAppUpdate: Value(isAppUpdate),
       priority: Value(priority),
+      queueOrder: Value(queueOrder),
       expectedSha256: expectedSha256 == null && nullToAbsent
           ? const Value.absent()
           : Value(expectedSha256),
@@ -1223,10 +912,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
     );
   }
 
-  factory DbDownloadTask.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
+  factory DbDownloadTask.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return DbDownloadTask(
       id: serializer.fromJson<String>(json['id']),
@@ -1253,23 +940,23 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       seedingEnabled: serializer.fromJson<bool>(json['seedingEnabled']),
       seedingLimited: serializer.fromJson<bool>(json['seedingLimited']),
       seedingLimitKbps: serializer.fromJson<int>(json['seedingLimitKbps']),
-      torrentFiles: serializer.fromJson<List<Map<String, dynamic>>?>(
-        json['torrentFiles'],
-      ),
+      torrentFiles: serializer
+          .fromJson<List<Map<String, dynamic>>?>(json['torrentFiles']),
       downloadPageUrl: serializer.fromJson<String?>(json['downloadPageUrl']),
       mergedAudioUrl: serializer.fromJson<String?>(json['mergedAudioUrl']),
       audioSize: serializer.fromJson<int>(json['audioSize']),
+      videoStreamSize: serializer.fromJson<int>(json['videoStreamSize']),
       audioProgress: serializer.fromJson<double>(json['audioProgress']),
       pausedByUser: serializer.fromJson<bool>(json['pausedByUser']),
-      youtubeQualityPreset: serializer.fromJson<String?>(
-        json['youtubeQualityPreset'],
-      ),
+      youtubeQualityPreset:
+          serializer.fromJson<String?>(json['youtubeQualityPreset']),
       notes: serializer.fromJson<String?>(json['notes']),
       playlistId: serializer.fromJson<String?>(json['playlistId']),
       playlistTitle: serializer.fromJson<String?>(json['playlistTitle']),
       thumbnailUrl: serializer.fromJson<String?>(json['thumbnailUrl']),
       isAppUpdate: serializer.fromJson<bool>(json['isAppUpdate']),
       priority: serializer.fromJson<int>(json['priority']),
+      queueOrder: serializer.fromJson<int>(json['queueOrder']),
       expectedSha256: serializer.fromJson<String?>(json['expectedSha256']),
       mirrorUrls: serializer.fromJson<List<String>?>(json['mirrorUrls']),
     );
@@ -1302,12 +989,12 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'seedingEnabled': serializer.toJson<bool>(seedingEnabled),
       'seedingLimited': serializer.toJson<bool>(seedingLimited),
       'seedingLimitKbps': serializer.toJson<int>(seedingLimitKbps),
-      'torrentFiles': serializer.toJson<List<Map<String, dynamic>>?>(
-        torrentFiles,
-      ),
+      'torrentFiles':
+          serializer.toJson<List<Map<String, dynamic>>?>(torrentFiles),
       'downloadPageUrl': serializer.toJson<String?>(downloadPageUrl),
       'mergedAudioUrl': serializer.toJson<String?>(mergedAudioUrl),
       'audioSize': serializer.toJson<int>(audioSize),
+      'videoStreamSize': serializer.toJson<int>(videoStreamSize),
       'audioProgress': serializer.toJson<double>(audioProgress),
       'pausedByUser': serializer.toJson<bool>(pausedByUser),
       'youtubeQualityPreset': serializer.toJson<String?>(youtubeQualityPreset),
@@ -1317,52 +1004,55 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       'thumbnailUrl': serializer.toJson<String?>(thumbnailUrl),
       'isAppUpdate': serializer.toJson<bool>(isAppUpdate),
       'priority': serializer.toJson<int>(priority),
+      'queueOrder': serializer.toJson<int>(queueOrder),
       'expectedSha256': serializer.toJson<String?>(expectedSha256),
       'mirrorUrls': serializer.toJson<List<String>?>(mirrorUrls),
     };
   }
 
-  DbDownloadTask copyWith({
-    String? id,
-    String? fileName,
-    String? url,
-    int? fileSize,
-    int? downloadedBytes,
-    double? speed,
-    Value<int?> eta = const Value.absent(),
-    String? category,
-    String? status,
-    String? savePath,
-    String? localFilePath,
-    String? tempFilePath,
-    Value<String?> errorMessage = const Value.absent(),
-    int? threadCount,
-    Value<List<double>?> chunks = const Value.absent(),
-    int? createdAt,
-    int? updatedAt,
-    Value<int?> completedAt = const Value.absent(),
-    Value<int?> scheduledAt = const Value.absent(),
-    bool? supportsResume,
-    int? speedLimitKbps,
-    bool? seedingEnabled,
-    bool? seedingLimited,
-    int? seedingLimitKbps,
-    Value<List<Map<String, dynamic>>?> torrentFiles = const Value.absent(),
-    Value<String?> downloadPageUrl = const Value.absent(),
-    Value<String?> mergedAudioUrl = const Value.absent(),
-    int? audioSize,
-    double? audioProgress,
-    bool? pausedByUser,
-    Value<String?> youtubeQualityPreset = const Value.absent(),
-    Value<String?> notes = const Value.absent(),
-    Value<String?> playlistId = const Value.absent(),
-    Value<String?> playlistTitle = const Value.absent(),
-    Value<String?> thumbnailUrl = const Value.absent(),
-    bool? isAppUpdate,
-    int? priority,
-    Value<String?> expectedSha256 = const Value.absent(),
-    Value<List<String>?> mirrorUrls = const Value.absent(),
-  }) =>
+  DbDownloadTask copyWith(
+          {String? id,
+          String? fileName,
+          String? url,
+          int? fileSize,
+          int? downloadedBytes,
+          double? speed,
+          Value<int?> eta = const Value.absent(),
+          String? category,
+          String? status,
+          String? savePath,
+          String? localFilePath,
+          String? tempFilePath,
+          Value<String?> errorMessage = const Value.absent(),
+          int? threadCount,
+          Value<List<double>?> chunks = const Value.absent(),
+          int? createdAt,
+          int? updatedAt,
+          Value<int?> completedAt = const Value.absent(),
+          Value<int?> scheduledAt = const Value.absent(),
+          bool? supportsResume,
+          int? speedLimitKbps,
+          bool? seedingEnabled,
+          bool? seedingLimited,
+          int? seedingLimitKbps,
+          Value<List<Map<String, dynamic>>?> torrentFiles =
+              const Value.absent(),
+          Value<String?> downloadPageUrl = const Value.absent(),
+          Value<String?> mergedAudioUrl = const Value.absent(),
+          int? audioSize,
+          int? videoStreamSize,
+          double? audioProgress,
+          bool? pausedByUser,
+          Value<String?> youtubeQualityPreset = const Value.absent(),
+          Value<String?> notes = const Value.absent(),
+          Value<String?> playlistId = const Value.absent(),
+          Value<String?> playlistTitle = const Value.absent(),
+          Value<String?> thumbnailUrl = const Value.absent(),
+          bool? isAppUpdate,
+          int? priority,
+          int? queueOrder,
+          Value<String?> expectedSha256 = const Value.absent(),
+          Value<List<String>?> mirrorUrls = const Value.absent()}) =>
       DbDownloadTask(
         id: id ?? this.id,
         fileName: fileName ?? this.fileName,
@@ -1397,6 +1087,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         mergedAudioUrl:
             mergedAudioUrl.present ? mergedAudioUrl.value : this.mergedAudioUrl,
         audioSize: audioSize ?? this.audioSize,
+        videoStreamSize: videoStreamSize ?? this.videoStreamSize,
         audioProgress: audioProgress ?? this.audioProgress,
         pausedByUser: pausedByUser ?? this.pausedByUser,
         youtubeQualityPreset: youtubeQualityPreset.present
@@ -1410,6 +1101,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
             thumbnailUrl.present ? thumbnailUrl.value : this.thumbnailUrl,
         isAppUpdate: isAppUpdate ?? this.isAppUpdate,
         priority: priority ?? this.priority,
+        queueOrder: queueOrder ?? this.queueOrder,
         expectedSha256:
             expectedSha256.present ? expectedSha256.value : this.expectedSha256,
         mirrorUrls: mirrorUrls.present ? mirrorUrls.value : this.mirrorUrls,
@@ -1471,6 +1163,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ? data.mergedAudioUrl.value
           : this.mergedAudioUrl,
       audioSize: data.audioSize.present ? data.audioSize.value : this.audioSize,
+      videoStreamSize: data.videoStreamSize.present
+          ? data.videoStreamSize.value
+          : this.videoStreamSize,
       audioProgress: data.audioProgress.present
           ? data.audioProgress.value
           : this.audioProgress,
@@ -1492,6 +1187,8 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
       isAppUpdate:
           data.isAppUpdate.present ? data.isAppUpdate.value : this.isAppUpdate,
       priority: data.priority.present ? data.priority.value : this.priority,
+      queueOrder:
+          data.queueOrder.present ? data.queueOrder.value : this.queueOrder,
       expectedSha256: data.expectedSha256.present
           ? data.expectedSha256.value
           : this.expectedSha256,
@@ -1531,6 +1228,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('downloadPageUrl: $downloadPageUrl, ')
           ..write('mergedAudioUrl: $mergedAudioUrl, ')
           ..write('audioSize: $audioSize, ')
+          ..write('videoStreamSize: $videoStreamSize, ')
           ..write('audioProgress: $audioProgress, ')
           ..write('pausedByUser: $pausedByUser, ')
           ..write('youtubeQualityPreset: $youtubeQualityPreset, ')
@@ -1540,6 +1238,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           ..write('thumbnailUrl: $thumbnailUrl, ')
           ..write('isAppUpdate: $isAppUpdate, ')
           ..write('priority: $priority, ')
+          ..write('queueOrder: $queueOrder, ')
           ..write('expectedSha256: $expectedSha256, ')
           ..write('mirrorUrls: $mirrorUrls')
           ..write(')'))
@@ -1576,6 +1275,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         downloadPageUrl,
         mergedAudioUrl,
         audioSize,
+        videoStreamSize,
         audioProgress,
         pausedByUser,
         youtubeQualityPreset,
@@ -1585,8 +1285,9 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
         thumbnailUrl,
         isAppUpdate,
         priority,
+        queueOrder,
         expectedSha256,
-        mirrorUrls,
+        mirrorUrls
       ]);
   @override
   bool operator ==(Object other) =>
@@ -1620,6 +1321,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.downloadPageUrl == this.downloadPageUrl &&
           other.mergedAudioUrl == this.mergedAudioUrl &&
           other.audioSize == this.audioSize &&
+          other.videoStreamSize == this.videoStreamSize &&
           other.audioProgress == this.audioProgress &&
           other.pausedByUser == this.pausedByUser &&
           other.youtubeQualityPreset == this.youtubeQualityPreset &&
@@ -1629,6 +1331,7 @@ class DbDownloadTask extends DataClass implements Insertable<DbDownloadTask> {
           other.thumbnailUrl == this.thumbnailUrl &&
           other.isAppUpdate == this.isAppUpdate &&
           other.priority == this.priority &&
+          other.queueOrder == this.queueOrder &&
           other.expectedSha256 == this.expectedSha256 &&
           other.mirrorUrls == this.mirrorUrls);
 }
@@ -1662,6 +1365,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> downloadPageUrl;
   final Value<String?> mergedAudioUrl;
   final Value<int> audioSize;
+  final Value<int> videoStreamSize;
   final Value<double> audioProgress;
   final Value<bool> pausedByUser;
   final Value<String?> youtubeQualityPreset;
@@ -1671,6 +1375,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
   final Value<String?> thumbnailUrl;
   final Value<bool> isAppUpdate;
   final Value<int> priority;
+  final Value<int> queueOrder;
   final Value<String?> expectedSha256;
   final Value<List<String>?> mirrorUrls;
   final Value<int> rowid;
@@ -1703,6 +1408,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.downloadPageUrl = const Value.absent(),
     this.mergedAudioUrl = const Value.absent(),
     this.audioSize = const Value.absent(),
+    this.videoStreamSize = const Value.absent(),
     this.audioProgress = const Value.absent(),
     this.pausedByUser = const Value.absent(),
     this.youtubeQualityPreset = const Value.absent(),
@@ -1712,6 +1418,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.thumbnailUrl = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
     this.priority = const Value.absent(),
+    this.queueOrder = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
     this.mirrorUrls = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1745,6 +1452,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.downloadPageUrl = const Value.absent(),
     this.mergedAudioUrl = const Value.absent(),
     this.audioSize = const Value.absent(),
+    this.videoStreamSize = const Value.absent(),
     this.audioProgress = const Value.absent(),
     this.pausedByUser = const Value.absent(),
     this.youtubeQualityPreset = const Value.absent(),
@@ -1754,6 +1462,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     this.thumbnailUrl = const Value.absent(),
     this.isAppUpdate = const Value.absent(),
     this.priority = const Value.absent(),
+    this.queueOrder = const Value.absent(),
     this.expectedSha256 = const Value.absent(),
     this.mirrorUrls = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1797,6 +1506,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? downloadPageUrl,
     Expression<String>? mergedAudioUrl,
     Expression<int>? audioSize,
+    Expression<int>? videoStreamSize,
     Expression<double>? audioProgress,
     Expression<bool>? pausedByUser,
     Expression<String>? youtubeQualityPreset,
@@ -1806,6 +1516,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     Expression<String>? thumbnailUrl,
     Expression<bool>? isAppUpdate,
     Expression<int>? priority,
+    Expression<int>? queueOrder,
     Expression<String>? expectedSha256,
     Expression<String>? mirrorUrls,
     Expression<int>? rowid,
@@ -1839,6 +1550,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (downloadPageUrl != null) 'download_page_url': downloadPageUrl,
       if (mergedAudioUrl != null) 'merged_audio_url': mergedAudioUrl,
       if (audioSize != null) 'audio_size': audioSize,
+      if (videoStreamSize != null) 'video_stream_size': videoStreamSize,
       if (audioProgress != null) 'audio_progress': audioProgress,
       if (pausedByUser != null) 'paused_by_user': pausedByUser,
       if (youtubeQualityPreset != null)
@@ -1849,54 +1561,56 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
       if (isAppUpdate != null) 'is_app_update': isAppUpdate,
       if (priority != null) 'priority': priority,
+      if (queueOrder != null) 'queue_order': queueOrder,
       if (expectedSha256 != null) 'expected_sha256': expectedSha256,
       if (mirrorUrls != null) 'mirror_urls': mirrorUrls,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
-  DownloadTasksCompanion copyWith({
-    Value<String>? id,
-    Value<String>? fileName,
-    Value<String>? url,
-    Value<int>? fileSize,
-    Value<int>? downloadedBytes,
-    Value<double>? speed,
-    Value<int?>? eta,
-    Value<String>? category,
-    Value<String>? status,
-    Value<String>? savePath,
-    Value<String>? localFilePath,
-    Value<String>? tempFilePath,
-    Value<String?>? errorMessage,
-    Value<int>? threadCount,
-    Value<List<double>?>? chunks,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-    Value<int?>? completedAt,
-    Value<int?>? scheduledAt,
-    Value<bool>? supportsResume,
-    Value<int>? speedLimitKbps,
-    Value<bool>? seedingEnabled,
-    Value<bool>? seedingLimited,
-    Value<int>? seedingLimitKbps,
-    Value<List<Map<String, dynamic>>?>? torrentFiles,
-    Value<String?>? downloadPageUrl,
-    Value<String?>? mergedAudioUrl,
-    Value<int>? audioSize,
-    Value<double>? audioProgress,
-    Value<bool>? pausedByUser,
-    Value<String?>? youtubeQualityPreset,
-    Value<String?>? notes,
-    Value<String?>? playlistId,
-    Value<String?>? playlistTitle,
-    Value<String?>? thumbnailUrl,
-    Value<bool>? isAppUpdate,
-    Value<int>? priority,
-    Value<String?>? expectedSha256,
-    Value<List<String>?>? mirrorUrls,
-    Value<int>? rowid,
-  }) {
+  DownloadTasksCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? fileName,
+      Value<String>? url,
+      Value<int>? fileSize,
+      Value<int>? downloadedBytes,
+      Value<double>? speed,
+      Value<int?>? eta,
+      Value<String>? category,
+      Value<String>? status,
+      Value<String>? savePath,
+      Value<String>? localFilePath,
+      Value<String>? tempFilePath,
+      Value<String?>? errorMessage,
+      Value<int>? threadCount,
+      Value<List<double>?>? chunks,
+      Value<int>? createdAt,
+      Value<int>? updatedAt,
+      Value<int?>? completedAt,
+      Value<int?>? scheduledAt,
+      Value<bool>? supportsResume,
+      Value<int>? speedLimitKbps,
+      Value<bool>? seedingEnabled,
+      Value<bool>? seedingLimited,
+      Value<int>? seedingLimitKbps,
+      Value<List<Map<String, dynamic>>?>? torrentFiles,
+      Value<String?>? downloadPageUrl,
+      Value<String?>? mergedAudioUrl,
+      Value<int>? audioSize,
+      Value<int>? videoStreamSize,
+      Value<double>? audioProgress,
+      Value<bool>? pausedByUser,
+      Value<String?>? youtubeQualityPreset,
+      Value<String?>? notes,
+      Value<String?>? playlistId,
+      Value<String?>? playlistTitle,
+      Value<String?>? thumbnailUrl,
+      Value<bool>? isAppUpdate,
+      Value<int>? priority,
+      Value<int>? queueOrder,
+      Value<String?>? expectedSha256,
+      Value<List<String>?>? mirrorUrls,
+      Value<int>? rowid}) {
     return DownloadTasksCompanion(
       id: id ?? this.id,
       fileName: fileName ?? this.fileName,
@@ -1926,6 +1640,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       downloadPageUrl: downloadPageUrl ?? this.downloadPageUrl,
       mergedAudioUrl: mergedAudioUrl ?? this.mergedAudioUrl,
       audioSize: audioSize ?? this.audioSize,
+      videoStreamSize: videoStreamSize ?? this.videoStreamSize,
       audioProgress: audioProgress ?? this.audioProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
       youtubeQualityPreset: youtubeQualityPreset ?? this.youtubeQualityPreset,
@@ -1935,6 +1650,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
       isAppUpdate: isAppUpdate ?? this.isAppUpdate,
       priority: priority ?? this.priority,
+      queueOrder: queueOrder ?? this.queueOrder,
       expectedSha256: expectedSha256 ?? this.expectedSha256,
       mirrorUrls: mirrorUrls ?? this.mirrorUrls,
       rowid: rowid ?? this.rowid,
@@ -1988,8 +1704,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     }
     if (chunks.present) {
       map['chunks'] = Variable<String>(
-        $DownloadTasksTable.$converterchunks.toSql(chunks.value),
-      );
+          $DownloadTasksTable.$converterchunks.toSql(chunks.value));
     }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
@@ -2020,8 +1735,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     }
     if (torrentFiles.present) {
       map['torrent_files'] = Variable<String>(
-        $DownloadTasksTable.$convertertorrentFiles.toSql(torrentFiles.value),
-      );
+          $DownloadTasksTable.$convertertorrentFiles.toSql(torrentFiles.value));
     }
     if (downloadPageUrl.present) {
       map['download_page_url'] = Variable<String>(downloadPageUrl.value);
@@ -2032,6 +1746,9 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (audioSize.present) {
       map['audio_size'] = Variable<int>(audioSize.value);
     }
+    if (videoStreamSize.present) {
+      map['video_stream_size'] = Variable<int>(videoStreamSize.value);
+    }
     if (audioProgress.present) {
       map['audio_progress'] = Variable<double>(audioProgress.value);
     }
@@ -2039,9 +1756,8 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
       map['paused_by_user'] = Variable<bool>(pausedByUser.value);
     }
     if (youtubeQualityPreset.present) {
-      map['youtube_quality_preset'] = Variable<String>(
-        youtubeQualityPreset.value,
-      );
+      map['youtube_quality_preset'] =
+          Variable<String>(youtubeQualityPreset.value);
     }
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
@@ -2061,13 +1777,15 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
     if (priority.present) {
       map['priority'] = Variable<int>(priority.value);
     }
+    if (queueOrder.present) {
+      map['queue_order'] = Variable<int>(queueOrder.value);
+    }
     if (expectedSha256.present) {
       map['expected_sha256'] = Variable<String>(expectedSha256.value);
     }
     if (mirrorUrls.present) {
       map['mirror_urls'] = Variable<String>(
-        $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls.value),
-      );
+          $DownloadTasksTable.$convertermirrorUrls.toSql(mirrorUrls.value));
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -2106,6 +1824,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('downloadPageUrl: $downloadPageUrl, ')
           ..write('mergedAudioUrl: $mergedAudioUrl, ')
           ..write('audioSize: $audioSize, ')
+          ..write('videoStreamSize: $videoStreamSize, ')
           ..write('audioProgress: $audioProgress, ')
           ..write('pausedByUser: $pausedByUser, ')
           ..write('youtubeQualityPreset: $youtubeQualityPreset, ')
@@ -2115,6 +1834,7 @@ class DownloadTasksCompanion extends UpdateCompanion<DbDownloadTask> {
           ..write('thumbnailUrl: $thumbnailUrl, ')
           ..write('isAppUpdate: $isAppUpdate, ')
           ..write('priority: $priority, ')
+          ..write('queueOrder: $queueOrder, ')
           ..write('expectedSha256: $expectedSha256, ')
           ..write('mirrorUrls: $mirrorUrls, ')
           ..write('rowid: $rowid')
@@ -2132,50 +1852,29 @@ class $BookmarksTable extends Bookmarks
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
-    'title',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'title', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _urlMeta = const VerificationMeta('url');
   @override
   late final GeneratedColumn<String> url = GeneratedColumn<String>(
-    'url',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'url', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _folderMeta = const VerificationMeta('folder');
   @override
   late final GeneratedColumn<String> folder = GeneratedColumn<String>(
-    'folder',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
+      'folder', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
   @override
   late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
   @override
   List<GeneratedColumn> get $columns => [id, title, url, folder, createdAt];
   @override
@@ -2184,10 +1883,8 @@ class $BookmarksTable extends Bookmarks
   String get actualTableName => $name;
   static const String $name = 'bookmarks';
   @override
-  VerificationContext validateIntegrity(
-    Insertable<DbBookmark> instance, {
-    bool isInserting = false,
-  }) {
+  VerificationContext validateIntegrity(Insertable<DbBookmark> instance,
+      {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -2197,31 +1894,23 @@ class $BookmarksTable extends Bookmarks
     }
     if (data.containsKey('title')) {
       context.handle(
-        _titleMeta,
-        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
-      );
+          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
     } else if (isInserting) {
       context.missing(_titleMeta);
     }
     if (data.containsKey('url')) {
       context.handle(
-        _urlMeta,
-        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
-      );
+          _urlMeta, url.isAcceptableOrUnknown(data['url']!, _urlMeta));
     } else if (isInserting) {
       context.missing(_urlMeta);
     }
     if (data.containsKey('folder')) {
-      context.handle(
-        _folderMeta,
-        folder.isAcceptableOrUnknown(data['folder']!, _folderMeta),
-      );
+      context.handle(_folderMeta,
+          folder.isAcceptableOrUnknown(data['folder']!, _folderMeta));
     }
     if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
@@ -2234,26 +1923,16 @@ class $BookmarksTable extends Bookmarks
   DbBookmark map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DbBookmark(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      title: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}title'],
-      )!,
-      url: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}url'],
-      )!,
-      folder: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}folder'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created_at'],
-      )!,
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      title: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
+      url: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}url'])!,
+      folder: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}folder']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
     );
   }
 
@@ -2269,13 +1948,12 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
   final String url;
   final String? folder;
   final int createdAt;
-  const DbBookmark({
-    required this.id,
-    required this.title,
-    required this.url,
-    this.folder,
-    required this.createdAt,
-  });
+  const DbBookmark(
+      {required this.id,
+      required this.title,
+      required this.url,
+      this.folder,
+      required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2300,10 +1978,8 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
     );
   }
 
-  factory DbBookmark.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
+  factory DbBookmark.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return DbBookmark(
       id: serializer.fromJson<String>(json['id']),
@@ -2325,13 +2001,12 @@ class DbBookmark extends DataClass implements Insertable<DbBookmark> {
     };
   }
 
-  DbBookmark copyWith({
-    String? id,
-    String? title,
-    String? url,
-    Value<String?> folder = const Value.absent(),
-    int? createdAt,
-  }) =>
+  DbBookmark copyWith(
+          {String? id,
+          String? title,
+          String? url,
+          Value<String?> folder = const Value.absent(),
+          int? createdAt}) =>
       DbBookmark(
         id: id ?? this.id,
         title: title ?? this.title,
@@ -2418,14 +2093,13 @@ class BookmarksCompanion extends UpdateCompanion<DbBookmark> {
     });
   }
 
-  BookmarksCompanion copyWith({
-    Value<String>? id,
-    Value<String>? title,
-    Value<String>? url,
-    Value<String?>? folder,
-    Value<int>? createdAt,
-    Value<int>? rowid,
-  }) {
+  BookmarksCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? title,
+      Value<String>? url,
+      Value<String?>? folder,
+      Value<int>? createdAt,
+      Value<int>? rowid}) {
     return BookmarksCompanion(
       id: id ?? this.id,
       title: title ?? this.title,
@@ -2483,45 +2157,28 @@ class $BrowserHistoryTable extends BrowserHistory
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'PRIMARY KEY AUTOINCREMENT',
-    ),
-  );
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
   static const VerificationMeta _urlMeta = const VerificationMeta('url');
   @override
   late final GeneratedColumn<String> url = GeneratedColumn<String>(
-    'url',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'url', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
-    'title',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _visitedAtMeta = const VerificationMeta(
-    'visitedAt',
-  );
+      'title', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _visitedAtMeta =
+      const VerificationMeta('visitedAt');
   @override
   late final GeneratedColumn<int> visitedAt = GeneratedColumn<int>(
-    'visited_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
+      'visited_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
   @override
   List<GeneratedColumn> get $columns => [id, url, title, visitedAt];
   @override
@@ -2530,10 +2187,8 @@ class $BrowserHistoryTable extends BrowserHistory
   String get actualTableName => $name;
   static const String $name = 'browser_history';
   @override
-  VerificationContext validateIntegrity(
-    Insertable<DbBrowserHistory> instance, {
-    bool isInserting = false,
-  }) {
+  VerificationContext validateIntegrity(Insertable<DbBrowserHistory> instance,
+      {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -2541,25 +2196,19 @@ class $BrowserHistoryTable extends BrowserHistory
     }
     if (data.containsKey('url')) {
       context.handle(
-        _urlMeta,
-        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
-      );
+          _urlMeta, url.isAcceptableOrUnknown(data['url']!, _urlMeta));
     } else if (isInserting) {
       context.missing(_urlMeta);
     }
     if (data.containsKey('title')) {
       context.handle(
-        _titleMeta,
-        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
-      );
+          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
     } else if (isInserting) {
       context.missing(_titleMeta);
     }
     if (data.containsKey('visited_at')) {
-      context.handle(
-        _visitedAtMeta,
-        visitedAt.isAcceptableOrUnknown(data['visited_at']!, _visitedAtMeta),
-      );
+      context.handle(_visitedAtMeta,
+          visitedAt.isAcceptableOrUnknown(data['visited_at']!, _visitedAtMeta));
     } else if (isInserting) {
       context.missing(_visitedAtMeta);
     }
@@ -2572,22 +2221,14 @@ class $BrowserHistoryTable extends BrowserHistory
   DbBrowserHistory map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DbBrowserHistory(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      url: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}url'],
-      )!,
-      title: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}title'],
-      )!,
-      visitedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}visited_at'],
-      )!,
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      url: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}url'])!,
+      title: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
+      visitedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}visited_at'])!,
     );
   }
 
@@ -2603,12 +2244,11 @@ class DbBrowserHistory extends DataClass
   final String url;
   final String title;
   final int visitedAt;
-  const DbBrowserHistory({
-    required this.id,
-    required this.url,
-    required this.title,
-    required this.visitedAt,
-  });
+  const DbBrowserHistory(
+      {required this.id,
+      required this.url,
+      required this.title,
+      required this.visitedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2628,10 +2268,8 @@ class DbBrowserHistory extends DataClass
     );
   }
 
-  factory DbBrowserHistory.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
+  factory DbBrowserHistory.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return DbBrowserHistory(
       id: serializer.fromJson<int>(json['id']),
@@ -2651,12 +2289,8 @@ class DbBrowserHistory extends DataClass
     };
   }
 
-  DbBrowserHistory copyWith({
-    int? id,
-    String? url,
-    String? title,
-    int? visitedAt,
-  }) =>
+  DbBrowserHistory copyWith(
+          {int? id, String? url, String? title, int? visitedAt}) =>
       DbBrowserHistory(
         id: id ?? this.id,
         url: url ?? this.url,
@@ -2728,12 +2362,11 @@ class BrowserHistoryCompanion extends UpdateCompanion<DbBrowserHistory> {
     });
   }
 
-  BrowserHistoryCompanion copyWith({
-    Value<int>? id,
-    Value<String>? url,
-    Value<String>? title,
-    Value<int>? visitedAt,
-  }) {
+  BrowserHistoryCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? url,
+      Value<String>? title,
+      Value<int>? visitedAt}) {
     return BrowserHistoryCompanion(
       id: id ?? this.id,
       url: url ?? this.url,
@@ -2781,88 +2414,55 @@ class $BrowserTabsTable extends BrowserTabs
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _urlMeta = const VerificationMeta('url');
   @override
   late final GeneratedColumn<String> url = GeneratedColumn<String>(
-    'url',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
+      'url', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
-    'title',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(''),
-  );
-  static const VerificationMeta _isActiveMeta = const VerificationMeta(
-    'isActive',
-  );
+      'title', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _isActiveMeta =
+      const VerificationMeta('isActive');
   @override
   late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
-    'is_active',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_active" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _positionMeta = const VerificationMeta(
-    'position',
-  );
+      'is_active', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_active" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _positionMeta =
+      const VerificationMeta('position');
   @override
   late final GeneratedColumn<int> position = GeneratedColumn<int>(
-    'position',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
+      'position', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
   @override
   late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
+      'created_at', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
   @override
-  List<GeneratedColumn> get $columns => [
-        id,
-        url,
-        title,
-        isActive,
-        position,
-        createdAt,
-      ];
+  List<GeneratedColumn> get $columns =>
+      [id, url, title, isActive, position, createdAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'browser_tabs';
   @override
-  VerificationContext validateIntegrity(
-    Insertable<SavedBrowserTab> instance, {
-    bool isInserting = false,
-  }) {
+  VerificationContext validateIntegrity(Insertable<SavedBrowserTab> instance,
+      {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -2872,35 +2472,25 @@ class $BrowserTabsTable extends BrowserTabs
     }
     if (data.containsKey('url')) {
       context.handle(
-        _urlMeta,
-        url.isAcceptableOrUnknown(data['url']!, _urlMeta),
-      );
+          _urlMeta, url.isAcceptableOrUnknown(data['url']!, _urlMeta));
     } else if (isInserting) {
       context.missing(_urlMeta);
     }
     if (data.containsKey('title')) {
       context.handle(
-        _titleMeta,
-        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
-      );
+          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
     }
     if (data.containsKey('is_active')) {
-      context.handle(
-        _isActiveMeta,
-        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
-      );
+      context.handle(_isActiveMeta,
+          isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta));
     }
     if (data.containsKey('position')) {
-      context.handle(
-        _positionMeta,
-        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
-      );
+      context.handle(_positionMeta,
+          position.isAcceptableOrUnknown(data['position']!, _positionMeta));
     }
     if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
@@ -2913,30 +2503,18 @@ class $BrowserTabsTable extends BrowserTabs
   SavedBrowserTab map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SavedBrowserTab(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      url: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}url'],
-      )!,
-      title: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}title'],
-      )!,
-      isActive: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_active'],
-      )!,
-      position: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}position'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created_at'],
-      )!,
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      url: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}url'])!,
+      title: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
+      isActive: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_active'])!,
+      position: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}position'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}created_at'])!,
     );
   }
 
@@ -2953,14 +2531,13 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
   final bool isActive;
   final int position;
   final int createdAt;
-  const SavedBrowserTab({
-    required this.id,
-    required this.url,
-    required this.title,
-    required this.isActive,
-    required this.position,
-    required this.createdAt,
-  });
+  const SavedBrowserTab(
+      {required this.id,
+      required this.url,
+      required this.title,
+      required this.isActive,
+      required this.position,
+      required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2984,10 +2561,8 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
     );
   }
 
-  factory SavedBrowserTab.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
+  factory SavedBrowserTab.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SavedBrowserTab(
       id: serializer.fromJson<String>(json['id']),
@@ -3011,14 +2586,13 @@ class SavedBrowserTab extends DataClass implements Insertable<SavedBrowserTab> {
     };
   }
 
-  SavedBrowserTab copyWith({
-    String? id,
-    String? url,
-    String? title,
-    bool? isActive,
-    int? position,
-    int? createdAt,
-  }) =>
+  SavedBrowserTab copyWith(
+          {String? id,
+          String? url,
+          String? title,
+          bool? isActive,
+          int? position,
+          int? createdAt}) =>
       SavedBrowserTab(
         id: id ?? this.id,
         url: url ?? this.url,
@@ -3114,15 +2688,14 @@ class BrowserTabsCompanion extends UpdateCompanion<SavedBrowserTab> {
     });
   }
 
-  BrowserTabsCompanion copyWith({
-    Value<String>? id,
-    Value<String>? url,
-    Value<String>? title,
-    Value<bool>? isActive,
-    Value<int>? position,
-    Value<int>? createdAt,
-    Value<int>? rowid,
-  }) {
+  BrowserTabsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? url,
+      Value<String>? title,
+      Value<bool>? isActive,
+      Value<int>? position,
+      Value<int>? createdAt,
+      Value<int>? rowid}) {
     return BrowserTabsCompanion(
       id: id ?? this.id,
       url: url ?? this.url,
@@ -3187,12 +2760,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [
-        downloadTasks,
-        bookmarks,
-        browserHistory,
-        browserTabs,
-      ];
+  List<DatabaseSchemaEntity> get allSchemaEntities =>
+      [downloadTasks, bookmarks, browserHistory, browserTabs];
 }
 
 typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
@@ -3225,6 +2794,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<String?> downloadPageUrl,
   Value<String?> mergedAudioUrl,
   Value<int> audioSize,
+  Value<int> videoStreamSize,
   Value<double> audioProgress,
   Value<bool> pausedByUser,
   Value<String?> youtubeQualityPreset,
@@ -3234,6 +2804,7 @@ typedef $$DownloadTasksTableCreateCompanionBuilder = DownloadTasksCompanion
   Value<String?> thumbnailUrl,
   Value<bool> isAppUpdate,
   Value<int> priority,
+  Value<int> queueOrder,
   Value<String?> expectedSha256,
   Value<List<String>?> mirrorUrls,
   Value<int> rowid,
@@ -3268,6 +2839,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<String?> downloadPageUrl,
   Value<String?> mergedAudioUrl,
   Value<int> audioSize,
+  Value<int> videoStreamSize,
   Value<double> audioProgress,
   Value<bool> pausedByUser,
   Value<String?> youtubeQualityPreset,
@@ -3277,6 +2849,7 @@ typedef $$DownloadTasksTableUpdateCompanionBuilder = DownloadTasksCompanion
   Value<String?> thumbnailUrl,
   Value<bool> isAppUpdate,
   Value<int> priority,
+  Value<int> queueOrder,
   Value<String?> expectedSha256,
   Value<List<String>?> mirrorUrls,
   Value<int> rowid,
@@ -3292,203 +2865,145 @@ class $$DownloadTasksTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.id, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get fileName => $composableBuilder(
-        column: $table.fileName,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.fileName, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.url, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get fileSize => $composableBuilder(
-        column: $table.fileSize,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.fileSize, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get downloadedBytes => $composableBuilder(
-        column: $table.downloadedBytes,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.downloadedBytes,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get speed => $composableBuilder(
-        column: $table.speed,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.speed, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get eta => $composableBuilder(
-        column: $table.eta,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.eta, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get category => $composableBuilder(
-        column: $table.category,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.category, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get status => $composableBuilder(
-        column: $table.status,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.status, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get savePath => $composableBuilder(
-        column: $table.savePath,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.savePath, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get localFilePath => $composableBuilder(
-        column: $table.localFilePath,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.localFilePath, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get tempFilePath => $composableBuilder(
-        column: $table.tempFilePath,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.tempFilePath, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get errorMessage => $composableBuilder(
-        column: $table.errorMessage,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.errorMessage, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get threadCount => $composableBuilder(
-        column: $table.threadCount,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.threadCount, builder: (column) => ColumnFilters(column));
 
   ColumnWithTypeConverterFilters<List<double>?, List<double>, String>
       get chunks => $composableBuilder(
-            column: $table.chunks,
-            builder: (column) => ColumnWithTypeConverterFilters(column),
-          );
+          column: $table.chunks,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
 
   ColumnFilters<int> get createdAt => $composableBuilder(
-        column: $table.createdAt,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get updatedAt => $composableBuilder(
-        column: $table.updatedAt,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get completedAt => $composableBuilder(
-        column: $table.completedAt,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.completedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get scheduledAt => $composableBuilder(
-        column: $table.scheduledAt,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.scheduledAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get supportsResume => $composableBuilder(
-        column: $table.supportsResume,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.supportsResume,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get speedLimitKbps => $composableBuilder(
-        column: $table.speedLimitKbps,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.speedLimitKbps,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get seedingEnabled => $composableBuilder(
-        column: $table.seedingEnabled,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.seedingEnabled,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get seedingLimited => $composableBuilder(
-        column: $table.seedingLimited,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.seedingLimited,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get seedingLimitKbps => $composableBuilder(
-        column: $table.seedingLimitKbps,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.seedingLimitKbps,
+      builder: (column) => ColumnFilters(column));
 
   ColumnWithTypeConverterFilters<List<Map<String, dynamic>>?,
           List<Map<String, dynamic>>, String>
       get torrentFiles => $composableBuilder(
-            column: $table.torrentFiles,
-            builder: (column) => ColumnWithTypeConverterFilters(column),
-          );
+          column: $table.torrentFiles,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
 
   ColumnFilters<String> get downloadPageUrl => $composableBuilder(
-        column: $table.downloadPageUrl,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.downloadPageUrl,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get mergedAudioUrl => $composableBuilder(
-        column: $table.mergedAudioUrl,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.mergedAudioUrl,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get audioSize => $composableBuilder(
-        column: $table.audioSize,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.audioSize, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get videoStreamSize => $composableBuilder(
+      column: $table.videoStreamSize,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get audioProgress => $composableBuilder(
-        column: $table.audioProgress,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.audioProgress, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get pausedByUser => $composableBuilder(
-        column: $table.pausedByUser,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.pausedByUser, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get youtubeQualityPreset => $composableBuilder(
-        column: $table.youtubeQualityPreset,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.youtubeQualityPreset,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get notes => $composableBuilder(
-        column: $table.notes,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.notes, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get playlistId => $composableBuilder(
-        column: $table.playlistId,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.playlistId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get playlistTitle => $composableBuilder(
-        column: $table.playlistTitle,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.playlistTitle, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get thumbnailUrl => $composableBuilder(
-        column: $table.thumbnailUrl,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.thumbnailUrl, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isAppUpdate => $composableBuilder(
-        column: $table.isAppUpdate,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.isAppUpdate, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get priority => $composableBuilder(
-        column: $table.priority,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.priority, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get queueOrder => $composableBuilder(
+      column: $table.queueOrder, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get expectedSha256 => $composableBuilder(
-        column: $table.expectedSha256,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.expectedSha256,
+      builder: (column) => ColumnFilters(column));
 
   ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
       get mirrorUrls => $composableBuilder(
-            column: $table.mirrorUrls,
-            builder: (column) => ColumnWithTypeConverterFilters(column),
-          );
+          column: $table.mirrorUrls,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
 }
 
 class $$DownloadTasksTableOrderingComposer
@@ -3501,199 +3016,146 @@ class $$DownloadTasksTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.id, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get fileName => $composableBuilder(
-        column: $table.fileName,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.fileName, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.url, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get fileSize => $composableBuilder(
-        column: $table.fileSize,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.fileSize, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get downloadedBytes => $composableBuilder(
-        column: $table.downloadedBytes,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.downloadedBytes,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<double> get speed => $composableBuilder(
-        column: $table.speed,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.speed, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get eta => $composableBuilder(
-        column: $table.eta,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.eta, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get category => $composableBuilder(
-        column: $table.category,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.category, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get status => $composableBuilder(
-        column: $table.status,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.status, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get savePath => $composableBuilder(
-        column: $table.savePath,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.savePath, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get localFilePath => $composableBuilder(
-        column: $table.localFilePath,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.localFilePath,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get tempFilePath => $composableBuilder(
-        column: $table.tempFilePath,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.tempFilePath,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get errorMessage => $composableBuilder(
-        column: $table.errorMessage,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.errorMessage,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get threadCount => $composableBuilder(
-        column: $table.threadCount,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.threadCount, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get chunks => $composableBuilder(
-        column: $table.chunks,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.chunks, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
-        column: $table.createdAt,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get updatedAt => $composableBuilder(
-        column: $table.updatedAt,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get completedAt => $composableBuilder(
-        column: $table.completedAt,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.completedAt, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get scheduledAt => $composableBuilder(
-        column: $table.scheduledAt,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.scheduledAt, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get supportsResume => $composableBuilder(
-        column: $table.supportsResume,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.supportsResume,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get speedLimitKbps => $composableBuilder(
-        column: $table.speedLimitKbps,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.speedLimitKbps,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get seedingEnabled => $composableBuilder(
-        column: $table.seedingEnabled,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.seedingEnabled,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get seedingLimited => $composableBuilder(
-        column: $table.seedingLimited,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.seedingLimited,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get seedingLimitKbps => $composableBuilder(
-        column: $table.seedingLimitKbps,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.seedingLimitKbps,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get torrentFiles => $composableBuilder(
-        column: $table.torrentFiles,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.torrentFiles,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get downloadPageUrl => $composableBuilder(
-        column: $table.downloadPageUrl,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.downloadPageUrl,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get mergedAudioUrl => $composableBuilder(
-        column: $table.mergedAudioUrl,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.mergedAudioUrl,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get audioSize => $composableBuilder(
-        column: $table.audioSize,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.audioSize, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get videoStreamSize => $composableBuilder(
+      column: $table.videoStreamSize,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<double> get audioProgress => $composableBuilder(
-        column: $table.audioProgress,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.audioProgress,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get pausedByUser => $composableBuilder(
-        column: $table.pausedByUser,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.pausedByUser,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get youtubeQualityPreset => $composableBuilder(
-        column: $table.youtubeQualityPreset,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.youtubeQualityPreset,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get notes => $composableBuilder(
-        column: $table.notes,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.notes, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get playlistId => $composableBuilder(
-        column: $table.playlistId,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.playlistId, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get playlistTitle => $composableBuilder(
-        column: $table.playlistTitle,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.playlistTitle,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get thumbnailUrl => $composableBuilder(
-        column: $table.thumbnailUrl,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.thumbnailUrl,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get isAppUpdate => $composableBuilder(
-        column: $table.isAppUpdate,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.isAppUpdate, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get priority => $composableBuilder(
-        column: $table.priority,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.priority, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get queueOrder => $composableBuilder(
+      column: $table.queueOrder, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get expectedSha256 => $composableBuilder(
-        column: $table.expectedSha256,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.expectedSha256,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get mirrorUrls => $composableBuilder(
-        column: $table.mirrorUrls,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.mirrorUrls, builder: (column) => ColumnOrderings(column));
 }
 
 class $$DownloadTasksTableAnnotationComposer
@@ -3718,9 +3180,7 @@ class $$DownloadTasksTableAnnotationComposer
       $composableBuilder(column: $table.fileSize, builder: (column) => column);
 
   GeneratedColumn<int> get downloadedBytes => $composableBuilder(
-        column: $table.downloadedBytes,
-        builder: (column) => column,
-      );
+      column: $table.downloadedBytes, builder: (column) => column);
 
   GeneratedColumn<double> get speed =>
       $composableBuilder(column: $table.speed, builder: (column) => column);
@@ -3738,24 +3198,16 @@ class $$DownloadTasksTableAnnotationComposer
       $composableBuilder(column: $table.savePath, builder: (column) => column);
 
   GeneratedColumn<String> get localFilePath => $composableBuilder(
-        column: $table.localFilePath,
-        builder: (column) => column,
-      );
+      column: $table.localFilePath, builder: (column) => column);
 
   GeneratedColumn<String> get tempFilePath => $composableBuilder(
-        column: $table.tempFilePath,
-        builder: (column) => column,
-      );
+      column: $table.tempFilePath, builder: (column) => column);
 
   GeneratedColumn<String> get errorMessage => $composableBuilder(
-        column: $table.errorMessage,
-        builder: (column) => column,
-      );
+      column: $table.errorMessage, builder: (column) => column);
 
   GeneratedColumn<int> get threadCount => $composableBuilder(
-        column: $table.threadCount,
-        builder: (column) => column,
-      );
+      column: $table.threadCount, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<List<double>?, String> get chunks =>
       $composableBuilder(column: $table.chunks, builder: (column) => column);
@@ -3767,110 +3219,78 @@ class $$DownloadTasksTableAnnotationComposer
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<int> get completedAt => $composableBuilder(
-        column: $table.completedAt,
-        builder: (column) => column,
-      );
+      column: $table.completedAt, builder: (column) => column);
 
   GeneratedColumn<int> get scheduledAt => $composableBuilder(
-        column: $table.scheduledAt,
-        builder: (column) => column,
-      );
+      column: $table.scheduledAt, builder: (column) => column);
 
   GeneratedColumn<bool> get supportsResume => $composableBuilder(
-        column: $table.supportsResume,
-        builder: (column) => column,
-      );
+      column: $table.supportsResume, builder: (column) => column);
 
   GeneratedColumn<int> get speedLimitKbps => $composableBuilder(
-        column: $table.speedLimitKbps,
-        builder: (column) => column,
-      );
+      column: $table.speedLimitKbps, builder: (column) => column);
 
   GeneratedColumn<bool> get seedingEnabled => $composableBuilder(
-        column: $table.seedingEnabled,
-        builder: (column) => column,
-      );
+      column: $table.seedingEnabled, builder: (column) => column);
 
   GeneratedColumn<bool> get seedingLimited => $composableBuilder(
-        column: $table.seedingLimited,
-        builder: (column) => column,
-      );
+      column: $table.seedingLimited, builder: (column) => column);
 
   GeneratedColumn<int> get seedingLimitKbps => $composableBuilder(
-        column: $table.seedingLimitKbps,
-        builder: (column) => column,
-      );
+      column: $table.seedingLimitKbps, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<List<Map<String, dynamic>>?, String>
       get torrentFiles => $composableBuilder(
-            column: $table.torrentFiles,
-            builder: (column) => column,
-          );
+          column: $table.torrentFiles, builder: (column) => column);
 
   GeneratedColumn<String> get downloadPageUrl => $composableBuilder(
-        column: $table.downloadPageUrl,
-        builder: (column) => column,
-      );
+      column: $table.downloadPageUrl, builder: (column) => column);
 
   GeneratedColumn<String> get mergedAudioUrl => $composableBuilder(
-        column: $table.mergedAudioUrl,
-        builder: (column) => column,
-      );
+      column: $table.mergedAudioUrl, builder: (column) => column);
 
   GeneratedColumn<int> get audioSize =>
       $composableBuilder(column: $table.audioSize, builder: (column) => column);
 
+  GeneratedColumn<int> get videoStreamSize => $composableBuilder(
+      column: $table.videoStreamSize, builder: (column) => column);
+
   GeneratedColumn<double> get audioProgress => $composableBuilder(
-        column: $table.audioProgress,
-        builder: (column) => column,
-      );
+      column: $table.audioProgress, builder: (column) => column);
 
   GeneratedColumn<bool> get pausedByUser => $composableBuilder(
-        column: $table.pausedByUser,
-        builder: (column) => column,
-      );
+      column: $table.pausedByUser, builder: (column) => column);
 
   GeneratedColumn<String> get youtubeQualityPreset => $composableBuilder(
-        column: $table.youtubeQualityPreset,
-        builder: (column) => column,
-      );
+      column: $table.youtubeQualityPreset, builder: (column) => column);
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
   GeneratedColumn<String> get playlistId => $composableBuilder(
-        column: $table.playlistId,
-        builder: (column) => column,
-      );
+      column: $table.playlistId, builder: (column) => column);
 
   GeneratedColumn<String> get playlistTitle => $composableBuilder(
-        column: $table.playlistTitle,
-        builder: (column) => column,
-      );
+      column: $table.playlistTitle, builder: (column) => column);
 
   GeneratedColumn<String> get thumbnailUrl => $composableBuilder(
-        column: $table.thumbnailUrl,
-        builder: (column) => column,
-      );
+      column: $table.thumbnailUrl, builder: (column) => column);
 
   GeneratedColumn<bool> get isAppUpdate => $composableBuilder(
-        column: $table.isAppUpdate,
-        builder: (column) => column,
-      );
+      column: $table.isAppUpdate, builder: (column) => column);
 
   GeneratedColumn<int> get priority =>
       $composableBuilder(column: $table.priority, builder: (column) => column);
 
+  GeneratedColumn<int> get queueOrder => $composableBuilder(
+      column: $table.queueOrder, builder: (column) => column);
+
   GeneratedColumn<String> get expectedSha256 => $composableBuilder(
-        column: $table.expectedSha256,
-        builder: (column) => column,
-      );
+      column: $table.expectedSha256, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<List<String>?, String> get mirrorUrls =>
       $composableBuilder(
-        column: $table.mirrorUrls,
-        builder: (column) => column,
-      );
+          column: $table.mirrorUrls, builder: (column) => column);
 }
 
 class $$DownloadTasksTableTableManager extends RootTableManager<
@@ -3884,197 +3304,203 @@ class $$DownloadTasksTableTableManager extends RootTableManager<
     $$DownloadTasksTableUpdateCompanionBuilder,
     (
       DbDownloadTask,
-      BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>,
+      BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>
     ),
     DbDownloadTask,
     PrefetchHooks Function()> {
   $$DownloadTasksTableTableManager(_$AppDatabase db, $DownloadTasksTable table)
-      : super(
-          TableManagerState(
-            db: db,
-            table: table,
-            createFilteringComposer: () =>
-                $$DownloadTasksTableFilterComposer($db: db, $table: table),
-            createOrderingComposer: () =>
-                $$DownloadTasksTableOrderingComposer($db: db, $table: table),
-            createComputedFieldComposer: () =>
-                $$DownloadTasksTableAnnotationComposer($db: db, $table: table),
-            updateCompanionCallback: ({
-              Value<String> id = const Value.absent(),
-              Value<String> fileName = const Value.absent(),
-              Value<String> url = const Value.absent(),
-              Value<int> fileSize = const Value.absent(),
-              Value<int> downloadedBytes = const Value.absent(),
-              Value<double> speed = const Value.absent(),
-              Value<int?> eta = const Value.absent(),
-              Value<String> category = const Value.absent(),
-              Value<String> status = const Value.absent(),
-              Value<String> savePath = const Value.absent(),
-              Value<String> localFilePath = const Value.absent(),
-              Value<String> tempFilePath = const Value.absent(),
-              Value<String?> errorMessage = const Value.absent(),
-              Value<int> threadCount = const Value.absent(),
-              Value<List<double>?> chunks = const Value.absent(),
-              Value<int> createdAt = const Value.absent(),
-              Value<int> updatedAt = const Value.absent(),
-              Value<int?> completedAt = const Value.absent(),
-              Value<int?> scheduledAt = const Value.absent(),
-              Value<bool> supportsResume = const Value.absent(),
-              Value<int> speedLimitKbps = const Value.absent(),
-              Value<bool> seedingEnabled = const Value.absent(),
-              Value<bool> seedingLimited = const Value.absent(),
-              Value<int> seedingLimitKbps = const Value.absent(),
-              Value<List<Map<String, dynamic>>?> torrentFiles =
-                  const Value.absent(),
-              Value<String?> downloadPageUrl = const Value.absent(),
-              Value<String?> mergedAudioUrl = const Value.absent(),
-              Value<int> audioSize = const Value.absent(),
-              Value<double> audioProgress = const Value.absent(),
-              Value<bool> pausedByUser = const Value.absent(),
-              Value<String?> youtubeQualityPreset = const Value.absent(),
-              Value<String?> notes = const Value.absent(),
-              Value<String?> playlistId = const Value.absent(),
-              Value<String?> playlistTitle = const Value.absent(),
-              Value<String?> thumbnailUrl = const Value.absent(),
-              Value<bool> isAppUpdate = const Value.absent(),
-              Value<int> priority = const Value.absent(),
-              Value<String?> expectedSha256 = const Value.absent(),
-              Value<List<String>?> mirrorUrls = const Value.absent(),
-              Value<int> rowid = const Value.absent(),
-            }) =>
-                DownloadTasksCompanion(
-              id: id,
-              fileName: fileName,
-              url: url,
-              fileSize: fileSize,
-              downloadedBytes: downloadedBytes,
-              speed: speed,
-              eta: eta,
-              category: category,
-              status: status,
-              savePath: savePath,
-              localFilePath: localFilePath,
-              tempFilePath: tempFilePath,
-              errorMessage: errorMessage,
-              threadCount: threadCount,
-              chunks: chunks,
-              createdAt: createdAt,
-              updatedAt: updatedAt,
-              completedAt: completedAt,
-              scheduledAt: scheduledAt,
-              supportsResume: supportsResume,
-              speedLimitKbps: speedLimitKbps,
-              seedingEnabled: seedingEnabled,
-              seedingLimited: seedingLimited,
-              seedingLimitKbps: seedingLimitKbps,
-              torrentFiles: torrentFiles,
-              downloadPageUrl: downloadPageUrl,
-              mergedAudioUrl: mergedAudioUrl,
-              audioSize: audioSize,
-              audioProgress: audioProgress,
-              pausedByUser: pausedByUser,
-              youtubeQualityPreset: youtubeQualityPreset,
-              notes: notes,
-              playlistId: playlistId,
-              playlistTitle: playlistTitle,
-              thumbnailUrl: thumbnailUrl,
-              isAppUpdate: isAppUpdate,
-              priority: priority,
-              expectedSha256: expectedSha256,
-              mirrorUrls: mirrorUrls,
-              rowid: rowid,
-            ),
-            createCompanionCallback: ({
-              required String id,
-              required String fileName,
-              required String url,
-              Value<int> fileSize = const Value.absent(),
-              Value<int> downloadedBytes = const Value.absent(),
-              Value<double> speed = const Value.absent(),
-              Value<int?> eta = const Value.absent(),
-              required String category,
-              required String status,
-              required String savePath,
-              required String localFilePath,
-              required String tempFilePath,
-              Value<String?> errorMessage = const Value.absent(),
-              required int threadCount,
-              Value<List<double>?> chunks = const Value.absent(),
-              required int createdAt,
-              required int updatedAt,
-              Value<int?> completedAt = const Value.absent(),
-              Value<int?> scheduledAt = const Value.absent(),
-              Value<bool> supportsResume = const Value.absent(),
-              Value<int> speedLimitKbps = const Value.absent(),
-              Value<bool> seedingEnabled = const Value.absent(),
-              Value<bool> seedingLimited = const Value.absent(),
-              Value<int> seedingLimitKbps = const Value.absent(),
-              Value<List<Map<String, dynamic>>?> torrentFiles =
-                  const Value.absent(),
-              Value<String?> downloadPageUrl = const Value.absent(),
-              Value<String?> mergedAudioUrl = const Value.absent(),
-              Value<int> audioSize = const Value.absent(),
-              Value<double> audioProgress = const Value.absent(),
-              Value<bool> pausedByUser = const Value.absent(),
-              Value<String?> youtubeQualityPreset = const Value.absent(),
-              Value<String?> notes = const Value.absent(),
-              Value<String?> playlistId = const Value.absent(),
-              Value<String?> playlistTitle = const Value.absent(),
-              Value<String?> thumbnailUrl = const Value.absent(),
-              Value<bool> isAppUpdate = const Value.absent(),
-              Value<int> priority = const Value.absent(),
-              Value<String?> expectedSha256 = const Value.absent(),
-              Value<List<String>?> mirrorUrls = const Value.absent(),
-              Value<int> rowid = const Value.absent(),
-            }) =>
-                DownloadTasksCompanion.insert(
-              id: id,
-              fileName: fileName,
-              url: url,
-              fileSize: fileSize,
-              downloadedBytes: downloadedBytes,
-              speed: speed,
-              eta: eta,
-              category: category,
-              status: status,
-              savePath: savePath,
-              localFilePath: localFilePath,
-              tempFilePath: tempFilePath,
-              errorMessage: errorMessage,
-              threadCount: threadCount,
-              chunks: chunks,
-              createdAt: createdAt,
-              updatedAt: updatedAt,
-              completedAt: completedAt,
-              scheduledAt: scheduledAt,
-              supportsResume: supportsResume,
-              speedLimitKbps: speedLimitKbps,
-              seedingEnabled: seedingEnabled,
-              seedingLimited: seedingLimited,
-              seedingLimitKbps: seedingLimitKbps,
-              torrentFiles: torrentFiles,
-              downloadPageUrl: downloadPageUrl,
-              mergedAudioUrl: mergedAudioUrl,
-              audioSize: audioSize,
-              audioProgress: audioProgress,
-              pausedByUser: pausedByUser,
-              youtubeQualityPreset: youtubeQualityPreset,
-              notes: notes,
-              playlistId: playlistId,
-              playlistTitle: playlistTitle,
-              thumbnailUrl: thumbnailUrl,
-              isAppUpdate: isAppUpdate,
-              priority: priority,
-              expectedSha256: expectedSha256,
-              mirrorUrls: mirrorUrls,
-              rowid: rowid,
-            ),
-            withReferenceMapper: (p0) => p0
-                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-                .toList(),
-            prefetchHooksCallback: null,
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DownloadTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DownloadTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DownloadTasksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> fileName = const Value.absent(),
+            Value<String> url = const Value.absent(),
+            Value<int> fileSize = const Value.absent(),
+            Value<int> downloadedBytes = const Value.absent(),
+            Value<double> speed = const Value.absent(),
+            Value<int?> eta = const Value.absent(),
+            Value<String> category = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String> savePath = const Value.absent(),
+            Value<String> localFilePath = const Value.absent(),
+            Value<String> tempFilePath = const Value.absent(),
+            Value<String?> errorMessage = const Value.absent(),
+            Value<int> threadCount = const Value.absent(),
+            Value<List<double>?> chunks = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> updatedAt = const Value.absent(),
+            Value<int?> completedAt = const Value.absent(),
+            Value<int?> scheduledAt = const Value.absent(),
+            Value<bool> supportsResume = const Value.absent(),
+            Value<int> speedLimitKbps = const Value.absent(),
+            Value<bool> seedingEnabled = const Value.absent(),
+            Value<bool> seedingLimited = const Value.absent(),
+            Value<int> seedingLimitKbps = const Value.absent(),
+            Value<List<Map<String, dynamic>>?> torrentFiles =
+                const Value.absent(),
+            Value<String?> downloadPageUrl = const Value.absent(),
+            Value<String?> mergedAudioUrl = const Value.absent(),
+            Value<int> audioSize = const Value.absent(),
+            Value<int> videoStreamSize = const Value.absent(),
+            Value<double> audioProgress = const Value.absent(),
+            Value<bool> pausedByUser = const Value.absent(),
+            Value<String?> youtubeQualityPreset = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            Value<String?> playlistId = const Value.absent(),
+            Value<String?> playlistTitle = const Value.absent(),
+            Value<String?> thumbnailUrl = const Value.absent(),
+            Value<bool> isAppUpdate = const Value.absent(),
+            Value<int> priority = const Value.absent(),
+            Value<int> queueOrder = const Value.absent(),
+            Value<String?> expectedSha256 = const Value.absent(),
+            Value<List<String>?> mirrorUrls = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DownloadTasksCompanion(
+            id: id,
+            fileName: fileName,
+            url: url,
+            fileSize: fileSize,
+            downloadedBytes: downloadedBytes,
+            speed: speed,
+            eta: eta,
+            category: category,
+            status: status,
+            savePath: savePath,
+            localFilePath: localFilePath,
+            tempFilePath: tempFilePath,
+            errorMessage: errorMessage,
+            threadCount: threadCount,
+            chunks: chunks,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            completedAt: completedAt,
+            scheduledAt: scheduledAt,
+            supportsResume: supportsResume,
+            speedLimitKbps: speedLimitKbps,
+            seedingEnabled: seedingEnabled,
+            seedingLimited: seedingLimited,
+            seedingLimitKbps: seedingLimitKbps,
+            torrentFiles: torrentFiles,
+            downloadPageUrl: downloadPageUrl,
+            mergedAudioUrl: mergedAudioUrl,
+            audioSize: audioSize,
+            videoStreamSize: videoStreamSize,
+            audioProgress: audioProgress,
+            pausedByUser: pausedByUser,
+            youtubeQualityPreset: youtubeQualityPreset,
+            notes: notes,
+            playlistId: playlistId,
+            playlistTitle: playlistTitle,
+            thumbnailUrl: thumbnailUrl,
+            isAppUpdate: isAppUpdate,
+            priority: priority,
+            queueOrder: queueOrder,
+            expectedSha256: expectedSha256,
+            mirrorUrls: mirrorUrls,
+            rowid: rowid,
           ),
-        );
+          createCompanionCallback: ({
+            required String id,
+            required String fileName,
+            required String url,
+            Value<int> fileSize = const Value.absent(),
+            Value<int> downloadedBytes = const Value.absent(),
+            Value<double> speed = const Value.absent(),
+            Value<int?> eta = const Value.absent(),
+            required String category,
+            required String status,
+            required String savePath,
+            required String localFilePath,
+            required String tempFilePath,
+            Value<String?> errorMessage = const Value.absent(),
+            required int threadCount,
+            Value<List<double>?> chunks = const Value.absent(),
+            required int createdAt,
+            required int updatedAt,
+            Value<int?> completedAt = const Value.absent(),
+            Value<int?> scheduledAt = const Value.absent(),
+            Value<bool> supportsResume = const Value.absent(),
+            Value<int> speedLimitKbps = const Value.absent(),
+            Value<bool> seedingEnabled = const Value.absent(),
+            Value<bool> seedingLimited = const Value.absent(),
+            Value<int> seedingLimitKbps = const Value.absent(),
+            Value<List<Map<String, dynamic>>?> torrentFiles =
+                const Value.absent(),
+            Value<String?> downloadPageUrl = const Value.absent(),
+            Value<String?> mergedAudioUrl = const Value.absent(),
+            Value<int> audioSize = const Value.absent(),
+            Value<int> videoStreamSize = const Value.absent(),
+            Value<double> audioProgress = const Value.absent(),
+            Value<bool> pausedByUser = const Value.absent(),
+            Value<String?> youtubeQualityPreset = const Value.absent(),
+            Value<String?> notes = const Value.absent(),
+            Value<String?> playlistId = const Value.absent(),
+            Value<String?> playlistTitle = const Value.absent(),
+            Value<String?> thumbnailUrl = const Value.absent(),
+            Value<bool> isAppUpdate = const Value.absent(),
+            Value<int> priority = const Value.absent(),
+            Value<int> queueOrder = const Value.absent(),
+            Value<String?> expectedSha256 = const Value.absent(),
+            Value<List<String>?> mirrorUrls = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DownloadTasksCompanion.insert(
+            id: id,
+            fileName: fileName,
+            url: url,
+            fileSize: fileSize,
+            downloadedBytes: downloadedBytes,
+            speed: speed,
+            eta: eta,
+            category: category,
+            status: status,
+            savePath: savePath,
+            localFilePath: localFilePath,
+            tempFilePath: tempFilePath,
+            errorMessage: errorMessage,
+            threadCount: threadCount,
+            chunks: chunks,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            completedAt: completedAt,
+            scheduledAt: scheduledAt,
+            supportsResume: supportsResume,
+            speedLimitKbps: speedLimitKbps,
+            seedingEnabled: seedingEnabled,
+            seedingLimited: seedingLimited,
+            seedingLimitKbps: seedingLimitKbps,
+            torrentFiles: torrentFiles,
+            downloadPageUrl: downloadPageUrl,
+            mergedAudioUrl: mergedAudioUrl,
+            audioSize: audioSize,
+            videoStreamSize: videoStreamSize,
+            audioProgress: audioProgress,
+            pausedByUser: pausedByUser,
+            youtubeQualityPreset: youtubeQualityPreset,
+            notes: notes,
+            playlistId: playlistId,
+            playlistTitle: playlistTitle,
+            thumbnailUrl: thumbnailUrl,
+            isAppUpdate: isAppUpdate,
+            priority: priority,
+            queueOrder: queueOrder,
+            expectedSha256: expectedSha256,
+            mirrorUrls: mirrorUrls,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
 }
 
 typedef $$DownloadTasksTableProcessedTableManager = ProcessedTableManager<
@@ -4088,7 +3514,7 @@ typedef $$DownloadTasksTableProcessedTableManager = ProcessedTableManager<
     $$DownloadTasksTableUpdateCompanionBuilder,
     (
       DbDownloadTask,
-      BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>,
+      BaseReferences<_$AppDatabase, $DownloadTasksTable, DbDownloadTask>
     ),
     DbDownloadTask,
     PrefetchHooks Function()>;
@@ -4119,29 +3545,19 @@ class $$BookmarksTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.id, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get title => $composableBuilder(
-        column: $table.title,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.title, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.url, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get folder => $composableBuilder(
-        column: $table.folder,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.folder, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get createdAt => $composableBuilder(
-        column: $table.createdAt,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$BookmarksTableOrderingComposer
@@ -4154,29 +3570,19 @@ class $$BookmarksTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.id, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get title => $composableBuilder(
-        column: $table.title,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.title, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.url, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get folder => $composableBuilder(
-        column: $table.folder,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.folder, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
-        column: $table.createdAt,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$BookmarksTableAnnotationComposer
@@ -4213,61 +3619,56 @@ class $$BookmarksTableTableManager extends RootTableManager<
     $$BookmarksTableAnnotationComposer,
     $$BookmarksTableCreateCompanionBuilder,
     $$BookmarksTableUpdateCompanionBuilder,
-    (
-      DbBookmark,
-      BaseReferences<_$AppDatabase, $BookmarksTable, DbBookmark>,
-    ),
+    (DbBookmark, BaseReferences<_$AppDatabase, $BookmarksTable, DbBookmark>),
     DbBookmark,
     PrefetchHooks Function()> {
   $$BookmarksTableTableManager(_$AppDatabase db, $BookmarksTable table)
-      : super(
-          TableManagerState(
-            db: db,
-            table: table,
-            createFilteringComposer: () =>
-                $$BookmarksTableFilterComposer($db: db, $table: table),
-            createOrderingComposer: () =>
-                $$BookmarksTableOrderingComposer($db: db, $table: table),
-            createComputedFieldComposer: () =>
-                $$BookmarksTableAnnotationComposer($db: db, $table: table),
-            updateCompanionCallback: ({
-              Value<String> id = const Value.absent(),
-              Value<String> title = const Value.absent(),
-              Value<String> url = const Value.absent(),
-              Value<String?> folder = const Value.absent(),
-              Value<int> createdAt = const Value.absent(),
-              Value<int> rowid = const Value.absent(),
-            }) =>
-                BookmarksCompanion(
-              id: id,
-              title: title,
-              url: url,
-              folder: folder,
-              createdAt: createdAt,
-              rowid: rowid,
-            ),
-            createCompanionCallback: ({
-              required String id,
-              required String title,
-              required String url,
-              Value<String?> folder = const Value.absent(),
-              required int createdAt,
-              Value<int> rowid = const Value.absent(),
-            }) =>
-                BookmarksCompanion.insert(
-              id: id,
-              title: title,
-              url: url,
-              folder: folder,
-              createdAt: createdAt,
-              rowid: rowid,
-            ),
-            withReferenceMapper: (p0) => p0
-                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-                .toList(),
-            prefetchHooksCallback: null,
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BookmarksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BookmarksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BookmarksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> title = const Value.absent(),
+            Value<String> url = const Value.absent(),
+            Value<String?> folder = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              BookmarksCompanion(
+            id: id,
+            title: title,
+            url: url,
+            folder: folder,
+            createdAt: createdAt,
+            rowid: rowid,
           ),
-        );
+          createCompanionCallback: ({
+            required String id,
+            required String title,
+            required String url,
+            Value<String?> folder = const Value.absent(),
+            required int createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              BookmarksCompanion.insert(
+            id: id,
+            title: title,
+            url: url,
+            folder: folder,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
 }
 
 typedef $$BookmarksTableProcessedTableManager = ProcessedTableManager<
@@ -4307,24 +3708,16 @@ class $$BrowserHistoryTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.id, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.url, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get title => $composableBuilder(
-        column: $table.title,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.title, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get visitedAt => $composableBuilder(
-        column: $table.visitedAt,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.visitedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$BrowserHistoryTableOrderingComposer
@@ -4337,24 +3730,16 @@ class $$BrowserHistoryTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.id, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.url, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get title => $composableBuilder(
-        column: $table.title,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.title, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get visitedAt => $composableBuilder(
-        column: $table.visitedAt,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.visitedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$BrowserHistoryTableAnnotationComposer
@@ -4390,53 +3775,50 @@ class $$BrowserHistoryTableTableManager extends RootTableManager<
     $$BrowserHistoryTableUpdateCompanionBuilder,
     (
       DbBrowserHistory,
-      BaseReferences<_$AppDatabase, $BrowserHistoryTable, DbBrowserHistory>,
+      BaseReferences<_$AppDatabase, $BrowserHistoryTable, DbBrowserHistory>
     ),
     DbBrowserHistory,
     PrefetchHooks Function()> {
   $$BrowserHistoryTableTableManager(
-    _$AppDatabase db,
-    $BrowserHistoryTable table,
-  ) : super(
-          TableManagerState(
-            db: db,
-            table: table,
-            createFilteringComposer: () =>
-                $$BrowserHistoryTableFilterComposer($db: db, $table: table),
-            createOrderingComposer: () =>
-                $$BrowserHistoryTableOrderingComposer($db: db, $table: table),
-            createComputedFieldComposer: () =>
-                $$BrowserHistoryTableAnnotationComposer($db: db, $table: table),
-            updateCompanionCallback: ({
-              Value<int> id = const Value.absent(),
-              Value<String> url = const Value.absent(),
-              Value<String> title = const Value.absent(),
-              Value<int> visitedAt = const Value.absent(),
-            }) =>
-                BrowserHistoryCompanion(
-              id: id,
-              url: url,
-              title: title,
-              visitedAt: visitedAt,
-            ),
-            createCompanionCallback: ({
-              Value<int> id = const Value.absent(),
-              required String url,
-              required String title,
-              required int visitedAt,
-            }) =>
-                BrowserHistoryCompanion.insert(
-              id: id,
-              url: url,
-              title: title,
-              visitedAt: visitedAt,
-            ),
-            withReferenceMapper: (p0) => p0
-                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-                .toList(),
-            prefetchHooksCallback: null,
+      _$AppDatabase db, $BrowserHistoryTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BrowserHistoryTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BrowserHistoryTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BrowserHistoryTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> url = const Value.absent(),
+            Value<String> title = const Value.absent(),
+            Value<int> visitedAt = const Value.absent(),
+          }) =>
+              BrowserHistoryCompanion(
+            id: id,
+            url: url,
+            title: title,
+            visitedAt: visitedAt,
           ),
-        );
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String url,
+            required String title,
+            required int visitedAt,
+          }) =>
+              BrowserHistoryCompanion.insert(
+            id: id,
+            url: url,
+            title: title,
+            visitedAt: visitedAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
 }
 
 typedef $$BrowserHistoryTableProcessedTableManager = ProcessedTableManager<
@@ -4450,7 +3832,7 @@ typedef $$BrowserHistoryTableProcessedTableManager = ProcessedTableManager<
     $$BrowserHistoryTableUpdateCompanionBuilder,
     (
       DbBrowserHistory,
-      BaseReferences<_$AppDatabase, $BrowserHistoryTable, DbBrowserHistory>,
+      BaseReferences<_$AppDatabase, $BrowserHistoryTable, DbBrowserHistory>
     ),
     DbBrowserHistory,
     PrefetchHooks Function()>;
@@ -4485,34 +3867,22 @@ class $$BrowserTabsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.id, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.url, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get title => $composableBuilder(
-        column: $table.title,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.title, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isActive => $composableBuilder(
-        column: $table.isActive,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.isActive, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get position => $composableBuilder(
-        column: $table.position,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.position, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get createdAt => $composableBuilder(
-        column: $table.createdAt,
-        builder: (column) => ColumnFilters(column),
-      );
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$BrowserTabsTableOrderingComposer
@@ -4525,34 +3895,22 @@ class $$BrowserTabsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get id => $composableBuilder(
-        column: $table.id,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.id, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get url => $composableBuilder(
-        column: $table.url,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.url, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get title => $composableBuilder(
-        column: $table.title,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.title, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get isActive => $composableBuilder(
-        column: $table.isActive,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.isActive, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get position => $composableBuilder(
-        column: $table.position,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.position, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
-        column: $table.createdAt,
-        builder: (column) => ColumnOrderings(column),
-      );
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$BrowserTabsTableAnnotationComposer
@@ -4594,63 +3952,61 @@ class $$BrowserTabsTableTableManager extends RootTableManager<
     $$BrowserTabsTableUpdateCompanionBuilder,
     (
       SavedBrowserTab,
-      BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
+      BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>
     ),
     SavedBrowserTab,
     PrefetchHooks Function()> {
   $$BrowserTabsTableTableManager(_$AppDatabase db, $BrowserTabsTable table)
-      : super(
-          TableManagerState(
-            db: db,
-            table: table,
-            createFilteringComposer: () =>
-                $$BrowserTabsTableFilterComposer($db: db, $table: table),
-            createOrderingComposer: () =>
-                $$BrowserTabsTableOrderingComposer($db: db, $table: table),
-            createComputedFieldComposer: () =>
-                $$BrowserTabsTableAnnotationComposer($db: db, $table: table),
-            updateCompanionCallback: ({
-              Value<String> id = const Value.absent(),
-              Value<String> url = const Value.absent(),
-              Value<String> title = const Value.absent(),
-              Value<bool> isActive = const Value.absent(),
-              Value<int> position = const Value.absent(),
-              Value<int> createdAt = const Value.absent(),
-              Value<int> rowid = const Value.absent(),
-            }) =>
-                BrowserTabsCompanion(
-              id: id,
-              url: url,
-              title: title,
-              isActive: isActive,
-              position: position,
-              createdAt: createdAt,
-              rowid: rowid,
-            ),
-            createCompanionCallback: ({
-              required String id,
-              required String url,
-              Value<String> title = const Value.absent(),
-              Value<bool> isActive = const Value.absent(),
-              Value<int> position = const Value.absent(),
-              required int createdAt,
-              Value<int> rowid = const Value.absent(),
-            }) =>
-                BrowserTabsCompanion.insert(
-              id: id,
-              url: url,
-              title: title,
-              isActive: isActive,
-              position: position,
-              createdAt: createdAt,
-              rowid: rowid,
-            ),
-            withReferenceMapper: (p0) => p0
-                .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-                .toList(),
-            prefetchHooksCallback: null,
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BrowserTabsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BrowserTabsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BrowserTabsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> url = const Value.absent(),
+            Value<String> title = const Value.absent(),
+            Value<bool> isActive = const Value.absent(),
+            Value<int> position = const Value.absent(),
+            Value<int> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              BrowserTabsCompanion(
+            id: id,
+            url: url,
+            title: title,
+            isActive: isActive,
+            position: position,
+            createdAt: createdAt,
+            rowid: rowid,
           ),
-        );
+          createCompanionCallback: ({
+            required String id,
+            required String url,
+            Value<String> title = const Value.absent(),
+            Value<bool> isActive = const Value.absent(),
+            Value<int> position = const Value.absent(),
+            required int createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              BrowserTabsCompanion.insert(
+            id: id,
+            url: url,
+            title: title,
+            isActive: isActive,
+            position: position,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
 }
 
 typedef $$BrowserTabsTableProcessedTableManager = ProcessedTableManager<
@@ -4664,7 +4020,7 @@ typedef $$BrowserTabsTableProcessedTableManager = ProcessedTableManager<
     $$BrowserTabsTableUpdateCompanionBuilder,
     (
       SavedBrowserTab,
-      BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>,
+      BaseReferences<_$AppDatabase, $BrowserTabsTable, SavedBrowserTab>
     ),
     SavedBrowserTab,
     PrefetchHooks Function()>;
