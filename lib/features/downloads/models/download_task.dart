@@ -74,6 +74,8 @@ class DownloadTask {
   final String? siteDisplayName;
   final String? contentHint;
 
+  final bool isMergeInProgress; // runtime only, not persisted
+
   DownloadTask({
     required this.id,
     required this.fileName,
@@ -110,6 +112,7 @@ class DownloadTask {
     this.audioProgress = 0.0,
     this.audioDownloadedBytes = 0,
     this.audioThreadCount = 2,
+    this.isMergeInProgress = false,
     this.pausedByUser = false,
     this.youtubeQualityPreset,
     this.notes,
@@ -172,13 +175,11 @@ class DownloadTask {
 
   /// Combined total payload size for this task (video + audio if YouTube, or resolvedFileSize).
   int get combinedTotalSize {
-    // FIX-B4 & FIX-YT-3
     if (hasMergedAudio && audioSize > 0) {
       if (videoStreamSize > 0) return videoStreamSize + audioSize;
       if (fileSize > 0) return fileSize;
-      // If we have downloaded bytes, use them as a floor
-      if (downloadedBytes > 0) return downloadedBytes + audioSize;
-      return 0; // unknown total size
+      // Growing estimate so bar is not stuck at 0
+      return max(downloadedBytes, 1) + audioSize;
     }
     return resolvedFileSize;
   }
@@ -188,10 +189,19 @@ class DownloadTask {
     final total = combinedTotalSize;
     var raw = downloadedBytes < 0 ? 0 : downloadedBytes;
     if (hasMergedAudio) {
-      if (audioSize > 0 && audioProgress > 0) {
-        raw += (audioProgress * audioSize).round();
-      } else if (audioDownloadedBytes > 0) {
-        raw += audioDownloadedBytes;
+      // FIX: if downloadedBytes already includes audio (post-pause),
+      // do NOT add audio again. Detect via a flag or by checking
+      // whether downloadedBytes > fileSize (video-only size).
+      final videoOnly =
+          videoStreamSize > 0 ? videoStreamSize : fileSize - audioSize;
+      if (videoOnly > 0 && raw > videoOnly) {
+        // Already includes audio — do not add again
+      } else if (audioSize > 0) {
+        if (audioProgress > 0) {
+          raw += (audioProgress * audioSize).round();
+        } else if (audioDownloadedBytes > 0) {
+          raw += audioDownloadedBytes;
+        }
       }
     }
     if (total > 0) return raw.clamp(0, total);
@@ -202,11 +212,9 @@ class DownloadTask {
     if (status == DownloadStatus.completed) return 1.0;
     final total = combinedTotalSize;
     if (total <= 0) {
-      if (downloadedBytes > 0) return -1.0; // indeterminate
-      return 0.0;
+      return downloadedBytes > 0 ? -1.0 : 0.0;
     }
-    final downloaded = combinedDownloadedBytes.clamp(0, total);
-    return (downloaded / total).clamp(0.0, 1.0);
+    return (combinedDownloadedBytes / total).clamp(0.0, 1.0);
   }
 
   String get progressPercentString {
@@ -373,6 +381,7 @@ class DownloadTask {
     String? siteType,
     String? siteDisplayName,
     String? contentHint,
+    bool? isMergeInProgress,
   }) {
     return DownloadTask(
       id: id,
@@ -414,8 +423,9 @@ class DownloadTask {
       audioSize: audioSize ?? this.audioSize,
       audioDownloadedBytes: audioDownloadedBytes ?? this.audioDownloadedBytes,
       videoStreamSize: videoStreamSize ?? this.videoStreamSize, // FIX-B4
-      audioProgress: audioProgress ?? this.audioProgress,
+      audioProgress: (audioProgress ?? this.audioProgress).clamp(0.0, 1.0),
       audioThreadCount: audioThreadCount ?? this.audioThreadCount,
+      isMergeInProgress: isMergeInProgress ?? this.isMergeInProgress,
       pausedByUser: pausedByUser ?? this.pausedByUser,
       youtubeQualityPreset: clearYoutubeQualityPreset
           ? null
@@ -629,6 +639,14 @@ class DownloadTask {
     final total = combinedTotalSize;
     final downloaded = combinedDownloadedBytes;
     return total > 0 ? min(downloaded, total) : downloaded;
+  }
+
+  String? get youtubePreferredType {
+    if (mergedAudioUrl != null && mergedAudioUrl!.isNotEmpty) return 'combined';
+    if (youtubeQualityPreset == 'audio_only' || category.toLowerCase() == 'audio' || fileName.toLowerCase().endsWith('.mp3') || fileName.toLowerCase().endsWith('.m4a')) {
+      return 'audio';
+    }
+    return null;
   }
 
 

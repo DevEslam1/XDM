@@ -586,6 +586,10 @@ class HttpTransferJob {
           final tolerance =
               (_state!.totalSize * 0.001).clamp(2048.0, 10 * 1024 * 1024);
           if ((serverTotal - _state!.totalSize).abs() > tolerance) {
+            for (var i = 0; i < _state!.chunks.length; i++) {
+              _state!.chunks[i] = ChunkState(start: _state!.chunks[i].start, end: _state!.chunks[i].end);
+            }
+            await StateStore.save(cmd.tempFilePath, _state!);
             throw _FileChangedOnServerException();
           }
         }
@@ -690,7 +694,9 @@ class HttpTransferJob {
     } catch (e) {
       // Persist whatever IS proven before surfacing the error — retry picks
       // up the surviving chunks.
-      st.status = DmxStateStatus.failed;
+      if (e is! _RangeUnsupportedException) {
+        st.status = DmxStateStatus.failed;
+      }
       try {
         await writer.flushAll();
         await StateStore.save(cmd.tempFilePath, st);
@@ -721,7 +727,7 @@ class HttpTransferJob {
         final resumeFrom = chunk.downloaded;
         final absStart = chunk.start + resumeFrom;
         final headers = <String, dynamic>{
-          'Range': 'bytes=$absStart-${chunk.end}',
+          'Range': chunk.end < 0 ? 'bytes=$absStart-' : 'bytes=$absStart-${chunk.end}',
         };
         if (resumeFrom > 0) {
           final ifRange = _firstNonEmpty(_state!.etag, _state!.lastModified);
@@ -816,6 +822,10 @@ class HttpTransferJob {
           final pos = chunk.start + resumeFrom + sessionBytes;
           await writer.write(-1, pos, piece);
           sessionBytes += piece.length;
+          if (chunk.size >= 0 && (resumeFrom + sessionBytes) > chunk.size) {
+            // Server sent more bytes than requested — truncate to prevent overwrite
+            break;
+          }
           chunk.downloaded = resumeFrom + sessionBytes;
           _bytesSinceSave += piece.length;
           await _throttledSaveAndReport(writer);

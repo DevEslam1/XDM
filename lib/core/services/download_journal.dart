@@ -312,6 +312,36 @@ class StateStore {
       }
     }
 
+    if (state == null && threadCount > 1) {
+      final tmp = File(tempFilePath);
+      if (await tmp.exists()) {
+        final len = await tmp.length();
+        if (len > 0) {
+          final perChunk = knownFileSize > 0
+              ? (len ~/ threadCount).clamp(0, knownFileSize ~/ threadCount)
+              : len ~/ threadCount;
+          state = TransferState(
+            totalSize: knownFileSize > 0 ? knownFileSize : len,
+            threadCount: threadCount,
+            chunks: List.generate(threadCount, (i) {
+              final start = i * perChunk;
+              final end = (i == threadCount - 1 && knownFileSize > 0)
+                  ? knownFileSize - 1
+                  : start + perChunk - 1;
+              // Multi-thread downloads pre-allocate the file; raw file length is not
+              // a reliable indicator of downloaded bytes without a state file.
+              // Treat as fresh download.
+              return ChunkState(
+                  start: start, end: end, downloaded: 0);
+            }),
+            url: url,
+            migrationNote: 'migrated_from_file_length_multithread',
+          );
+          migratedFrom = 'fileLength';
+        }
+      }
+    }
+
     var created = false;
     if (state == null) {
       created = true;

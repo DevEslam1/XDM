@@ -670,6 +670,13 @@ class YoutubeService {
       try {
         final result = await _resolveStreamsWithFallback(url, cookies: cookies);
         if (result != null && result.isNotEmpty) return result;
+
+        // result is null or empty — apply backoff before next attempt
+        if (attempt < maxRetries) {
+          final delay = Duration(seconds: 3 * (attempt + 1));
+          await Future.delayed(delay);
+        }
+        continue;
       } catch (e) {
         final transient = e is XdmBackendTimeoutException ||
             e is BackendNetworkException ||
@@ -1004,8 +1011,9 @@ class YoutubeService {
   }
 
   static Future<Map<String, String?>?> getFreshStreams(
-    String downloadPageUrl,
-  ) async {
+    String downloadPageUrl, {
+    String? preferredType,
+  }) async {
     final videoId = extractVideoId(downloadPageUrl) ??
         (downloadPageUrl.length == 11 ? downloadPageUrl : null);
     if (videoId == null) return null;
@@ -1013,6 +1021,22 @@ class YoutubeService {
     try {
       final streams = await getStreams(downloadPageUrl);
       if (streams.isNotEmpty) {
+        if (preferredType != null) {
+          final matched = streams.where((s) => s['type'] == preferredType).toList();
+          if (matched.isNotEmpty) {
+            final best = matched.firstWhere(
+              (s) => s['src'] != null,
+              orElse: () => <String, dynamic>{},
+            );
+            if (best.isNotEmpty) {
+              return {
+                'url': best['src'] as String?,
+                'audioUrl': best['audioSrc'] as String?,
+              };
+            }
+          }
+        }
+
         final combined = streams.where((s) => s['type'] == 'combined').toList();
         if (combined.isNotEmpty) {
           final best = combined.firstWhere(

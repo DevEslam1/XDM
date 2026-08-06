@@ -34,8 +34,16 @@ class TorrentResumeStore {
     return dir;
   }
 
-  static String _keyFor(String sourceUrl) =>
-      sha256.convert(utf8.encode(sourceUrl)).toString();
+  static String _stableKey(String sourceUrl) {
+    if (sourceUrl.startsWith('magnet:')) {
+      final match = RegExp(r'xt=urn:btih:([^&]+)').firstMatch(sourceUrl);
+      if (match != null) {
+        final infoHash = match.group(1)!;
+        return sha256.convert(utf8.encode(infoHash.toLowerCase())).toString();
+      }
+    }
+    return sha256.convert(utf8.encode(sourceUrl)).toString();
+  }
 
   static void registerSource(int torrentId, String sourceUrl) {
     if (sourceUrl.trim().isEmpty) return;
@@ -60,7 +68,7 @@ class TorrentResumeStore {
       if (blob == null || blob.isEmpty) return false;
 
       final dir = await _dir();
-      final key = _keyFor(sourceUrl);
+      final key = _stableKey(sourceUrl);
       final blobFile = File('${dir.path}/$key.bin');
       final metaFile = File('${dir.path}/$key.meta.json');
       final blobTmp = File('${dir.path}/$key.bin.tmp');
@@ -125,7 +133,7 @@ class TorrentResumeStore {
   static Future<Uint8List?> loadResumeDataForSource(String sourceUrl) async {
     try {
       final dir = await _dir();
-      final key = _keyFor(sourceUrl);
+      final key = _stableKey(sourceUrl);
       final blobFile = File('${dir.path}/$key.bin');
       final metaFile = File('${dir.path}/$key.meta.json');
       if (!await blobFile.exists() || !await metaFile.exists()) return null;
@@ -156,7 +164,7 @@ class TorrentResumeStore {
       String sourceUrl) async {
     try {
       final dir = await _dir();
-      final key = _keyFor(sourceUrl);
+      final key = _stableKey(sourceUrl);
       final metaFile = File('${dir.path}/$key.meta.json');
       if (!await metaFile.exists()) return null;
       final meta = jsonDecode(await metaFile.readAsString());
@@ -173,7 +181,7 @@ class TorrentResumeStore {
   static Future<void> deleteResumeDataForSource(String sourceUrl) async {
     try {
       final dir = await _dir();
-      final key = _keyFor(sourceUrl);
+      final key = _stableKey(sourceUrl);
       for (final suffix in ['.bin', '.meta.json', '.bin.tmp']) {
         final f = File('${dir.path}/$key$suffix');
         if (await f.exists()) await f.delete();

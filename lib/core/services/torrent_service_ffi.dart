@@ -763,7 +763,7 @@ class TorrentService {
   }
 
   static Future<void> pauseTorrent(int id) async {
-    if (!isInitialized) return;
+    if (!isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
       try {
         // Snapshot torrent file priorities/selections BEFORE pausing so they
@@ -787,6 +787,9 @@ class TorrentService {
           _log.warning('getFiles snapshot failed for id $id (non-fatal): $e');
         }
 
+        LibtorrentFlutter.instance.pauseTorrent(id);
+        await Future.delayed(const Duration(milliseconds: 200));
+
         // Persist native fast-resume bytes under the stable source key.
         // Best-effort: never throw out of pauseTorrent.
         try {
@@ -802,8 +805,6 @@ class TorrentService {
         } catch (e) {
           _log.warning('saveResumeData failed for id $id: $e');
         }
-
-        LibtorrentFlutter.instance.pauseTorrent(id);
       } catch (e) {
         _log.warning('pauseTorrent failed for id $id: $e');
       }
@@ -811,7 +812,7 @@ class TorrentService {
   }
 
   static void resumeTorrent(int id) {
-    if (!isInitialized) return;
+    if (!isInitialized || !isTorrentAlive(id)) return;
     if (id >= 0) {
       try {
         LibtorrentFlutter.instance.resumeTorrent(id);
@@ -870,7 +871,7 @@ class TorrentService {
   }
 
   static List<TorrentFileItem> getFiles(int id) {
-    if (!isInitialized) return [];
+    if (!isInitialized || !isTorrentAlive(id)) return [];
     if (id >= 0) {
       try {
         final files = LibtorrentFlutter.instance.getFiles(id);

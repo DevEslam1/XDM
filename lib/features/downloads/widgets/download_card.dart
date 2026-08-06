@@ -566,6 +566,7 @@ class _TelemetryStrip extends StatelessWidget {
 
     // Active downloading or seeding: 2-row live telemetry with sparkline
     if (isDownloading) {
+      // FIX-UI-05: Show correct speed for seeding torrents
       final speedText = seeding
           ? '${formatBytes(seedingUploadSpeed)}/s'
           : task.speedFormatted;
@@ -729,6 +730,7 @@ class _ChunkedProgressBar extends StatelessWidget {
             final activeChunks = liveChunks.isNotEmpty ? liveChunks : chunks;
             return Row(
               children: List.generate(activeChunks.length, (i) {
+                // FIX-UI-01: Clamp chunk values to [0, 1]
                 final p = activeChunks[i].clamp(0.0, 1.0);
                 return Expanded(
                   child: Padding(
@@ -802,7 +804,8 @@ class _ProgressRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDownloading = task.status == DownloadStatus.downloading;
-    final showIndeterminate = (task.hasUnknownSize || task.progress == -1.0) && isDownloading;
+    final showIndeterminate =
+        (task.hasUnknownSize || task.progress == -1.0) && isDownloading;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1026,6 +1029,25 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
               provider.retryTask(task.id);
             },
           )
+        else if (task.status == DownloadStatus.merging)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(accent),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Merging…',
+                style: TextStyle(color: accent, fontSize: 12),
+              ),
+            ],
+          )
         else if (task.status == DownloadStatus.completed)
           _ControlButton(
             icon: Icons.folder_open_rounded,
@@ -1089,6 +1111,20 @@ class _ControlCluster extends StatelessWidget with HapticHelper {
 // ────────────────────────────────────────────────────────────────────────────
 // Status message / error rows
 // ────────────────────────────────────────────────────────────────────────────
+
+IconData _statusMessageIcon(String? message) {
+  if (message == null) return Icons.info_outline_rounded;
+  final m = message.toLowerCase();
+  if (m.contains('wifi')) return Icons.wifi_off_rounded;
+  if (m.contains('network') || m.contains('waiting')) return Icons.signal_wifi_bad_rounded;
+  if (m.contains('merg')) return Icons.merge_type_rounded;
+  if (m.contains('forbidden') || m.contains('403')) return Icons.block_rounded;
+  if (m.contains('retry') || m.contains('retrying')) return Icons.refresh_rounded;
+  if (m.contains('schedul')) return Icons.schedule_rounded;
+  if (m.contains('paused') || m.contains('orphan')) return Icons.pause_circle_outline_rounded;
+  if (m.contains('error') || m.contains('fail')) return Icons.error_outline_rounded;
+  return Icons.info_outline_rounded;
+}
 
 class _NoticeRow extends StatelessWidget {
   final String text;
@@ -1262,7 +1298,7 @@ class _FileCard extends StatelessWidget with HapticHelper {
                   _NoticeRow(
                     text: task.statusMessage!,
                     color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-                    icon: Icons.merge_type_rounded,
+                    icon: _statusMessageIcon(task.statusMessage),
                     isDark: isDark,
                   ),
                 if (task.status == DownloadStatus.failed &&
@@ -1499,7 +1535,7 @@ class _MediaCard extends StatelessWidget with HapticHelper {
                   _NoticeRow(
                     text: task.statusMessage!,
                     color: isDark ? AppTheme.neonAmber : AppTheme.lightNeonAmber,
-                    icon: Icons.merge_type_rounded,
+                    icon: _statusMessageIcon(task.statusMessage),
                     isDark: isDark,
                   ),
                 if (task.status == DownloadStatus.failed &&
@@ -1643,7 +1679,7 @@ class _TorrentCardState extends State<_TorrentCard> with HapticHelper {
                                 spacing: 6,
                                 runSpacing: 4,
                                 children: [
-                                  // FIX(T-4): Show "Fetching metadata…" when magnet fileSize == 0 and downloading
+                                  // FIX-UI-04: Show "Fetching metadata…" for magnets with fileSize == 0
                                   _StatusChip(
                                     task: widget.task,
                                     isDark: isDark,

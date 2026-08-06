@@ -834,6 +834,11 @@ class DownloadEngine {
       resolvedFileName: resolvedFileName,
     );
 
+    if (adaptiveThreads) {
+      // TODO(adaptive-threads): wire up recordSample and startAdaptiveMonitorIfEnabled
+      debugPrint('[DMX] adaptiveThreads requested but monitor not yet wired');
+    }
+
     final pool = await _ensurePool();
     final job = pool.submit(command);
     final completer = Completer<void>();
@@ -879,6 +884,7 @@ class DownloadEngine {
         case 'progress':
           resetInactivityTimer();
           final p = message.data;
+          // TODO(adaptive-threads): wire up recordSample here with speed and threadCount
           onProgress(DownloadProgress(
             downloadedBytes: (p['downloadedBytes'] as num?)?.toInt() ?? 0,
             fileSize: (p['fileSize'] as num?)?.toInt() ?? 0,
@@ -1079,6 +1085,9 @@ class DownloadEngine {
       );
     } finally {
       _activeTorrentIds.remove(id);
+      // FIX-TOR-04: Clean up static maps on torrent removal or completion
+      _lastConcurrentLimitApply.remove(id);
+      _lastIncompleteSnapshot.remove(id);
     }
   }
 
@@ -1243,7 +1252,7 @@ class DownloadEngine {
 
       final rawDownloaded = torrent.totalWantedDone > 0
           ? torrent.totalWantedDone
-          : (torrent.totalWanted > 0 ? 0 : torrent.totalDone);
+          : torrent.totalDone;  // fallback to totalDone
       final downloadedBytes =
           totalSize > 0 ? min(rawDownloaded, totalSize) : rawDownloaded;
 
@@ -1357,7 +1366,7 @@ class DownloadEngine {
       final selected = f['selected'] as bool? ?? true;
       final length = (f['length'] as num?)?.toInt() ?? 0;
       final downloaded = (f['downloadedBytes'] as num?)?.toInt() ?? 0;
-      if (selected && downloaded < length) {
+      if (selected && (length == 0 || downloaded < length)) {
         incompleteSelected.add(idx);
         incompleteSet.add(idx);
       }
@@ -1395,40 +1404,12 @@ class DownloadEngine {
     final needing = files
         .where((f) => (f['progressEstimated'] as bool? ?? true) == true)
         .toList();
-    if (needing.isEmpty || downloadedBytes <= 0) return;
+    if (needing.isEmpty) return;
 
-    final confirmed = files
-        .where((f) => (f['progressEstimated'] as bool? ?? true) == false)
-        .fold<int>(0, (s, f) => s + ((f['downloadedBytes'] as int?) ?? 0));
-    final remaining = (downloadedBytes - confirmed).clamp(0, downloadedBytes);
-    final selectedSize = needing.fold<int>(
-        0, (s, f) => s + ((f['length'] as num?)?.toInt() ?? 0));
-    if (selectedSize <= 0) return;
-
-    // FIX T-5: Largest-remainder method to avoid over-allocation
-    final rawShares = <double>[];
-    final floorShares = <int>[];
-    var floorSum = 0;
-    for (final f in needing) {
-      final len = (f['length'] as num?)?.toInt() ?? 0;
-      final raw = remaining * (len / selectedSize);
-      final floor = raw.floor();
-      rawShares.add(raw - floor);
-      floorShares.add(floor);
-      floorSum += floor;
-    }
-    // Distribute leftover bytes to files with largest fractional parts
-    var leftover = remaining - floorSum;
-    final indices = List<int>.generate(needing.length, (i) => i)
-      ..sort((a, b) => rawShares[b].compareTo(rawShares[a]));
-    for (final idx in indices) {
-      if (leftover <= 0) break;
-      floorShares[idx]++;
-      leftover--;
-    }
     for (var i = 0; i < needing.length; i++) {
-      final len = (needing[i]['length'] as num?)?.toInt() ?? 0;
-      needing[i]['downloadedBytes'] = floorShares[i].clamp(0, len);
+      // FIX-TOR-02: Prefer native data. If no data, keep at 0 and flag as estimated.
+      needing[i]['downloadedBytes'] = 0;
+      needing[i]['progressEstimated'] = true;
     }
   }
 

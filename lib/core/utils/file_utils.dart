@@ -246,26 +246,16 @@ int scanFolderBytesSync(String path) {
             if (storedDownloaded > 0) {
               downloaded = storedDownloaded;
             } else if (diskLen > 0 && diskLen < length) {
-              // FIX(T-1): Probe tail when diskLen < length to avoid trusting pre-allocated sparse files
+              // Probe head to confirm real data
               try {
                 final raf = file.openSync();
-                final headProbe = raf.readSync(diskLen < 4096 ? diskLen : 4096);
-                final hasHead = headProbe.any((b) => b != 0);
-                if (hasHead) {
-                  if (diskLen > 8192) {
-                    raf.setPositionSync(diskLen - 4096);
-                    final tailProbe = raf.readSync(4096);
-                    final hasTail = tailProbe.any((b) => b != 0);
-                    downloaded = hasTail ? diskLen : (diskLen ~/ 2);
-                  } else {
-                    downloaded = diskLen;
-                  }
-                } else {
-                  downloaded = 0;
-                }
+                final probeSize = diskLen < 4096 ? diskLen : 4096;
+                final probe = raf.readSync(probeSize);
                 raf.closeSync();
+                final hasContent = probe.any((b) => b != 0);
+                downloaded = hasContent ? diskLen : 0;
               } catch (_) {
-                downloaded = diskLen;
+                downloaded = diskLen; // fallback
               }
             } else if (diskLen >= length) {
               try {
